@@ -181,3 +181,8 @@ function ProgressionService.PurchaseSkill(src, citizenId, skillType)
     DB_UpsertSkill(citizenId, skillType, currentLevel + 1)
     return true
 end
+
+-- Alias de compatibilidade com aurp_trucker:server:upgradeSkill
+function ProgressionService.UpgradeSkill(citizenId, skillType)
+    return ProgressionService.PurchaseSkill(nil, citizenId, skillType)
+end

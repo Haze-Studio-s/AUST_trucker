@@ -302,143 +302,142 @@
 					</div>
 				</div>
 				<div class="pages skills-page" style="height: 100%;">
-					<div id="skills-title-div" class="col-12 mt-3 mb-3">
-						<h4 id="skills-title" class="text-uppercase"></h4>
-						<p id="skills-desc"></p>
+					<div id="skills-title-div" class="ets2-skills-header-bar">
+						<div class="ets2-header-title">SKILLS</div>
 					</div>
-					<div style="max-height: calc(100% - var(--skills-title-height)); overflow: auto;">
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="product-type-title" class="m-2"></h4>
-							</div>
-							<div id="product_type" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="product-type-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-product-type-accordion" data-toggle="collapse" data-target="#collapse-product-type-accordion" aria-expanded="false" aria-controls="collapse-distance-accordion">
-											<h6 id="skills-description-1" class="mb-0 p-2"></h6>
+					<div class="ets2-skills-layout">
+						<!-- Left Column: Skill Rows -->
+						<div class="ets2-skills-list-col">
+
+							<!-- 1. Hazardous Cargo -->
+							<div class="ets2-skill-row active" id="ets2-row-product_type" data-skill="product_type" onclick="selectEts2Skill('product_type')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-truck-ramp-box ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-product_type">Hazardous Cargo</div>
+									<div class="ets2-adr-blocks" id="ets2-blocks-product_type">
+										<div class="ets2-adr-badge" data-adr="1" title="Classe 1: Explosivos">
+											<img src="img/icons/explosive-1.png" alt="ADR 1" />
 										</div>
-										<div id="collapse-product-type-accordion" class="collapse" aria-labelledby="heading-product-type-accordion" data-parent="#product-type-desc-accordion">
-											<div id="product-type-desc" class="card-body">
-												
-											</div>
+										<div class="ets2-adr-badge" data-adr="2" title="Classe 2: Gases">
+											<img src="img/icons/flamable-2.png" alt="ADR 2" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="3" title="Classe 3: Líquidos Inflamáveis">
+											<img src="img/icons/flamable-3.png" alt="ADR 3" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="4" title="Classe 4: Sólidos Inflamáveis">
+											<img src="img/icons/flamable-4.png" alt="ADR 4" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="5" title="Classe 6: Substâncias Tóxicas">
+											<img src="img/icons/toxic-6.png" alt="ADR 5" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="6" title="Classe 8: Substâncias Corrosivas">
+											<img src="img/icons/corrosive-8.png" alt="ADR 6" />
 										</div>
 									</div>
 								</div>
-							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="distance-title" class="m-2"></h4>
-							</div>
-							<div id="distance" class="progresses">
-
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="distance-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-distance-accordion" data-toggle="collapse" data-target="#collapse-distance-accordion" aria-expanded="false" aria-controls="collapse-distance-accordion">
-											<h6 id="skills-description-2" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-distance-accordion" class="collapse" aria-labelledby="heading-distance-accordion" data-parent="#distance-desc-accordion">
-											<div id="distance-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-product_type" onclick="stageEts2Skill('product_type', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-product_type" onclick="stageEts2Skill('product_type', -1, event)">-</button>
 								</div>
 							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="valuable-skill-title" class="m-2"></h4>
-							</div>
-							<div id="valuable" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="valuable-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-valuable-skill-accordion" data-toggle="collapse" data-target="#collapse-valuable-skill-accordion" aria-expanded="false" aria-controls="collapse-valuable-skill-accordion">
-											<h6 id="skills-description-3" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-valuable-skill-accordion" class="collapse" aria-labelledby="heading-valuable-skill-accordion" data-parent="#valuable-skill-desc-accordion">
-											<div id="valuable-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
+							<!-- 2. Long Distance -->
+							<div class="ets2-skill-row" id="ets2-row-distance" data-skill="distance" onclick="selectEts2Skill('distance')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-route ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-distance">Long Distance</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-distance"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-distance" onclick="stageEts2Skill('distance', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-distance" onclick="stageEts2Skill('distance', -1, event)">-</button>
 								</div>
 							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="fragile-skill-title" class="m-2"></h4>
-							</div>
-							<div id="fragile" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="fragile-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-fragile-skill-accordion" data-toggle="collapse" data-target="#collapse-fragile-skill-accordion" aria-expanded="false" aria-controls="collapse-fragile-skill-accordion">
-											<h6 id="skills-description-4" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-fragile-skill-accordion" class="collapse" aria-labelledby="heading-fragile-skill-accordion" data-parent="#fragile-skill-desc-accordion">
-											<div id="fragile-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
+							<!-- 3. High Value Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-valuable" data-skill="valuable" onclick="selectEts2Skill('valuable')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-star ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-valuable">High Value Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-valuable"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-valuable" onclick="stageEts2Skill('valuable', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-valuable" onclick="stageEts2Skill('valuable', -1, event)">-</button>
 								</div>
 							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="fast-skill-title" class="m-2"></h4>
-							</div>
-							<div id="fast" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="fast-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-fast-skill-accordion" data-toggle="collapse" data-target="#collapse-fast-skill-accordion" aria-expanded="false" aria-controls="collapse-fast-skill-accordion">
-											<h6 id="skills-description-5" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-fast-skill-accordion" class="collapse" aria-labelledby="heading-fast-skill-accordion" data-parent="#fast-skill-desc-accordion">
-											<div id="fast-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
+							<!-- 4. Fragile Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-fragile" data-skill="fragile" onclick="selectEts2Skill('fragile')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-wine-glass-empty ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fragile">Fragile Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fragile"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fragile" onclick="stageEts2Skill('fragile', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fragile" onclick="stageEts2Skill('fragile', -1, event)">-</button>
 								</div>
 							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="illegal-skill-title" class="m-2"></h4>
-							</div>
-							<div id="illegal" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="illegal-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-illegal-skill-accordion" data-toggle="collapse" data-target="#collapse-illegal-skill-accordion" aria-expanded="false" aria-controls="collapse-illegal-skill-accordion">
-											<h6 id="skills-description-6" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-illegal-skill-accordion" class="collapse" aria-labelledby="heading-illegal-skill-accordion" data-parent="#illegal-skill-desc-accordion">
-											<div id="illegal-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
+							<!-- 5. Just-In-Time Delivery -->
+							<div class="ets2-skill-row" id="ets2-row-fast" data-skill="fast" onclick="selectEts2Skill('fast')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-stopwatch ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fast">Just-In-Time Delivery</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fast"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fast" onclick="stageEts2Skill('fast', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fast" onclick="stageEts2Skill('fast', -1, event)">-</button>
 								</div>
 							</div>
+
+							<!-- 6. Fuel Economy -->
+							<div class="ets2-skill-row" id="ets2-row-illegal" data-skill="illegal" onclick="selectEts2Skill('illegal')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-leaf ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-illegal">Fuel Economy</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-illegal"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-illegal" onclick="stageEts2Skill('illegal', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-illegal" onclick="stageEts2Skill('illegal', -1, event)">-</button>
+								</div>
+							</div>
+
 						</div>
+
+						<!-- Right Column: Details Panel -->
+						<div class="ets2-skills-detail-col">
+							<div class="ets2-unassigned-bar">
+								<span>Unassigned skill points:</span>
+								<span id="ets2-skill-points" class="ets2-unassigned-num">0</span>
+							</div>
+							<div class="ets2-detail-card">
+								<div id="ets2-detail-title" class="ets2-detail-title">Hazardous Cargo</div>
+								<div id="ets2-detail-desc" class="ets2-detail-desc"></div>
+								<div id="ets2-detail-ranks" class="ets2-detail-ranks-list"></div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Bottom Action Bar -->
+					<div class="ets2-skills-bottom-bar" id="skills-footer-div">
+						<button type="button" id="ets2-apply-btn" class="ets2-apply-btn" onclick="applyEts2Skills()" disabled>Apply</button>
 					</div>
 				</div>
 				<div class="pages diagnostic-page">

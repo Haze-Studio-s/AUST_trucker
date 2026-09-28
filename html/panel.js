@@ -579,12 +579,7 @@ window.addEventListener("message", async function (event) {
 
         $("#skills-desc").empty();
         $("#skills-desc").append(Utils.translate("skills_page_desc").format(users.skill_points));
-        setSkill("distance", users.distance);
-        setSkill("product_type", users.product_type);
-        setSkill("valuable", users.valuable);
-        setSkill("fragile", users.fragile);
-        setSkill("fast", users.fast);
-        setSkill("illegal", users.illegal);
+        initEts2Skills(users);
 
         $("#dealership-page-list").empty();
         list_item = ``;
@@ -1099,24 +1094,298 @@ function getMyTruckHTML(truck) {
     return truck.driver == 0 ? `<button onclick="spawnTruck(${truck.truck_id})" class="btn btn-primary mr-2">${Utils.translate("trucks_page_spawn")}</button> <button onclick="setDriver(null,'${truck.truck_id}')" class="btn btn-outline-primary mr-2">${Utils.translate("trucks_page_remove")}</button>` : `<button onclick="setDriver('0','${truck.truck_id}')" class="btn btn-primary mr-2">${Utils.translate("trucks_page_select")}</button>`;
 }
 
-function setSkill(id, newValue) {
-    $("#" + id).empty();
-    for (let i = 1; i <= 6; i++) {
-        if (i <= newValue) {
-            if (i == 1) {
-                $("#" + id).append(`<div class="steps bg-success"> <span><i class="fas fa-check"></i></span> </div>`);
-            } else {
-                $("#" + id).append(`<span class="line bg-success"></span><div class="steps bg-success"> <span><i class="fas fa-check"></i></span> </div>`);
-            }
+/* ============================================================
+   ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   ============================================================ */
+
+const ETS2_SKILLS_INFO = {
+    product_type: {
+        title: "Hazardous Cargo (ADR)",
+        desc: "O transporte de mercadorias perigosas exige profissionais com treinamento especial. Adquira certificações ADR para desbloquear fretes com cargas de alto risco e elevada compensação financeira.",
+        ranks: [
+            { heading: "Classe 1 - Explosivos", perk: "Desbloqueia cargas de dinamite, munições, pólvora e fogos de artifício." },
+            { heading: "Classe 2 - Gases", perk: "Desbloqueia gases inflamáveis, não-inflamáveis e comprimidos." },
+            { heading: "Classe 3 - Líquidos Inflamáveis", perk: "Desbloqueia combustíveis perigosos como gasolina, diesel e querosene." },
+            { heading: "Classe 4 - Sólidos Inflamáveis", perk: "Desbloqueia fósforo, magnésio e materiais de combustão espontânea." },
+            { heading: "Classe 6 - Substâncias Tóxicas", perk: "Desbloqueia venenos industriais, pesticidas e agentes biológicos." },
+            { heading: "Classe 8 - Substâncias Corrosivas", perk: "Desbloqueia ácidos concentrados, hidróxidos e substâncias corrosivas." }
+        ]
+    },
+    distance: {
+        title: "Long Distance",
+        desc: "Sua habilidade de longa distância determina a distância máxima que você pode viajar em serviço e garante recompensas financeiras e experiência progressivas.",
+        ranks: [
+            { heading: "Rank 1", perk: "Entregas até 6.5 km (+2% de pagamento e +5% de XP para rotas > 6.0 km)." },
+            { heading: "Rank 2", perk: "Entregas até 7.0 km (+4% de pagamento e +10% de XP para rotas > 6.5 km)." },
+            { heading: "Rank 3", perk: "Entregas até 7.5 km (+6% de pagamento e +15% de XP para rotas > 7.0 km)." },
+            { heading: "Rank 4", perk: "Entregas até 8.0 km (+8% de pagamento e +20% de XP para rotas > 7.5 km)." },
+            { heading: "Rank 5", perk: "Entregas até 8.5 km (+10% de pagamento e +25% de XP para rotas > 8.0 km)." },
+            { heading: "Rank 6", perk: "Entregas em qualquer distância (+12% de pagamento e +30% de XP para rotas > 8.5 km)." }
+        ]
+    },
+    valuable: {
+        title: "High Value Cargo",
+        desc: "Toda carga tem valor, mas algumas são de altíssimo custo. As empresas confiam apenas em motoristas certificados e experientes para transportá-las.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de cargas valiosas (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Cargas de alto valor (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Cargas de alto valor (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Cargas de alto valor (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Cargas de alto valor (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Cargas de alto valor (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    fragile: {
+        title: "Fragile Cargo",
+        desc: "Esta especialização permite transportar cargas frágeis, como vidros nobres, eletrônicos industriais e maquinário de precisão com bônus por cuidado extra.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de cargas frágeis (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Cargas frágeis (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Cargas frágeis (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Cargas frágeis (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Cargas frágeis (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Cargas frágeis (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    fast: {
+        title: "Just-In-Time Delivery",
+        desc: "Entregas com janela horária apertada e grande urgência. Exigem condução precisa e pontualidade sob pressão, recompensando com alto retorno.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de carga urgente (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Entregas urgentes (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Entregas urgentes (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Entregas urgentes (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Entregas urgentes (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Entregas urgentes (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    illegal: {
+        title: "Fuel Economy",
+        desc: "Técnicas de condução eficiente e gestão de rota diminuem significativamente o consumo de combustível da sua frota em qualquer serviço.",
+        ranks: [
+            { heading: "Rank 1", perk: "Até 10% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 2", perk: "Até 15% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 3", perk: "Até 20% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 4", perk: "Até 25% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 5", perk: "Até 30% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 6", perk: "Até 35% de economia de combustível com reboque ou livre." }
+        ]
+    }
+};
+
+let ets2SkillsState = {
+    selectedSkill: 'product_type',
+    unassignedPoints: 0,
+    skills: {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    },
+    staged: {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    }
+};
+
+function initEts2Skills(usersData) {
+    if (!usersData) return;
+    ets2SkillsState.unassignedPoints = Number(usersData.skill_points || 0);
+    ets2SkillsState.skills = {
+        product_type: Math.min(6, Math.max(0, Number(usersData.product_type || 0))),
+        distance: Math.min(6, Math.max(0, Number(usersData.distance || 0))),
+        valuable: Math.min(6, Math.max(0, Number(usersData.valuable || 0))),
+        fragile: Math.min(6, Math.max(0, Number(usersData.fragile || 0))),
+        fast: Math.min(6, Math.max(0, Number(usersData.fast || 0))),
+        illegal: Math.min(6, Math.max(0, Number(usersData.illegal || 0)))
+    };
+    ets2SkillsState.staged = {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    };
+    renderEts2Skills();
+}
+
+function getEts2StagedTotal() {
+    let total = 0;
+    for (let k in ets2SkillsState.staged) {
+        total += ets2SkillsState.staged[k];
+    }
+    return total;
+}
+
+function getEts2AvailablePoints() {
+    return Math.max(0, ets2SkillsState.unassignedPoints - getEts2StagedTotal());
+}
+
+function selectEts2Skill(skillId) {
+    if (!ETS2_SKILLS_INFO[skillId]) return;
+    ets2SkillsState.selectedSkill = skillId;
+    renderEts2Skills();
+}
+
+function stageEts2Skill(skillId, delta, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!ETS2_SKILLS_INFO[skillId]) return;
+
+    let current = ets2SkillsState.skills[skillId] || 0;
+    let staged = ets2SkillsState.staged[skillId] || 0;
+    let available = getEts2AvailablePoints();
+
+    if (delta > 0) {
+        if (available > 0 && (current + staged) < 6) {
+            ets2SkillsState.staged[skillId]++;
+        }
+    } else if (delta < 0) {
+        if (staged > 0) {
+            ets2SkillsState.staged[skillId]--;
+        }
+    }
+
+    ets2SkillsState.selectedSkill = skillId;
+    renderEts2Skills();
+}
+
+function renderEts2Skills() {
+    let availablePoints = getEts2AvailablePoints();
+    let stagedTotal = getEts2StagedTotal();
+
+    // 1. Contador de pontos disponíveis
+    $("#ets2-skill-points").text(availablePoints);
+
+    // 2. Renderização das linhas de habilidades
+    const skillKeys = ['product_type', 'distance', 'valuable', 'fragile', 'fast', 'illegal'];
+    for (const key of skillKeys) {
+        let current = ets2SkillsState.skills[key] || 0;
+        let staged = ets2SkillsState.staged[key] || 0;
+        let total = current + staged;
+
+        // Seleção de linha
+        let row = $("#ets2-row-" + key);
+        if (key === ets2SkillsState.selectedSkill) {
+            row.addClass("active");
         } else {
-            if (i == 1) {
-                $("#" + id).append(`<div class="redsteps" onclick="upgradeSkill('${id}',${i})"> <span class="font-weight-bold">${i}</span> </div>`);
-            } else {
-                $("#" + id).append(`</div> <span class="redline"></span><div class="redsteps" onclick="upgradeSkill('${id}',${i})"> <span class="font-weight-bold">${i}</span>`);
+            row.removeClass("active");
+        }
+
+        // Botões do stepper
+        let plusBtn = $("#ets2-plus-" + key);
+        let minusBtn = $("#ets2-minus-" + key);
+
+        plusBtn.prop("disabled", !(availablePoints > 0 && total < 6));
+        minusBtn.prop("disabled", !(staged > 0));
+
+        // Renderização dos blocos / diamantes
+        if (key === 'product_type') {
+            let adrBadges = $("#ets2-blocks-product_type .ets2-adr-badge");
+            adrBadges.each(function() {
+                let rank = Number($(this).attr("data-adr"));
+                $(this).removeClass("unlocked pending locked");
+                if (rank <= current) {
+                    $(this).addClass("unlocked");
+                } else if (rank <= total) {
+                    $(this).addClass("pending");
+                } else {
+                    $(this).addClass("locked");
+                }
+            });
+        } else {
+            let blocksContainer = $("#ets2-blocks-" + key);
+            blocksContainer.empty();
+            for (let r = 1; r <= 6; r++) {
+                let stateClass = "locked";
+                if (r <= current) {
+                    stateClass = "unlocked";
+                } else if (r <= total) {
+                    stateClass = "pending";
+                }
+                blocksContainer.append(`<div class="ets2-block ${stateClass}"></div>`);
             }
         }
     }
+
+    // 3. Painel de Detalhes da Direita
+    let info = ETS2_SKILLS_INFO[ets2SkillsState.selectedSkill] || ETS2_SKILLS_INFO.product_type;
+    let selCurrent = ets2SkillsState.skills[ets2SkillsState.selectedSkill] || 0;
+    let selStaged = ets2SkillsState.staged[ets2SkillsState.selectedSkill] || 0;
+    let selTotal = selCurrent + selStaged;
+
+    $("#ets2-detail-title").text(info.title);
+    $("#ets2-detail-desc").text(info.desc);
+
+    let ranksHtml = "";
+    for (let i = 0; i < info.ranks.length; i++) {
+        let rankNum = i + 1;
+        let rInfo = info.ranks[i];
+        let rClass = "locked";
+        if (rankNum <= selCurrent) {
+            rClass = "unlocked";
+        } else if (rankNum <= selTotal) {
+            rClass = "pending";
+        }
+
+        ranksHtml += `
+            <div class="ets2-rank-item ${rClass}">
+                <div class="rank-heading">${rInfo.heading}</div>
+                <div class="rank-perks">${rInfo.perk}</div>
+            </div>
+        `;
+    }
+    $("#ets2-detail-ranks").html(ranksHtml);
+
+    // 4. Botão Apply
+    let applyBtn = $("#ets2-apply-btn");
+    applyBtn.prop("disabled", stagedTotal === 0);
 }
+
+let isEts2Applying = false;
+function applyEts2Skills() {
+    if (isEts2Applying) return;
+    let stagedTotal = getEts2StagedTotal();
+    if (stagedTotal === 0) return;
+
+    isEts2Applying = true;
+    $("#ets2-apply-btn").prop("disabled", true);
+
+    for (let key in ets2SkillsState.staged) {
+        let count = ets2SkillsState.staged[key];
+        if (count > 0) {
+            let startLvl = ets2SkillsState.skills[key];
+            for (let step = 1; step <= count; step++) {
+                upgradeSkill(key, startLvl + step);
+            }
+            ets2SkillsState.skills[key] += count;
+            ets2SkillsState.staged[key] = 0;
+        }
+    }
+
+    ets2SkillsState.unassignedPoints -= stagedTotal;
+    renderEts2Skills();
+
+    setTimeout(() => {
+        isEts2Applying = false;
+    }, 1500);
+}
+
+function setSkill(id, newValue) {
+    if (ets2SkillsState.skills[id] !== undefined) {
+        ets2SkillsState.skills[id] = Number(newValue || 0);
+        renderEts2Skills();
+    }
+}
+
 
 function openPage(pageN) {
     $(".pages").css("display", "none");

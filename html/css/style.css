@@ -950,3 +950,394 @@ body {
 	user-select: none;
 	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
 }
+
+/* ============================================================
+   ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   ============================================================ */
+
+.skills-page {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    padding: 10px 18px 8px !important;
+}
+
+.skills-page[style*="display: block"] {
+    display: flex !important;
+}
+
+.ets2-skills-header-bar {
+    text-align: center;
+    padding: 2px 0 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 10px;
+}
+
+.ets2-header-title {
+    font-family: 'Montserrat', 'Poppins', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: #f1f5f9;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-skills-layout {
+    display: grid;
+    grid-template-columns: 1.18fr 0.82fr;
+    gap: 14px;
+    flex: 1;
+    min-height: 0;
+    margin-bottom: 6px;
+}
+
+/* Left Column: Rows */
+.ets2-skills-list-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.ets2-skills-list-col::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 2px;
+}
+
+.ets2-skill-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
+    background: linear-gradient(180deg, #2a2c33 0%, #1e2025 50%, #151619 100%);
+    border: 1px solid #3c404b;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    user-select: none;
+}
+
+.ets2-skill-row:hover {
+    border-color: #525866;
+    background: linear-gradient(180deg, #32353d 0%, #23252c 50%, #191b1f 100%);
+}
+
+.ets2-skill-row.active {
+    border-color: #f59e0b !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 10px rgba(245, 158, 11, 0.35) !important;
+}
+
+.ets2-skill-row.active .ets2-skill-label {
+    color: #f59e0b !important;
+    text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+}
+
+.ets2-skill-icon-box {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #383c46 0%, #202227 100%);
+    border: 1px solid #4a505e;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ets2-fa-icon {
+    color: #d1d5db;
+    font-size: 18px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-skill-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+}
+
+.ets2-skill-label {
+    font-family: 'Poppins', sans-serif;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Rank Blocks */
+.ets2-rank-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-block {
+    width: 27px;
+    height: 20px;
+    border-radius: 2px;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.ets2-block.locked {
+    background: linear-gradient(180deg, #585f6e 0%, #3a3f4a 48%, #252830 52%, #18191d 100%);
+    border: 1px solid #202227;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.ets2-block.unlocked {
+    background: linear-gradient(180deg, #fde047 0%, #f59e0b 45%, #b45309 52%, #78350f 100%);
+    border: 1px solid #fef08a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 7px rgba(245, 158, 11, 0.65), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-block.pending {
+    background: linear-gradient(180deg, #38bdf8 0%, #0284c7 45%, #0369a1 52%, #075985 100%);
+    border: 1px solid #7dd3fc;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 9px rgba(56, 189, 248, 0.85);
+}
+
+/* ADR Badges */
+.ets2-adr-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-adr-badge {
+    width: 25px;
+    height: 25px;
+    border-radius: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    transition: all 0.2s ease;
+}
+
+.ets2-adr-badge.locked {
+    filter: grayscale(100%) opacity(25%);
+    border: 1px solid #2d3139;
+}
+
+.ets2-adr-badge.unlocked {
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.7));
+    border: 1px solid #f59e0b;
+}
+
+.ets2-adr-badge.pending {
+    filter: drop-shadow(0 0 6px #38bdf8);
+    border: 1px solid #38bdf8;
+    background: rgba(2, 132, 199, 0.25);
+}
+
+.ets2-adr-badge img {
+    width: 21px;
+    height: 21px;
+    object-fit: contain;
+}
+
+/* Stepper Buttons */
+.ets2-stepper {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-step-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #383c46 0%, #22242a 100%);
+    border: 1px solid #4a505e;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: #d1d5db;
+    font-family: monospace;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    outline: none !important;
+}
+
+.ets2-step-btn:not(:disabled):hover {
+    background: linear-gradient(180deg, #484d5a 0%, #2c2f38 100%);
+    color: #f59e0b;
+    border-color: #636b7c;
+}
+
+.ets2-step-btn:not(:disabled):active {
+    background: linear-gradient(180deg, #1c1d22 0%, #2f323a 100%);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-step-btn:disabled {
+    opacity: 0.22;
+    cursor: not-allowed;
+}
+
+/* Right Column: Details Card */
+.ets2-skills-detail-col {
+    background: linear-gradient(180deg, #24272e 0%, #17181c 100%);
+    border: 1px solid #3c404b;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 8px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+}
+
+.ets2-unassigned-bar {
+    background: linear-gradient(180deg, #31353e 0%, #202329 100%);
+    border-bottom: 1px solid #141518;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Poppins', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    color: #cbd5e1;
+}
+
+.ets2-unassigned-num {
+    color: #f59e0b;
+    font-size: 15px;
+    font-weight: 800;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+}
+
+.ets2-detail-card {
+    padding: 10px 14px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.ets2-detail-card::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 2px;
+}
+
+.ets2-detail-title {
+    font-family: 'Poppins', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: #f59e0b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    margin: 0;
+}
+
+.ets2-detail-desc {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+    margin: 0;
+}
+
+.ets2-detail-ranks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.ets2-rank-item {
+    font-size: 10.5px;
+    line-height: 1.3;
+}
+
+.ets2-rank-item .rank-heading {
+    font-weight: 700;
+    margin-bottom: 1px;
+    font-size: 11px;
+}
+
+.ets2-rank-item.unlocked .rank-heading {
+    color: #f59e0b;
+}
+.ets2-rank-item.unlocked .rank-perks {
+    color: #fbbf24;
+}
+
+.ets2-rank-item.pending .rank-heading {
+    color: #38bdf8;
+}
+.ets2-rank-item.pending .rank-perks {
+    color: #7dd3fc;
+}
+
+.ets2-rank-item.locked .rank-heading {
+    color: #94a3b8;
+}
+.ets2-rank-item.locked .rank-perks {
+    color: #64748b;
+}
+
+/* Bottom Action Bar */
+.ets2-skills-bottom-bar {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 0 2px;
+}
+
+.ets2-apply-btn {
+    width: 260px;
+    height: 30px;
+    border-radius: 15px;
+    border: 1px solid #3c404b;
+    font-family: 'Poppins', sans-serif;
+    font-size: 11.5px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none !important;
+}
+
+.ets2-apply-btn:disabled {
+    background: linear-gradient(180deg, #2b2e36 0%, #191a1d 100%);
+    color: #64748b;
+    cursor: not-allowed;
+}
+
+.ets2-apply-btn:not(:disabled) {
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 45%, #b45309 100%);
+    border-color: #fef08a;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 14px rgba(245, 158, 11, 0.65);
+}
+
+.ets2-apply-btn:not(:disabled):hover {
+    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 45%, #d97706 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 18px rgba(245, 158, 11, 0.9);
+}
