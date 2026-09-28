@@ -157,9 +157,37 @@ RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId,
         if TruckRentalService then
             TruckRentalService.RegisterNetId(citizenId, truckNetId)
         end
+        local truckEnt = NetworkGetEntityFromNetworkId(tonumber(truckNetId))
+        if truckEnt and DoesEntityExist(truckEnt) then
+            pcall(function()
+                if exports['qbx_vehiclekeys'] then
+                    exports['qbx_vehiclekeys']:GiveKeys(src, truckEnt)
+                end
+            end)
+        end
     end
     if trailerNetId and tonumber(trailerNetId) then
         VP_Trucker.PlayerJobEntities[citizenId].trailerNetId = tonumber(trailerNetId)
+    end
+end)
+
+RegisterNetEvent('aurp_trucker:rental:registerNetId', function(netId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    if netId and tonumber(netId) then
+        if TruckRentalService then
+            TruckRentalService.RegisterNetId(citizenId, netId)
+        end
+        local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
+        if veh and DoesEntityExist(veh) then
+            pcall(function()
+                if exports['qbx_vehiclekeys'] then
+                    exports['qbx_vehiclekeys']:GiveKeys(src, veh)
+                end
+            end)
+        end
     end
 end)
 
@@ -1084,8 +1112,7 @@ end)
 -- LC LOGISTICS: QUICK JOBS & FREIGHT CONTRACTS
 -- =====================================================
 
-RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
-    local src = source
+local function StartLCContractForPlayer(src, contractId)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -1142,7 +1169,7 @@ RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
         load.trailer, payment, dist, os.time() + 7200
     })
 
-    TriggerClientEvent('aurp_trucker:client:startLCContract', src, {
+    local payload = {
         jobId = jobId,
         cargoName = load.name,
         truckModel = truckModel,
@@ -1152,7 +1179,79 @@ RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
         deliveryCoords = dest,
         payment = payment,
         distance = dist,
-    })
+    }
+
+    TriggerClientEvent('aurp_trucker:client:startLCContract', src, payload)
+    TriggerClientEvent('truck_logistics:startContract', src, 'buccaneer_hq', payload, 1)
+end
+
+RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
+    StartLCContractForPlayer(source, contractId)
+end)
+
+RegisterNetEvent('truck_logistics:startContract', function(location, data)
+    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
+    StartLCContractForPlayer(source, contractId)
+end)
+
+RegisterNetEvent('truck_logistics:deliveredCargo', function()
+    -- Confirma entrega do frete
+end)
+
+RegisterNetEvent('truck_logistics:finishContract', function(engine, body, trailerBody)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local row = MySQL.single.await([[
+        SELECT * FROM trucker_jobs WHERE player_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+    ]], { citizenId })
+    if row then
+        -- Conclui e processa autoritativamente
+        local payment = row.base_payment or 2500
+        local dist = row.distance or 2.5
+        Framework.AddMoney(Player, 'bank', payment, 'truck-logistics-finish')
+        MySQL.update.await([[
+            UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ?
+        ]], { row.id })
+        DB_AddPlayerStats(citizenId, payment, dist)
+        ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+        TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
+            payment = payment,
+            distance = dist,
+            parkedManually = true
+        })
+    end
+end)
+
+RegisterNetEvent('truck_logistics:buyTruck', function(location, data)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local truckModel = data and (data.truck_name or data.model or data.name)
+    if not truckModel then return end
+    local ok, res = TruckFleetService.BuyTruck(src, citizenId, truckModel)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão comprado com sucesso!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Falha ao comprar caminhão', 'error')
+    end
+end)
+
+RegisterNetEvent('truck_logistics:sellTruck', function(location, data)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local truckId = data and (data.truck_id or data.truckId or data.id)
+    if not truckId then return end
+    local ok, refund = TruckFleetService.SellTruck(src, citizenId, truckId)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, ('Caminhão vendido por $%d!'):format(refund or 0), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, refund or 'Falha ao vender caminhão', 'error')
+    end
 end)
 
 RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parkedManually)
