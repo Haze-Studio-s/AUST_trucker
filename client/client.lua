@@ -2802,6 +2802,51 @@ end)
 -- LC LOGISTICS: QUICK JOBS EXECUTION
 -- =====================================================
 
+local function createVehicleMarkersThread(truck, trailer)
+    CreateThread(function()
+        local timer = 2000
+        while lcActiveJob and (DoesEntityExist(truck) or DoesEntityExist(trailer)) do
+            timer = 2000
+            local ped = cache.ped or PlayerPedId()
+            local pCoords = GetEntityCoords(ped)
+
+            local isAttached = (DoesEntityExist(truck) and DoesEntityExist(trailer)) and (
+                IsEntityAttachedToEntity(trailer, truck) or 
+                IsEntityAttachedToEntity(truck, trailer) or 
+                IsVehicleAttachedToTrailer(truck)
+            )
+
+            if not isAttached then
+                if DoesEntityExist(truck) then
+                    local tkCoords = GetEntityCoords(truck)
+                    local distTruck = #(pCoords - tkCoords)
+                    if distTruck < 50.0 and GetVehiclePedIsIn(ped, false) ~= truck then
+                        timer = 2
+                        DrawMarker(0, tkCoords.x, tkCoords.y, tkCoords.z + 3.1,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            1.0, 1.0, 1.0,
+                            0, 100, 255, 180, false, true, 2, false, nil, nil, false)
+                    end
+                end
+
+                if DoesEntityExist(trailer) then
+                    local trCoords = GetEntityCoords(trailer)
+                    local distTrailer = #(pCoords - trCoords)
+                    if distTrailer < 50.0 then
+                        timer = 2
+                        DrawMarker(0, trCoords.x, trCoords.y, trCoords.z + 3.6,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            1.0, 1.0, 1.0,
+                            0, 100, 255, 180, false, true, 2, false, nil, nil, false)
+                    end
+                end
+            end
+
+            Wait(timer)
+        end
+    end)
+end
+
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     if not contract or lcActiveJob then return end
     isStartingJob = true
@@ -2841,6 +2886,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
 
     lcActiveJob.truck = truck
     lcActiveJob.trailer = trailer
+    createVehicleMarkersThread(truck, trailer)
 
     -- 3. Marcar GPS e Blip de Destino
     local dest = contract.deliveryCoords
