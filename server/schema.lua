@@ -1,0 +1,9 @@
+-- aurp_trucker — server/schema.lua
+-- ⚠️  ESTE ARQUIVO FOI UNIFICADO EM server/database.lua
+--
+-- O SchemaService (tabelas + migrations) agora está na seção
+-- "SCHEMA SERVICE" no topo de server/database.lua.
+--
+-- Para adicionar tabelas ou migrations, edite server/database.lua.
+-- Este arquivo existe apenas para compatibilidade com forks antigos
+-- que possam referenciar schema.lua diretamente.

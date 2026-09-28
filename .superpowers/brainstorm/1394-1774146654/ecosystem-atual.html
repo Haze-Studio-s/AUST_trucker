@@ -1,0 +1,142 @@
+<style>
+  .eco-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 20px;
+    margin: 20px 0;
+  }
+  .resource-box {
+    border-radius: 12px;
+    padding: 18px;
+    position: relative;
+  }
+  .resource-box h3 { margin: 0 0 8px; font-size: 1rem; }
+  .resource-box .tag { font-size: 0.7rem; opacity: 0.7; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px; display: block; }
+  .resource-box ul { margin: 0; padding-left: 16px; font-size: 0.82rem; line-height: 1.7; }
+
+  .box-oil    { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); border: 1px solid #f39c12; color: #f0e6d3; }
+  .box-truck  { background: linear-gradient(135deg, #1a1a2e 0%, #0f3460 100%); border: 1px solid #3498db; color: #d6e8f7; }
+  .box-sala   { background: linear-gradient(135deg, #1a1a2e 0%, #1c1f3a 100%); border: 1px solid #9b59b6; color: #e8d6f7; }
+  .box-gov    { background: linear-gradient(135deg, #1a1a2e 0%, #1a3a1a 100%); border: 1px solid #27ae60; color: #d6f7e0; }
+
+  .box-oil h3    { color: #f39c12; }
+  .box-truck h3  { color: #3498db; }
+  .box-sala h3   { color: #9b59b6; }
+  .box-gov h3    { color: #27ae60; }
+
+  .connectors {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 24px 0;
+  }
+  .conn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.83rem;
+    padding: 10px 14px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .conn .arrow { font-size: 1.1rem; opacity: 0.8; flex-shrink: 0; }
+  .conn .status-ok   { color: #2ecc71; font-weight: bold; font-size: 0.7rem; margin-left: auto; background: rgba(46,204,113,0.1); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .conn .status-miss { color: #e74c3c; font-weight: bold; font-size: 0.7rem; margin-left: auto; background: rgba(231,76,60,0.1); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+  .conn .status-prep { color: #f39c12; font-weight: bold; font-size: 0.7rem; margin-left: auto; background: rgba(243,156,18,0.1); padding: 2px 8px; border-radius: 4px; white-space: nowrap; }
+
+  .legend { display: flex; gap: 16px; margin-bottom: 16px; font-size: 0.75rem; opacity: 0.7; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+</style>
+
+<h2>Ecossistema Atual — Estado das Integrações</h2>
+<p class="subtitle">Os 4 resources e como se conectam hoje</p>
+
+<div class="eco-grid">
+  <div class="resource-box box-oil">
+    <span class="tag">🛢️ Petróleo & Gás</span>
+    <h3>lsn-oilfield</h3>
+    <ul>
+      <li>Poços, empresas, upgrades</li>
+      <li>Extração de barris de crude</li>
+      <li>Refinaria → Distribuição</li>
+      <li>Postos de gasolina nativos</li>
+      <li>Missões offshore co-op</li>
+      <li>Eventos dinâmicos de poço</li>
+    </ul>
+  </div>
+  <div class="resource-box box-truck">
+    <span class="tag">🚛 Logística</span>
+    <h3>aurp_trucker</h3>
+    <ul>
+      <li>Jobs de entrega tri-setor</li>
+      <li>Empresas de transporte</li>
+      <li>Convoy co-op</li>
+      <li>Cargo theft & repo man</li>
+      <li>ADR (hazmat) certs</li>
+      <li>Combustível/diesel como cargo</li>
+    </ul>
+  </div>
+  <div class="resource-box box-sala">
+    <span class="tag">👮 Fiscalização</span>
+    <h3>vp-sala</h3>
+    <ul>
+      <li>Inspeção de veículos (H key)</li>
+      <li>Ranking de fiscais</li>
+      <li>Multas unificadas por domínio</li>
+      <li>Embargos com expiração</li>
+      <li>Blitz e documentos oficiais</li>
+      <li>MDT e HQ central</li>
+    </ul>
+  </div>
+  <div class="resource-box box-gov">
+    <span class="tag">🏛️ Governo</span>
+    <h3>vp-governo</h3>
+    <ul>
+      <li>Licença de extração de petróleo</li>
+      <li>Licença de criação de empresa</li>
+      <li>Tesouro público</li>
+      <li>Leis & eleições</li>
+      <li>Multas dinâmicas por tipo</li>
+    </ul>
+  </div>
+</div>
+
+<h3 style="margin-top:28px; margin-bottom:12px;">Conexões Existentes</h3>
+<div class="connectors">
+  <div class="conn">
+    <span class="arrow">🛢️→👮</span>
+    <span><strong>lsn-oilfield → vp-sala</strong>: 9 exports (multas, embargos, ranking, patrulhas)</span>
+    <span class="status-ok">✅ Integrado</span>
+  </div>
+  <div class="conn">
+    <span class="arrow">🛢️→🏛️</span>
+    <span><strong>lsn-oilfield → vp-governo</strong>: imposto 15% nas vendas + criação de empresa</span>
+    <span class="status-ok">✅ Integrado</span>
+  </div>
+  <div class="conn">
+    <span class="arrow">👮→🏛️</span>
+    <span><strong>vp-sala → vp-governo</strong>: tesouro recebe % das multas pagas</span>
+    <span class="status-ok">✅ Integrado</span>
+  </div>
+</div>
+
+<h3 style="margin-bottom:12px;">Lacunas — O que falta para o ecossistema ser completo</h3>
+<div class="connectors">
+  <div class="conn">
+    <span class="arrow">🛢️⇢🚛</span>
+    <span><strong>lsn-oilfield ↔ aurp_trucker</strong>: barris de crude como cargo — pipeline de petróleo</span>
+    <span class="status-miss">❌ Sem integração</span>
+  </div>
+  <div class="conn">
+    <span class="arrow">🚛⇢👮</span>
+    <span><strong>aurp_trucker → vp-sala</strong>: infrações de transporte (exports preparados no trucker)</span>
+    <span class="status-prep">⚠️ Preparado</span>
+  </div>
+  <div class="conn">
+    <span class="arrow">🚛⇢🏛️</span>
+    <span><strong>aurp_trucker → vp-governo</strong>: licença de transportadora + impostos sobre entregas</span>
+    <span class="status-miss">❌ Sem integração</span>
+  </div>
+</div>

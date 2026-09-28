@@ -1,0 +1,150 @@
+<style>
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 20px 0;
+  }
+  .step {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+    border-left: 4px solid transparent;
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+  .step-oil    { border-color: #f39c12; }
+  .step-truck  { border-color: #3498db; }
+  .step-sala   { border-color: #9b59b6; }
+  .step-gov    { border-color: #27ae60; }
+  .step-crime  { border-color: #e74c3c; }
+  .step-all    { border-color: #95a5a6; background: rgba(255,255,255,0.07); }
+
+  .role-badge {
+    font-size: 0.68rem;
+    font-weight: bold;
+    padding: 3px 9px;
+    border-radius: 20px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .badge-oil   { background: rgba(243,156,18,0.2);  color: #f39c12; }
+  .badge-truck { background: rgba(52,152,219,0.2);  color: #3498db; }
+  .badge-sala  { background: rgba(155,89,182,0.2);  color: #9b59b6; }
+  .badge-gov   { background: rgba(39,174,96,0.2);   color: #27ae60; }
+  .badge-crime { background: rgba(231,76,60,0.2);   color: #e74c3c; }
+  .badge-all   { background: rgba(149,165,166,0.2); color: #bdc3c7; }
+
+  .arrow-down {
+    text-align: center;
+    font-size: 1.2rem;
+    opacity: 0.4;
+    margin: 1px 0;
+  }
+
+  .new-tag {
+    font-size: 0.65rem;
+    background: rgba(46,204,113,0.15);
+    color: #2ecc71;
+    border: 1px solid rgba(46,204,113,0.3);
+    padding: 1px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+
+  .section-title {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    opacity: 0.4;
+    margin: 18px 0 6px;
+  }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 10px; }
+  .side-box { background: rgba(255,255,255,0.04); border-radius: 10px; padding: 14px; font-size: 0.8rem; line-height: 1.7; }
+  .side-box h4 { margin: 0 0 8px; font-size: 0.85rem; }
+</style>
+
+<h2>Loop Completo do Ecossistema</h2>
+<p class="subtitle">Como cada perfil de jogador alimenta o próximo</p>
+
+<p class="section-title">⬇ Fluxo Principal de Petróleo</p>
+<div class="flow">
+
+  <div class="step step-gov">
+    <span class="role-badge badge-gov">🏛️ GOVERNO</span>
+    <span>Jogador obtém <strong>licença de extração de petróleo</strong> ($75K) no vp-governo. Sem licença, poço não produz. <span class="new-tag">novo hook</span></span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-oil">
+    <span class="role-badge badge-oil">🛢️ POÇO</span>
+    <span>Poço produz barris de <strong>crude oil</strong>. Dono emite <strong>manifesto de transporte</strong> (já existe no lsn-oilfield) para contratar entrega.</span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-gov">
+    <span class="role-badge badge-gov">🏛️ GOVERNO</span>
+    <span>Transportadora precisa de <strong>licença de hazmat</strong> para carregar crude ($30K, ADR flammable_liquid). vp-governo emite. <span class="new-tag">novo</span></span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-truck">
+    <span class="role-badge badge-truck">🚛 TRUCKER</span>
+    <span>Caminhoneiro aceita job de <strong>crude oil barrel</strong> (novo cargo type no aurp_trucker). Carrega tanker no poço, recebe manifesto integrado. <span class="new-tag">novo</span></span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-sala">
+    <span class="role-badge badge-sala">👮 SALA</span>
+    <span>Fiscal para caminhão na estrada (Transport Check — já existe). Verifica: <strong>ADR cert + manifesto válido + carga correta</strong>. Tudo ok → +pontos de ranking. <span class="new-tag">novo hook</span></span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-truck">
+    <span class="role-badge badge-truck">🚛 TRUCKER</span>
+    <span>Entrega à <strong>refinaria do lsn-oilfield</strong>. Bônus de preço se manifesto válido (já implementado). Desbloqueia processamento em refinery.</span>
+  </div>
+  <div class="arrow-down">↓</div>
+
+  <div class="step step-gov">
+    <span class="role-badge badge-gov">🏛️ GOVERNO</span>
+    <span><strong>Imposto de 15%</strong> coletado automaticamente na venda (já existe). Tesouro cresce. Governo pode subsidiar jobs ou eventos especiais. <span class="new-tag">subsídios: novo</span></span>
+  </div>
+
+</div>
+
+<p class="section-title">⚡ Eventos Cruzados — O que torna vivo</p>
+<div class="cols">
+  <div class="side-box">
+    <h4 style="color:#f39c12;">🛢️ Crise de Poço afeta Trucker</h4>
+    Evento de gas_kick ou pump_failure no lsn-oilfield → preço do crude sobe →
+    aurp_trucker gera jobs com <strong>bônus automático de pagamento</strong> enquanto o preço estiver alto.
+    <span class="new-tag">novo</span>
+  </div>
+  <div class="side-box">
+    <h4 style="color:#9b59b6;">👮 Embargo afeta Rotas</h4>
+    SALA embarga zona → aurp_trucker bloqueia geração de jobs de coleta
+    naquela zona. Caminhoneiros precisam buscar crude em outra zona.
+    <span class="new-tag">novo</span>
+  </div>
+  <div class="side-box">
+    <h4 style="color:#e74c3c;">🔴 Loop Criminal</h4>
+    Ladrão rouba caminhão de crude (cargo theft do trucker) →
+    vende no <strong>mercado negro</strong> com desconto → impacta preço do crude →
+    SALA recebe alerta + job de recuperação de carga.
+    <span class="new-tag">novo</span>
+  </div>
+  <div class="side-box">
+    <h4 style="color:#27ae60;">🏛️ Tesouro gera Conteúdo</h4>
+    Governo acumula impostos → pode lançar <strong>contratos públicos</strong>
+    (entregas urgentes com pagamento do tesouro) → qualquer trucker pode aceitar.
+    <span class="new-tag">novo</span>
+  </div>
+</div>
