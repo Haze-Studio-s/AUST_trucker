@@ -382,3 +382,133 @@ Config.LC_DeliveryLocations = {
     vector4(-704.20, 5772.55, 17.34, 68.44),
     vector4(2204.73, 5574.04, 53.74, 351.31)
 }
+
+-- Concessionária de Caminhões (Catálogo Oficial LC Logistics)
+Config.LC_Dealership = {
+    ['hauler'] = {
+        name = 'JoBuilt Hauler',
+        price = 70000,
+        engine = "12.0L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '500',
+        img = 'img/trucks/hauler.png',
+        driver_bonus = 4,
+        required_level = 0
+    },
+    ['phantom'] = {
+        name = 'JoBuilt Phantom',
+        price = 130000,
+        engine = "15.0L Turbocharged V12",
+        transmission = "10-Speed",
+        hp = '600',
+        img = 'img/trucks/phantom.png',
+        driver_bonus = 8,
+        required_level = 3
+    },
+    ['phantom3'] = {
+        name = 'JoBuilt Phantom Custom',
+        price = 180000,
+        engine = "16.5L Twin-Turbo V16",
+        transmission = "12-Speed Plus",
+        hp = '650',
+        img = 'img/trucks/phantom3.png',
+        driver_bonus = 10,
+        required_level = 5
+    },
+    ['packer'] = {
+        name = 'MTL Packer',
+        price = 110000,
+        engine = "13.0L Supercharged V8",
+        transmission = "8-Speed",
+        hp = '570',
+        img = 'img/trucks/packer.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['aerocab'] = {
+        name = 'Vapid Tanker',
+        price = 90000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '565',
+        img = 'img/trucks/aerocab.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['blacktop'] = {
+        name = 'Brute Blacktop',
+        price = 45000,
+        engine = "11.0L Brute I6",
+        transmission = "6-Speed",
+        hp = '420',
+        img = 'img/trucks/blacktop.png',
+        driver_bonus = 2,
+        required_level = 0
+    },
+    ['brickades'] = {
+        name = 'MTL Brickade',
+        price = 60000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '480',
+        img = 'img/trucks/brickades.png',
+        driver_bonus = 4,
+        required_level = 1
+    },
+    ['linerunner'] = {
+        name = 'HVY Linerunner',
+        price = 105000,
+        engine = "14.0L Supercharged V10",
+        transmission = "10-Speed",
+        hp = '580',
+        img = 'img/trucks/linerunner.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['vetirs'] = {
+        name = 'Vetir Semi',
+        price = 25000,
+        engine = "10.0L Vetir I6",
+        transmission = "6-Speed",
+        hp = '380',
+        img = 'img/trucks/vetirs.png',
+        driver_bonus = 0,
+        required_level = 0
+    }
+}
+
+-- Planos de Empréstimo Financeiro
+Config.LC_Loans = {
+    payment_interval_hours = 24,
+    plans = {
+        {
+            loan_amount = 20000,
+            interest_rate = 20,
+            repayment_days = 15
+        },
+        {
+            loan_amount = 50000,
+            interest_rate = 17.5,
+            repayment_days = 20
+        },
+        {
+            loan_amount = 100000,
+            interest_rate = 15,
+            repayment_days = 25
+        },
+        {
+            loan_amount = 400000,
+            interest_rate = 12.5,
+            repayment_days = 30
+        }
+    }
+}
+
+-- Custos de Reparo e Combustível na Oficina Mecânica
+Config.LC_RepairPrice = {
+    engine = 100,
+    transmission = 100,
+    wheels = 100,
+    body = 100,
+    fuel = 10
+}

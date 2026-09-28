@@ -1193,3 +1193,242 @@ RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parke
         parkedManually = parkedManually
     })
 end)
+
+-- =====================================================
+-- NUI LC TRUCK LOGISTICS INTEGRATION EVENTS
+-- =====================================================
+
+-- Concessionária: Comprar Caminhão
+RegisterNetEvent('aurp_trucker:fleet:buyTruck', function(truckModel)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player or not truckModel then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local ok, res = TruckFleetService.BuyTruck(src, citizenId, truckModel)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão comprado com sucesso!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Falha ao comprar caminhão', 'error')
+    end
+end)
+
+-- Concessionária: Vender Caminhão
+RegisterNetEvent('aurp_trucker:fleet:sellTruck', function(truckId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player or not truckId then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local ok, res = TruckFleetService.SellTruck(src, citizenId, tonumber(truckId))
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão vendido com sucesso!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Falha ao vender caminhão', 'error')
+    end
+end)
+
+-- Oficina: Reparo Completo de Caminhão
+RegisterNetEvent('aurp_trucker:fleet:repairTruck', function(truckId, part)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player or not truckId then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local truck = MySQL.single.await('SELECT * FROM trucker_trucks WHERE truck_id = ? AND user_id = ?', { tonumber(truckId), citizenId })
+    if not truck then return end
+
+    local cfg = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100 }
+    local cost = math.floor(((1000 - truck.body) / 10 * cfg.body) + ((1000 - truck.engine) / 10 * cfg.engine) + ((1000 - truck.transmission) / 10 * cfg.transmission) + ((1000 - truck.wheels) / 10 * cfg.wheels))
+    if cost <= 0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão já está em perfeitas condições!', 'info')
+        return
+    end
+
+    local balance = Framework.GetPlayerMoney(src, 'bank')
+    if balance < cost then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Saldo bancário insuficiente para o reparo!', 'error')
+        return
+    end
+
+    Framework.RemovePlayerMoney(src, 'bank', cost, 'Reparo de caminhão')
+    MySQL.update.await('UPDATE trucker_trucks SET body = 1000, engine = 1000, transmission = 1000, wheels = 1000 WHERE truck_id = ?', { tonumber(truckId) })
+    TriggerClientEvent('aurp_trucker:notify', src, ('Caminhão totalmente reparado por $%s!'):format(cost), 'success')
+end)
+
+-- Árvore de Habilidades: Upgrade de Skill
+RegisterNetEvent('aurp_trucker:server:upgradeSkill', function(skillType)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player or not skillType then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local ok, reason = ProgressionService.UpgradeSkill(citizenId, skillType)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, ('Habilidade [%s] aprimorada!'):format(skillType), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, reason or 'Não foi possível aprimorar', 'error')
+    end
+end)
+
+-- Empréstimo: Contratar Plano
+RegisterNetEvent('aurp_trucker:loan:takePlan', function(planIndex)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    planIndex = (tonumber(planIndex) or 0) + 1
+    local plans = Config.LC_Loans and Config.LC_Loans.plans
+    local plan = plans and plans[planIndex]
+    if not plan then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Plano de empréstimo inválido!', 'error')
+        return
+    end
+
+    local res = LoanService.Create(src, citizenId, nil, plan.loan_amount)
+    if res.success then
+        TriggerClientEvent('aurp_trucker:notify', src, ('Empréstimo de $%s concedido!'):format(plan.loan_amount), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res.reason or 'Falha ao solicitar empréstimo', 'error')
+    end
+end)
+
+-- Empréstimo: Quitar Empréstimo
+RegisterNetEvent('aurp_trucker:loan:payOff', function(loanId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    loanId = tonumber(loanId)
+    local loan = DB_GetLoanById(loanId)
+    if not loan or loan.citizenid ~= citizenId then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Empréstimo não encontrado', 'error')
+        return
+    end
+
+    local res = LoanService.Pay(src, citizenId, nil, loanId, loan.remaining_balance)
+    if res.success then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Empréstimo totalmente quitado!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res.reason or 'Falha ao quitar', 'error')
+    end
+end)
+
+-- RH: Contratar Motorista da Agência
+RegisterNetEvent('aurp_trucker:driver:hireAgency', function(driverIndex)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    driverIndex = tonumber(driverIndex) or 1
+    local ok, res = NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, ('Motorista %s contratado com sucesso!'):format(res.name), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Falha ao contratar motorista', 'error')
+    end
+end)
+
+-- RH: Demitir Motorista
+RegisterNetEvent('aurp_trucker:driver:fireHired', function(driverId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    driverId = tonumber(driverId)
+    local ok = NpcDriverService.FireHiredDriver(src, citizenId, driverId)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Motorista dispensado.', 'info')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, 'Falha ao dispensar motorista', 'error')
+    end
+end)
+
+-- RH: Atribuir Caminhão a Motorista
+RegisterNetEvent('aurp_trucker:driver:setTruck', function(driverId, truckId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    driverId = tonumber(driverId)
+    truckId = tonumber(truckId)
+    local ok, msg = NpcDriverService.AssignTruck(src, citizenId, driverId, truckId)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Atribuição de caminhão atualizada!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, msg or 'Falha ao atribuir caminhão', 'error')
+    end
+end)
+
+-- Banco: Depósito
+RegisterNetEvent('aurp_trucker:bank:deposit', function(amount)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return end
+
+    local company = CompanyService.GetByMember(citizenId)
+    if not company then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Você não possui empresa registrada para depósito.', 'error')
+        return
+    end
+
+    local cash = Framework.GetMoney(Player, 'cash') or 0
+    if cash < amount then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Dinheiro em mãos insuficiente!', 'error')
+        return
+    end
+
+    if Framework.RemoveMoney(Player, 'cash', amount, 'trucker-company-deposit') then
+        CompanyService.Deposit(company.id, amount, citizenId)
+        TriggerClientEvent('aurp_trucker:notify', src, ('Depositado $%s na conta da empresa!'):format(amount), 'success')
+    end
+end)
+
+-- Banco: Saque
+RegisterNetEvent('aurp_trucker:bank:withdraw', function(amount)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return end
+
+    local company = CompanyService.GetByMember(citizenId)
+    if not company then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Você não possui empresa registrada.', 'error')
+        return
+    end
+
+    local ok, res = CompanyService.Withdraw(company.id, amount, citizenId)
+    if ok then
+        Framework.AddMoney(Player, 'cash', amount, 'trucker-company-withdraw')
+        TriggerClientEvent('aurp_trucker:notify', src, ('Sacado $%s da conta da empresa!'):format(amount), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Saldo da empresa insuficiente!', 'error')
+    end
+end)
+
+-- Party: Criar Grupo
+RegisterNetEvent('aurp_trucker:party:create', function()
+    local src = source
+    local partyId, err = PartyService.Create(src)
+    if partyId then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Grupo de transporte criado!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, err or 'Falha ao criar grupo', 'error')
+    end
+end)
+
+-- Party: Sair do Grupo
+RegisterNetEvent('aurp_trucker:party:leave', function()
+    local src = source
+    PartyService.Leave(src)
+    TriggerClientEvent('aurp_trucker:notify', src, 'Você saiu do grupo.', 'info')
+end)

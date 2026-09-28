@@ -1,26 +1,43 @@
-let config;
+let config = {};
 
 window.addEventListener("message", async function (event) {
     let item = event.data;
-    let list_item;
-    if (item.utils) {
-        if (typeof Lang === "undefined") {
-            await Utils.loadLanguageModules(item.utils);
-        }
+    if (!item) return;
+
+    if (item.action === "close" || item.hidemenu) {
+        $(".main").fadeOut(200);
+        return;
     }
+
     if (item.resourceName) {
         Utils.setResourceName(item.resourceName);
     }
-    if (item.showmenu) {
-        config = item.dados.config;
-        let contracts = item.dados.trucker_available_contracts;
-        let users = item.dados.trucker_users;
-        let myTrucks = item.dados.trucker_trucks;
-        let drivers = item.dados.trucker_drivers;
-        let top_truckers = item.dados.top_truckers;
-        let loans = item.dados.trucker_loans;
-        let trucker_party_members = item.dados.trucker_party_members;
-        let trucker_party = item.dados.trucker_party;
+
+    if (item.utils && item.utils.config) {
+        Utils.setLocale(item.utils.config.locale || "en");
+        Utils.setFormat(item.utils.config.format || { currency: "USD", location: "en-US" });
+    }
+
+    if (item.showmenu || item.action === "open") {
+        let dados = item.dados || item;
+        config = dados.config || {};
+        config.player_level = config.player_level || 0;
+        config.required_xp_to_levelup = config.required_xp_to_levelup || [100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200];
+        config.party = config.party || { price_to_create: 500, max_members: 4, price_per_member: 100 };
+        config.loans = config.loans || { plans: [] };
+        config.dealership = config.dealership || {};
+
+        let contracts = Array.isArray(dados.trucker_available_contracts) ? dados.trucker_available_contracts : [];
+        let users = dados.trucker_users || {
+            user_id: 1, money: 0, total_earned: 0, finished_deliveries: 0,
+            exp: 0, traveled_distance: 0, skill_points: 0, dark_theme: 1
+        };
+        let myTrucks = Array.isArray(dados.trucker_trucks) ? dados.trucker_trucks : [];
+        let drivers = Array.isArray(dados.trucker_drivers) ? dados.trucker_drivers : [];
+        let top_truckers = Array.isArray(dados.top_truckers) ? dados.top_truckers : [];
+        let loans = Array.isArray(dados.trucker_loans) ? dados.trucker_loans : [];
+        let trucker_party_members = Array.isArray(dados.trucker_party_members) ? dados.trucker_party_members : [];
+        let trucker_party = dados.trucker_party || null;
 
         if (item.update != true) {
             // Open on first time
@@ -585,15 +602,16 @@ window.addEventListener("message", async function (event) {
         $("#trucks-page-list").empty();
         list_item = "";
         for (const truck of myTrucks) {
-            truck.body = truck.body / 10;
-            truck.engine = truck.engine / 10;
-            truck.transmission = truck.transmission / 10;
-            truck.wheels = truck.wheels / 10;
-            if (truck.driver == 0) {
-                $("#repair-truck-img").attr("src", config.dealership[truck.truck_name].img);
+            let truckInfo = (config.dealership && config.dealership[truck.truck_name]) ? config.dealership[truck.truck_name] : { name: truck.truck_name, img: "img/trucks/hauler.png" };
+            truck.body = truck.body > 100 ? (truck.body / 10) : truck.body;
+            truck.engine = truck.engine > 100 ? (truck.engine / 10) : truck.engine;
+            truck.transmission = truck.transmission > 100 ? (truck.transmission / 10) : truck.transmission;
+            truck.wheels = truck.wheels > 100 ? (truck.wheels / 10) : truck.wheels;
+            if (truck.driver == 0 || truck.driver == null) {
+                $("#repair-truck-img").attr("src", truckInfo.img);
                 $("#diagnostic-title-div").empty();
                 $("#diagnostic-title-div").append(`
-					<h4 class="text-uppercase">${Utils.translate("diagnostic_page_title")} <small>(${config.dealership[truck.truck_name].name})</small></h4>
+					<h4 class="text-uppercase">${Utils.translate("diagnostic_page_title")} <small>(${truckInfo.name})</small></h4>
 					<p>${Utils.translate("diagnostic_page_desc")}</p>
 				`);
                 let color;
@@ -613,14 +631,14 @@ window.addEventListener("message", async function (event) {
                 $("#diagnostic-body").append(`
 					<div class="media d-flex">
 						<div class="media-body text-left">
-							<h3 class="${color}">${truck.body} %</h3><small>${Utils.translate("diagnostic_page_chassi")} (${Utils.currencyFormat((100 - truck.body) * config.repair_price.body)})</small>
+							<h3 class="${color}">${truck.body} %</h3><small>${Utils.translate("diagnostic_page_chassi")} (${Utils.currencyFormat((100 - truck.body) * (config.repair_price ? config.repair_price.body : 100))})</small>
 						</div>
 						<div class="align-self-center">
 							<i class="fas fa-truck-field ${color} font-large-2 float-right"></i>
 						</div>
 					</div>
 					<div class="progress mt-1 mb-0" style="height: 7px;">
-						<div class="progress-bar ${bgcolor} role="progressbar" style="width: ${truck.body}%" aria-valuenow="${truck.body}" aria-valuemin="0" aria-valuemax="100"></div>
+						<div class="progress-bar ${bgcolor}" role="progressbar" style="width: ${truck.body}%" aria-valuenow="${truck.body}" aria-valuemin="0" aria-valuemax="100"></div>
 					</div>
 				`);
 
@@ -638,14 +656,14 @@ window.addEventListener("message", async function (event) {
                 $("#diagnostic-engine").append(`
 					<div class="media d-flex">
 						<div class="media-body text-left">
-							<h3 class="${color}">${truck.engine} %</h3><small>${Utils.translate("diagnostic_page_engine")} (${Utils.currencyFormat((100 - truck.engine) * config.repair_price.engine)})</small>
+							<h3 class="${color}">${truck.engine} %</h3><small>${Utils.translate("diagnostic_page_engine")} (${Utils.currencyFormat((100 - truck.engine) * (config.repair_price ? config.repair_price.engine : 100))})</small>
 						</div>
 						<div class="align-self-center">
 							<i class="fas fa-car-battery ${color} font-large-2 float-right"></i>
 						</div>
 					</div>
 					<div class="progress mt-1 mb-0" style="height: 7px;">
-						<div class="progress-bar ${bgcolor} role="progressbar" style="width: ${truck.engine}%" aria-valuenow="${truck.engine}" aria-valuemin="0" aria-valuemax="100"></div>
+						<div class="progress-bar ${bgcolor}" role="progressbar" style="width: ${truck.engine}%" aria-valuenow="${truck.engine}" aria-valuemin="0" aria-valuemax="100"></div>
 					</div>
 				`);
 
@@ -663,14 +681,14 @@ window.addEventListener("message", async function (event) {
                 $("#diagnostic-transmission").append(`
 					<div class="media d-flex">
 						<div class="media-body text-left">
-							<h3 class="${color}">${truck.transmission} %</h3><small>${Utils.translate("diagnostic_page_transmission")} (${Utils.currencyFormat((100 - truck.transmission) * config.repair_price.transmission)})</small>
+							<h3 class="${color}">${truck.transmission} %</h3><small>${Utils.translate("diagnostic_page_transmission")} (${Utils.currencyFormat((100 - truck.transmission) * (config.repair_price ? config.repair_price.transmission : 100))})</small>
 						</div>
 						<div class="align-self-center">
 							<i class="fas fa-tools ${color} font-large-2 float-right"></i>
 						</div>
 					</div>
 					<div class="progress mt-1 mb-0" style="height: 7px;">
-						<div class="progress-bar ${bgcolor} role="progressbar" style="width: ${truck.transmission}%" aria-valuenow="${truck.transmission}" aria-valuemin="0" aria-valuemax="100"></div>
+						<div class="progress-bar ${bgcolor}" role="progressbar" style="width: ${truck.transmission}%" aria-valuenow="${truck.transmission}" aria-valuemin="0" aria-valuemax="100"></div>
 					</div>
 				`);
 
@@ -688,22 +706,25 @@ window.addEventListener("message", async function (event) {
                 $("#diagnostic-wheels").append(`
 					<div class="media d-flex">
 						<div class="media-body text-left">
-							<h3 class="${color}">${truck.wheels} %</h3><small>${Utils.translate("diagnostic_page_wheels")} (${Utils.currencyFormat((100 - truck.wheels) * config.repair_price.wheels)})</small>
+							<h3 class="${color}">${truck.wheels} %</h3><small>${Utils.translate("diagnostic_page_wheels")} (${Utils.currencyFormat((100 - truck.wheels) * (config.repair_price ? config.repair_price.wheels : 100))})</small>
 						</div>
 						<div class="align-self-center">
 							<i class="fas fa-gear ${color} font-large-2 float-right"></i>
 						</div>
 					</div>
 					<div class="progress mt-1 mb-0" style="height: 7px;">
-						<div class="progress-bar ${bgcolor} role="progressbar" style="width: ${truck.wheels}%" aria-valuenow="${truck.wheels}" aria-valuemin="0" aria-valuemax="100"></div>
+						<div class="progress-bar ${bgcolor}" role="progressbar" style="width: ${truck.wheels}%" aria-valuenow="${truck.wheels}" aria-valuemin="0" aria-valuemax="100"></div>
 					</div>
 				`);
+
+                $("#repair-truck-btn").empty();
+                $("#repair-truck-btn").append(`<button onclick="repairTruck(${truck.truck_id})" type="button" class="btn btn-primary btn-block waves-effect waves-light">${Utils.translate("diagnostic_page_repair")}</button>`);
 
                 let refuel_btn = ``;
                 if (truck.fuel < 98) {
                     refuel_btn = `
 					<span class="mt-2">${Utils.translate("diagnostic_page_refuel_label")}</span>
-					<button onclick="refuelTruck(${truck.truck_id})" class="btn btn-danger mt-1">${Utils.currencyFormat((100 - truck.fuel) * config.repair_price.fuel, 0)}</button>`;
+					<button onclick="refuelTruck(${truck.truck_id})" class="btn btn-danger mt-1">${Utils.currencyFormat((100 - truck.fuel) * (config.repair_price ? config.repair_price.fuel : 10), 0)}</button>`;
                 }
                 if (truck.fuel > 20) {
                     bgcolor = "bg-warning";
@@ -725,9 +746,9 @@ window.addEventListener("message", async function (event) {
             }
             list_item += `
 				<li class="d-flex justify-content-between card-theme">
-					<div class="d-flex flex-row align-items-center"><img src="${config.dealership[truck.truck_name].img}" class="img-width" alt="User-Profile-Image">
+					<div class="d-flex flex-row align-items-center"><img src="${truckInfo.img}" class="img-width" alt="Truck-Image">
 						<div class="ml-2">
-							<h6 class="mb-0">${config.dealership[truck.truck_name].name}</h6>
+							<h6 class="mb-0">${truckInfo.name}</h6>
 							<div class="d-flex flex-row mt-1 text-black-50 date-time">
 								<div>
 									<i class="fas fa-truck-field"></i><span class="ml-2">${Utils.translate("trucks_page_chassi")}: ${truck.body}%</span>
@@ -1170,12 +1191,27 @@ $(document).ready(function () {
         let timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
         let baseText = (window.Utils && Utils.translate) ? Utils.translate("new_contracts").format(2) : "New contracts each 2 min";
         $("#new-contracts-1").text(`${baseText} (${timeStr})`);
-        $("#new-contracts-2").text(`${baseText} (${timeStr})`);
     }, 1000);
+
+    $(document).keyup(function (e) {
+        if (e.key === "Escape" || e.keyCode === 27) {
+            closeUI();
+        }
+    });
 });
 
 function closeUI() {
-    Utils.post("close", "");
+    $(".main").fadeOut(150);
+    try {
+        Utils.post("close", {});
+    } catch(e) {}
+    try {
+        fetch(`https://${GetParentResourceName()}/close`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+            body: JSON.stringify({})
+        }).catch(function() {});
+    } catch(e) {}
 }
 function startContract(contract_id, party) {
     Utils.post("startContract", { id: contract_id, party: party });

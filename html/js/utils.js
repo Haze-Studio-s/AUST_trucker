@@ -1,20 +1,23 @@
 let Utils = {};
 
-let locale;
-let format;
+let locale = "en";
+let format = { currency: "USD", location: "en-US" };
 Utils.translate = function (key) {
-    if (!Lang.hasOwnProperty(locale)) {
-        console.warn(`Language '${locale}' is not available. Using default 'en'.`);
+    if (typeof Lang === "undefined" || !Lang) {
+        return key;
+    }
+    if (!locale || !Lang.hasOwnProperty(locale)) {
         locale = "en";
     }
 
-    let langObj = Lang[locale];
+    let langObj = Lang[locale] || Lang["en"];
+    if (!langObj) return key;
+
     const keys = key.split(".");
 
     for (const k of keys) {
         if (!langObj.hasOwnProperty(k)) {
-            console.warn(`Translation key '${key}' not found for language '${locale}'.`);
-            return "missing_translation";
+            return key;
         }
         langObj = langObj[k];
     }
@@ -23,11 +26,11 @@ Utils.translate = function (key) {
 };
 
 Utils.setLocale = function (current_locale) {
-    locale = current_locale;
+    locale = current_locale || "en";
 };
 
 Utils.setFormat = function (current_format) {
-    format = current_format;
+    format = current_format || { currency: "USD", location: "en-US" };
 };
 
 Utils.loadLanguageFile = async function () {
@@ -64,23 +67,34 @@ Utils.loadLanguageFile = async function () {
 };
 
 Utils.loadLanguageModules = async function (utils_module) {
-    Utils.setLocale(utils_module.config.locale);
-    Utils.setFormat(utils_module.config.format);
-    await Utils.loadLanguageFile();
-    Utils.deepMerge(Lang,utils_module.lang);
+    if (utils_module && utils_module.config) {
+        Utils.setLocale(utils_module.config.locale || "en");
+        Utils.setFormat(utils_module.config.format || { currency: "USD", location: "en-US" });
+    }
+    try {
+        await Utils.loadLanguageFile();
+    } catch(e) {}
+    if (utils_module && utils_module.lang && typeof Lang !== "undefined") {
+        Utils.deepMerge(Lang, utils_module.lang);
+    }
 };
 
 Utils.timeConverter = function (UNIX_timestamp, options = {}) {
-    const timestampMillis = UNIX_timestamp * 1000;
-    const formattedTime = new Date(timestampMillis).toLocaleString(locale, options);
-
-    return formattedTime;
+    const timestampMillis = (UNIX_timestamp || 0) * 1000;
+    try {
+        return new Date(timestampMillis).toLocaleString(locale || "en-US", options);
+    } catch (e) {
+        return new Date(timestampMillis).toISOString();
+    }
 };
 
 Utils.currencyFormat = function (number, decimalPlaces = null) {
+    if (!format || !format.currency) {
+        format = { currency: "USD", location: "en-US" };
+    }
     const options = {
         style: "currency",
-        currency: format.currency,
+        currency: format.currency || "USD",
     };
 
     if (decimalPlaces != null) {
@@ -88,17 +102,28 @@ Utils.currencyFormat = function (number, decimalPlaces = null) {
         options.maximumFractionDigits = decimalPlaces;
     }
 
-    return new Intl.NumberFormat(format.location, options).format(number);
+    try {
+        return new Intl.NumberFormat(format.location || "en-US", options).format(number || 0);
+    } catch (e) {
+        return "$" + (number || 0);
+    }
 };
 
 Utils.numberFormat = function (number, decimalPlaces = 0) {
+    if (!format || !format.location) {
+        format = { currency: "USD", location: "en-US" };
+    }
     const factor = Math.pow(10, decimalPlaces);
-    const rounded = Math.round(number * factor) / factor;
+    const rounded = Math.round((number || 0) * factor) / factor;
 
-    return new Intl.NumberFormat(format.location, {
-        minimumFractionDigits: decimalPlaces,
-        maximumFractionDigits: decimalPlaces,
-    }).format(rounded);
+    try {
+        return new Intl.NumberFormat(format.location || "en-US", {
+            minimumFractionDigits: decimalPlaces,
+            maximumFractionDigits: decimalPlaces,
+        }).format(rounded);
+    } catch (e) {
+        return "" + (rounded || 0);
+    }
 };
 
 Utils.getCurrencySymbol = function () {
@@ -553,6 +578,7 @@ Utils.onInvalidInput = function (textbox) { // oninvalid="Utils.onInvalidInput(t
  * @returns {Array} - The sorted array of objects.
  */
 Utils.sortElement = function(input, propertyPath, ascending = true) {
+    if (!input) return [];
     let arrayToSort;
 
     // Convert input to an array of objects if it's not already one, including `.id`

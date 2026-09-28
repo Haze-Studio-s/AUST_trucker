@@ -196,7 +196,7 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             table.insert(lc_contracts, {
                 contract_id   = i,
                 contract_name = load.name,
-                contract_type = 0,
+                contract_type = (i % 2 == 0) and 1 or 0, -- Alterna entre Quick Jobs (0) e Freight Jobs (1)
                 distance      = tonumber(string.format("%.2f", baseDist)),
                 reward        = reward,
                 truck         = truckModel,
@@ -212,7 +212,88 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
 
         local fleetTrucks = _r.fleetTrucks or (TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId)) or {}
         local hiredDrivers = _r.hiredDrivers or (NpcDriverService and NpcDriverService.GetHiredDrivers(citizenId)) or {}
-        local loanPlans = _r.loanPlans or (LoanService and LoanService.GetPlans(citizenId)) or {}
+
+        -- Motoristas da Agência de Recrutamento (user_id = nil para aparecer na aba Recruitment)
+        local agencyCatalog = (NpcDriverService and NpcDriverService.GetAgencyCatalog()) or {}
+        local combinedDrivers = {}
+        for _, hd in ipairs(hiredDrivers) do
+            table.insert(combinedDrivers, {
+                driver_id    = hd.driver_id,
+                user_id      = hd.user_id,
+                name         = hd.name,
+                img          = hd.img or 'img/avatar/avatar1.png',
+                price        = hd.price or 1000,
+                product_type = hd.product_type or 0,
+                distance     = hd.distance or 0,
+                valuable     = hd.valuable or 0,
+                fragile      = hd.fragile or 0,
+                fast         = hd.fast or 0,
+            })
+        end
+        for i, cand in ipairs(agencyCatalog) do
+            table.insert(combinedDrivers, {
+                driver_id    = cand.driver_id or cand.id or i,
+                user_id      = nil, -- user_id nil indica candidato disponível para contratação
+                name         = cand.name,
+                img          = cand.img or 'img/avatar/avatar1.png',
+                price        = cand.price or 800,
+                product_type = cand.product_type or 0,
+                distance     = cand.distance or cand.distance_skill or 0,
+                valuable     = cand.valuable or cand.valuable_skill or 0,
+                fragile      = cand.fragile or cand.fragile_skill or 0,
+                fast         = cand.fast or cand.fast_skill or 0,
+            })
+        end
+
+        -- Empréstimos Ativos do Jogador
+        local activeLoansList = {}
+        if _r.personalLoan then
+            table.insert(activeLoansList, {
+                id               = _r.personalLoan.id,
+                loan             = _r.personalLoan.amount,
+                day_cost         = _r.personalLoan.monthly_payment,
+                remaining_amount = _r.personalLoan.remaining_balance,
+                timer            = _r.personalLoan.next_payment_at or os.time(),
+            })
+        end
+
+        -- Ranking dos Top Caminhoneiros
+        local topTruckersList = {}
+        local topRows = MySQL.query.await([[
+            SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp
+            FROM trucker_player_progression p
+            ORDER BY p.xp DESC
+            LIMIT 10
+        ]]) or {}
+        for _, row in ipairs(topRows) do
+            table.insert(topTruckersList, {
+                name = 'Motorista #' .. string.sub(tostring(row.citizenid), 1, 5),
+                firstname = '',
+                traveled_distance = tonumber(row.traveled_distance) or 0,
+                exp = tonumber(row.exp) or 0
+            })
+        end
+
+        -- Sincronização de Party / Grupo
+        local partyObj = nil
+        local partyMembersList = {}
+        if partyPayload then
+            partyObj = {
+                name          = partyPayload.name or ('Grupo #' .. partyPayload.partyId),
+                description   = partyPayload.description or 'Grupo de transporte cooperativo',
+                owner         = partyPayload.isLeader and 1 or 0,
+                user_id       = partyPayload.isLeader and citizenId or '',
+                members       = partyPayload.maxSize or 4,
+                members_count = #partyPayload.members,
+            }
+            for _, m in ipairs(partyPayload.members) do
+                table.insert(partyMembersList, {
+                    user_id = m.citizenid,
+                    name    = m.name,
+                    owner   = m.isLeader,
+                })
+            end
+        end
 
         local lc_dados = {
             config = {
@@ -222,7 +303,7 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                 max_loan_per_level = { 50000, 100000, 200000, 400000 },
                 loans = Config.LC_Loans or {},
                 cooldown = 2,
-                party = { price_to_create = 500, max_members = 4 },
+                party = { price_to_create = 500, max_members = 4, price_per_member = 100 },
                 disable_loans = false,
                 disable_drivers = false,
                 max_emprestimo = 400000,
@@ -246,9 +327,11 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                 dark_theme = 1,
             },
             trucker_trucks = fleetTrucks,
-            trucker_drivers = hiredDrivers,
-            trucker_loans = loanPlans,
-            top_truckers = {},
+            trucker_drivers = combinedDrivers,
+            trucker_loans = activeLoansList,
+            trucker_party_members = partyMembersList,
+            trucker_party = partyObj,
+            top_truckers = topTruckersList,
             available_money = playerMoney,
         }
 

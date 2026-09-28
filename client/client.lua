@@ -386,6 +386,20 @@ end, false)
 RegisterCommand('-trucker_close_ui', function() end, false)
 RegisterKeyMapping('+trucker_close_ui', 'Fechar painel caminhoneiro', 'keyboard', 'BACK')
 
+local function RefreshNUIData()
+    if not isNUIOpen then return end
+    SetTimeout(350, function()
+        if not isNUIOpen then return end
+        local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
+        if ok and data and data.lc_dados then
+            SendNUIMessage({
+                update = true,
+                dados = data.lc_dados,
+            })
+        end
+    end)
+end
+
 -- NUI Callbacks: Protocolo LC Logistics (Utils.post)
 RegisterNUICallback('post', function(body, cb)
     local event = body and body.event
@@ -414,6 +428,7 @@ RegisterNUICallback('post', function(body, cb)
     if event == "buyTruck" then
         local truckName = data and data.truck_name
         TriggerServerEvent('aurp_trucker:fleet:buyTruck', truckName)
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -421,6 +436,7 @@ RegisterNUICallback('post', function(body, cb)
     if event == "sellTruck" then
         local truckId = data and data.truck_id
         TriggerServerEvent('aurp_trucker:fleet:sellTruck', truckId)
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -428,6 +444,7 @@ RegisterNUICallback('post', function(body, cb)
     if event == "repairTruck" then
         local truckId = data and (data.id or data.truck_id)
         TriggerServerEvent('aurp_trucker:fleet:repairTruck', truckId, 'all')
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -435,6 +452,7 @@ RegisterNUICallback('post', function(body, cb)
     if event == "upgradeSkill" then
         local skillId = data and data.id
         TriggerServerEvent('aurp_trucker:server:upgradeSkill', skillId)
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -442,6 +460,15 @@ RegisterNUICallback('post', function(body, cb)
     if event == "loan" then
         local planId = data and data.loan_id
         TriggerServerEvent('aurp_trucker:loan:takePlan', planId)
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "payLoan" then
+        local loanId = data and data.loan_id
+        TriggerServerEvent('aurp_trucker:loan:payOff', loanId)
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -449,6 +476,7 @@ RegisterNUICallback('post', function(body, cb)
     if event == "hireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:hireAgency', driverId)
+        RefreshNUIData()
         cb(200)
         return
     end
@@ -456,6 +484,46 @@ RegisterNUICallback('post', function(body, cb)
     if event == "fireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:fireHired', driverId)
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "setDriver" then
+        local driverId = data and data.driver_id
+        local truckId = data and data.truck_id
+        TriggerServerEvent('aurp_trucker:driver:setTruck', driverId, truckId)
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "depositMoney" then
+        local amount = data and data.amount
+        TriggerServerEvent('aurp_trucker:bank:deposit', amount)
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "withdrawMoney" then
+        local amount = data and data.amount
+        TriggerServerEvent('aurp_trucker:bank:withdraw', amount)
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "createParty" then
+        TriggerServerEvent('aurp_trucker:party:create')
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "quitParty" or event == "deleteParty" then
+        TriggerServerEvent('aurp_trucker:party:leave')
+        RefreshNUIData()
         cb(200)
         return
     end
