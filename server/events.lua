@@ -1079,3 +1079,117 @@ RegisterNetEvent('aurp_trucker:containerHandler:cancel', function()
 end)
 
 -- audit C-03: ContainerHandler.OnPlayerDropped foi movido para o handler centralizado (linha ~647)
+
+-- =====================================================
+-- LC LOGISTICS: QUICK JOBS & FREIGHT CONTRACTS
+-- =====================================================
+
+RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    if JobService.GetActiveByPlayer(citizenId) then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Você já possui uma entrega ativa!', 'error')
+        return
+    end
+
+    contractId = tonumber(contractId) or 1
+    local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
+    local load = availableLoads[contractId] or availableLoads[1]
+    if not load then return end
+
+    -- Local de entrega autoritativo
+    local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
+    local destIndex = ((contractId - 1) % #deliveryLocs) + 1
+    local dest = deliveryLocs[destIndex]
+
+    -- Ponto de origem: Buccaneer Way
+    local origin = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
+    local dist = #(vector3(dest.x, dest.y, dest.z) - origin) / 1000.0
+
+    -- Cálculo autoritativo de pagamento com bônus e taxa da firma (Quick Job)
+    local def = load.def or {0,0,0,0}
+    local adr = def[1] or 0
+    local fragile = def[2] or 0
+    local valuable = def[3] or 0
+    local illegal = def[4] or 0
+
+    local baseRate = 1250 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
+    -- Quick Job desconta taxa de aluguel de veículo fornecido pela firma (15%)
+    local rentalFeePct = (Config.LC_Jobs and Config.LC_Jobs.truck_rental and Config.LC_Jobs.truck_rental.rental_fee_percent) or 15
+    local rawPayment = math.floor(dist * baseRate + 1200)
+    local payment = math.floor(rawPayment * (1 - (rentalFeePct / 100)))
+
+    -- Sorteio de vagas livres de spawn na doca
+    local garageSpawns = Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns or { vector4(1250.55, -3162.4, 5.88, 270.00) }
+    local trailerSpawns = Config.LC_Headquarters and Config.LC_Headquarters.trailer_spawns or { vector4(1274.21, -3186.43, 5.91, 90.00) }
+    local truckSpawn = garageSpawns[((contractId - 1) % #garageSpawns) + 1]
+    local trailerSpawn = trailerSpawns[((contractId - 1) % #trailerSpawns) + 1]
+
+    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    local truckModel = rentalTrucks[((contractId - 1) % #rentalTrucks) + 1]
+
+    local jobId = ('lc_%d_%d'):format(os.time(), math.random(1000, 9999))
+    MySQL.insert.await([[
+        INSERT INTO trucker_jobs (
+            id, status, player_id, origin_id, dest_id, cargo_item,
+            trailer_model, base_payment, distance, expires_at, created_at
+        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, ?, NOW())
+    ]], {
+        jobId, citizenId, ('dest_%d'):format(destIndex), load.name,
+        load.trailer, payment, dist, os.time() + 7200
+    })
+
+    TriggerClientEvent('aurp_trucker:client:startLCContract', src, {
+        jobId = jobId,
+        cargoName = load.name,
+        truckModel = truckModel,
+        trailerModel = load.trailer,
+        truckSpawn = truckSpawn,
+        trailerSpawn = trailerSpawn,
+        deliveryCoords = dest,
+        payment = payment,
+        distance = dist,
+    })
+end)
+
+RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parkedManually)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local row = MySQL.single.await([[
+        SELECT * FROM trucker_jobs WHERE id = ? AND player_id = ? AND status = 'active'
+    ]], { jobId, citizenId })
+
+    if not row then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Contrato inválido ou já concluído!', 'error')
+        return
+    end
+
+    local payment = row.base_payment or 2500
+    local dist = row.distance or 2.5
+
+    -- Bônus de manobra perfeita manual (+5% $ e +45 XP)
+    if parkedManually then
+        payment = math.floor(payment * 1.05)
+    end
+
+    Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
+
+    MySQL.update.await([[
+        UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ?
+    ]], { jobId })
+
+    DB_AddPlayerStats(citizenId, payment, dist)
+    ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+
+    TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
+        payment = payment,
+        distance = dist,
+        parkedManually = parkedManually
+    })
+end)

@@ -98,7 +98,7 @@ export function JobList() {
               <div className="bg-lation-surface-deep border border-lation-line rounded-lg p-2.5">
                 <p className="text-[10px] text-lation-content-muted font-mono uppercase">Distância da Viagem</p>
                 <p className="font-mono font-bold text-white mt-1">
-                  {selectedJob.distance > 0 ? `${selectedJob.distance.toFixed(1)} km` : 'Especial'}
+                  {Number(selectedJob.distance || 0) > 0 ? `${Number(selectedJob.distance).toFixed(1)} km` : 'Especial'}
                 </p>
               </div>
               <div className="bg-lation-surface-deep border border-lation-line rounded-lg p-2.5">

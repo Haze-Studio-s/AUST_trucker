@@ -330,12 +330,14 @@ end)
 -- SISTEMA NUI
 -- =======================================
 
+
+
 local function CloseJobBoard()
     if not isNUIOpen then return end
 
     isNUIOpen = false
     SetNuiFocus(false, false)
-    SendNUIMessage({ action = 'close' })
+    SendNUIMessage({ action = 'close', hidemenu = true })
 end
 
 local function OpenJobBoard()
@@ -351,29 +353,27 @@ local function OpenJobBoard()
     isNUIOpen = true
     SetNuiFocus(true, true)
 
-    -- action 'open' é a única que o NUI React reconhece para abrir a tela
+    -- Enviar para a interface oficial LC Truck Logistics
     SendNUIMessage({
-        action              = 'open',
-        jobs                = data.jobs or {},
-        company             = data.company,
-        activeJob           = data.activeJob,
-        stats               = data.stats,
-        playerName          = data.playerName,
-        playerMoney         = data.playerMoney,
-        rentalTrucks        = data.rentalTrucks or (Config.TruckRental and Config.TruckRental.trucks or {}),
-        activeRental        = data.activeRental,
-        recruitingCompanies = data.recruitingCompanies or {},
-        skills              = data.skills,
-        personalLoan        = data.personalLoan,
-        companyLoan         = data.companyLoan,
-        repoOrders          = data.repoOrders,
-        activeRepoOrder     = data.activeRepoOrder,
-        ownedIndustries     = data.ownedIndustries,
-        currentParty        = data.currentParty,
-        npcDrivers          = data.npcDrivers,
-        adrCerts            = data.adrCerts,
-        clients             = data.clients or {},
-        activeContract      = data.activeContract,
+        showmenu     = true,
+        update       = false,
+        dados        = data.lc_dados or data,
+        utils        = {
+            config = {
+                locale = "en",
+                format = { currency = "USD", location = "en-US" }
+            },
+            lang = {}
+        },
+        resourceName = GetCurrentResourceName(),
+        -- Retrocompatibilidade
+        action       = 'open',
+        jobs         = data.jobs or {},
+        company      = data.company,
+        activeJob    = data.activeJob,
+        stats        = data.stats,
+        playerName   = data.playerName,
+        playerMoney  = data.playerMoney,
     })
 end
 
@@ -386,7 +386,90 @@ end, false)
 RegisterCommand('-trucker_close_ui', function() end, false)
 RegisterKeyMapping('+trucker_close_ui', 'Fechar painel caminhoneiro', 'keyboard', 'BACK')
 
--- NUI Callbacks
+-- NUI Callbacks: Protocolo LC Logistics (Utils.post)
+RegisterNUICallback('post', function(body, cb)
+    local event = body and body.event
+    local data  = body and body.data
+
+    if event == "close" then
+        CloseJobBoard()
+        cb(200)
+        return
+    end
+
+    if event == "startContract" then
+        CloseJobBoard()
+        local contractId = data and data.id
+        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
+        cb(200)
+        return
+    end
+
+    if event == "cancelContract" then
+        ExecuteCommand('canceljob')
+        cb(200)
+        return
+    end
+
+    if event == "buyTruck" then
+        local truckName = data and data.truck_name
+        TriggerServerEvent('aurp_trucker:fleet:buyTruck', truckName)
+        cb(200)
+        return
+    end
+
+    if event == "sellTruck" then
+        local truckId = data and data.truck_id
+        TriggerServerEvent('aurp_trucker:fleet:sellTruck', truckId)
+        cb(200)
+        return
+    end
+
+    if event == "repairTruck" then
+        local truckId = data and (data.id or data.truck_id)
+        TriggerServerEvent('aurp_trucker:fleet:repairTruck', truckId, 'all')
+        cb(200)
+        return
+    end
+
+    if event == "upgradeSkill" then
+        local skillId = data and data.id
+        TriggerServerEvent('aurp_trucker:server:upgradeSkill', skillId)
+        cb(200)
+        return
+    end
+
+    if event == "loan" then
+        local planId = data and data.loan_id
+        TriggerServerEvent('aurp_trucker:loan:takePlan', planId)
+        cb(200)
+        return
+    end
+
+    if event == "hireDriver" then
+        local driverId = data and data.driver_id
+        TriggerServerEvent('aurp_trucker:driver:hireAgency', driverId)
+        cb(200)
+        return
+    end
+
+    if event == "fireDriver" then
+        local driverId = data and data.driver_id
+        TriggerServerEvent('aurp_trucker:driver:fireHired', driverId)
+        cb(200)
+        return
+    end
+
+    cb(200)
+end)
+
+RegisterNUICallback('startJob', function(data, cb)
+    CloseJobBoard()
+    local contractId = data and (data.id or data.jobId)
+    TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
+    cb('ok')
+end)
+
 RegisterNUICallback('close', function(data, cb)
     CloseJobBoard()
     cb('ok')
@@ -2548,4 +2631,132 @@ RegisterNetEvent('aurp_trucker:client:contractCompleted', function()
     UpdateContractPoint(nil)
     SetWaypointOff()
     lib.notify({ title = 'Contrato Concluído!', description = 'Pagamento depositado na sua conta.', type = 'success', duration = 8000 })
+end)
+
+-- =====================================================
+-- LC LOGISTICS: QUICK JOBS EXECUTION
+-- =====================================================
+
+local lcActiveJob = nil
+local lcDeliveryPoint = nil
+local lcDeliveryBlip = nil
+
+RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
+    if not contract then return end
+    lcActiveJob = contract
+
+    -- 1. Spawn do caminhão da firma
+    local truckModel = contract.truckModel or 'hauler'
+    local truckHash = joaat(truckModel)
+    lib.requestModel(truckHash)
+    local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
+    local truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
+    SetEntityHeading(truck, tspawn.w)
+    SetVehicleOnGroundProperly(truck)
+    SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
+    SetEntityAsMissionEntity(truck, true, true)
+    SetVehicleHasBeenOwnedByPlayer(truck, true)
+    if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end) end
+    if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end) end
+
+    -- 2. Spawn do reboque designado
+    local trailerModel = contract.trailerModel or 'docktrailer'
+    local trailerHash = joaat(trailerModel)
+    lib.requestModel(trailerHash)
+    local trspawn = contract.trailerSpawn or vector4(1274.21, -3186.43, 5.91, 90.00)
+    local trailer = CreateVehicle(trailerHash, trspawn.x, trspawn.y, trspawn.z, trspawn.w, true, false)
+    SetEntityHeading(trailer, trspawn.w)
+    SetVehicleOnGroundProperly(trailer)
+    SetEntityAsMissionEntity(trailer, true, true)
+
+    lcActiveJob.truck = truck
+    lcActiveJob.trailer = trailer
+
+    -- 3. Marcar GPS e Blip de Destino
+    local dest = contract.deliveryCoords
+    SetNewWaypoint(dest.x, dest.y)
+
+    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then RemoveBlip(lcDeliveryBlip) end
+    lcDeliveryBlip = AddBlipForCoord(dest.x, dest.y, dest.z)
+    SetBlipSprite(lcDeliveryBlip, 477)
+    SetBlipColour(lcDeliveryBlip, 3)
+    SetBlipScale(lcDeliveryBlip, 0.9)
+    SetBlipRoute(lcDeliveryBlip, true)
+    SetBlipRouteColour(lcDeliveryBlip, 3)
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("Entrega: " .. (contract.cargoName or "Carga"))
+    EndTextCommandSetBlipName(lcDeliveryBlip)
+
+    lib.notify({
+        title = 'Quick Job Iniciado!',
+        description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca!'):format(contract.cargoName, contract.payment),
+        type = 'success',
+        duration = 8000
+    })
+
+    -- 4. Ponto de entrega com lib.points
+    if lcDeliveryPoint then pcall(function() lcDeliveryPoint:remove() end) end
+    lcDeliveryPoint = lib.points.new({
+        coords = vector3(dest.x, dest.y, dest.z),
+        distance = 35.0,
+        nearby = function(self)
+            DrawMarker(1, self.coords.x, self.coords.y, self.coords.z - 1.0,
+                0, 0, 0, 0, 0, 0, 4.0, 4.0, 1.2,
+                16, 185, 129, 140, false, false, 2, false, nil, nil, false)
+
+            if self.currentDistance <= 6.0 then
+                local ped = PlayerPedId()
+                local veh = GetVehiclePedIsIn(ped, false)
+                if veh ~= 0 then
+                    lib.showTextUI('[E] Descarregar e Concluir Frete')
+                    if IsControlJustPressed(0, 38) then
+                        lib.hideTextUI()
+                        if lib.progressBar({
+                            duration = 4000,
+                            label = 'Descarregando mercadoria...',
+                            useWhileDead = false,
+                            canCancel = false,
+                        }) then
+                            TriggerServerEvent('aurp_trucker:server:completeLCContract', contract.jobId, true)
+                        end
+                    end
+                end
+            else
+                lib.hideTextUI()
+            end
+        end,
+        onExit = function()
+            lib.hideTextUI()
+        end
+    })
+end)
+
+RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
+    if lcDeliveryPoint then
+        pcall(function() lcDeliveryPoint:remove() end)
+        lcDeliveryPoint = nil
+    end
+    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+        RemoveBlip(lcDeliveryBlip)
+        lcDeliveryBlip = nil
+    end
+    SetWaypointOff()
+    lib.hideTextUI()
+
+    if lcActiveJob then
+        if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
+            DeleteEntity(lcActiveJob.trailer)
+        end
+        if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
+            DeleteEntity(lcActiveJob.truck)
+        end
+        lcActiveJob = nil
+    end
+
+    lib.notify({
+        title = 'Entrega Concluída!',
+        description = ('Recebido: $%d | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, result.distance or 0.0),
+        type = 'success',
+        duration = 10000
+    })
 end)

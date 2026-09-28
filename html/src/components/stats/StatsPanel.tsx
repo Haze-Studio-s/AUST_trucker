@@ -128,15 +128,15 @@ export function StatsPanel() {
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="bg-card rounded-lg p-3 border border-app-border text-center">
-                  <p className="text-success font-bold text-lg">${stats.total_earnings.toLocaleString()}</p>
+                  <p className="text-success font-bold text-lg">${Number(stats.total_earnings || 0).toLocaleString()}</p>
                   <p className="text-txt text-[10px]">Total Ganho</p>
                 </div>
                 <div className="bg-card rounded-lg p-3 border border-app-border text-center">
-                  <p className="text-primary font-bold text-lg">{stats.total_deliveries}</p>
+                  <p className="text-primary font-bold text-lg">{Number(stats.total_deliveries || 0)}</p>
                   <p className="text-txt text-[10px]">Entregas</p>
                 </div>
                 <div className="bg-card rounded-lg p-3 border border-app-border text-center">
-                  <p className="text-txt-light font-bold text-lg">{stats.total_distance.toFixed(0)} km</p>
+                  <p className="text-txt-light font-bold text-lg">{Number(stats.total_distance || 0).toFixed(0)} km</p>
                   <p className="text-txt text-[10px]">Distância</p>
                 </div>
               </div>

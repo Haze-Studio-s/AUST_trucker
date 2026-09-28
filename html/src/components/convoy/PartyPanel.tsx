@@ -119,7 +119,7 @@ export function PartyPanel() {
 
                   <div className="flex flex-col items-center">
                     <span className={`text-sm font-semibold ${bonusPct > 0 ? 'text-gold' : 'text-txt'}`}>
-                      ×{row.bonus_mult.toFixed(2)}
+                      ×{Number(row.bonus_mult || 1).toFixed(2)}
                     </span>
                     {bonusPct > 0 && (
                       <span className="text-gold text-xs">+{bonusPct}%</span>
@@ -242,7 +242,7 @@ export function PartyPanel() {
                       </div>
                       <div className="text-right">
                         <p className="text-success text-sm font-semibold">${job.basePayment.toLocaleString()}</p>
-                        <p className="text-txt-secondary text-xs">{job.distance.toFixed(1)} km</p>
+                        <p className="text-txt-secondary text-xs">{Number(job.distance || 0).toFixed(1)} km</p>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-1 text-xs text-txt-secondary">

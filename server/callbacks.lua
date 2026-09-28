@@ -171,7 +171,89 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             end
         end
 
+        -- Montar contratos LC idênticos à referência (Quick Jobs)
+        local lc_contracts = {}
+        local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
+        local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+        local stats = _r.stats or {}
+        local skills = _r.skills or {}
+        local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
+        local playerXP = tonumber(stats.xp) or 0
+        local playerLevel = ProgressionService and ProgressionService.CalcLevel(playerXP) or 0
+
+        for i, load in ipairs(availableLoads) do
+            local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
+            local def = load.def or {0,0,0,0}
+            local adr = def[1] or 0
+            local fragile = def[2] or 0
+            local valuable = def[3] or 0
+            local illegal = def[4] or 0
+
+            local baseDist = 0.8 + ((i * 1.37) % 9.2)
+            local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
+            local reward = math.floor(baseDist * rewardRate + 950)
+
+            table.insert(lc_contracts, {
+                contract_id   = i,
+                contract_name = load.name,
+                contract_type = 0,
+                distance      = tonumber(string.format("%.2f", baseDist)),
+                reward        = reward,
+                truck         = truckModel,
+                trailer       = load.trailer,
+                cargo_type    = adr,
+                fragile       = fragile,
+                valuable      = valuable,
+                fast          = (i % 3 == 0) and 1 or 0,
+                illegal       = illegal,
+                progress      = nil,
+            })
+        end
+
+        local fleetTrucks = _r.fleetTrucks or (TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId)) or {}
+        local hiredDrivers = _r.hiredDrivers or (NpcDriverService and NpcDriverService.GetHiredDrivers(citizenId)) or {}
+        local loanPlans = _r.loanPlans or (LoanService and LoanService.GetPlans(citizenId)) or {}
+
+        local lc_dados = {
+            config = {
+                dealership = Config.LC_Dealership or {},
+                repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
+                required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
+                max_loan_per_level = { 50000, 100000, 200000, 400000 },
+                loans = Config.LC_Loans or {},
+                cooldown = 2,
+                party = { price_to_create = 500, max_members = 4 },
+                disable_loans = false,
+                disable_drivers = false,
+                max_emprestimo = 400000,
+                player_level = playerLevel,
+            },
+            trucker_available_contracts = lc_contracts,
+            trucker_users = {
+                user_id = citizenId,
+                money = playerMoney,
+                total_earned = tonumber(stats.total_earnings) or 0,
+                finished_deliveries = tonumber(stats.total_deliveries) or 0,
+                exp = playerXP,
+                traveled_distance = tonumber(stats.total_distance) or 0.0,
+                skill_points = (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or math.floor(playerLevel / 2),
+                product_type = skills.product_type or 0,
+                distance = skills.distance or 0,
+                valuable = skills.valuable or 0,
+                fragile = skills.fragile or 0,
+                fast = skills.fast or 0,
+                illegal = skills.illegal or 0,
+                dark_theme = 1,
+            },
+            trucker_trucks = fleetTrucks,
+            trucker_drivers = hiredDrivers,
+            trucker_loans = loanPlans,
+            top_truckers = {},
+            available_money = playerMoney,
+        }
+
         return {
+            lc_dados            = lc_dados,
             jobs                = jobs,
             company             = companyPayload,
             activeJob           = _r.activeJob,
@@ -192,11 +274,11 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             activeRental        = TruckRentalService and TruckRentalService.GetRental(citizenId) or nil,
             playerName          = (Player and Framework.GetCharName and Framework.GetCharName(Player)) or (GetCharName and GetCharName(source)) or 'Motorista',
             playerMoney         = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0,
-            fleetTrucks         = TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId) or {},
+            fleetTrucks         = fleetTrucks,
             dealershipCatalog   = TruckFleetService and TruckFleetService.GetCatalog() or {},
-            loanPlans           = LoanService and LoanService.GetPlans(citizenId) or {},
+            loanPlans           = loanPlans,
             agencyDrivers       = NpcDriverService and NpcDriverService.GetAgencyCatalog() or {},
-            hiredDrivers        = NpcDriverService and NpcDriverService.GetHiredDrivers(citizenId) or {},
+            hiredDrivers        = hiredDrivers,
             repairPrices        = Config.LC_RepairPrice or {},
         }
     end)

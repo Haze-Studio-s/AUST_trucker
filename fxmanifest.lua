@@ -78,6 +78,15 @@ ui_page 'html/index.html'
 
 files {
     'html/index.html',
-    'html/assets/*.js',
-    'html/assets/*.css',
+    'html/style.css',
+    'html/panel.js',
+    'html/css/*',
+    'html/js/*',
+    'html/lang/*',
+    'html/img/*',
+    'html/img/avatar/*',
+    'html/img/icons/*',
+    'html/img/trailers/*',
+    'html/img/trucks/*',
+    'html/assets/*',
 }

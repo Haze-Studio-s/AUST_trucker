@@ -95,8 +95,8 @@ export function CompanyPanel() {
           </div>
           <div className="bg-app-bg rounded p-2">
             <p className="text-primary font-bold text-sm">
-              {company.perks.bonus > 1.0
-                ? `+${((company.perks.bonus - 1) * 100).toFixed(0)}%`
+              {Number(company.perks.bonus || 1) > 1.0
+                ? `+${((Number(company.perks.bonus) - 1) * 100).toFixed(0)}%`
                 : '0%'}
             </p>
             <p className="text-txt-secondary text-[10px]">Bônus</p>

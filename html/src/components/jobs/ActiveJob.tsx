@@ -249,7 +249,7 @@ export function ActiveJob() {
         </div>
         <div className="bg-card rounded-lg p-3 border border-app-border">
           <p className="text-txt text-xs">Distância</p>
-          <p className="text-txt-light text-sm mt-0.5">{activeJob.distance.toFixed(1)} km</p>
+          <p className="text-txt-light text-sm mt-0.5">{Number(activeJob.distance || 0).toFixed(1)} km</p>
         </div>
         <div className="bg-card rounded-lg p-3 border border-app-border">
           <p className="text-txt text-xs">Tempo decorrido</p>

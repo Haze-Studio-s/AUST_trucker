@@ -74,7 +74,7 @@ export function JobCard({ job, isSelected, onSelect }: JobCardProps) {
             R$ {job.basePayment.toLocaleString('pt-BR')}
           </span>
           <span className="font-mono text-xs text-lation-content-muted mt-1">
-            {job.distance > 0 ? `${job.distance.toFixed(1)} km` : 'Rota Especial'}
+            {Number(job.distance || 0) > 0 ? `${Number(job.distance).toFixed(1)} km` : 'Rota Especial'}
           </span>
         </div>
       </div>
