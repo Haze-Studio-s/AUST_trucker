@@ -1483,9 +1483,39 @@ CreateThread(function()
         })
     end
 
+    -- Ponto de interação [E] no chão para Elysian Island
+    local elysianMenuPoint = lib.points.new({
+        coords = Config.TrailerCompany.coords,
+        distance = 15.0,
+        nearby = function(self)
+            DrawMarker(21, self.coords.x, self.coords.y, self.coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 16, 185, 129, 180, false, true, 2, false, nil, nil, false)
+            if self.currentDistance < 2.5 then
+                if not self.isTextOpen then
+                    lib.showTextUI('[E] Acessar Central Logística', { icon = 'truck-fast', position = 'left-center' })
+                    self.isTextOpen = true
+                end
+                if IsControlJustPressed(0, 38) then
+                    CreateThread(OpenJobBoard)
+                end
+            elseif self.isTextOpen then
+                lib.hideTextUI()
+                self.isTextOpen = false
+            end
+        end,
+        onExit = function(self)
+            if self.isTextOpen then
+                lib.hideTextUI()
+                self.isTextOpen = false
+            end
+        end,
+    })
+
     -- Cleanup ao parar o recurso
     AddEventHandler('onResourceStop', function(res)
         if res ~= GetCurrentResourceName() then return end
+        if elysianMenuPoint then
+            pcall(function() elysianMenuPoint:remove() end)
+        end
         if dispatcherPed and DoesEntityExist(dispatcherPed) then
             exports.ox_target:removeLocalEntity(dispatcherPed)
             DeleteEntity(dispatcherPed)
@@ -1557,6 +1587,40 @@ CreateThread(function()
                 end
             end)
         end
+
+        -- Ponto de interação original [E] no chão com Marker
+        local lcMenuPoint = lib.points.new({
+            coords = hq.coords,
+            distance = 15.0,
+            nearby = function(self)
+                DrawMarker(21, self.coords.x, self.coords.y, self.coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 16, 185, 129, 180, false, true, 2, false, nil, nil, false)
+                if self.currentDistance < 2.5 then
+                    if not self.isTextOpen then
+                        lib.showTextUI('[E] Acessar Central Logística', { icon = 'truck-fast', position = 'left-center' })
+                        self.isTextOpen = true
+                    end
+                    if IsControlJustPressed(0, 38) then
+                        CreateThread(OpenJobBoard)
+                    end
+                elseif self.isTextOpen then
+                    lib.hideTextUI()
+                    self.isTextOpen = false
+                end
+            end,
+            onExit = function(self)
+                if self.isTextOpen then
+                    lib.hideTextUI()
+                    self.isTextOpen = false
+                end
+            end,
+        })
+
+        AddEventHandler('onResourceStop', function(res)
+            if res ~= GetCurrentResourceName() then return end
+            if lcMenuPoint then
+                pcall(function() lcMenuPoint:remove() end)
+            end
+        end)
     end
 end)
 
