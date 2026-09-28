@@ -32,7 +32,8 @@ local function CalcXP(basePayment, timeMultiplier, distance)
 end
 
 -- Calcula o nível correspondente ao XP total acumulado
-local function CalcLevel(xp)
+function ProgressionService.CalcLevel(xp)
+    xp = tonumber(xp) or 0
     local req = Config.LC_RequiredXP or LEVEL_THRESHOLDS
     local maxLvl = (req == Config.LC_RequiredXP) and 36 or 30
     local level = 1
@@ -45,6 +46,7 @@ local function CalcLevel(xp)
     end
     return level
 end
+local CalcLevel = ProgressionService.CalcLevel
 
 -- Concede XP ao jogador, processa level-ups, notifica o cliente
 -- Returns: { xpGained, newLevel, levelsGained }

@@ -256,8 +256,7 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
         local stats = _r.stats or {}
         local skills = _r.skills or {}
         local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
-        local playerXP = tonumber(stats.xp) or 0
-        local playerLevel = ProgressionService and ProgressionService.CalcLevel(playerXP) or 0
+        local playerLevel = (ProgressionService and ProgressionService.CalcLevel and ProgressionService.CalcLevel(playerXP)) or (stats and stats.level) or 1
 
         for i, load in ipairs(availableLoads) do
             local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]

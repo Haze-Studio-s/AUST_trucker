@@ -1161,12 +1161,12 @@ local function StartLCContractForPlayer(src, contractId)
     local jobId = ('lc_%d_%d'):format(os.time(), math.random(1000, 9999))
     MySQL.insert.await([[
         INSERT INTO trucker_jobs (
-            id, status, player_id, origin_id, dest_id, cargo_item,
+            id, status, assigned_citizenid, origin_id, dest_id, cargo_item,
             trailer_model, base_payment, distance, expires_at, created_at
-        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, ?, NOW())
+        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR), NOW())
     ]], {
         jobId, citizenId, ('dest_%d'):format(destIndex), load.name,
-        load.trailer, payment, dist, os.time() + 7200
+        load.trailer, payment, dist
     })
 
     local payload = {
@@ -1204,7 +1204,7 @@ RegisterNetEvent('truck_logistics:finishContract', function(engine, body, traile
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
     local row = MySQL.single.await([[
-        SELECT * FROM trucker_jobs WHERE player_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+        SELECT * FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
     ]], { citizenId })
     if row then
         -- Conclui e processa autoritativamente
@@ -1261,7 +1261,7 @@ RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parke
     local citizenId = Framework.GetCitizenId(Player)
 
     local row = MySQL.single.await([[
-        SELECT * FROM trucker_jobs WHERE id = ? AND player_id = ? AND status = 'active'
+        SELECT * FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active'
     ]], { jobId, citizenId })
 
     if not row then
