@@ -353,11 +353,44 @@ local function OpenJobBoard()
     isNUIOpen = true
     SetNuiFocus(true, true)
 
+    local lcDados = data.lc_dados or data
+    if type(lcDados) ~= 'table' then lcDados = {} end
+    if not lcDados.config then
+        lcDados.config = {
+            cooldown = 2,
+            max_emprestimo = 400000,
+            party = { price_to_create = 500, max_members = 4, price_per_member = 100 },
+            loans = { plans = {}, payment_interval_hours = 24 },
+            dealership = Config.LC_Dealership or {},
+            repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
+            player_level = 0,
+        }
+    end
+    if (not lcDados.trucker_available_contracts or #lcDados.trucker_available_contracts == 0) and data.jobs and #data.jobs > 0 then
+        lcDados.trucker_available_contracts = {}
+        for i, j in ipairs(data.jobs) do
+            table.insert(lcDados.trucker_available_contracts, {
+                contract_id = i,
+                contract_name = (j.originName and j.destName) and (j.originName .. " -> " .. j.destName) or (j.cargoItem or "Carga Geral"),
+                contract_type = (i % 2 == 0) and 1 or 0,
+                distance = tonumber(j.distance) or 5.0,
+                reward = tonumber(j.basePayment) or 1500,
+                truck = "hauler",
+                trailer = j.trailerModel or "docktrailer",
+                cargo_type = 0,
+                fragile = 0,
+                valuable = 0,
+                fast = 0,
+                illegal = 0,
+            })
+        end
+    end
+
     -- Enviar para a interface oficial LC Truck Logistics
     SendNUIMessage({
         showmenu     = true,
         update       = false,
-        dados        = data.lc_dados or data,
+        dados        = lcDados,
         utils        = {
             config = {
                 locale = "en",
@@ -391,10 +424,10 @@ local function RefreshNUIData()
     SetTimeout(350, function()
         if not isNUIOpen then return end
         local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
-        if ok and data and data.lc_dados then
+        if ok and data then
             SendNUIMessage({
                 update = true,
-                dados = data.lc_dados,
+                dados = data.lc_dados or data,
             })
         end
     end)
@@ -2235,8 +2268,11 @@ end)
 AddEventHandler('aurp_trucker:client:jobsUpdated', function()
     if not IsNUIFocused() then return end
     local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
-    if ok and data and data.jobs then
-        SendNUIMessage({ action = 'updateJobs', jobs = data.jobs })
+    if ok and data then
+        SendNUIMessage({
+            update = true,
+            dados  = data.lc_dados or data,
+        })
     end
 end)
 

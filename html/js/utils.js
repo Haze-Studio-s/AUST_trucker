@@ -489,9 +489,9 @@ if (!String.prototype.format) {
     String.prototype.format = function() {
         let args = arguments;
         return this.replace(/{(\d+)}/g, function(match, number) {
-            return typeof args[number] != "undefined"
+            return (typeof args[number] !== "undefined" && args[number] !== null)
                 ? args[number]
-                : match
+                : (number === "0" ? "2" : match)
             ;
         });
     };

@@ -1,12 +1,90 @@
 -- aurp_trucker — server/callbacks.lua
 -- lib.callback.register (substitui QBCore.Functions.CreateCallback)
 
+local function BuildDefaultContracts()
+    local lc_contracts = {}
+    local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
+    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    for i, load in ipairs(availableLoads) do
+        local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
+        local def = load.def or {0,0,0,0}
+        local baseDist = 0.8 + ((i * 1.37) % 9.2)
+        local rewardRate = 1200 + ((def[3] or 0) * 450) + ((def[2] or 0) * 350) + ((def[1] or 0) > 0 and 600 or 0)
+        local reward = math.floor(baseDist * rewardRate + 950)
+
+        table.insert(lc_contracts, {
+            contract_id   = i,
+            contract_name = load.name,
+            contract_type = (i % 2 == 0) and 1 or 0,
+            distance      = tonumber(string.format("%.2f", baseDist)),
+            reward        = reward,
+            truck         = truckModel,
+            trailer       = load.trailer,
+            cargo_type    = def[1] or 0,
+            fragile       = def[2] or 0,
+            valuable      = def[3] or 0,
+            fast          = (i % 3 == 0) and 1 or 0,
+            illegal       = def[4] or 0,
+            progress      = nil,
+        })
+    end
+    return lc_contracts
+end
+
+local function BuildFallbackLcDados(citizenId, playerMoney)
+    return {
+        config = {
+            dealership = Config.LC_Dealership or {},
+            repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
+            required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
+            max_loan_per_level = { 50000, 100000, 200000, 400000 },
+            loans = Config.LC_Loans or { plans = {}, payment_interval_hours = 24 },
+            cooldown = 2,
+            party = { price_to_create = 500, max_members = 4, price_per_member = 100 },
+            disable_loans = false,
+            disable_drivers = false,
+            max_emprestimo = 400000,
+            player_level = 0,
+        },
+        trucker_available_contracts = BuildDefaultContracts(),
+        trucker_users = {
+            user_id = citizenId or 'default',
+            money = playerMoney or 0,
+            total_earned = 0,
+            finished_deliveries = 0,
+            exp = 0,
+            traveled_distance = 0.0,
+            skill_points = 0,
+            product_type = 0,
+            distance = 0,
+            valuable = 0,
+            fragile = 0,
+            fast = 0,
+            illegal = 0,
+            dark_theme = 1,
+        },
+        trucker_trucks = {},
+        trucker_drivers = {},
+        trucker_loans = {},
+        trucker_party_members = {},
+        trucker_party = nil,
+        top_truckers = {},
+        available_money = playerMoney or 0,
+    }
+end
+
 -- Dados iniciais para abrir a NUI
 -- PERF: queries independentes lançadas em paralelo via Citizen.CreateThread (barrier pattern)
 -- Reduz latência de abertura da NUI de ~15 queries sequenciais para 2 fases paralelas
 lib.callback.register('aurp_trucker:getInitialData', function(source)
     local Player = Framework.GetPlayer(source)
-    if not Player then return { jobs = {}, recruitingCompanies = {} } end
+    if not Player then
+        return {
+            lc_dados = BuildFallbackLcDados(nil, 0),
+            jobs = {},
+            recruitingCompanies = {}
+        }
+    end
     local citizenId = Framework.GetCitizenId(Player)
 
     local ok, result = pcall(function()
@@ -259,19 +337,23 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
 
         -- Ranking dos Top Caminhoneiros
         local topTruckersList = {}
-        local topRows = MySQL.query.await([[
-            SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp
-            FROM trucker_player_progression p
-            ORDER BY p.xp DESC
-            LIMIT 10
-        ]]) or {}
-        for _, row in ipairs(topRows) do
-            table.insert(topTruckersList, {
-                name = 'Motorista #' .. string.sub(tostring(row.citizenid), 1, 5),
-                firstname = '',
-                traveled_distance = tonumber(row.traveled_distance) or 0,
-                exp = tonumber(row.exp) or 0
-            })
+        local topOk, topRows = pcall(function()
+            return MySQL.query.await([[
+                SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp
+                FROM trucker_player_progression p
+                ORDER BY p.xp DESC
+                LIMIT 10
+            ]])
+        end)
+        if topOk and type(topRows) == 'table' then
+            for _, row in ipairs(topRows) do
+                table.insert(topTruckersList, {
+                    name = 'Motorista #' .. string.sub(tostring(row.citizenid), 1, 5),
+                    firstname = '',
+                    traveled_distance = tonumber(row.traveled_distance) or 0,
+                    exp = tonumber(row.exp) or 0
+                })
+            end
         end
 
         -- Sincronização de Party / Grupo
@@ -368,7 +450,15 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
 
     if not ok then
         print('^1[AUST_trucker] getInitialData ERROR: ' .. tostring(result) .. '^7')
-        return { jobs = {}, recruitingCompanies = {} }
+        local pMoney = 0
+        if Player then
+            pMoney = Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash') or 0
+        end
+        return {
+            lc_dados = BuildFallbackLcDados(citizenId, pMoney),
+            jobs = {},
+            recruitingCompanies = {}
+        }
     end
 
     return result

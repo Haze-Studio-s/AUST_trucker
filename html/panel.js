@@ -21,15 +21,46 @@ window.addEventListener("message", async function (event) {
     if (item.showmenu || item.action === "open") {
         let dados = item.dados || item;
         config = dados.config || {};
+        config.cooldown = config.cooldown || 2;
+        config.max_emprestimo = config.max_emprestimo || 400000;
         config.player_level = config.player_level || 0;
         config.required_xp_to_levelup = config.required_xp_to_levelup || [100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200];
         config.party = config.party || { price_to_create: 500, max_members: 4, price_per_member: 100 };
-        config.loans = config.loans || { plans: [] };
+        config.loans = config.loans || { plans: [], payment_interval_hours: 24 };
+        config.loans.plans = config.loans.plans || [];
+        config.loans.payment_interval_hours = config.loans.payment_interval_hours || 24;
         config.dealership = config.dealership || {};
+        config.repair_price = config.repair_price || { engine: 100, transmission: 100, wheels: 100, body: 100, fuel: 10 };
 
-        let contracts = Array.isArray(dados.trucker_available_contracts) ? dados.trucker_available_contracts : [];
+        let rawContracts = Array.isArray(dados.trucker_available_contracts) && dados.trucker_available_contracts.length > 0
+            ? dados.trucker_available_contracts
+            : (Array.isArray(dados.contracts) && dados.contracts.length > 0
+                ? dados.contracts
+                : (Array.isArray(item.jobs) && item.jobs.length > 0
+                    ? item.jobs
+                    : (Array.isArray(dados.jobs) && dados.jobs.length > 0 ? dados.jobs : [])));
+
+        let contracts = rawContracts.map((c, idx) => {
+            return {
+                contract_id: c.contract_id ?? c.id ?? (idx + 1),
+                contract_name: c.contract_name || ((c.originName && c.destName) ? `${c.originName} -> ${c.destName}` : (c.cargoItem || `Contrato #${idx + 1}`)),
+                contract_type: c.contract_type ?? (idx % 2 === 0 ? 0 : 1),
+                distance: Number(c.distance) || 3.5,
+                reward: Number(c.reward || c.basePayment) || 1200,
+                truck: c.truck || 'hauler',
+                trailer: c.trailer || c.trailerModel || 'docktrailer',
+                cargo_type: c.cargo_type || 0,
+                fragile: c.fragile || 0,
+                valuable: c.valuable || 0,
+                fast: c.fast || 0,
+                illegal: c.illegal || 0,
+                progress: c.progress || null,
+                external_data: c.external_data || null,
+            };
+        });
+
         let users = dados.trucker_users || {
-            user_id: 1, money: 0, total_earned: 0, finished_deliveries: 0,
+            user_id: 1, money: (dados.available_money ?? item.playerMoney ?? 0), total_earned: 0, finished_deliveries: 0,
             exp: 0, traveled_distance: 0, skill_points: 0, dark_theme: 1
         };
         let myTrucks = Array.isArray(dados.trucker_trucks) ? dados.trucker_trucks : [];
@@ -368,98 +399,93 @@ window.addEventListener("message", async function (event) {
 			<img src="img/icons/fuel.png" style="width: 40px;" class="mt-3">
 		`);
 
-        $("#new-contracts-1").empty();
-        $("#new-contracts-1").append(Utils.translate("new_contracts").format(config.cooldown));
-        $("#new-contracts-2").empty();
-        $("#new-contracts-2").append(Utils.translate("new_contracts").format(config.cooldown));
+        let cooldownVal = (config && config.cooldown) ? config.cooldown : 2;
+        $("#new-contracts-1").empty().append(Utils.translate("new_contracts").format(cooldownVal));
+        $("#new-contracts-2").empty().append(Utils.translate("new_contracts").format(cooldownVal));
 
-        $("#profile-money").empty();
-        $("#profile-money").append(Utils.currencyFormat(users.money, 0));
-        $("#bank-money").empty();
-        $("#bank-money").append(Utils.currencyFormat(users.money, 0));
+        $("#profile-money").empty().append(Utils.currencyFormat(users.money, 0));
+        $("#bank-money").empty().append(Utils.currencyFormat(users.money, 0));
 
-        $("#withdraw-modal-money-available").text(`${Utils.translate("bank_page_modal_money_available").format(Utils.currencyFormat(users.money))}`);
-        $("#deposit-modal-money-available").text(`${Utils.translate("bank_page_modal_money_available").format(Utils.currencyFormat(item.dados.available_money))}`);
+        let availMoney = (dados && typeof dados.available_money !== "undefined") ? dados.available_money : (users.money || 0);
+        $("#withdraw-modal-money-available").text(`${Utils.translate("bank_page_modal_money_available").format(Utils.currencyFormat(users.money || 0))}`);
+        $("#deposit-modal-money-available").text(`${Utils.translate("bank_page_modal_money_available").format(Utils.currencyFormat(availMoney))}`);
 
-        $("#profile-money-earned").empty();
-        $("#profile-money-earned").append(Utils.currencyFormat(users.total_earned, 0));
-        $("#profile-deliveries").empty();
-        $("#profile-deliveries").append(users.finished_deliveries);
-        $("#profile-exp-1").empty();
-        $("#profile-exp-1").append(Utils.numberFormat(users.exp));
+        $("#profile-money-earned").empty().append(Utils.currencyFormat(users.total_earned || 0, 0));
+        $("#profile-deliveries").empty().append(users.finished_deliveries || 0);
+        $("#profile-exp-1").empty().append(Utils.numberFormat(users.exp || 0));
         $("#profile-exp-2").empty();
         let exp_r = 0;
-        if (users.exp >= config.required_xp_to_levelup[config.required_xp_to_levelup.length - 1]) {
+        let xpLevels = Array.isArray(config.required_xp_to_levelup) ? config.required_xp_to_levelup : [100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200];
+        if (users.exp >= xpLevels[xpLevels.length - 1]) {
             exp_r = 100;
         } else if (config.player_level == 0) {
-            let max = config.required_xp_to_levelup[config.player_level];
-            let exp = users.exp;
-            exp_r = Math.round((exp * 100) / max);
+            let max = xpLevels[0] || 100;
+            let exp = users.exp || 0;
+            exp_r = Math.min(100, Math.max(0, Math.round((exp * 100) / max)));
         } else {
-            for (const key in config.required_xp_to_levelup) {
-                if (users.exp < config.required_xp_to_levelup[key]) {
-                    let max = config.required_xp_to_levelup[key] - config.required_xp_to_levelup[key - 1];
-                    let exp = users.exp - config.required_xp_to_levelup[key - 1];
-                    exp_r = Math.round((exp * 100) / max);
-                    if (exp_r >= 0) {
-                        break;
-                    }
+            for (let key = 0; key < xpLevels.length; key++) {
+                if (users.exp < xpLevels[key]) {
+                    let prev = key > 0 ? xpLevels[key - 1] : 0;
+                    let max = xpLevels[key] - prev;
+                    let exp = users.exp - prev;
+                    exp_r = max > 0 ? Math.min(100, Math.max(0, Math.round((exp * 100) / max))) : 0;
+                    break;
                 }
             }
         }
         $("#profile-exp-2").append(`<div class="progress-bar bg-amber accent-4" role="progressbar" style="width: ${exp_r}%" aria-valuenow="${exp_r}" aria-valuemin="0" aria-valuemax="100"></div>`);
-        $("#profile-distance-traveled").empty();
-        $("#profile-distance-traveled").append(Utils.numberFormat(users.traveled_distance, 2) + "km");
-        $("#profile-skill-points").empty();
-        $("#profile-skill-points").append(users.skill_points);
-        $("#profile-trucks").empty();
-        $("#profile-trucks").append(myTrucks.length);
-        $("#profile-drivers").empty();
+        $("#profile-distance-traveled").empty().append(Utils.numberFormat(users.traveled_distance || 0, 2) + "km");
+        $("#profile-skill-points").empty().append(users.skill_points || 0);
+        $("#profile-trucks").empty().append(myTrucks.length);
         let drivers_count = 0;
         for (const driver of drivers) {
-            if (driver.user_id != null && driver.user_id != undefined) {
+            if (driver && driver.user_id != null && driver.user_id != undefined) {
                 drivers_count++;
             }
         }
-        $("#profile-drivers").append(drivers_count);
+        $("#profile-drivers").empty().append(drivers_count);
 
         $("#top-truckers-list").empty();
-        let c = 1;
-        let icon;
-        for (const top_users of top_truckers) {
-            if (c == 1) {
-                icon = "fa-medal amber accent-4 font-large-2";
-            } else if (c == 2) {
-                icon = "fa-medal blue-grey lighten-3 font-large-1";
-            } else if (c == 3) {
-                icon = "fa-medal bronze font-large-0";
-            } else {
-                icon = "fa-check-circle checkicon font-small-3";
+        if (top_truckers.length === 0) {
+            $("#top-truckers-list").html(`<li class="card-theme p-3 text-center text-muted font-small-3" style="border-radius: 8px;">Nenhum registro no ranking ainda.</li>`);
+        } else {
+            let c = 1;
+            for (const top_users of top_truckers) {
+                let icon;
+                if (c == 1) {
+                    icon = "fa-medal amber accent-4 font-large-2";
+                } else if (c == 2) {
+                    icon = "fa-medal blue-grey lighten-3 font-large-1";
+                } else if (c == 3) {
+                    icon = "fa-medal bronze font-large-0";
+                } else {
+                    icon = "fa-check-circle checkicon font-small-3";
+                }
+                $("#top-truckers-list").append(`
+                <li class="d-flex justify-content-between card-theme">
+                    <div class="d-flex flex-row align-items-center"><i class="fas ${icon}"></i>
+                        <div class="ml-2">
+                            <h6 class="mb-0">${top_users.name || "Motorista"} ${top_users.firstname ?? ""}</h6>
+                            <div class="d-flex flex-row mt-1 text-black-50 date-time">
+                                <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("top_trucker_distance_traveled").format(Utils.numberFormat(top_users.traveled_distance || 0, 2))}</span></div>
+                                <div class="ml-3"><i class="fas fa-chart-line"></i><span class="ml-2">${Utils.translate("top_trucker_exp").format(Utils.numberFormat(top_users.exp || 0))}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </li>`);
+                c++;
             }
-            $("#top-truckers-list").append(`
-			<li class="d-flex justify-content-between card-theme">
-				<div class="d-flex flex-row align-items-center"><i class="fas ${icon}"></i>
-					<div class="ml-2">
-						<h6 class="mb-0">${top_users.name} ${top_users.firstname ?? ""}</h6>
-						<div class="d-flex flex-row mt-1 text-black-50 date-time">
-							<div><i class="fas fa-route"></i></i><span class="ml-2">${Utils.translate("top_trucker_distance_traveled").format(Utils.numberFormat(top_users.traveled_distance, 2))}</span></div>
-							<div class="ml-3"><i class="fas fa-chart-line"></i></i><span class="ml-2">${Utils.translate("top_trucker_exp").format(Utils.numberFormat(top_users.exp))}</span></div>
-						</div>
-					</div>
-				</div>
-			</li>`);
-            c++;
         }
 
         $("#job-page-list").empty();
         $("#freight-page-list").empty();
+        let quick_jobs_count = 0;
+        let freight_jobs_count = 0;
+
         for (const contract of contracts) {
-            if (!contract.distance) {
-                continue;
-            }
-            if (contract.illegal == 1 && users.illegal == 0) {
-                continue;
-            }
+            if (!contract || !contract.distance) continue;
+            if (contract.illegal == 1 && (!users.illegal || users.illegal == 0)) continue;
+
             let icon = "";
             let border = "";
             if (contract.external_data) {
@@ -469,53 +495,15 @@ window.addEventListener("message", async function (event) {
             if (contract.illegal == 1) {
                 border = ` style="border: 1px solid #dc3545;"`;
             }
-            if (config.dealership[contract.truck]) {
+            if (config.dealership && config.dealership[contract.truck]) {
                 icon = `<img src="${config.dealership[contract.truck].img}" class="img-width" alt="${config.dealership[contract.truck].img}">`;
+            } else {
+                icon = `<img src="img/trucks/hauler.png" class="img-width" alt="truck">`;
             }
             icon += `<img src="img/trailers/${contract.trailer}.png" class="img-width" alt="${contract.trailer}">`;
-            list_item = `
-			<ul class="list list-inline mb-2">
-				<li class="d-flex justify-content-between card-theme"${border}>
-					<div class="d-flex flex-row align-items-center">${icon}
-						<div class="ml-2">
-							<h6 class="mb-0">${contract.contract_name}</h6>
-							<div class="d-flex flex-row mt-1 text-black-50 date-time">
-								<div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("contract_page_distance").format(Utils.numberFormat(contract.distance, 2))}</span></div>
-								<div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}</span></div>
-							</div>
-						</div>
-					</div>
-					<div class="d-flex flex-row align-items-center">
-						<div class="d-flex flex-column mr-2">
-							<div class="profile-image">
-							`;
-            if (contract.cargo_type == 1) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_explosive")}"><img src="img/icons/explosive-1.png" width="30"></div>`;
-            } else if (contract.cargo_type == 2) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammablegas")}"><img src="img/icons/flamable-2.png" width="30"></div>`;
-            } else if (contract.cargo_type == 3) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammableliquid")}"><img src="img/icons/flamable-3.png" width="30"></div>`;
-            } else if (contract.cargo_type == 4) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammablesolid")}"><img src="img/icons/flamable-4.png" width="30"></div>`;
-            } else if (contract.cargo_type == 5) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_toxic")}"><img src="img/icons/toxic-6.png" width="30"></div>`;
-            } else if (contract.cargo_type == 6) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_corrosive")}"><img src="img/icons/corrosive-8.png" width="30"></div>`;
-            }
-            if (contract.fragile == 1) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_fragile")}"><img src="img/icons/fragile.png" width="30"></div>`;
-            }
-            if (contract.valuable == 1) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_valuable")}"><img src="img/icons/valuable.png" width="30"></div>`;
-            }
-            if (contract.fast == 1) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_urgent")}"><img src="img/icons/fast.png" width="30"></div>`;
-            }
-            if (contract.illegal == 1) {
-                list_item += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_illegal")}"><img src="img/icons/illegal.png" width="30"></div>`;
-            }
+
             let partystart_btn = "";
-            if (trucker_party != undefined && !contract.external_data) {
+            if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
                 partystart_btn = `<button onclick="startContract(${contract.contract_id},true)" type="button" class="btn btn-dark waves-effect waves-light">${Utils.translate("contract_page_button_start_job_party")}</button>`;
             }
             let button = `<button onclick="startContract(${contract.contract_id},false)" type="button" class="btn btn-primary waves-effect waves-light">${Utils.translate("contract_page_button_start_job")}</button>`;
@@ -523,22 +511,70 @@ window.addEventListener("message", async function (event) {
                 button = `<button onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                 partystart_btn = "";
             }
-            list_item += `
-							</div>
-						</div>
-						<div class="btn-group" role="group">
-							${button}
-							${partystart_btn}
-						</div>
-					</div>
-				</li>
-			</ul>
-			`;
+
+            let cargo_badge = "";
+            if (contract.cargo_type == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_explosive")}"><img src="img/icons/explosive-1.png" width="30"></div>`;
+            else if (contract.cargo_type == 2) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammablegas")}"><img src="img/icons/flamable-2.png" width="30"></div>`;
+            else if (contract.cargo_type == 3) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammableliquid")}"><img src="img/icons/flamable-3.png" width="30"></div>`;
+            else if (contract.cargo_type == 4) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_flammablesolid")}"><img src="img/icons/flamable-4.png" width="30"></div>`;
+            else if (contract.cargo_type == 5) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_toxic")}"><img src="img/icons/toxic-6.png" width="30"></div>`;
+            else if (contract.cargo_type == 6) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_corrosive")}"><img src="img/icons/corrosive-8.png" width="30"></div>`;
+
+            if (contract.fragile == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_fragile")}"><img src="img/icons/fragile.png" width="30"></div>`;
+            if (contract.valuable == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_valuable")}"><img src="img/icons/valuable.png" width="30"></div>`;
+            if (contract.fast == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_urgent")}"><img src="img/icons/fast.png" width="30"></div>`;
+            if (contract.illegal == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_illegal")}"><img src="img/icons/illegal.png" width="30"></div>`;
+
+            let item_html = `
+            <ul class="list list-inline mb-2">
+                <li class="d-flex justify-content-between card-theme"${border}>
+                    <div class="d-flex flex-row align-items-center">${icon}
+                        <div class="ml-2">
+                            <h6 class="mb-0">${contract.contract_name}</h6>
+                            <div class="d-flex flex-row mt-1 text-black-50 date-time">
+                                <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("contract_page_distance").format(Utils.numberFormat(contract.distance, 2))}</span></div>
+                                <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-row align-items-center">
+                        <div class="d-flex flex-column mr-2">
+                            <div class="profile-image">
+                                ${cargo_badge}
+                            </div>
+                        </div>
+                        <div class="btn-group" role="group">
+                            ${button}
+                            ${partystart_btn}
+                        </div>
+                    </div>
+                </li>
+            </ul>`;
+
             if (contract.contract_type == 0) {
-                $("#job-page-list").append(list_item);
+                $("#job-page-list").append(item_html);
+                quick_jobs_count++;
             } else {
-                $("#freight-page-list").append(list_item);
+                $("#freight-page-list").append(item_html);
+                freight_jobs_count++;
             }
+        }
+
+        if (quick_jobs_count === 0) {
+            $("#job-page-list").html(`
+                <div class="card-theme p-4 text-center text-muted my-3" style="border-radius: 8px;">
+                    <i class="fas fa-truck-loading mb-2" style="font-size: 32px; color: var(--accent-emerald, #10b981);"></i>
+                    <p class="mb-0">Nenhum trabalho rápido disponível no momento. Aguarde a renovação dos contratos.</p>
+                </div>
+            `);
+        }
+        if (freight_jobs_count === 0) {
+            $("#freight-page-list").html(`
+                <div class="card-theme p-4 text-center text-muted my-3" style="border-radius: 8px;">
+                    <i class="fas fa-dolly-flatbed mb-2" style="font-size: 32px; color: var(--accent-emerald, #10b981);"></i>
+                    <p class="mb-0">Nenhum frete disponível no momento. Adquira um caminhão próprio na concessionária.</p>
+                </div>
+            `);
         }
 
         $("#skills-desc").empty();
@@ -775,54 +811,69 @@ window.addEventListener("message", async function (event) {
 				</li>
 				`;
         }
-        $("#trucks-page-list").append(list_item);
+        if (myTrucks.length === 0) {
+            $("#trucks-page-list").html(`
+                <div class="card-theme p-4 text-center text-muted my-3" style="border-radius: 8px;">
+                    <i class="fas fa-truck mb-2" style="font-size: 32px; color: var(--accent-emerald, #10b981);"></i>
+                    <p class="mb-0">Você não possui nenhum caminhão em sua frota. Visite a Concessionária para adquirir veículos.</p>
+                </div>
+            `);
+        } else {
+            $("#trucks-page-list").append(list_item);
+        }
 
         $("#recruitment-page-list").empty();
         $("#drivers-page-list").empty();
-        list_item = ``;
+        let recruitment_item = ``;
+        let my_drivers_count = 0;
+        let recruitment_count = 0;
+
         for (const driver of drivers) {
+            if (!driver) continue;
             if (driver.user_id == null || driver.user_id == undefined) {
-                list_item += `
+                recruitment_count++;
+                recruitment_item += `
 					<div class="card user-card">
 						<div class="card-block">
 							<div class="user-image">
-								<img src="${driver.img}" class="img-radius" alt="User-Profile-Image">
+								<img src="${driver.img || 'img/avatar/avatar1.png'}" class="img-radius" alt="User-Profile-Image">
 							</div>
-							<h6 class="mt-4 mb-2">${driver.name}</h6>
-							<p class="text-muted">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price))}</p>
+							<h6 class="mt-4 mb-2">${driver.name || "Candidato"}</h6>
+							<p class="text-muted">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price || 1000))}</p>
 							<hr>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_product_type")}</p>
 							<ul class="list-unstyled activity-leval">
-								${getDriverLevelHTML(driver.product_type)}
+								${getDriverLevelHTML(driver.product_type || 0)}
 							</ul>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_distance")}</p>
 							<ul class="list-unstyled activity-leval">
-								${getDriverLevelHTML(driver.distance)}
+								${getDriverLevelHTML(driver.distance || 0)}
 							</ul>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_valuable")}</p>
 							<ul class="list-unstyled activity-leval">
-								${getDriverLevelHTML(driver.valuable)}
+								${getDriverLevelHTML(driver.valuable || 0)}
 							</ul>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_fragile")}</p>
 							<ul class="list-unstyled activity-leval">
-								${getDriverLevelHTML(driver.fragile)}
+								${getDriverLevelHTML(driver.fragile || 0)}
 							</ul>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_urgent")}</p>
 							<ul class="list-unstyled activity-leval">
-								${getDriverLevelHTML(driver.fast)}
+								${getDriverLevelHTML(driver.fast || 0)}
 							</ul>
 							<div onclick="hireDriver('${driver.driver_id}')" class="mx-3 mt-3 mb-2"><button type="button" class="btn btn-primary btn-block"><small>${Utils.translate("drivers_page_hire_button")}</small></button></div>
 						</div>
 					</div>
 					`;
             } else {
+                my_drivers_count++;
                 let fuel_color = `warning`;
                 let refuel_btn = ``;
                 let refuel_bar = ``;
                 let truck_assigned = myTrucks.find((truck) => truck.driver == driver.driver_id);
                 if (truck_assigned) {
                     if (truck_assigned.fuel < 98) {
-                        refuel_btn = `<a class="dropdown-item text-black-50" onclick="refuelTruck(${truck_assigned.truck_id})">${Utils.translate("drivers_page_refuel_button").format(Utils.currencyFormat((100 - truck_assigned.fuel) * config.repair_price.fuel, 0))}</a>`;
+                        refuel_btn = `<a class="dropdown-item text-black-50" onclick="refuelTruck(${truck_assigned.truck_id})">${Utils.translate("drivers_page_refuel_button").format(Utils.currencyFormat((100 - truck_assigned.fuel) * (config.repair_price ? config.repair_price.fuel : 10), 0))}</a>`;
                         if (truck_assigned.fuel < 20) {
                             fuel_color = "danger";
                         }
@@ -840,15 +891,15 @@ window.addEventListener("message", async function (event) {
                 $("#drivers-page-list").append(`
 					<li class="d-flex justify-content-between card-theme">
 						<div class="d-flex flex-row align-items-center">
-							<img src="${driver.img}" class="img-radius img-width" alt="User-Profile-Image">
+							<img src="${driver.img || 'img/avatar/avatar1.png'}" class="img-radius img-width" alt="User-Profile-Image">
 							<div class="ml-2">
-								<h6 class="mb-0">${driver.name}</h6>
+								<h6 class="mb-0">${driver.name || "Motorista"}</h6>
 								<div class="d-flex flex-row mt-1 text-black-50 date-time">
 									<div>
-										<i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price))}</span>
+										<i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price || 1000))}</span>
 									</div>
 									<div class="ml-3">
-										<i class="fas fa-medal"></i><span class="ml-2">${Utils.translate("drivers_page_skills")}: ${Utils.translate("drivers_page_product_type")} (${driver.product_type}) ${Utils.translate("drivers_page_distance")} (${driver.distance}) <BR>${Utils.translate("drivers_page_valuable")} (${driver.valuable}) ${Utils.translate("drivers_page_fragile")} (${driver.fragile}) ${Utils.translate("drivers_page_urgent")} (${driver.fast})</span>
+										<i class="fas fa-medal"></i><span class="ml-2">${Utils.translate("drivers_page_skills")}: ${Utils.translate("drivers_page_product_type")} (${driver.product_type || 0}) ${Utils.translate("drivers_page_distance")} (${driver.distance || 0}) <BR>${Utils.translate("drivers_page_valuable")} (${driver.valuable || 0}) ${Utils.translate("drivers_page_fragile")} (${driver.fragile || 0}) ${Utils.translate("drivers_page_urgent")} (${driver.fast || 0})</span>
 									</div>
 								</div>
 							</div>
@@ -872,21 +923,42 @@ window.addEventListener("message", async function (event) {
 				`);
             }
         }
-        $("#recruitment-page-list").append(list_item);
+
+        if (recruitment_count > 0) {
+            $("#recruitment-page-list").html(recruitment_item);
+        } else {
+            $("#recruitment-page-list").html(`
+                <div class="col-12 card-theme p-4 text-center text-muted my-3" style="border-radius: 8px;">
+                    <i class="fas fa-user-plus mb-2" style="font-size: 32px; color: var(--accent-emerald, #10b981);"></i>
+                    <p class="mb-0">Nenhum motorista disponível para contratação no momento.</p>
+                </div>
+            `);
+        }
+
+        if (my_drivers_count === 0) {
+            $("#drivers-page-list").html(`
+                <div class="card-theme p-4 text-center text-muted my-3" style="border-radius: 8px;">
+                    <i class="fas fa-users mb-2" style="font-size: 32px; color: var(--accent-emerald, #10b981);"></i>
+                    <p class="mb-0">Você ainda não contratou nenhum motorista. Visite a Agência de Recrutamento.</p>
+                </div>
+            `);
+        }
 
         $("#loan-table-body").empty();
         $("#loan-table-container").css("display", "none");
-        for (const loan of loans) {
-            $("#loan-table-body").append(`
-				<tr>
-					<td>${Utils.currencyFormat(loan.loan)}</td>
-					<td>${Utils.currencyFormat(loan.day_cost)}</td>
-					<td class="text-danger">${Utils.currencyFormat(loan.remaining_amount)}</td>
-					<td>${Utils.timeConverter(loan.timer+(config.loans.payment_interval_hours*3600))}</td>
-					<td><button class="btn btn-outline-primary" style="min-width: 200px;" onclick="payLoan(${loan.id},${loan.remaining_amount})" >${Utils.translate("bank_page_loan_pay")}</button></td>
-				</tr>
-			`);
-            $("#loan-table-container").css("display", "");
+        if (loans && loans.length > 0) {
+            for (const loan of loans) {
+                $("#loan-table-body").append(`
+                    <tr>
+                        <td>${Utils.currencyFormat(loan.loan || 0)}</td>
+                        <td>${Utils.currencyFormat(loan.day_cost || 0)}</td>
+                        <td class="text-danger">${Utils.currencyFormat(loan.remaining_amount || 0)}</td>
+                        <td>${Utils.timeConverter((loan.timer || 0)+((config.loans.payment_interval_hours || 24)*3600))}</td>
+                        <td><button class="btn btn-outline-primary" style="min-width: 200px;" onclick="payLoan(${loan.id},${loan.remaining_amount})" >${Utils.translate("bank_page_loan_pay")}</button></td>
+                    </tr>
+                `);
+                $("#loan-table-container").css("display", "");
+            }
         }
 
         if (trucker_party != undefined) {
@@ -1189,8 +1261,10 @@ $(document).ready(function () {
         let mins = Math.floor(remaining / 60);
         let secs = remaining % 60;
         let timeStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        let baseText = (window.Utils && Utils.translate) ? Utils.translate("new_contracts").format(2) : "New contracts each 2 min";
+        let cooldownVal = (config && config.cooldown) ? config.cooldown : 2;
+        let baseText = (window.Utils && Utils.translate) ? Utils.translate("new_contracts").format(cooldownVal) : `New contracts each ${cooldownVal} min`;
         $("#new-contracts-1").text(`${baseText} (${timeStr})`);
+        $("#new-contracts-2").text(`${baseText} (${timeStr})`);
     }, 1000);
 
     $(document).keyup(function (e) {
