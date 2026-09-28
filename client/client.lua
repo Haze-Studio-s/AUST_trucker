@@ -42,6 +42,25 @@ local function ShowNotification(title, description, type, duration)
     })
 end
 
+local function SafeGetNetworkId(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return nil end
+    local timeout = 100
+    while not NetworkGetEntityIsNetworked(entity) and timeout > 0 do
+        NetworkRegisterEntityAsNetworked(entity)
+        Wait(10)
+        timeout = timeout - 1
+    end
+    if NetworkGetEntityIsNetworked(entity) then
+        local netId = NetworkGetNetworkIdFromEntity(entity)
+        if netId and netId ~= 0 then
+            SetNetworkIdCanMigrate(netId, true)
+            SetNetworkIdExistsOnAllMachines(netId, true)
+            return netId
+        end
+    end
+    return nil
+end
+
 local pickupPoint = nil
 local deliveryPoint = nil
 local contractStopPoint = nil
@@ -179,10 +198,10 @@ local function SpawnTrailer(model, coords)
         SetModelAsNoLongerNeeded(modelHash)
 
         -- Registrar entidades no servidor para cleanup autoritativo em playerDropped ou abandono
-        local trlNetId = NetworkGetNetworkIdFromEntity(trailer)
+        local trlNetId = SafeGetNetworkId(trailer)
         local ped = PlayerPedId()
         local veh = GetVehiclePedIsIn(ped, false)
-        local vehNetId = (veh ~= 0 and DoesEntityExist(veh)) and NetworkGetNetworkIdFromEntity(veh) or nil
+        local vehNetId = (veh ~= 0 and DoesEntityExist(veh)) and SafeGetNetworkId(veh) or nil
         TriggerServerEvent('aurp_trucker:server:registerJobEntities', vehNetId, trlNetId)
 
         return trailer
@@ -2821,9 +2840,13 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     })
 
     -- 4. Registro de Entidades e Chaves no Servidor
-    local truckNetId = NetworkGetNetworkIdFromEntity(truck)
-    local trailerNetId = NetworkGetNetworkIdFromEntity(trailer)
-    TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNetId, trailerNetId)
+    CreateThread(function()
+        local truckNetId = SafeGetNetworkId(truck)
+        local trailerNetId = SafeGetNetworkId(trailer)
+        if truckNetId or trailerNetId then
+            TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNetId, trailerNetId)
+        end
+    end)
 
     -- 5. Loop de Entrega com DrawMarker 30 autoritativo (Padrão LC Truck Logistics)
     CreateThread(function()
