@@ -358,6 +358,10 @@ local function OpenJobBoard()
         company             = data.company,
         activeJob           = data.activeJob,
         stats               = data.stats,
+        playerName          = data.playerName,
+        playerMoney         = data.playerMoney,
+        rentalTrucks        = data.rentalTrucks or (Config.TruckRental and Config.TruckRental.trucks or {}),
+        activeRental        = data.activeRental,
         recruitingCompanies = data.recruitingCompanies or {},
         skills              = data.skills,
         personalLoan        = data.personalLoan,
@@ -383,9 +387,70 @@ RegisterCommand('-trucker_close_ui', function() end, false)
 RegisterKeyMapping('+trucker_close_ui', 'Fechar painel caminhoneiro', 'keyboard', 'BACK')
 
 -- NUI Callbacks
+RegisterNUICallback('close', function(data, cb)
+    CloseJobBoard()
+    cb('ok')
+end)
+
 RegisterNUICallback('closeUI', function(data, cb)
     CloseJobBoard()
     cb('ok')
+end)
+
+RegisterNUICallback('rentTruck', function(data, cb)
+    local model = data and data.model
+    if not model then return cb({ ok = false, reason = 'Modelo inválido' }) end
+    local ok, res = pcall(lib.callback.await, 'aurp_trucker:rental:rentTruck', false, model)
+    if ok and res and res.success then
+        local spawnCoords = res.spawnCoords or Config.TruckRental.spawnCoords
+        local heading = spawnCoords.w or 0.0
+        lib.requestModel(model)
+        local veh = CreateVehicle(joaat(model), spawnCoords.x, spawnCoords.y, spawnCoords.z, heading, true, false)
+        SetVehicleNumberPlateText(veh, res.plate)
+        SetEntityAsMissionEntity(veh, true, true)
+        SetVehicleHasBeenOwnedByPlayer(veh, true)
+        SetVehicleNeedsToBeHotwired(veh, false)
+        if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(veh) end) end
+        if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(veh, 100.0) end) end
+        local netId = NetworkGetNetworkIdFromEntity(veh)
+        TriggerServerEvent('aurp_trucker:rental:registerNetId', netId)
+        lib.notify({ title = 'Locadora', description = ('Caminhão alugado! Placa: %s'):format(res.plate), type = 'success' })
+        cb({ ok = true, rental = res })
+    else
+        local reason = (res and res.reason) or 'Falha ao alugar caminhão'
+        lib.notify({ title = 'Locadora', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('returnTruck', function(data, cb)
+    local ped = cache.ped
+    local veh = GetVehiclePedIsIn(ped, false)
+    local bodyHealth = 1000.0
+    local engineHealth = 1000.0
+    if veh ~= 0 then
+        bodyHealth = GetVehicleBodyHealth(veh)
+        engineHealth = GetVehicleEngineHealth(veh)
+    end
+    local ok, res = pcall(lib.callback.await, 'aurp_trucker:rental:returnTruck', false, {
+        bodyHealth = bodyHealth,
+        engineHealth = engineHealth,
+    })
+    if ok and res and res.success then
+        if veh ~= 0 then
+            DeleteEntity(veh)
+        end
+        lib.notify({
+            title = 'Locadora',
+            description = ('Caminhão devolvido!\nCaução estornada: R$ %d (Avarias deduzidas: R$ %d)'):format(res.refundAmount, res.damageCost),
+            type = 'success'
+        })
+        cb({ ok = true, result = res })
+    else
+        local reason = (res and res.reason) or 'Nenhum caminhão alugado para devolver.'
+        lib.notify({ title = 'Locadora', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
 end)
 
 RegisterNUICallback('acceptJob', function(data, cb)

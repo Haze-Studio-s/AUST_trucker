@@ -1,7 +1,9 @@
 import { useNUI } from './hooks/useNUI'
 import { useAppStore } from './stores/useAppStore'
 import { useCompanyStore } from './stores/useCompanyStore'
+import { LationHeader } from './components/layout/LationHeader'
 import { TabBar } from './components/layout/TabBar'
+import { FooterActions } from './components/layout/FooterActions'
 import { JobList } from './components/jobs/JobList'
 import { ActiveJob } from './components/jobs/ActiveJob'
 import { CompanySetup } from './components/company/CompanySetup'
@@ -28,21 +30,31 @@ export default function App() {
     <>
       <TruckHUD />
       <NpcEventAlert />
-      <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-        <div className="pointer-events-auto w-[90vw] max-w-[1400px] h-[85vh] bg-app-bg rounded-lg border border-app-border shadow-[0_1px_20px_rgba(0,0,0,0.1)] flex flex-col overflow-hidden">
+
+      <div className="fixed inset-0 flex items-center justify-center pointer-events-none bg-black/65 backdrop-blur-[2px] z-40 select-none">
+        <div className="pointer-events-auto w-[88vw] max-w-[1360px] h-[86vh] bg-lation-surface rounded-xl border border-lation-line shadow-lation-panel flex flex-col overflow-hidden animate-fadeIn">
+          {/* Header Superior com Perfil do Motorista */}
+          <LationHeader />
+
+          {/* Abas Técnicas de Navegação */}
           <TabBar />
-          <div className="flex-1 overflow-auto p-4">
+
+          {/* Área Principal de Conteúdo */}
+          <main className="flex-1 overflow-y-auto p-5 bg-lation-surface">
             {activeTab === 'jobs'       && <JobList />}
+            {activeTab === 'garage'     && <GaragePanel />}
             {activeTab === 'missions'   && <RepoPanel />}
             {activeTab === 'active'     && <ActiveJob />}
             {activeTab === 'company'    && (company ? <CompanyPanel /> : <CompanySetup />)}
-            {activeTab === 'garage'     && <GaragePanel />}
             {activeTab === 'industries' && <IndustryList />}
             {activeTab === 'stats'      && <StatsPanel />}
             {activeTab === 'convoy'     && <PartyPanel />}
             {activeTab === 'drivers'    && <NpcDriverPanel />}
             {activeTab === 'adr'        && <AdrPanel />}
-          </div>
+          </main>
+
+          {/* Rodapé com Atalhos e Ações Rápidas */}
+          <FooterActions />
         </div>
       </div>
     </>

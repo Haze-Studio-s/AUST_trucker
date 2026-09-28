@@ -27,6 +27,10 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
         spawn('stats', function()
             local s = DB_GetPlayerStats(citizenId)
             if not s then pcall(DB_UpsertPlayerStats, citizenId); s = DB_GetPlayerStats(citizenId) end
+            if s then
+                s.name = Framework.GetCharName(Player)
+                s.money = Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash') or 0
+            end
             return s
         end)
         spawn('personalLoan',   function() return DB_GetActiveLoan(citizenId) end)
@@ -184,6 +188,10 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             adrCerts            = _r.adrCerts,
             activeContract      = _r.activeContract,
             clients             = _r.clients or {},
+            rentalTrucks        = Config.TruckRental and Config.TruckRental.trucks or {},
+            activeRental        = TruckRentalService and TruckRentalService.GetRental(citizenId) or nil,
+            playerName          = Framework.GetCharName(Player),
+            playerMoney         = Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash') or 0,
         }
     end)
 

@@ -9,6 +9,27 @@ export interface Job {
   weight?: number     // peso da carga em kg
   expiresAt: number  // Unix timestamp (seconds)
   cargoQty?: number  // 1-6 pacotes, default 1
+  adrRequired?: string
+  adrLocked?: boolean
+  urgency?: 'normal' | 'urgent' | 'critical'
+  fragile?: boolean
+  valuable?: boolean
+}
+
+export interface RentalTruck {
+  model: string
+  label: string
+  fee: number
+  deposit: number
+  capacity?: string
+}
+
+export interface ActiveRental {
+  plate: string
+  model: string
+  deposit: number
+  fee: number
+  rentedAt?: number
 }
 
 export interface ActiveJob extends Job {
@@ -97,6 +118,8 @@ export interface Skills {
 // Stats completas (reflete trucker_player_progression)
 export interface Stats {
   citizenid:        string
+  name?:            string
+  money?:           number
   level:            number
   xp:               number
   rank:             number

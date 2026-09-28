@@ -1,33 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --surface: #1e1f24;
+  --surface-band: #18191e;
+  --surface-hover: #252630;
+  --surface-elevated: #2a2b31;
+  --surface-deep: #16171b;
+
+  --line: #2a2b31;
+  --line-strong: #3a3b41;
+  --line-hover: #4a4b51;
+
+  --content: #e4e4e7;
+  --content-secondary: #a1a1aa;
+  --content-muted: #71717a;
+  --content-heading: #ffffff;
+
+  --accent: #10b981;
+  --accent-soft: #34d399;
+  --accent-bright: #6afe87;
+  --accent-dim: rgba(16, 185, 129, 0.12);
+  --accent-glow: rgba(16, 185, 129, 0.28);
+
+  --btn-green-bg: #1b3b2d;
+  --btn-green-text: #6afe87;
+  --btn-green-border: #224d3a;
+  --btn-green-hover: #234d3b;
+
+  --radius: 10px;
+  --radius-sm: 7px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+  --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.25), 0 12px 32px rgba(0, 0, 0, 0.45);
+}
 
 * {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
+  font-family: var(--font-sans);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background: transparent;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #c1c2c5;
-  line-height: 1.55;
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+  color: var(--content);
 }
 
-/* Custom Scrollbar */
+/* Scrollbar Lation */
 ::-webkit-scrollbar {
-  width: 8px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #25262b;
+  background: var(--surface-deep);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #373a40;
+  background: var(--line-strong);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #495057;
+  background: var(--accent);
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -38,17 +80,34 @@ body {
   scrollbar-width: none;
 }
 
+/* Lation Chips & UI Elements */
+.chip {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--surface-elevated);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 0.15rem 0.5rem;
+  white-space: nowrap;
+}
+.chip.money {
+  color: var(--btn-green-text);
+  background: var(--btn-green-bg);
+  border-color: var(--btn-green-border);
+}
+.chip.buff {
+  color: var(--accent-soft);
+  border-color: var(--btn-green-border);
+  background: rgba(16, 185, 129, 0.1);
+}
+
 /* Animations */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes slideInRight {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
-}
-
 .animate-fadeIn {
-  animation: fadeIn 0.3s ease;
+  animation: fadeIn 0.22s ease-out;
 }

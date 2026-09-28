@@ -11,7 +11,7 @@ import { useNpcDriverStore } from '../stores/useNpcDriverStore'
 import { useAdrStore } from '../stores/useAdrStore'
 import { useContractStore } from '../stores/useContractStore'
 import type { ClientRelationship, ActiveContract } from '../stores/useContractStore'
-import type { Job, ActiveJob, Company, Member, Vehicle, Industry, IndustryOwnership, Stats, Skills, Party, NpcGraveEvent, NpcDriver, NpcDriverData, AdrCert, ConvoyPayment } from '../types'
+import type { Job, ActiveJob, Company, Member, Vehicle, Industry, IndustryOwnership, Stats, Skills, Party, NpcGraveEvent, NpcDriver, NpcDriverData, AdrCert, ConvoyPayment, RentalTruck, ActiveRental } from '../types'
 import type { LoanData } from '../types/loan'
 import type { RepoOrder } from '../types/repo'
 
@@ -74,10 +74,15 @@ interface NUIMessage {
   history?:             unknown
   // Convoy History
   convoyHistory?:       ConvoyPayment[]
+  // Profile & Rental
+  playerName?:          string
+  playerMoney?:         number
+  rentalTrucks?:        RentalTruck[]
+  activeRental?:        ActiveRental | null
 }
 
 export function useNUI() {
-  const { setOpen, setTab }                                            = useAppStore()
+  const { setOpen, setTab, setPlayerProfile, setRentalTrucks, setActiveRental } = useAppStore()
   const { setJobs, setActiveJob }                                      = useJobStore()
   const { setCompany, setRecruitingList, setMembers, setVehicles, setCompanyLoan } = useCompanyStore()
   const { setIndustries, setOwnedIndustries }                         = useIndustryStore()
@@ -90,6 +95,18 @@ export function useNUI() {
   const { setClients, setActiveContract } = useContractStore()
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.keyCode === 27) {
+        setOpen(false)
+        fetchNUI('closeUI', {}).catch(() => {})
+        fetchNUI('close', {}).catch(() => {})
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [setOpen])
+
+  useEffect(() => {
     const handler = (event: MessageEvent<NUIMessage>) => {
       const { action } = event.data
       switch (action) {
@@ -99,6 +116,17 @@ export function useNUI() {
           setCompany(openCompany)
           setActiveJob(event.data.activeJob ?? null)
           setStats(event.data.stats ?? null)
+          if (event.data.playerName !== undefined || event.data.playerMoney !== undefined) {
+            setPlayerProfile(event.data.playerName || 'Motorista', event.data.playerMoney ?? 0)
+          } else if (event.data.stats?.name) {
+            setPlayerProfile(event.data.stats.name, event.data.stats.money ?? 0)
+          }
+          if (event.data.rentalTrucks) {
+            setRentalTrucks(event.data.rentalTrucks)
+          }
+          if (event.data.activeRental !== undefined) {
+            setActiveRental(event.data.activeRental)
+          }
           setRecruitingList(event.data.recruitingCompanies ?? [])
           if (event.data.skills) setSkills(event.data.skills)
           setPersonalLoan(event.data.personalLoan ?? null)
@@ -140,6 +168,9 @@ export function useNUI() {
           break
         case 'updateVehicles':
           setVehicles(event.data.vehicles ?? [])
+          break
+        case 'updateRental':
+          setActiveRental(event.data.activeRental ?? null)
           break
         case 'updateStats':
           setStats(event.data.stats ?? null)

@@ -3,12 +3,11 @@ import { useJobStore } from '../../stores/useJobStore'
 import { useCompanyStore } from '../../stores/useCompanyStore'
 import { useRepoStore } from '../../stores/useRepoStore'
 import { useContractStore } from '../../stores/useContractStore'
-import { fetchNUI } from '../../hooks/useNUI'
 import type { TabName } from '../../types'
 import clsx from 'clsx'
 
 export function TabBar() {
-  const { activeTab, setTab, setOpen } = useAppStore()
+  const { activeTab, setTab }         = useAppStore()
   const { activeJob }                  = useJobStore()
   const { company }                    = useCompanyStore()
   const { activeRepoOrder }            = useRepoStore()
@@ -16,63 +15,53 @@ export function TabBar() {
 
   const isRepo = company?.company_type === 'repo'
 
-  const TABS: { id: TabName; label: string }[] = [
-    { id: isRepo ? 'missions' : 'jobs', label: isRepo ? 'Missões' : 'Jobs' },
-    { id: 'active',     label: 'Contratos' },
+  const TABS: { id: TabName; label: string; icon?: string }[] = [
+    { id: isRepo ? 'missions' : 'jobs', label: isRepo ? 'Missões Guincho' : 'Fretes Disponíveis' },
+    { id: 'garage',     label: 'Frota & Aluguel' },
+    { id: 'active',     label: 'Viagem Ativa' },
     { id: 'company',    label: 'Empresa' },
-    { id: 'garage',     label: 'Garagem' },
     { id: 'industries', label: 'Indústrias' },
-    { id: 'stats',      label: 'Stats' },
-    { id: 'convoy',     label: 'Convoy' },
+    { id: 'stats',      label: 'Progresso & Skills' },
+    { id: 'convoy',     label: 'Comboio' },
     { id: 'drivers',    label: 'Motoristas' },
-    { id: 'adr',        label: 'ADR'        },
+    { id: 'adr',        label: 'ADR' },
   ]
 
-  function handleClose() {
-    setOpen(false)
-    fetchNUI('closeUI', {})
-  }
-
   return (
-    <div className="flex border-b border-app-border bg-card items-center">
-      <div className="flex flex-1 overflow-x-auto scrollbar-hide">
+    <div className="bg-lation-surface-deep px-3 py-2 border-b border-lation-line">
+      <nav className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
         {TABS.map((tab) => {
-          const disabled = (tab.id === 'active' && !activeJob && !activeContract && !company)
-            || (tab.id === 'garage' && !company)
+          const disabled = tab.id === 'active' && !activeJob && !activeContract && !company
+          const isActive = activeTab === tab.id
+
           return (
             <button
               key={tab.id}
               onClick={() => !disabled && setTab(tab.id)}
               disabled={disabled}
               className={clsx(
-                'px-2.5 py-3 text-xs font-medium transition-colors whitespace-nowrap',
-                activeTab === tab.id
-                  ? 'text-primary border-b-2 border-primary'
-                  : 'text-txt hover:text-txt-light',
-                disabled && 'opacity-30 cursor-not-allowed'
+                'px-3.5 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all whitespace-nowrap flex items-center gap-2 border select-none',
+                isActive
+                  ? 'bg-lation-btn-bg text-lation-btn-text border-lation-btn-border shadow-[0_0_12px_rgba(16,185,129,0.2)]'
+                  : 'bg-transparent text-lation-content-sec border-transparent hover:text-white hover:bg-lation-surface-hover hover:border-lation-line',
+                disabled && 'opacity-30 cursor-not-allowed hover:bg-transparent hover:text-lation-content-sec'
               )}
             >
-              {tab.label}
+              <span>{tab.label}</span>
+
               {tab.id === 'active' && (activeJob || activeContract) && (
-                <span className="ml-1 w-2 h-2 bg-success rounded-full inline-block" />
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
               )}
               {tab.id === 'active' && !activeJob && !activeContract && clients.length > 0 && (
-                <span className="ml-1 w-2 h-2 bg-gold rounded-full inline-block" />
+                <span className="w-2 h-2 rounded-full bg-gold" />
               )}
               {tab.id === 'missions' && activeRepoOrder && (
-                <span className="ml-1 w-2 h-2 bg-primary-hover rounded-full inline-block" />
+                <span className="w-2 h-2 rounded-full bg-lation-accent-bright animate-ping" />
               )}
             </button>
           )
         })}
-      </div>
-      <button
-        onClick={handleClose}
-        className="w-9 h-9 flex items-center justify-center ml-1 mr-1 text-txt hover:text-danger hover:bg-card-alt rounded transition-colors flex-shrink-0 text-base font-bold"
-        title="Fechar (ESC)"
-      >
-        ✕
-      </button>
+      </nav>
     </div>
   )
 }

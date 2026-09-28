@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AURP Trucker</title>
-    <script type="module" crossorigin src="./assets/index-CFmDeDaN.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-DUksbkcI.css">
+    <title>AURP Trucker - Central Logística</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet">
 
     <!-- ── Parcel Tracker Overlay ── -->
     <style>
@@ -16,25 +17,25 @@
         right: 20px;
         width: 260px;
         z-index: 9999;
-        background: rgba(12, 12, 18, 0.94);
+        background: rgba(18, 19, 23, 0.96);
         border-radius: 10px;
         overflow: hidden;
         box-shadow: 0 4px 24px rgba(0,0,0,.5);
-        border: 1px solid rgba(255,255,255,.09);
-        animation: pt-slide-in .4s cubic-bezier(.4,0,.2,1);
-        font-family: system-ui, -apple-system, sans-serif;
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        animation: pt-slide-in .35s cubic-bezier(.4,0,.2,1);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
       }
       @keyframes pt-slide-in {
         from { transform: translateX(110%); opacity: 0; }
         to   { transform: translateX(0);    opacity: 1; }
       }
       #parcel-tracker .pt-header {
-        background: rgba(255,140,0,.15);
-        border-bottom: 1px solid rgba(255,165,0,.3);
+        background: rgba(16, 185, 129, 0.15);
+        border-bottom: 1px solid rgba(16, 185, 129, 0.3);
         padding: 10px 14px;
         font-size: .82rem;
         font-weight: 700;
-        color: #ffa500;
+        color: #6afe87;
         display: flex;
         align-items: center;
         gap: 8px;
@@ -56,11 +57,13 @@
         transition: background .2s, color .2s;
       }
       #pt-list li:last-child { border-bottom: none; }
-      #pt-list li.completed  { color: #4ade80; background: rgba(74,222,128,.06); }
+      #pt-list li.completed  { color: #6afe87; background: rgba(16,185,129,.08); font-weight: 600; }
       #pt-list li .pt-icon   { width: 14px; text-align: center; flex-shrink: 0; }
-      #pt-list li.completed .pt-icon { color: #4ade80; }
+      #pt-list li.completed .pt-icon { color: #6afe87; }
       #pt-list li:not(.completed) .pt-icon { color: #f87171; }
     </style>
+    <script type="module" crossorigin src="./assets/index-ByrUNvRt.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DWMdYiBu.css">
   </head>
   <body class="bg-transparent">
     <div id="root"></div>
@@ -68,7 +71,6 @@
     <!-- Parcel Tracker — gerenciado por SendNUIMessage(action='parcel_*') -->
     <div id="parcel-tracker" role="complementary" aria-label="Tracker de Entregas">
       <div class="pt-header">
-        <!-- caminhão SVG inline (sem dependência de CDN) -->
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/>
@@ -79,6 +81,7 @@
       <ul id="pt-list"></ul>
     </div>
 
+
     <script>
       (function () {
         'use strict';
@@ -86,9 +89,8 @@
         const list       = document.getElementById('pt-list');
         const routeLabel = document.getElementById('pt-route-label');
 
-        // SVG check / cross compactos (sem Font Awesome)
         const ICON_PENDING = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#f87171" stroke-width="2.5" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>';
-        const ICON_DONE    = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#4ade80" stroke-width="2.5" fill="none"><path d="M20 6L9 17l-5-5"/></svg>';
+        const ICON_DONE    = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#6afe87" stroke-width="2.5" fill="none"><path d="M20 6L9 17l-5-5"/></svg>';
 
         function createStopItem(id, text) {
           const li = document.createElement('li');
@@ -111,7 +113,6 @@
           }
 
           else if (d.action === 'parcel_update_stop') {
-            // d.index é 0-based (enviado pelo Lua como stopIndex - 1)
             const li = document.getElementById('pt-stop-' + (d.index + 1));
             if (li) {
               li.classList.add('completed');

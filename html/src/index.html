@@ -3,10 +3,140 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AURP Trucker</title>
+    <title>AURP Trucker - Central Logística</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- ── Parcel Tracker Overlay ── -->
+    <style>
+      #parcel-tracker {
+        display: none;
+        position: fixed;
+        top: 20%;
+        right: 20px;
+        width: 260px;
+        z-index: 9999;
+        background: rgba(18, 19, 23, 0.96);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 24px rgba(0,0,0,.5);
+        border: 1px solid rgba(16, 185, 129, 0.25);
+        animation: pt-slide-in .35s cubic-bezier(.4,0,.2,1);
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      }
+      @keyframes pt-slide-in {
+        from { transform: translateX(110%); opacity: 0; }
+        to   { transform: translateX(0);    opacity: 1; }
+      }
+      #parcel-tracker .pt-header {
+        background: rgba(16, 185, 129, 0.15);
+        border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+        padding: 10px 14px;
+        font-size: .82rem;
+        font-weight: 700;
+        color: #6afe87;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      #parcel-tracker .pt-header svg { flex-shrink: 0; }
+      #pt-list {
+        list-style: none;
+        margin: 0;
+        padding: 6px 0;
+      }
+      #pt-list li {
+        padding: 8px 14px;
+        font-size: .78rem;
+        color: #cbd5e1;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border-bottom: 1px solid rgba(255,255,255,.04);
+        transition: background .2s, color .2s;
+      }
+      #pt-list li:last-child { border-bottom: none; }
+      #pt-list li.completed  { color: #6afe87; background: rgba(16,185,129,.08); font-weight: 600; }
+      #pt-list li .pt-icon   { width: 14px; text-align: center; flex-shrink: 0; }
+      #pt-list li.completed .pt-icon { color: #6afe87; }
+      #pt-list li:not(.completed) .pt-icon { color: #f87171; }
+    </style>
   </head>
   <body class="bg-transparent">
     <div id="root"></div>
+
+    <!-- Parcel Tracker — gerenciado por SendNUIMessage(action='parcel_*') -->
+    <div id="parcel-tracker" role="complementary" aria-label="Tracker de Entregas">
+      <div class="pt-header">
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+        <span id="pt-route-label">Rota de Entrega</span>
+      </div>
+      <ul id="pt-list"></ul>
+    </div>
+
     <script type="module" src="./main.tsx"></script>
+
+    <script>
+      (function () {
+        'use strict';
+        const tracker    = document.getElementById('parcel-tracker');
+        const list       = document.getElementById('pt-list');
+        const routeLabel = document.getElementById('pt-route-label');
+
+        const ICON_PENDING = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#f87171" stroke-width="2.5" fill="none"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+        const ICON_DONE    = '<svg viewBox="0 0 24 24" width="12" height="12" stroke="#6afe87" stroke-width="2.5" fill="none"><path d="M20 6L9 17l-5-5"/></svg>';
+
+        function createStopItem(id, text) {
+          const li = document.createElement('li');
+          li.id = id;
+          li.innerHTML = '<span class="pt-icon">' + ICON_PENDING + '</span><span>' + text + '</span>';
+          return li;
+        }
+
+        window.addEventListener('message', function (e) {
+          const d = e.data;
+          if (!d || !d.action) return;
+
+          if (d.action === 'parcel_start') {
+            list.innerHTML = '';
+            routeLabel.textContent = d.routeLabel || 'Rota de Entrega';
+            for (let i = 1; i <= (d.amount || 0); i++) {
+              list.appendChild(createStopItem('pt-stop-' + i, 'Parada #' + i));
+            }
+            tracker.style.display = 'block';
+          }
+
+          else if (d.action === 'parcel_update_stop') {
+            const li = document.getElementById('pt-stop-' + (d.index + 1));
+            if (li) {
+              li.classList.add('completed');
+              li.querySelector('.pt-icon').innerHTML = ICON_DONE;
+            }
+          }
+
+          else if (d.action === 'parcel_add_return') {
+            list.appendChild(createStopItem('pt-return', 'Retornar ao Depósito'));
+          }
+
+          else if (d.action === 'parcel_close') {
+            tracker.style.transition = 'transform 300ms ease, opacity 300ms ease';
+            tracker.style.transform  = 'translateX(110%)';
+            tracker.style.opacity    = '0';
+            setTimeout(function () {
+              tracker.style.display    = 'none';
+              tracker.style.transform  = '';
+              tracker.style.opacity    = '';
+              tracker.style.transition = '';
+              list.innerHTML = '';
+            }, 310);
+          }
+        });
+      }());
+    </script>
   </body>
 </html>
