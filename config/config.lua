@@ -839,7 +839,7 @@ Config.Loans = {
 }
 
 Config.Flatbed = {
-    model    = 'flatbed3',
+    model    = 'flatbed',
     bedModel = 'inm_flatbed_base',
 
     -- Animação do operador ao usar controles do flatbed
