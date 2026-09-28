@@ -7,12 +7,11 @@ body {
 }
 
 .main {
-	width: 1280px;
-	height: 726px;
-	background-color: #f5f6f8;
-	border-radius: 0px 20px 20px 0px;
+	width: 1320px;
+	height: 760px;
+	border-radius: 18px !important;
 	display: grid;
-    grid-template-columns: 80px 1200px;
+    grid-template-columns: 84px 1fr;
 }
 
 /*===========================*/

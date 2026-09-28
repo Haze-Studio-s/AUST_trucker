@@ -1,42 +1,349 @@
-.backgound-theme {
-	background-color: #222222df;
+/* ============================================================
+   AUST_trucker — Padrão Nation (Nation Scripts Style)
+   Dark Theme & Glassmorphism Design System
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --primary-color: #8b5cf6;
+    --primary-color-hover: #7c3aed;
+    --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
+    --primary-glow: rgba(139, 92, 246, 0.35);
+
+    --accent-cyan: #06b6d4;
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-rose: #f43f5e;
+
+    --bg-main: rgba(13, 15, 24, 0.92);
+    --bg-sidebar: rgba(9, 10, 16, 0.97);
+    --bg-card: rgba(22, 26, 40, 0.72);
+    --bg-card-hover: rgba(30, 36, 56, 0.88);
+    --bg-input: rgba(255, 255, 255, 0.05);
+    --bg-input-focus: rgba(255, 255, 255, 0.09);
+
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-hover: rgba(139, 92, 246, 0.5);
+    --border-active: #8b5cf6;
+
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --radius-xl: 18px;
+
+    --shadow-main: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
-.card-theme {
-    background-color: #2f2f2f;
-    border: 1px solid rgba(250, 250, 250, 0.125);
+/* Base & Font */
+body {
+    font-family: 'Poppins', -apple-system, sans-serif !important;
+    background-color: transparent !important;
 }
 
-.card-featured-theme {
-    background-color: rgba(250, 250, 250, 0.03);
+/* Custom Thin Scrollbar */
+::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+}
+::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.35);
+    border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--primary-color);
 }
 
-.user-card .card-block .activity-leval li {
-    background-color: #5a5a5a;
+/* Main Container Glassmorphism */
+.backgound-theme, .main {
+    background: var(--bg-main) !important;
+    backdrop-filter: blur(20px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-xl) !important;
+    box-shadow: var(--shadow-main) !important;
+    color: var(--text-primary) !important;
 }
 
-.bank-money-title, .bank-loan-title {
-    color: #e1e1e1;
-}
-
-.diagnostic-page .card-content:hover{
-    background-color: #292929;
-}
-
+/* Minimalist Sidebar (Nation Style) */
 .sidebar-navigation {
-	background-color: #3b3b3b;
+    background: var(--bg-sidebar) !important;
+    border-right: 1px solid var(--border-subtle) !important;
+    padding: 12px 0 !important;
+}
+
+.sidebar-navigation ul {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sidebar-navigation ul li {
+    height: 50px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted) !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border-left: 3px solid transparent !important;
+    border-radius: 0 8px 8px 0;
+    margin-right: 6px;
+}
+
+.sidebar-navigation ul li i {
+    font-size: 19px !important;
+    transition: all 0.2s ease;
+}
+
+.sidebar-navigation ul li:hover {
+    color: var(--text-primary) !important;
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+.sidebar-navigation ul li.active {
+    color: var(--primary-color) !important;
+    background: rgba(139, 92, 246, 0.1) !important;
+    border-left-color: var(--primary-color) !important;
+}
+
+.sidebar-navigation ul li.active i {
+    color: var(--primary-color) !important;
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 10px var(--primary-glow));
+}
+
+.sidebar-navigation ul li#sidebar-close:hover {
+    background: rgba(244, 63, 94, 0.1) !important;
+    border-left-color: var(--accent-rose) !important;
+}
+.sidebar-navigation ul li#sidebar-close:hover i {
+    color: var(--accent-rose) !important;
 }
 
 .sidebar-navigation ul li .tooltip {
-	background-color: #3b3b3b;
-    border: 1px solid rgba(250, 250, 250, 0.085);
+    background: rgba(18, 20, 30, 0.95) !important;
+    color: #fff !important;
+    padding: 6px 12px !important;
+    border-radius: var(--radius-sm) !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5) !important;
+    border: 1px solid var(--border-subtle) !important;
 }
 
-.vt-card {
-    background-color: #222222df;
-    color: #e1e1e1;
+/* Header & Player Info */
+.player-info-container {
+    background: rgba(255, 255, 255, 0.015) !important;
+    border-bottom: 1px solid var(--border-subtle) !important;
+    padding: 14px 24px !important;
 }
 
+.player-info-item {
+    font-weight: 600 !important;
+    letter-spacing: 0.3px;
+}
+
+.text-primary, i.text-primary {
+    color: var(--primary-color) !important;
+}
+
+/* Floating Cards with Glow & Hover */
+.card, .card-theme {
+    background-color: var(--bg-card) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-card) !important;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.card:hover, .card-theme:hover {
+    background-color: var(--bg-card-hover) !important;
+    border-color: var(--border-hover) !important;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45) !important;
+}
+
+.card-centering:hover {
+    transform: translateY(-2px);
+}
+
+.card-featured-theme {
+    background-color: rgba(255, 255, 255, 0.03) !important;
+    border-radius: var(--radius-md) !important;
+}
+
+/* Job Cards (Quick Jobs & Freight Jobs) */
+ul.list-inline li.card-theme {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px !important;
+    margin-bottom: 10px !important;
+    background: var(--bg-card) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-lg) !important;
+    transition: all 0.22s ease !important;
+}
+
+ul.list-inline li.card-theme:hover {
+    background: var(--bg-card-hover) !important;
+    border-color: var(--border-hover) !important;
+    transform: scale(1.008);
+}
+
+/* User Profile & Candidate Cards */
+.user-card {
+    border-radius: var(--radius-lg) !important;
+    overflow: hidden;
+}
+
+.user-card .card-block .activity-leval li {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 4px;
+}
+
+.user-card .card-block .activity-leval li.actived {
+    background: var(--primary-gradient) !important;
+    box-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* Buttons (Padrão Nation - Flat, vibrante e moderno) */
+.btn-primary {
+    background: var(--primary-gradient) !important;
+    border: none !important;
+    border-radius: var(--radius-sm) !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.3px;
+    padding: 8px 18px !important;
+    box-shadow: 0 4px 14px var(--primary-glow) !important;
+    transition: all 0.2s ease !important;
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px var(--primary-glow) !important;
+    filter: brightness(1.12);
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-danger {
+    background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%) !important;
+    border: none !important;
+    border-radius: var(--radius-sm) !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35) !important;
+    transition: all 0.2s ease;
+}
+
+.btn-danger:hover {
+    filter: brightness(1.12);
+    transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+    background: rgba(139, 92, 246, 0.08) !important;
+    border: 1px solid var(--primary-color) !important;
+    color: #c4b5fd !important;
+    border-radius: var(--radius-sm) !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease;
+}
+
+.btn-outline-primary:hover {
+    background: var(--primary-color) !important;
+    color: #ffffff !important;
+}
+
+/* Inputs & Form Controls */
+.form-control, input.form-control, select.form-control {
+    background: var(--bg-input) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-sm) !important;
+    color: var(--text-primary) !important;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus, input.form-control:focus, select.form-control:focus {
+    background: var(--bg-input-focus) !important;
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+    color: #ffffff !important;
+}
+
+/* Modals */
+.modal-content {
+    background: rgba(16, 18, 28, 0.96) !important;
+    border: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-lg) !important;
+    box-shadow: var(--shadow-main) !important;
+    backdrop-filter: blur(20px);
+}
+
+.modal-header, .modal-footer {
+    border-color: var(--border-subtle) !important;
+}
+
+/* Progress Bars & Health Indicators */
+.progress {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    border-radius: 8px !important;
+}
+
+.progress-bar.bg-success {
+    background: linear-gradient(90deg, #10b981, #34d399) !important;
+}
+
+.progress-bar.bg-warning {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24) !important;
+}
+
+.progress-bar.bg-danger {
+    background: linear-gradient(90deg, #e11d48, #f43f5e) !important;
+}
+
+/* Skills Tree */
+.steps.bg-success {
+    background: var(--primary-gradient) !important;
+    box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.line.bg-success {
+    background: var(--primary-color) !important;
+}
+
+.redsteps {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-muted) !important;
+    transition: all 0.2s ease;
+}
+
+.redsteps:hover {
+    border-color: var(--primary-color);
+    color: #fff !important;
+    background: rgba(139, 92, 246, 0.15) !important;
+    cursor: pointer;
+}
+
+.redline {
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Dealership & Garage */
 .dealership-locked-background {
-    background: #272727;
+    background: rgba(15, 17, 25, 0.5) !important;
+    opacity: 0.75;
 }
