@@ -525,6 +525,9 @@ AddEventHandler('QBCore:Server:OnPlayerLoaded', function()
     local citizenId = Framework.GetCitizenId(Player)
     DB_UpsertPlayerStats(citizenId)
     TruckSimulationService.OnPlayerLoaded(src)
+    if TruckRentalService and TruckRentalService.OnPlayerLoaded then
+        TruckRentalService.OnPlayerLoaded(src, citizenId) -- estorno pendente da caução
+    end
     if PartyService then
         PartyService.OnPlayerReconnect(src, citizenId)
     end

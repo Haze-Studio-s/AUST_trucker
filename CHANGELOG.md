@@ -1,5 +1,17 @@
 # Changelog — AUST_trucker
 
+## [Unreleased] — 2026-09-28 — Sync do repo VP local (só servidor + docs)
+
+Detalhes e achados: [`docs/SYNC_VP_LOCAL_2026-09-28.md`](docs/SYNC_VP_LOCAL_2026-09-28.md).
+
+### Adicionado
+- Entrega de combustível abastece postos do `vp_gasstations` (`AddFuelStock`) + 4 postos em `Config.SecondaryIndustries`.
+
+### Segurança
+- `truck_rental_service.lua` blindado mantendo o contrato do client: dano lido no servidor, `RegisterNetId` validado (placa/modelo/spawn), trava + throttle, estorno pendente persistido (`trucker_rentals.refund_due`), resposta com `refundAmount`/`damageCost` que a UI espera.
+
+Verificação: harness MOCK 13/13 + sintaxe. **Não testado in-game.** UI/HTML/client não foram alterados.
+
 ## [Unreleased] — 2026-09-16 — Auditoria de runtime (/fivem)
 
 ### Corrigido
