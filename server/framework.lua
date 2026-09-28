@@ -43,6 +43,15 @@ if fw == 'qbx' or fw == 'qbcore' then
         return player.PlayerData.charinfo
     end
 
+    Framework.GetCharName = function(player)
+        if not player then return 'Motorista' end
+        local ci = player.PlayerData and player.PlayerData.charinfo
+        if ci and (ci.firstname or ci.lastname) then
+            return ('%s %s'):format(ci.firstname or '', ci.lastname or ''):gsub('^%s*(.-)%s*$', '%1')
+        end
+        return GetPlayerName(player.PlayerData and player.PlayerData.source or 0) or 'Motorista'
+    end
+
     Framework.GetJob = function(player)
         return player and player.PlayerData.job or { name = '', label = '' }
     end
@@ -132,6 +141,12 @@ elseif fw == 'esx' then
             firstname = parts[1] or '',
             lastname  = parts[2] or '',
         }
+    end
+
+    Framework.GetCharName = function(player)
+        if not player then return 'Motorista' end
+        local name = player.getName and player.getName()
+        return name or player.name or 'Motorista'
     end
 
     Framework.GetJob = function(player)

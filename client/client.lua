@@ -1423,110 +1423,143 @@ local function ReturnRentedTruck()
 end
 
 -- =======================================
--- INICIALIZAÇÃO
+-- INICIALIZAÇÃO: MARCADORES VISUAIS & INTERAÇÃO [E]
 -- =======================================
 
-CreateThread(function()
-    Wait(2000)
+local function SafeRequestModel(modelHash, timeoutMs)
+    if not IsModelInCdimage(modelHash) or not IsModelValid(modelHash) then return false end
+    RequestModel(modelHash)
+    local t = 0
+    while not HasModelLoaded(modelHash) and t < (timeoutMs or 3000) do
+        Wait(50)
+        t = t + 50
+    end
+    return HasModelLoaded(modelHash)
+end
 
-    -- Criar blip da empresa
+local hqLocations = {
+    {
+        coords = Config.TrailerCompany.coords, -- Elysian Island: vector3(-1266.0, -3396.0, 13.94)
+        name   = Config.TrailerCompany.name or 'Central Logística (Elysian Island)',
+    }
+}
+if Config.LC_Headquarters and Config.LC_Headquarters.coords then
+    table.insert(hqLocations, {
+        coords = Config.LC_Headquarters.coords, -- Buccaneer Way: vector3(1208.83, -3115.0, 5.54)
+        name   = Config.LC_Headquarters.name or 'Central de Fretes (Buccaneer Way)',
+    })
+end
+
+-- Thread dedicada para Marcadores Visuais no Chão e Tecla [E] (Resmon < 0.01ms)
+CreateThread(function()
+    local textUiShown = false
+    while true do
+        local sleep = 1500
+        local playerPed = PlayerPedId()
+        local pCoords = GetEntityCoords(playerPed)
+        local inRangeAny = false
+
+        for _, loc in ipairs(hqLocations) do
+            local dist = #(pCoords - loc.coords)
+            if dist < 35.0 then
+                sleep = 0
+                -- 1. Cilindro no chão com brilho esmeralda
+                DrawMarker(1, loc.coords.x, loc.coords.y, loc.coords.z - 1.0,
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    2.0, 2.0, 0.6,
+                    16, 185, 129, 140, false, false, 2, false, nil, nil, false)
+
+                -- 2. Chevron giratório flutuante
+                DrawMarker(21, loc.coords.x, loc.coords.y, loc.coords.z + 0.35,
+                    0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                    0.75, 0.75, 0.75,
+                    16, 185, 129, 200, false, true, 2, true, nil, nil, false)
+
+                -- 3. Texto 3D no local
+                DrawText3D(loc.coords, "~g~[E]~w~ Central de Logística")
+
+                if dist < 2.5 then
+                    inRangeAny = true
+                    if not textUiShown then
+                        lib.showTextUI('[E] Acessar Central Logística', { icon = 'truck-fast', position = 'left-center' })
+                        textUiShown = true
+                    end
+                    if IsControlJustPressed(0, 38) then
+                        CreateThread(OpenJobBoard)
+                    end
+                end
+            end
+        end
+
+        if not inRangeAny and textUiShown then
+            lib.hideTextUI()
+            textUiShown = false
+        end
+
+        Wait(sleep)
+    end
+end)
+
+-- Thread de Blips e NPCs Despachantes (com ox_target secundário)
+CreateThread(function()
+    Wait(500)
+
+    -- 1. Blip Elysian Island
     blips.trailerCompany = CreateBlip(
         Config.TrailerCompany.coords,
         477, -- truck icon
-        5, -- yellow
+        5,   -- yellow
         Config.TrailerCompany.name,
         0.8
     )
 
-    -- Spawnar NPC despachante na central
-    local coords  = Config.TrailerCompany.coords
-    local heading = Config.TrailerCompany.spawnCoords and Config.TrailerCompany.spawnCoords.w or 180.0
-    local model = GetHashKey('a_m_m_business_01')
-    RequestModel(model)
-    while not HasModelLoaded(model) do Wait(10) end
+    -- NPC Elysian Island
+    local elysianCoords = Config.TrailerCompany.coords
+    local elysianHeading = Config.TrailerCompany.spawnCoords and Config.TrailerCompany.spawnCoords.w or 180.0
+    local modelElysian = GetHashKey('a_m_m_business_01')
+    if SafeRequestModel(modelElysian, 4000) then
+        local dispatcherPed = CreatePed(4, modelElysian, elysianCoords.x, elysianCoords.y, elysianCoords.z, elysianHeading, false, true)
+        if dispatcherPed and dispatcherPed ~= 0 and DoesEntityExist(dispatcherPed) then
+            SetEntityInvincible(dispatcherPed, true)
+            SetBlockingOfNonTemporaryEvents(dispatcherPed, true)
+            FreezeEntityPosition(dispatcherPed, true)
+            SetModelAsNoLongerNeeded(modelElysian)
 
-    local dispatcherPed = CreatePed(4, model, coords.x, coords.y, coords.z, heading, false, true)
-    SetEntityInvincible(dispatcherPed, true)
-    SetBlockingOfNonTemporaryEvents(dispatcherPed, true)
-    FreezeEntityPosition(dispatcherPed, true)
-    SetModelAsNoLongerNeeded(model)
+            exports.ox_target:addLocalEntity(dispatcherPed, {
+                {
+                    name     = 'open_job_board',
+                    icon     = 'fas fa-clipboard-list',
+                    label    = 'Central de Trabalhos',
+                    distance = 3.0,
+                    onSelect = function() CreateThread(OpenJobBoard) end,
+                },
+                {
+                    name     = 'rent_truck',
+                    icon     = 'fas fa-truck-moving',
+                    label    = 'Alugar Caminhão (Caução)',
+                    distance = 3.0,
+                    onSelect = function() OpenRentalMenu() end,
+                },
+                {
+                    name     = 'return_truck',
+                    icon     = 'fas fa-undo-alt',
+                    label    = 'Devolver Caminhão Alugado',
+                    distance = 3.0,
+                    onSelect = function() ReturnRentedTruck() end,
+                },
+            })
 
-    if dispatcherPed and dispatcherPed ~= 0 and DoesEntityExist(dispatcherPed) then
-        exports.ox_target:addLocalEntity(dispatcherPed, {
-            {
-                name     = 'open_job_board',
-                icon     = 'fas fa-clipboard-list',
-                label    = 'Central de Trabalhos',
-                distance = 3.0,
-                onSelect = function()
-                    CreateThread(OpenJobBoard)
-                end,
-            },
-            {
-                name     = 'rent_truck',
-                icon     = 'fas fa-truck-moving',
-                label    = 'Alugar Caminhão (Caução)',
-                distance = 3.0,
-                onSelect = function()
-                    OpenRentalMenu()
-                end,
-            },
-            {
-                name     = 'return_truck',
-                icon     = 'fas fa-undo-alt',
-                label    = 'Devolver Caminhão Alugado',
-                distance = 3.0,
-                onSelect = function()
-                    ReturnRentedTruck()
-                end,
-            },
-        })
+            AddEventHandler('onResourceStop', function(res)
+                if res ~= GetCurrentResourceName() then return end
+                if dispatcherPed and DoesEntityExist(dispatcherPed) then
+                    exports.ox_target:removeLocalEntity(dispatcherPed)
+                    DeleteEntity(dispatcherPed)
+                end
+            end)
+        end
     end
 
-    -- Ponto de interação [E] no chão para Elysian Island
-    local elysianMenuPoint = lib.points.new({
-        coords = Config.TrailerCompany.coords,
-        distance = 15.0,
-        nearby = function(self)
-            DrawMarker(21, self.coords.x, self.coords.y, self.coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 16, 185, 129, 180, false, true, 2, false, nil, nil, false)
-            if self.currentDistance < 2.5 then
-                if not self.isTextOpen then
-                    lib.showTextUI('[E] Acessar Central Logística', { icon = 'truck-fast', position = 'left-center' })
-                    self.isTextOpen = true
-                end
-                if IsControlJustPressed(0, 38) then
-                    CreateThread(OpenJobBoard)
-                end
-            elseif self.isTextOpen then
-                lib.hideTextUI()
-                self.isTextOpen = false
-            end
-        end,
-        onExit = function(self)
-            if self.isTextOpen then
-                lib.hideTextUI()
-                self.isTextOpen = false
-            end
-        end,
-    })
-
-    -- Cleanup ao parar o recurso
-    AddEventHandler('onResourceStop', function(res)
-        if res ~= GetCurrentResourceName() then return end
-        if elysianMenuPoint then
-            pcall(function() elysianMenuPoint:remove() end)
-        end
-        if dispatcherPed and DoesEntityExist(dispatcherPed) then
-            exports.ox_target:removeLocalEntity(dispatcherPed)
-            DeleteEntity(dispatcherPed)
-        end
-    end)
-
-    if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 NPC despachante criado na central de trabalhos")
-    end
-
-    -- Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
+    -- 2. Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
     if Config.LC_Headquarters then
         local hq = Config.LC_Headquarters
         blips.lcHq = CreateBlip(
@@ -1538,89 +1571,48 @@ CreateThread(function()
         )
 
         local lcPedCoords = hq.pedCoords or vector4(hq.coords.x, hq.coords.y, hq.coords.z, 90.0)
-        local lcModel = GetHashKey('s_m_m_dockwork_01')
-        RequestModel(lcModel)
-        while not HasModelLoaded(lcModel) do Wait(10) end
+        local lcModel = GetHashKey('s_m_y_dockwork_01') -- Modelo válido GTA V dockworker
+        if SafeRequestModel(lcModel, 4000) then
+            local lcDispatcher = CreatePed(4, lcModel, lcPedCoords.x, lcPedCoords.y, lcPedCoords.z, lcPedCoords.w, false, true)
+            if lcDispatcher and lcDispatcher ~= 0 and DoesEntityExist(lcDispatcher) then
+                SetEntityInvincible(lcDispatcher, true)
+                SetBlockingOfNonTemporaryEvents(lcDispatcher, true)
+                FreezeEntityPosition(lcDispatcher, true)
+                SetModelAsNoLongerNeeded(lcModel)
 
-        local lcDispatcher = CreatePed(4, lcModel, lcPedCoords.x, lcPedCoords.y, lcPedCoords.z, lcPedCoords.w, false, true)
-        SetEntityInvincible(lcDispatcher, true)
-        SetBlockingOfNonTemporaryEvents(lcDispatcher, true)
-        FreezeEntityPosition(lcDispatcher, true)
-        SetModelAsNoLongerNeeded(lcModel)
+                exports.ox_target:addLocalEntity(lcDispatcher, {
+                    {
+                        name     = 'open_lc_job_board',
+                        icon     = 'fas fa-truck-loading',
+                        label    = 'Central de Fretes (Buccaneer Way)',
+                        distance = 3.0,
+                        onSelect = function() CreateThread(OpenJobBoard) end,
+                    },
+                    {
+                        name     = 'rent_truck_lc',
+                        icon     = 'fas fa-truck-moving',
+                        label    = 'Locadora de Caminhões',
+                        distance = 3.0,
+                        onSelect = function() OpenRentalMenu() end,
+                    },
+                    {
+                        name     = 'return_truck_lc',
+                        icon     = 'fas fa-undo-alt',
+                        label    = 'Devolver Caminhão Alugado',
+                        distance = 3.0,
+                        onSelect = function() ReturnRentedTruck() end,
+                    },
+                })
 
-        if lcDispatcher and DoesEntityExist(lcDispatcher) then
-            exports.ox_target:addLocalEntity(lcDispatcher, {
-                {
-                    name     = 'open_lc_job_board',
-                    icon     = 'fas fa-truck-loading',
-                    label    = 'Central de Fretes (Buccaneer Way)',
-                    distance = 3.0,
-                    onSelect = function()
-                        CreateThread(OpenJobBoard)
-                    end,
-                },
-                {
-                    name     = 'rent_truck_lc',
-                    icon     = 'fas fa-truck-moving',
-                    label    = 'Locadora de Caminhões',
-                    distance = 3.0,
-                    onSelect = function()
-                        OpenRentalMenu()
-                    end,
-                },
-                {
-                    name     = 'return_truck_lc',
-                    icon     = 'fas fa-undo-alt',
-                    label    = 'Devolver Caminhão Alugado',
-                    distance = 3.0,
-                    onSelect = function()
-                        ReturnRentedTruck()
-                    end,
-                },
-            })
-
-            AddEventHandler('onResourceStop', function(res)
-                if res ~= GetCurrentResourceName() then return end
-                if lcDispatcher and DoesEntityExist(lcDispatcher) then
-                    exports.ox_target:removeLocalEntity(lcDispatcher)
-                    DeleteEntity(lcDispatcher)
-                end
-            end)
-        end
-
-        -- Ponto de interação original [E] no chão com Marker
-        local lcMenuPoint = lib.points.new({
-            coords = hq.coords,
-            distance = 15.0,
-            nearby = function(self)
-                DrawMarker(21, self.coords.x, self.coords.y, self.coords.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6, 0.6, 0.6, 16, 185, 129, 180, false, true, 2, false, nil, nil, false)
-                if self.currentDistance < 2.5 then
-                    if not self.isTextOpen then
-                        lib.showTextUI('[E] Acessar Central Logística', { icon = 'truck-fast', position = 'left-center' })
-                        self.isTextOpen = true
+                AddEventHandler('onResourceStop', function(res)
+                    if res ~= GetCurrentResourceName() then return end
+                    if lcDispatcher and DoesEntityExist(lcDispatcher) then
+                        exports.ox_target:removeLocalEntity(lcDispatcher)
+                        DeleteEntity(lcDispatcher)
                     end
-                    if IsControlJustPressed(0, 38) then
-                        CreateThread(OpenJobBoard)
-                    end
-                elseif self.isTextOpen then
-                    lib.hideTextUI()
-                    self.isTextOpen = false
-                end
-            end,
-            onExit = function(self)
-                if self.isTextOpen then
-                    lib.hideTextUI()
-                    self.isTextOpen = false
-                end
-            end,
-        })
-
-        AddEventHandler('onResourceStop', function(res)
-            if res ~= GetCurrentResourceName() then return end
-            if lcMenuPoint then
-                pcall(function() lcMenuPoint:remove() end)
+                end)
             end
-        end)
+        end
     end
 end)
 
