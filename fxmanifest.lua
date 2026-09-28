@@ -1,5 +1,6 @@
 fx_version 'cerulean'
 game 'gta5'
+lua54 'yes'
 
 author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
@@ -45,6 +46,7 @@ server_scripts {
     'server/services/truck_simulation_service.lua',
     'server/crude_oil.lua',
     'server/services/parcel_service.lua',  -- v19/v20: Parcel Delivery (antes de exports — ParcelService global)
+    'server/services/truck_rental_service.lua', -- Sistema de Aluguel e Caução de Caminhões
     'server/exports.lua',
     'server/exports_shop.lua',   -- v16: exports estoque lojas
     'server/callbacks.lua',

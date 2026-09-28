@@ -30,6 +30,9 @@ VP_Trucker = {
     CargoByPlate     = {},  -- plate → { jobId, citizenId, gpsEnabled, isStolen, basePayment, vulnerableSince, theftBy, theftStartedAt }
     -- v20: Container Handler (integração oConteneur)
     ContainerJobs    = {},  -- citizenId → { src, startedAt, containerLoc, deliverySlot, cargo }
+    -- v20.2: Gerenciamento autoritativo de entidades e aluguel de caminhões
+    PlayerJobEntities = {}, -- citizenId → { truckNetId, trailerNetId, rentalPlate }
+    TruckRentals      = {}, -- citizenId → { plate, model, deposit, fee, rentedAt, netId }
 }
 
 -- Helper global: retorna nome do PERSONAGEM (firstname lastname), fallback para Steam name

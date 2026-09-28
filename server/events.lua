@@ -122,8 +122,71 @@ RegisterNetEvent('aurp_trucker:abandonJob', function()
     local src = source
     local Player = Framework.GetPlayer(src)
     if not Player then return end
-    JobService.Abandon(Framework.GetCitizenId(Player))
+    local citizenId = Framework.GetCitizenId(Player)
+    JobService.Abandon(citizenId)
+
+    -- Limpeza estrita de entidades (caminhão e trailer) no servidor
+    if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
+        local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
+        if jobEnts.truckNetId then
+            local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
+            if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
+        end
+        if jobEnts.trailerNetId then
+            local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
+            if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
+        end
+        VP_Trucker.PlayerJobEntities[citizenId] = nil
+    end
+
     TriggerClientEvent('aurp_trucker:client:jobAbandoned', src)
+end)
+
+-- Registra netId de caminhão e trailer do jogador para tracking e cleanup autoritativo
+RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId, trailerNetId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    VP_Trucker.PlayerJobEntities = VP_Trucker.PlayerJobEntities or {}
+    VP_Trucker.PlayerJobEntities[citizenId] = VP_Trucker.PlayerJobEntities[citizenId] or {}
+
+    if truckNetId and tonumber(truckNetId) then
+        VP_Trucker.PlayerJobEntities[citizenId].truckNetId = tonumber(truckNetId)
+        if TruckRentalService then
+            TruckRentalService.RegisterNetId(citizenId, truckNetId)
+        end
+    end
+    if trailerNetId and tonumber(trailerNetId) then
+        VP_Trucker.PlayerJobEntities[citizenId].trailerNetId = tonumber(trailerNetId)
+    end
+end)
+
+-- Limpeza ao morrer durante a rota
+RegisterNetEvent('aurp_trucker:server:onPlayerDeath', function()
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
+        local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
+        if jobEnts.truckNetId then
+            local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
+            if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
+        end
+        if jobEnts.trailerNetId then
+            local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
+            if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
+        end
+        VP_Trucker.PlayerJobEntities[citizenId] = nil
+    end
+
+    if JobService.GetActiveByPlayer(citizenId) then
+        JobService.Abandon(citizenId)
+        TriggerClientEvent('aurp_trucker:client:jobAbandoned', src)
+    end
 end)
 
 -- =====================================================
@@ -732,12 +795,29 @@ AddEventHandler('playerDropped', function()
         end
     end
     TruckSimulationService.OnPlayerDropped(src)
-    if citizenid and PartyService then
+        if citizenid and PartyService then
         PartyService.OnPlayerDisconnect(src, citizenid)
     end
     -- audit C-03: Container Handler cleanup (v20) — centralizado aqui em vez de handler separado
     if citizenid then
         pcall(ContainerHandlerService.OnPlayerDropped, citizenid)
+
+        -- Limpeza estrita de entidades órfãs (caminhão e trailer) via DeleteEntity
+        if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenid] then
+            local jobEnts = VP_Trucker.PlayerJobEntities[citizenid]
+            if jobEnts.truckNetId then
+                local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
+                if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
+            end
+            if jobEnts.trailerNetId then
+                local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
+                if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
+            end
+            VP_Trucker.PlayerJobEntities[citizenid] = nil
+        end
+        if TruckRentalService then
+            TruckRentalService.OnPlayerDropped(citizenid)
+        end
     end
 end)
 

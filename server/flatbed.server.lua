@@ -37,7 +37,7 @@ AddEventHandler('entityRemoved', function(entity)
     if DoesEntityExist(bedEnt) then DeleteEntity(bedEnt) end
 end)
 
-RegisterNetEvent('aurp_trucker:flatbed:CreateBedEntity')
+-- Evento interno do servidor (não exposto para clientes prevenindo injeção de props)
 AddEventHandler('aurp_trucker:flatbed:CreateBedEntity', function(flatbedNetId)
     -- IMPORTANTE: usar CreateThread pois Wait() não pode ser chamado diretamente em AddEventHandler
     Citizen.CreateThread(function()

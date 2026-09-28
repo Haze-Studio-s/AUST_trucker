@@ -335,6 +335,16 @@ local TABLES = {
         INDEX `idx_low_stock` (`current_stock`, `min_threshold`),
         INDEX `idx_pending` (`pending_contract_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Truck Rental & Caution Deposit (v20.2.0)
+    [[CREATE TABLE IF NOT EXISTS `trucker_rentals` (
+        `citizenid`   VARCHAR(50) PRIMARY KEY,
+        `plate`       VARCHAR(20) NOT NULL,
+        `model`       VARCHAR(50) NOT NULL,
+        `deposit`     INT         NOT NULL,
+        `fee`         INT         NOT NULL,
+        `rented_at`   DATETIME    DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 }
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)

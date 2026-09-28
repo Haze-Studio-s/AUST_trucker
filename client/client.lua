@@ -42,6 +42,24 @@ local function ShowNotification(title, description, type, duration)
     })
 end
 
+local pickupPoint = nil
+local deliveryPoint = nil
+local contractStopPoint = nil
+
+local function ClearJobPoints()
+    if pickupPoint then
+        pcall(function() pickupPoint:remove() end)
+        pickupPoint = nil
+    end
+    if deliveryPoint then
+        pcall(function() deliveryPoint:remove() end)
+        deliveryPoint = nil
+    end
+    if lib and lib.hideTextUI then
+        lib.hideTextUI()
+    end
+end
+
 local function CreateBlip(coords, sprite, color, label, scale, route)
     local blip = AddBlipForCoord(coords.x, coords.y, coords.z)
     SetBlipSprite(blip, sprite)
@@ -73,9 +91,70 @@ local function CreateGroundMarker(coords, r, g, b, a)
     )
 end
 
-local function SpawnTrailer(model, coords)
-    local modelHash = GetHashKey(model)
+-- Detecção autoritativa de desobstrução de vaga de spawn (anti-sobreposição)
+local function GetSafeSpawnCoords(baseCoords, radius)
+    radius = radius or 4.5
+    if not IsPositionOccupied(baseCoords.x, baseCoords.y, baseCoords.z, radius, false, true, true, false, false, 0, false) then
+        return baseCoords
+    end
 
+    local offsets = {
+        vector4(baseCoords.x + 3.5, baseCoords.y, baseCoords.z, baseCoords.w or 0.0),
+        vector4(baseCoords.x - 3.5, baseCoords.y, baseCoords.z, baseCoords.w or 0.0),
+        vector4(baseCoords.x, baseCoords.y + 6.0, baseCoords.z, baseCoords.w or 0.0),
+        vector4(baseCoords.x, baseCoords.y - 6.0, baseCoords.z, baseCoords.w or 0.0),
+        vector4(baseCoords.x + 5.0, baseCoords.y + 5.0, baseCoords.z, baseCoords.w or 0.0),
+    }
+
+    for _, testPos in ipairs(offsets) do
+        if not IsPositionOccupied(testPos.x, testPos.y, testPos.z, radius, false, true, true, false, false, 0, false) then
+            return testPos
+        end
+    end
+
+    return nil
+end
+
+-- Concessão autoritativa de chaves (qbx_vehiclekeys/qb-vehiclekeys) e combustível (ox_fuel/cdn-fuel/StateBag)
+local function GiveVehicleKeysAndFuel(vehicle, plate, fuelLevel)
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
+    fuelLevel = fuelLevel or 100.0
+
+    -- 1. Combustível
+    Entity(vehicle).state.fuel = fuelLevel
+    SetVehicleFuelLevel(vehicle, fuelLevel)
+    if GetResourceState('ox_fuel') == 'started' then
+        pcall(function() exports['ox_fuel']:setFuel(vehicle, fuelLevel) end)
+    elseif GetResourceState('cdn-fuel') == 'started' then
+        pcall(function() exports['cdn-fuel']:SetFuel(vehicle, fuelLevel) end)
+    end
+
+    -- 2. Chaves
+    local netId = NetworkGetNetworkIdFromEntity(vehicle)
+    if GetResourceState('qbx_vehiclekeys') == 'started' then
+        pcall(function() exports.qbx_vehiclekeys:GiveKeys(plate) end)
+        if netId and netId ~= 0 then
+            TriggerServerEvent('qbx_vehiclekeys:server:tookKeys', netId)
+        end
+    elseif GetResourceState('qb-vehiclekeys') == 'started' then
+        TriggerServerEvent('qb-vehiclekeys:server:AcquireVehicleKeys', plate)
+    end
+end
+
+local function SpawnTrailer(model, coords)
+    -- Verificar ocupação de vaga
+    local safeCoords = GetSafeSpawnCoords(coords, 5.0)
+    if not safeCoords then
+        lib.notify({
+            title = 'Doca Bloqueada',
+            description = 'A vaga de spawn está ocupada por outro veículo. Desobstrua a área.',
+            type = 'error',
+            duration = 7000
+        })
+        return nil
+    end
+
+    local modelHash = GetHashKey(model)
     RequestModel(modelHash)
     local timeout = 0
     while not HasModelLoaded(modelHash) and timeout < 5000 do
@@ -90,13 +169,22 @@ local function SpawnTrailer(model, coords)
         return nil
     end
 
-    local trailer = CreateVehicle(modelHash, coords.x, coords.y, coords.z, coords.w, true, false)
+    local trailer = CreateVehicle(modelHash, safeCoords.x, safeCoords.y, safeCoords.z, safeCoords.w, true, false)
 
     if trailer and trailer ~= 0 then
+        local plate = "AURP" .. math.random(1000, 9999)
         SetVehicleEngineOn(trailer, false, false, false)
-        SetVehicleNumberPlateText(trailer, "AURP" .. math.random(1000, 9999))
+        SetVehicleNumberPlateText(trailer, plate)
         SetEntityAsMissionEntity(trailer, true, true)
         SetModelAsNoLongerNeeded(modelHash)
+
+        -- Registrar entidades no servidor para cleanup autoritativo em playerDropped ou abandono
+        local trlNetId = NetworkGetNetworkIdFromEntity(trailer)
+        local ped = PlayerPedId()
+        local veh = GetVehiclePedIsIn(ped, false)
+        local vehNetId = (veh ~= 0 and DoesEntityExist(veh)) and NetworkGetNetworkIdFromEntity(veh) or nil
+        TriggerServerEvent('aurp_trucker:server:registerJobEntities', vehNetId, trlNetId)
+
         return trailer
     else
         SetModelAsNoLongerNeeded(modelHash)
@@ -105,42 +193,29 @@ local function SpawnTrailer(model, coords)
 end
 
 local function GetPlayerTrailer()
-    if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: Verificando trailer...")
-    end
-
-    -- Primeiro verificar se existe um trailer spawned pelo sistema
+    -- 1. Se houver trailer criado no ciclo atual
     if currentTrailer and DoesEntityExist(currentTrailer) then
-        if Config.Debug then
-            print("^2[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: Encontrado currentTrailer = " .. tostring(currentTrailer))
-        end
         return currentTrailer
-    else
-        if Config.Debug then
-            print("^2[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: currentTrailer = " .. tostring(currentTrailer) .. " | Existe = " .. tostring(currentTrailer and DoesEntityExist(currentTrailer)))
-        end
     end
 
-    -- Se não há trailer do sistema, verificar se há um acoplado
+    -- 2. Checagem autoritativa do veículo acoplado via natives do GTA
     local playerPed = PlayerPedId()
     local vehicle = GetVehiclePedIsIn(playerPed, false)
-    if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: Veículo do jogador = " .. tostring(vehicle))
-    end
-
     if vehicle and vehicle ~= 0 then
-        local trailer = GetVehicleTrailerVehicle(vehicle)
-        if Config.Debug then
-            print("^2[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: Trailer acoplado = " .. tostring(trailer))
-        end
-        if trailer and trailer ~= 0 then
+        local hasTrailer, trailer = GetVehicleTrailerVehicle(vehicle)
+        if (hasTrailer == 1 or hasTrailer == true) and trailer and trailer ~= 0 and DoesEntityExist(trailer) then
+            currentTrailer = trailer
             return trailer
         end
+        if IsVehicleAttachedToTrailer(vehicle) then
+            local _, attachedTrl = GetVehicleTrailerVehicle(vehicle)
+            if attachedTrl and attachedTrl ~= 0 and DoesEntityExist(attachedTrl) then
+                currentTrailer = attachedTrl
+                return attachedTrl
+            end
+        end
     end
 
-    if Config.Debug then
-        print("^1[AURP_TRUCKER]^7 DEBUG GetPlayerTrailer: Nenhum trailer encontrado")
-    end
     return nil
 end
 
@@ -510,6 +585,39 @@ function StartJob(job)
         true -- route
     )
 
+    -- Criar ponto ox_lib otimizado para a doca de carregamento (Resmon 0.00ms fora do raio)
+    ClearJobPoints()
+    if job.pickup and job.pickup.coords then
+        pickupPoint = lib.points.new({
+            coords = job.pickup.coords,
+            distance = 45.0,
+            nearby = function(self)
+                if not currentJob or jobProgress.stage ~= 'pickup' then return end
+                DrawMarker(1, self.coords.x, self.coords.y, self.coords.z - 1.0,
+                    0, 0, 0, 0, 0, 0, 3.5, 3.5, 1.2, 0, 255, 0, 140, false, true, 2, false, nil, nil, false)
+
+                local playerPed = PlayerPedId()
+                local inVeh = IsPedInAnyVehicle(playerPed, false)
+                if self.currentDistance <= 4.0 then
+                    if inVeh then
+                        lib.showTextUI('[E] Carregar ' .. (currentJob.cargo or 'Mercadoria'))
+                        if IsControlJustPressed(0, 38) then
+                            lib.hideTextUI()
+                            StartLoading()
+                        end
+                    else
+                        lib.showTextUI('Entre no veículo para carregar')
+                    end
+                else
+                    lib.hideTextUI()
+                end
+            end,
+            onExit = function()
+                lib.hideTextUI()
+            end
+        })
+    end
+
     local vehicleHint = job.trailer == 'van'
         and 'Use qualquer veículo'
         or 'Trailer: OK'
@@ -549,6 +657,39 @@ local function _CompleteLoading()
     if jobProgress.pickupBlip then
         RemoveBlip(jobProgress.pickupBlip)
         jobProgress.pickupBlip = nil
+    end
+
+    -- Limpar ponto de carregamento e criar ponto de entrega otimizado
+    ClearJobPoints()
+    if currentJob.delivery and currentJob.delivery.coords then
+        deliveryPoint = lib.points.new({
+            coords = currentJob.delivery.coords,
+            distance = 45.0,
+            nearby = function(self)
+                if not currentJob or jobProgress.stage ~= 'delivering' then return end
+                DrawMarker(1, self.coords.x, self.coords.y, self.coords.z - 1.0,
+                    0, 0, 0, 0, 0, 0, 4.0, 4.0, 1.5, 0, 150, 255, 140, false, true, 2, false, nil, nil, false)
+
+                local playerPed = PlayerPedId()
+                local inVeh = IsPedInAnyVehicle(playerPed, false)
+                if self.currentDistance <= 5.0 then
+                    if inVeh then
+                        lib.showTextUI('[E] Entregar ' .. (currentJob.cargo or 'Mercadoria'))
+                        if IsControlJustPressed(0, 38) then
+                            lib.hideTextUI()
+                            StartUnloading()
+                        end
+                    else
+                        lib.showTextUI('Entre no caminhão para entregar')
+                    end
+                else
+                    lib.hideTextUI()
+                end
+            end,
+            onExit = function()
+                lib.hideTextUI()
+            end
+        })
     end
 
     jobProgress.deliveryBlip = CreateBlip(
@@ -772,7 +913,7 @@ function CompleteJob()
     -- if currentTrailer and DoesEntityExist(currentTrailer) then
     --     DeleteEntity(currentTrailer)
     -- end
-    -- currentTrailer = nil -- Manter o trailer para reutilização
+    ClearJobPoints()
 
     currentJob = nil
     VP_Trucker_CurrentJobOriginId = nil
@@ -863,82 +1004,244 @@ function SpawnPlayerTrailer(model)
 end
 
 -- =======================================
--- SISTEMA DE INTERAÇÕES COM BLIPS
+-- SISTEMA DE INTERAÇÕES E FÍSICA DE TRAILERS
 -- =======================================
 
+local isTrailerDetached = false
+local detachedBlip = nil
+
+-- Monitoramento e recuperação autoritativa de desengate de trailer (IsVehicleAttachedToTrailer)
 CreateThread(function()
     while true do
+        if currentJob and currentJob.trailer ~= 'van' and jobProgress.stage == 'delivering' then
+            local playerPed = PlayerPedId()
+            local veh = GetVehiclePedIsIn(playerPed, false)
+            if veh ~= 0 and DoesEntityExist(veh) then
+                local hasTrailer, attachedTrailer = GetVehicleTrailerVehicle(veh)
+                local isAttached = (hasTrailer == 1 or hasTrailer == true) or IsVehicleAttachedToTrailer(veh)
+
+                if not isAttached then
+                    if not isTrailerDetached then
+                        isTrailerDetached = true
+                        lib.notify({
+                            title = 'Atenção: Trailer Desengatado!',
+                            description = 'Seu trailer se soltou! Retorne e acople o caminhão de ré para prosseguir.',
+                            type = 'warning',
+                            duration = 10000
+                        })
+                        local trl = currentTrailer
+                        if trl and DoesEntityExist(trl) then
+                            if not detachedBlip or not DoesBlipExist(detachedBlip) then
+                                detachedBlip = AddBlipForEntity(trl)
+                                SetBlipSprite(detachedBlip, 479)
+                                SetBlipColour(detachedBlip, 5)
+                                SetBlipRoute(detachedBlip, true)
+                                SetBlipRouteColour(detachedBlip, 5)
+                                BeginTextCommandSetBlipName("STRING")
+                                AddTextComponentString("Recuperar Trailer")
+                                EndTextCommandSetBlipName(detachedBlip)
+                            end
+                        end
+                    end
+                else
+                    if isTrailerDetached then
+                        isTrailerDetached = false
+                        if detachedBlip and DoesBlipExist(detachedBlip) then
+                            RemoveBlip(detachedBlip)
+                            detachedBlip = nil
+                        end
+                        lib.notify({
+                            title = 'Trailer Reconectado!',
+                            description = 'Carga engatada com sucesso. Prossiga até o destino final.',
+                            type = 'success',
+                            duration = 6000
+                        })
+                    end
+                end
+            end
+            Wait(1500)
+        else
+            if detachedBlip and DoesBlipExist(detachedBlip) then
+                RemoveBlip(detachedBlip)
+                detachedBlip = nil
+            end
+            isTrailerDetached = false
+            Wait(3500)
+        end
+    end
+end)
+
+-- Limpeza autoritativa ao morrer em serviço
+AddEventHandler('gameEventTriggered', function(event, data)
+    if event == 'CEventNetworkEntityDamage' then
+        local victim = data[1]
+        if victim == PlayerPedId() and IsEntityDead(victim) then
+            if currentJob or activeJob then
+                TriggerServerEvent('aurp_trucker:server:onPlayerDeath')
+            end
+        end
+    end
+end)
+
+-- Limpeza ao cancelar/abandonar rota
+RegisterNetEvent('aurp_trucker:client:jobAbandoned', function()
+    if jobProgress.pickupBlip then RemoveBlip(jobProgress.pickupBlip); jobProgress.pickupBlip = nil end
+    if jobProgress.deliveryBlip then RemoveBlip(jobProgress.deliveryBlip); jobProgress.deliveryBlip = nil end
+    if detachedBlip and DoesBlipExist(detachedBlip) then RemoveBlip(detachedBlip); detachedBlip = nil end
+    if currentTrailer and DoesEntityExist(currentTrailer) then
+        DeleteEntity(currentTrailer)
+        currentTrailer = nil
+    end
+    currentJob = nil
+    activeJob = nil
+    VP_Trucker_CurrentJobOriginId = nil
+    ClearJobPoints()
+    lib.notify({ title = 'Trabalho Cancelado', description = 'A rota de entrega foi encerrada.', type = 'inform' })
+    if isNUIOpen then
+        SendNUIMessage({ action = 'updateActiveJob', activeJob = nil })
+    end
+end)
+
+-- Loop leve (2.5s) apenas para remoção de blips manuais
+CreateThread(function()
+    while true do
+        Wait(2500)
         local playerPed = PlayerPedId()
         local playerCoords = GetEntityCoords(playerPed)
-        local isNearInteraction = false
 
-        -- interação com empresa via NPC + ox_target (sem proximity manual)
-
-        -- Verificar proximidade com blips marcados manualmente e removê-los ao chegar perto
         if locationBlips.pickup and currentJob then
-            local pickupDist = #(playerCoords - currentJob.pickup.coords)
-            if pickupDist <= 50.0 then
+            if #(playerCoords - currentJob.pickup.coords) <= 40.0 then
                 RemoveBlip(locationBlips.pickup)
                 locationBlips.pickup = nil
             end
         end
 
         if locationBlips.delivery and currentJob then
-            local deliveryDist = #(playerCoords - currentJob.delivery.coords)
-            if deliveryDist <= 50.0 then
+            if #(playerCoords - currentJob.delivery.coords) <= 40.0 then
                 RemoveBlip(locationBlips.delivery)
                 locationBlips.delivery = nil
             end
         end
-
-        -- Verificar proximidade com pickup do trabalho atual
-        if currentJob and jobProgress.stage == 'pickup' then
-            local pickupDistance = #(playerCoords - currentJob.pickup.coords)
-            if pickupDistance <= 50.0 then
-                isNearInteraction = true
-                CreateGroundMarker(currentJob.pickup.coords, 0, 255, 0, 150) -- Verde
-
-                local inVehicle = IsPedInAnyVehicle(playerPed, false)
-                if inVehicle then
-                    DrawText3D(currentJob.pickup.coords, "[E] Carregar " .. currentJob.cargo)
-                else
-                    DrawText3D(currentJob.pickup.coords, "Entre no caminhão para carregar")
-                end
-
-                if pickupDistance <= 3.0 and IsControlJustPressed(0, 38) then -- E key
-                    StartLoading()
-                end
-            end
-        end
-
-        -- Verificar proximidade com delivery do trabalho atual
-        if currentJob and jobProgress.stage == 'delivering' then
-            local deliveryDistance = #(playerCoords - currentJob.delivery.coords)
-            if deliveryDistance <= 50.0 then
-                isNearInteraction = true
-                CreateGroundMarker(currentJob.delivery.coords, 0, 150, 255, 150) -- Azul
-
-                local inVehicle = IsPedInAnyVehicle(playerPed, false)
-                if inVehicle then
-                    DrawText3D(currentJob.delivery.coords, "[E] Entregar " .. currentJob.cargo)
-                else
-                    DrawText3D(currentJob.delivery.coords, "Entre no caminhão para entregar")
-                end
-
-                if deliveryDistance <= 3.0 and IsControlJustPressed(0, 38) then -- E key
-                    StartUnloading()
-                end
-            end
-        end
-
-        -- Mostrar help text se estiver perto de alguma interação
-        if isNearInteraction then
-            ShowHelpText("Pressione ~INPUT_CONTEXT~ para interagir")
-        end
-
-        Wait(isNearInteraction and 0 or 500)
     end
 end)
+
+-- Funções da Locadora de Caminhões com Retenção de Caução
+local function OpenRentalMenu()
+    local options = {}
+    for _, truck in ipairs(Config.TruckRental.trucks or {}) do
+        table.insert(options, {
+            title = truck.label,
+            description = ('Aluguel: $%d | Caução: $%d (Total: $%d)'):format(
+                truck.fee, truck.deposit, truck.fee + truck.deposit),
+            icon = 'truck',
+            onSelect = function()
+                local confirmed = lib.alertDialog({
+                    header = 'Confirmar Locação',
+                    content = ('Deseja alugar o caminhão **%s**?\n\n- Taxa de Uso: **$%d**\n- Caução Retida: **$%d**\n- Total Debitado: **$%d**\n\n*A caução será devolvida ao entregar o veículo sem avarias na doca.*'):format(
+                        truck.label, truck.fee, truck.deposit, truck.fee + truck.deposit),
+                    centered = true,
+                    cancel = true
+                })
+                if confirmed == 'confirm' then
+                    local ok, res = pcall(lib.callback.await, 'aurp_trucker:rental:rentTruck', false, truck.model)
+                    if ok and res and res.success then
+                        local spawnCoords = res.spawnCoords or Config.TruckRental.spawnCoords
+                        local safeCoords = GetSafeSpawnCoords(spawnCoords, 5.0) or spawnCoords
+                        local modelHash = GetHashKey(res.model)
+                        RequestModel(modelHash)
+                        while not HasModelLoaded(modelHash) do Wait(10) end
+
+                        local veh = CreateVehicle(modelHash, safeCoords.x, safeCoords.y, safeCoords.z, safeCoords.w or 0.0, true, false)
+                        SetVehicleNumberPlateText(veh, res.plate)
+                        SetEntityAsMissionEntity(veh, true, true)
+                        SetModelAsNoLongerNeeded(modelHash)
+
+                        GiveVehicleKeysAndFuel(veh, res.plate, 100.0)
+
+                        local netId = NetworkGetNetworkIdFromEntity(veh)
+                        TriggerServerEvent('aurp_trucker:server:registerJobEntities', netId, nil)
+
+                        lib.notify({
+                            title = 'Caminhão Liberado!',
+                            description = ('Seu %s (Placa: %s) está pronto na vaga. Cuide bem dele!'):format(truck.label, res.plate),
+                            type = 'success',
+                            duration = 8000
+                        })
+                    else
+                        lib.notify({
+                            title = 'Aluguel Não Autorizado',
+                            description = res and res.reason or 'Falha ao processar locação.',
+                            type = 'error'
+                        })
+                    end
+                end
+            end
+        })
+    end
+
+    lib.registerContext({
+        id = 'truck_rental_menu',
+        title = 'Locadora de Caminhões — AURP',
+        options = options
+    })
+    lib.showContext('truck_rental_menu')
+end
+
+local function ReturnRentedTruck()
+    local ped = PlayerPedId()
+    local veh = GetVehiclePedIsIn(ped, false)
+    if veh == 0 then
+        local pos = GetEntityCoords(ped)
+        local closeVeh = GetClosestVehicle(pos.x, pos.y, pos.z, 20.0, 0, 71)
+        if closeVeh ~= 0 and DoesEntityExist(closeVeh) then
+            veh = closeVeh
+        end
+    end
+
+    if veh == 0 or not DoesEntityExist(veh) then
+        lib.notify({
+            title = 'Devolução',
+            description = 'Nenhum veículo alugado encontrado próximo a você.',
+            type = 'error'
+        })
+        return
+    end
+
+    local netId = NetworkGetNetworkIdFromEntity(veh)
+    local bodyHealth = GetVehicleBodyHealth(veh)
+    local engineHealth = GetVehicleEngineHealth(veh)
+
+    local ok, res = pcall(lib.callback.await, 'aurp_trucker:rental:returnTruck', false, {
+        netId        = netId,
+        bodyHealth   = bodyHealth,
+        engineHealth = engineHealth
+    })
+
+    if ok and res and res.success then
+        if res.damagePenalty > 0 then
+            lib.notify({
+                title = 'Devolução com Avarias',
+                description = ('Caução: $%d | Danos: -$%d | Estorno recebido: $%d'):format(
+                    res.deposit, res.damagePenalty, res.refund),
+                type = 'warning',
+                duration = 9000
+            })
+        else
+            lib.notify({
+                title = 'Devolução Concluída!',
+                description = ('Veículo entregue impecável! Estorno total da caução: $%d'):format(res.refund),
+                type = 'success',
+                duration = 8000
+            })
+        end
+    else
+        lib.notify({
+            title = 'Devolução Recusada',
+            description = res and res.reason or 'Não foi possível devolver o veículo.',
+            type = 'error'
+        })
+    end
+end
 
 -- =======================================
 -- INICIALIZAÇÃO
@@ -978,6 +1281,24 @@ CreateThread(function()
                 distance = 3.0,
                 onSelect = function()
                     CreateThread(OpenJobBoard)
+                end,
+            },
+            {
+                name     = 'rent_truck',
+                icon     = 'fas fa-truck-moving',
+                label    = 'Alugar Caminhão (Caução)',
+                distance = 3.0,
+                onSelect = function()
+                    OpenRentalMenu()
+                end,
+            },
+            {
+                name     = 'return_truck',
+                icon     = 'fas fa-undo-alt',
+                label    = 'Devolver Caminhão Alugado',
+                distance = 3.0,
+                onSelect = function()
+                    ReturnRentedTruck()
                 end,
             },
         })
@@ -1281,9 +1602,16 @@ RegisterNUICallback('retrieveVehicle', function(data, cb)
         return
     end
 
-    -- Spawn à frente do jogador
+    -- Spawn com detecção autoritativa de desobstrução de vaga
     local forward = GetEntityForwardVector(ped)
-    local spawnPos = coords + forward * 5.0
+    local rawSpawnPos = coords + forward * 5.0
+    local spawnPos = GetSafeSpawnCoords(vector4(rawSpawnPos.x, rawSpawnPos.y, rawSpawnPos.z, heading), 4.5)
+    if not spawnPos then
+        lib.notify({ title = 'Vaga Ocupada', description = 'A área de saída está obstruída. Libere espaço na garagem.', type = 'error' })
+        cb({ success = false })
+        return
+    end
+
     local vehicle = CreateVehicle(modelHash, spawnPos.x, spawnPos.y, spawnPos.z, heading, true, false)
 
     if vehicle and vehicle ~= 0 then
@@ -1293,11 +1621,11 @@ RegisterNUICallback('retrieveVehicle', function(data, cb)
         SetVehicleDoorsLocked(vehicle, 1) -- destrancado
         SetModelAsNoLongerNeeded(modelHash)
 
-        -- Dar chave ao jogador via qbx_vehiclekeys
+        -- Combustível e chaves universais (qbx_vehiclekeys, ox_fuel)
+        GiveVehicleKeysAndFuel(vehicle, result.plate, 100.0)
+
         local netId = NetworkGetNetworkIdFromEntity(vehicle)
-        if netId and netId ~= 0 then
-            TriggerServerEvent('qbx_vehiclekeys:server:tookKeys', netId)
-        end
+        TriggerServerEvent('aurp_trucker:server:registerJobEntities', netId, nil)
 
         -- Adicionar ox_target para guardar o veículo no mundo
         exports.ox_target:addLocalEntity(vehicle, {
@@ -1824,6 +2152,62 @@ local function SetContractGPS(stop)
 
     -- Waypoint direto no GPS (mais confiável)
     SetNewWaypoint(x, y)
+
+    -- Configurar ponto ox_lib otimizado (Resmon 0.00ms idle)
+    UpdateContractPoint(stop)
+end
+
+function UpdateContractPoint(stop)
+    if contractStopPoint then
+        pcall(function() contractStopPoint:remove() end)
+        contractStopPoint = nil
+    end
+    if lib and lib.hideTextUI then lib.hideTextUI() end
+    if not stop then return end
+
+    local sx = tonumber(stop.coords_x)
+    local sy = tonumber(stop.coords_y)
+    local sz = tonumber(stop.coords_z)
+    if not sx or not sy then return end
+
+    local stopCoords = vector3(sx, sy, sz or 0.0)
+    contractStopPoint = lib.points.new({
+        coords = stopCoords,
+        distance = 35.0,
+        nearby = function(self)
+            if not currentContract or not currentContract.currentStop then return end
+            DrawMarker(1, self.coords.x, self.coords.y, self.coords.z - 1.0,
+                0, 0, 0, 0, 0, 0, 4.0, 4.0, 1.5,
+                stop.action == 'pickup' and 0 or 0,
+                stop.action == 'pickup' and 200 or 100,
+                stop.action == 'pickup' and 0 or 255,
+                120, false, true, 2, false, nil, nil, false)
+
+            if self.currentDistance <= 5.0 then
+                lib.showTextUI(stop.action == 'pickup'
+                    and '[E] Coletar ' .. (stop.cargo_item or 'carga')
+                    or '[E] Entregar ' .. (stop.cargo_item or 'carga'))
+
+                if IsControlJustPressed(0, 38) then
+                    lib.hideTextUI()
+                    if lib.progressBar({
+                        duration = 5000,
+                        label = stop.action == 'pickup' and 'Coletando carga...' or 'Entregando carga...',
+                        useWhileDead = false,
+                        canCancel = false,
+                        anim = { dict = 'anim@heists@box_carry@', clip = 'idle' },
+                    }) then
+                        TriggerServerEvent('aurp_trucker:completeContractStop', stop.stop_order)
+                    end
+                end
+            else
+                lib.hideTextUI()
+            end
+        end,
+        onExit = function()
+            if lib and lib.hideTextUI then lib.hideTextUI() end
+        end
+    })
 end
 
 RegisterNetEvent('aurp_trucker:client:contractStarted', function(contract)
@@ -1852,68 +2236,7 @@ RegisterNetEvent('aurp_trucker:client:contractCompleted', function()
     currentContract = nil
     if contractBlip and DoesBlipExist(contractBlip) then RemoveBlip(contractBlip) end
     contractBlip = nil
+    UpdateContractPoint(nil)
     SetWaypointOff()
     lib.notify({ title = 'Contrato Concluído!', description = 'Pagamento depositado na sua conta.', type = 'success', duration = 8000 })
-end)
-
--- Loop de detecção de chegada nas paradas do contrato
-CreateThread(function()
-    while true do
-        Wait(2000)
-        if currentContract and currentContract.currentStop then
-            local stop = currentContract.currentStop
-            local sx = tonumber(stop.coords_x)
-            local sy = tonumber(stop.coords_y)
-            local sz = tonumber(stop.coords_z)
-            if sx and sy then
-                local ped = PlayerPedId()
-                local playerCoords = GetEntityCoords(ped)
-                local stopCoords = vector3(sx, sy, sz or 0.0)
-                local dist = #(playerCoords - stopCoords)
-
-                if dist <= 30.0 then
-                    -- Mostrar marcador e texto
-                    while dist <= 30.0 and currentContract and currentContract.currentStop do
-                        Wait(0)
-                        local pCoords = GetEntityCoords(PlayerPedId())
-                        dist = #(pCoords - stopCoords)
-
-                        DrawMarker(1, stopCoords.x, stopCoords.y, stopCoords.z - 1.0,
-                            0, 0, 0, 0, 0, 0,
-                            4.0, 4.0, 2.0,
-                            stop.action == 'pickup' and 0 or 0,
-                            stop.action == 'pickup' and 200 or 100,
-                            stop.action == 'pickup' and 0 or 255,
-                            100, false, true, 2, false, nil, nil, false)
-
-                        if dist <= 5.0 then
-                            lib.showTextUI(stop.action == 'pickup'
-                                and '[E] Coletar ' .. (stop.cargo_item or 'carga')
-                                or '[E] Entregar ' .. (stop.cargo_item or 'carga'))
-
-                            if IsControlJustPressed(0, 38) then -- E key
-                                lib.hideTextUI()
-
-                                -- Progress bar
-                                if lib.progressBar({
-                                    duration = stop.action == 'pickup' and 5000 or 5000,
-                                    label = stop.action == 'pickup' and 'Coletando carga...' or 'Entregando carga...',
-                                    useWhileDead = false,
-                                    canCancel = false,
-                                    anim = { dict = 'anim@heists@box_carry@', clip = 'idle' },
-                                }) then
-                                    -- Completar parada no server
-                                    TriggerServerEvent('aurp_trucker:completeContractStop', stop.stop_order)
-                                end
-                                break
-                            end
-                        else
-                            lib.hideTextUI()
-                        end
-                    end
-                    lib.hideTextUI()
-                end
-            end
-        end
-    end
 end)

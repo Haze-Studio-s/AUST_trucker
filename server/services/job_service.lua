@@ -314,13 +314,14 @@ function JobService.Complete(src, payload)
     local activeJob = DB_GetActiveJobByPlayer(citizenId)
     if not activeJob then return false end
 
-    -- v15: elapsed server-side (padrão #8 — nunca confiar no client para tempo)
-    local elapsed = (activeJob.accepted_at_unix and activeJob.accepted_at_unix > 0)
-                    and math.max(0, os.time() - activeJob.accepted_at_unix)
-                    or  (tonumber(payload.deliveryTime) or 9999)
+    -- Validação estrita de tempo server-side: nunca confiar no client
+    if not activeJob.accepted_at_unix or activeJob.accepted_at_unix <= 0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Erro de integridade da missão (dados corrompidos ou inexistentes).', 'error')
+        return false
+    end
+    local elapsed = math.max(0, os.time() - activeJob.accepted_at_unix)
 
-    -- v15: validação anti-cheat — executa ANTES do convoy branch
-    -- (convoy jobs também passam pela validação de velocidade/posição)
+    -- Validação anti-cheat (velocidade mínima, proximidade geográfica e routing bucket)
     local acOk, acReason = AntiCheatService.ValidateDelivery(src, citizenId, activeJob, elapsed)
     if not acOk then
         TriggerClientEvent('aurp_trucker:notify', src, acReason or 'Entrega inválida.', 'error')

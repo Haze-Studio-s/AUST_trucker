@@ -93,6 +93,25 @@ Config.TrailerCompany = {
 }
 
 -- =======================================
+-- SISTEMA DE ALUGUEL DE CAMINHÕES COM CAUÇÃO
+-- =======================================
+Config.TruckRental = {
+    enabled       = true,
+    pedModel      = 's_m_m_trucker_01',
+    pedCoords     = vector4(-1268.5, -3398.0, 13.94, 330.0),
+    spawnCoords   = vector4(-1279.0, -3400.0, 13.94, 330.0),
+    returnCoords  = vector3(-1279.0, -3400.0, 13.94),
+    returnRadius  = 18.0,
+    depositAmount = 1500, -- Caução devolvida após devolução sem avarias
+    rentalFee     = 300,  -- Custo de locação
+    trucks = {
+        { model = 'hauler',  label = 'Hauler Comercial', deposit = 1500, fee = 300 },
+        { model = 'phantom', label = 'Phantom Clássico',  deposit = 1500, fee = 300 },
+        { model = 'packer',  label = 'Packer Pesado',     deposit = 2000, fee = 400 },
+    }
+}
+
+-- =======================================
 -- SISTEMA DE INDÚSTRIAS PRIMÁRIAS E SECUNDÁRIAS
 -- =======================================
 
@@ -1576,6 +1595,9 @@ Config.AntiCheat = {
     -- Usado para calcular o tempo MÍNIMO de viagem.
     -- Se o player entregou mais rápido que isso → teleporte → bloqueado.
     MaxSpeedKmh = 120.0,
+
+    -- Tempo MÍNIMO absoluto em segundos para qualquer entrega (evita entregas instantâneas em rotas curtas)
+    MinTravelTimeSeconds = 25,
 
     -- Cooldowns em segundos por evento (0 = sem cooldown)
     RateLimits = {

@@ -320,3 +320,13 @@ CREATE TABLE `trucker_convoy_payments` (
     INDEX `idx_cp_citizenid` (`citizenid`),
     INDEX `idx_cp_created`   (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `trucker_rentals` (
+    `citizenid`   VARCHAR(50) PRIMARY KEY,
+    `plate`       VARCHAR(20) NOT NULL,
+    `model`       VARCHAR(50) NOT NULL,
+    `deposit`     INT         NOT NULL,
+    `fee`         INT         NOT NULL,
+    `rented_at`   DATETIME    DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+

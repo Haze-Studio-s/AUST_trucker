@@ -44,15 +44,24 @@ end
 function AntiCheatService.ValidateDelivery(src, citizenId, activeJob, elapsedSeconds)
     if not Config.AntiCheat.Enabled then return true, nil end
 
-    -- 1. Velocidade máxima: rejeita se elapsed < tempo mínimo possível
+    if not activeJob or not activeJob.dest_id then
+        return false, 'Nenhuma missão ativa encontrada para validação.'
+    end
+
+    -- 1. Velocidade máxima e tempo mínimo realista de viagem (anti-teleport)
     --    minSeconds = (distance_km / MaxSpeedKmh) * 3600
-    local minSeconds = (activeJob.distance / Config.AntiCheat.MaxSpeedKmh) * 3600
+    local distKm = tonumber(activeJob.distance) or 0
+    local maxSpeed = tonumber(Config.AntiCheat.MaxSpeedKmh) or 120.0
+    local calculatedMin = (distKm / maxSpeed) * 3600
+    local absoluteMin = tonumber(Config.AntiCheat.MinTravelTimeSeconds) or 25
+
+    local minSeconds = math.max(absoluteMin, math.floor(calculatedMin))
     if elapsedSeconds < minSeconds then
         if Config.Debug then
             print(('[AC] ValidateDelivery FAIL velocidade: %s elapsed=%ds min=%ds dist=%.1fkm'):format(
-                citizenId, elapsedSeconds, math.ceil(minSeconds), activeJob.distance))
+                citizenId, elapsedSeconds, minSeconds, distKm))
         end
-        return false, 'Velocidade de entrega inválida.'
+        return false, ('Tempo de viagem insuficiente (%ds decorridos, mínimo necessário: %ds).'):format(elapsedSeconds, minSeconds)
     end
 
     -- 2. Proximidade ao destino (OneSync — fail-closed)
