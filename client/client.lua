@@ -2822,7 +2822,7 @@ local function createVehicleMarkersThread(truck, trailer)
                     local distTruck = #(pCoords - tkCoords)
                     if distTruck < 50.0 and GetVehiclePedIsIn(ped, false) ~= truck then
                         timer = 2
-                        DrawMarker(0, tkCoords.x, tkCoords.y, tkCoords.z + 3.1,
+                        DrawMarker(0, tkCoords.x, tkCoords.y, tkCoords.z + 4.8,
                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                             1.0, 1.0, 1.0,
                             0, 100, 255, 180, false, true, 2, false, nil, nil, false)
@@ -2834,7 +2834,7 @@ local function createVehicleMarkersThread(truck, trailer)
                     local distTrailer = #(pCoords - trCoords)
                     if distTrailer < 50.0 then
                         timer = 2
-                        DrawMarker(0, trCoords.x, trCoords.y, trCoords.z + 3.6,
+                        DrawMarker(0, trCoords.x, trCoords.y, trCoords.z + 4.8,
                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                             1.0, 1.0, 1.0,
                             0, 100, 255, 180, false, true, 2, false, nil, nil, false)
