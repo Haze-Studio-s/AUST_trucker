@@ -638,6 +638,43 @@ Config.SecondaryIndustries = {
         acceptedProducts = {"Encomendas Expressas", "Refeições Prontas", "Bebidas e Snacks"},
         multiplier = 1.2,
         unloadTime = 3000
+    },
+    -- Postos de Gasolina (vp_gasstations)
+    {
+        id = "station_strawberry",
+        name = "Posto Globe Oil - Strawberry",
+        coords = vector3(-71.28, -1761.16, 29.48),
+        type = "petrol",
+        acceptedProducts = {"Combustível", "Diesel", "Petróleo Refinado", "Gasolina Premium", "Óleo Diesel", "Lubrificantes"},
+        multiplier = 1.25,
+        unloadTime = 8500
+    },
+    {
+        id = "station_innocence",
+        name = "Posto RON - Innocence Blvd",
+        coords = vector3(264.74, -1260.98, 29.18),
+        type = "petrol",
+        acceptedProducts = {"Combustível", "Diesel", "Petróleo Refinado", "Gasolina Premium", "Óleo Diesel", "Lubrificantes"},
+        multiplier = 1.25,
+        unloadTime = 8500
+    },
+    {
+        id = "station_davis",
+        name = "Posto RON - Davis",
+        coords = vector3(175.31, -1561.73, 29.26),
+        type = "petrol",
+        acceptedProducts = {"Combustível", "Diesel", "Petróleo Refinado", "Gasolina Premium", "Óleo Diesel", "Lubrificantes"},
+        multiplier = 1.25,
+        unloadTime = 8500
+    },
+    {
+        id = "station_paleto",
+        name = "Posto RON - Paleto Blvd",
+        coords = vector3(1702.79, 6416.86, 33.64),
+        type = "petrol",
+        acceptedProducts = {"Combustível", "Diesel", "Petróleo Refinado", "Gasolina Premium", "Óleo Diesel", "Lubrificantes"},
+        multiplier = 1.45,
+        unloadTime = 9500
     }
 }
 
