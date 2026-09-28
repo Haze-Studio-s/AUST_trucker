@@ -446,7 +446,7 @@ RegisterNUICallback('post', function(body, cb)
 
     if event == "startContract" then
         CloseJobBoard()
-        local contractId = data and data.id
+        local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
         cb(200)
         return
@@ -459,7 +459,7 @@ RegisterNUICallback('post', function(body, cb)
     end
 
     if event == "buyTruck" then
-        local truckName = data and data.truck_name
+        local truckName = data and (data.truck_name or data.model or data.name)
         TriggerServerEvent('aurp_trucker:fleet:buyTruck', truckName)
         RefreshNUIData()
         cb(200)
@@ -467,7 +467,7 @@ RegisterNUICallback('post', function(body, cb)
     end
 
     if event == "sellTruck" then
-        local truckId = data and data.truck_id
+        local truckId = data and (data.truck_id or data.truckId or data.id)
         TriggerServerEvent('aurp_trucker:fleet:sellTruck', truckId)
         RefreshNUIData()
         cb(200)
@@ -566,7 +566,7 @@ end)
 
 RegisterNUICallback('startJob', function(data, cb)
     CloseJobBoard()
-    local contractId = data and (data.id or data.jobId)
+    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
     cb('ok')
 end)
@@ -741,11 +741,12 @@ end)
 -- =======================================
 
 RegisterNUICallback('buyTruck', function(data, cb)
-    local model = data and data.model
+    local model = data and (data.model or data.truck_name or data.name)
     if not model then return cb({ ok = false, reason = 'Modelo inválido' }) end
     local ok, res, extra = pcall(lib.callback.await, 'aurp_trucker:buyTruck', false, model)
     if ok and res then
         lib.notify({ title = 'Concessionária', description = 'Caminhão adquirido com sucesso!', type = 'success' })
+        RefreshNUIData()
         cb({ ok = true, truck = extra })
     else
         local reason = (type(extra) == 'string' and extra) or (type(res) == 'string' and res) or 'Erro ao comprar caminhão'
@@ -755,11 +756,12 @@ RegisterNUICallback('buyTruck', function(data, cb)
 end)
 
 RegisterNUICallback('sellTruck', function(data, cb)
-    local truckId = data and data.truckId
+    local truckId = data and (data.truckId or data.truck_id or data.id)
     if not truckId then return cb({ ok = false, reason = 'ID inválido' }) end
     local ok, res, refund = pcall(lib.callback.await, 'aurp_trucker:sellTruck', false, truckId)
     if ok and res then
         lib.notify({ title = 'Garagem', description = ('Caminhão vendido por $%d!'):format(refund or 0), type = 'success' })
+        RefreshNUIData()
         cb({ ok = true, refund = refund })
     else
         local reason = (type(refund) == 'string' and refund) or 'Erro ao vender veículo'

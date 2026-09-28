@@ -157,7 +157,12 @@ const processQueue = async () => {
                 throw new Error(`Request failed with status: ${response.status}`);
             }
 
-            const responseData = await response.json();
+            let responseData = 200;
+            try {
+                responseData = await response.json();
+            } catch(e) {
+                responseData = 200;
+            }
 
             if (cb) {
                 cb(responseData);
@@ -182,9 +187,10 @@ Utils.post = function (event, data, route = "post", cb) {
     processQueue();
 };
 
-let resource_name;
+let resource_name = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
 Utils.getRoute = function (name) {
-    return `https://${resource_name}/${name}`;
+    let res = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : (resource_name || "AUST_trucker");
+    return `https://${res}/${name}`;
 };
 
 Utils.setResourceName = function (current_resource_name) {
