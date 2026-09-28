@@ -1,31 +1,31 @@
 /* ============================================================
-   AUST_trucker — Padrão Nation (Nation Scripts Style)
-   Dark Theme & Glassmorphism Design System
+   AUST_trucker — Padrão Lation (Lation Modern UI Design System)
+   Dark Theme & Glassmorphism
    ============================================================ */
 
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-    --primary-color: #8b5cf6;
-    --primary-color-hover: #7c3aed;
-    --primary-gradient: linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
-    --primary-glow: rgba(139, 92, 246, 0.35);
+    --primary-color: #0ea5e9;
+    --primary-color-hover: #0284c7;
+    --primary-gradient: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
+    --primary-glow: rgba(14, 165, 233, 0.4);
 
     --accent-cyan: #06b6d4;
     --accent-emerald: #10b981;
     --accent-amber: #f59e0b;
     --accent-rose: #f43f5e;
 
-    --bg-main: rgba(13, 15, 24, 0.92);
-    --bg-sidebar: rgba(9, 10, 16, 0.97);
-    --bg-card: rgba(22, 26, 40, 0.72);
-    --bg-card-hover: rgba(30, 36, 56, 0.88);
+    --bg-main: rgba(15, 23, 42, 0.95);
+    --bg-sidebar: rgba(30, 41, 59, 0.55);
+    --bg-card: rgba(30, 41, 59, 0.7);
+    --bg-card-hover: rgba(51, 65, 85, 0.85);
     --bg-input: rgba(255, 255, 255, 0.05);
     --bg-input-focus: rgba(255, 255, 255, 0.09);
 
     --border-subtle: rgba(255, 255, 255, 0.08);
-    --border-hover: rgba(139, 92, 246, 0.5);
-    --border-active: #8b5cf6;
+    --border-hover: rgba(14, 165, 233, 0.5);
+    --border-active: #0ea5e9;
 
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
@@ -34,16 +34,25 @@
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
-    --radius-xl: 18px;
+    --radius-xl: 16px;
 
     --shadow-main: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
     --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 
 /* Base & Font */
-body {
-    font-family: 'Poppins', -apple-system, sans-serif !important;
+html, body {
+    background: transparent !important;
     background-color: transparent !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-family: 'Poppins', -apple-system, sans-serif !important;
 }
 
 /* Custom Thin Scrollbar */
@@ -56,7 +65,7 @@ body {
     border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(139, 92, 246, 0.35);
+    background: rgba(14, 165, 233, 0.35);
     border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -65,43 +74,75 @@ body {
 
 /* Main Container Glassmorphism */
 .backgound-theme, .main {
+    width: 1280px !important;
+    height: 740px !important;
+    max-width: 95vw !important;
+    max-height: 92vh !important;
     background: var(--bg-main) !important;
-    backdrop-filter: blur(20px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+    backdrop-filter: blur(16px) saturate(180%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-xl) !important;
     box-shadow: var(--shadow-main) !important;
     color: var(--text-primary) !important;
+    display: flex !important;
+    flex-direction: row !important;
+    overflow: hidden !important;
+    position: relative !important;
+    box-sizing: border-box !important;
 }
 
-/* Minimalist Sidebar (Nation Style) */
+.main[style*="display: none"] {
+    display: none !important;
+}
+
+/* Minimalist Sidebar (Lation Style) */
 .sidebar-navigation {
+    width: 78px !important;
+    min-width: 78px !important;
+    max-width: 78px !important;
+    height: 100% !important;
+    flex-shrink: 0 !important;
     background: var(--bg-sidebar) !important;
     border-right: 1px solid var(--border-subtle) !important;
+    border-radius: var(--radius-xl) 0 0 var(--radius-xl) !important;
     padding: 12px 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    z-index: 10 !important;
+    margin: 0 !important;
 }
 
 .sidebar-navigation ul {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 4px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    list-style: none !important;
+    width: 100% !important;
 }
 
 .sidebar-navigation ul li {
-    height: 50px !important;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    height: 48px !important;
+    max-height: 48px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     color: var(--text-muted) !important;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     border-left: 3px solid transparent !important;
-    border-radius: 0 8px 8px 0;
-    margin-right: 6px;
+    border-radius: 0 8px 8px 0 !important;
+    margin-right: 4px !important;
+    padding: 0 !important;
+    cursor: pointer !important;
 }
 
 .sidebar-navigation ul li i {
-    font-size: 19px !important;
-    transition: all 0.2s ease;
+    font-size: 18px !important;
+    transition: all 0.2s ease !important;
 }
 
 .sidebar-navigation ul li:hover {
@@ -111,18 +152,18 @@ body {
 
 .sidebar-navigation ul li.active {
     color: var(--primary-color) !important;
-    background: rgba(139, 92, 246, 0.1) !important;
+    background: rgba(14, 165, 233, 0.12) !important;
     border-left-color: var(--primary-color) !important;
 }
 
 .sidebar-navigation ul li.active i {
     color: var(--primary-color) !important;
-    transform: scale(1.1);
-    filter: drop-shadow(0 0 10px var(--primary-glow));
+    transform: scale(1.08) !important;
+    filter: drop-shadow(0 0 8px var(--primary-glow)) !important;
 }
 
 .sidebar-navigation ul li#sidebar-close:hover {
-    background: rgba(244, 63, 94, 0.1) !important;
+    background: rgba(244, 63, 94, 0.12) !important;
     border-left-color: var(--accent-rose) !important;
 }
 .sidebar-navigation ul li#sidebar-close:hover i {
@@ -130,21 +171,53 @@ body {
 }
 
 .sidebar-navigation ul li .tooltip {
-    background: rgba(18, 20, 30, 0.95) !important;
-    color: #fff !important;
+    background: rgba(15, 23, 42, 0.95) !important;
+    color: #f8fafc !important;
     padding: 6px 12px !important;
     border-radius: var(--radius-sm) !important;
     font-size: 12px !important;
     font-weight: 500 !important;
     box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5) !important;
     border: 1px solid var(--border-subtle) !important;
+    left: 86px !important;
+    z-index: 100 !important;
+}
+
+/* Pages Container */
+.container-pages {
+    flex: 1 1 auto !important;
+    height: 100% !important;
+    width: calc(100% - 78px) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    border-radius: 0 var(--radius-xl) var(--radius-xl) 0 !important;
+    box-sizing: border-box !important;
+    margin: 0 !important;
+    background: transparent !important;
+}
+
+.pages {
+    flex: 1 1 auto !important;
+    height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 20px 24px !important;
+    box-sizing: border-box !important;
 }
 
 /* Header & Player Info */
 .player-info-container {
-    background: rgba(255, 255, 255, 0.015) !important;
-    border-bottom: 1px solid var(--border-subtle) !important;
-    padding: 14px 24px !important;
+    background: transparent !important;
+    border-bottom: none !important;
+    position: absolute !important;
+    right: 24px !important;
+    top: 20px !important;
+    z-index: 20 !important;
+    display: flex !important;
+    align-items: center !important;
+    padding: 0 !important;
 }
 
 .player-info-item {
@@ -215,7 +288,7 @@ ul.list-inline li.card-theme:hover {
     box-shadow: 0 0 8px var(--primary-glow);
 }
 
-/* Buttons (Padrão Nation - Flat, vibrante e moderno) */
+/* Buttons (Padrão Lation - Flat, vibrante e moderno) */
 .btn-primary {
     background: var(--primary-gradient) !important;
     border: none !important;
@@ -254,9 +327,9 @@ ul.list-inline li.card-theme:hover {
 }
 
 .btn-outline-primary {
-    background: rgba(139, 92, 246, 0.08) !important;
+    background: rgba(14, 165, 233, 0.08) !important;
     border: 1px solid var(--primary-color) !important;
-    color: #c4b5fd !important;
+    color: #7dd3fc !important;
     border-radius: var(--radius-sm) !important;
     font-weight: 500 !important;
     transition: all 0.2s ease;
@@ -279,13 +352,13 @@ ul.list-inline li.card-theme:hover {
 .form-control:focus, input.form-control:focus, select.form-control:focus {
     background: var(--bg-input-focus) !important;
     border-color: var(--primary-color) !important;
-    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.2) !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2) !important;
     color: #ffffff !important;
 }
 
 /* Modals */
 .modal-content {
-    background: rgba(16, 18, 28, 0.96) !important;
+    background: rgba(15, 23, 42, 0.98) !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
     box-shadow: var(--shadow-main) !important;
@@ -334,7 +407,7 @@ ul.list-inline li.card-theme:hover {
 .redsteps:hover {
     border-color: var(--primary-color);
     color: #fff !important;
-    background: rgba(139, 92, 246, 0.15) !important;
+    background: rgba(14, 165, 233, 0.15) !important;
     cursor: pointer;
 }
 
@@ -344,6 +417,6 @@ ul.list-inline li.card-theme:hover {
 
 /* Dealership & Garage */
 .dealership-locked-background {
-    background: rgba(15, 17, 25, 0.5) !important;
+    background: rgba(15, 23, 42, 0.6) !important;
     opacity: 0.75;
 }

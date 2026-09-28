@@ -1,17 +1,25 @@
-body {
+html, body {
 	display: flex;
-    align-items: center;
-    justify-content: center;
+	align-items: center;
+	justify-content: center;
 	overflow: hidden;
-	background-color: #0000006e !important;
+	background: transparent !important;
+	background-color: transparent !important;
+	font-family: 'Poppins', 'Montserrat', sans-serif !important;
+	width: 100vw;
+	height: 100vh;
+	margin: 0;
+	padding: 0;
 }
 
 .main {
-	width: 1320px;
-	height: 760px;
-	border-radius: 18px !important;
-	display: grid;
-    grid-template-columns: 84px 1fr;
+	width: 1280px;
+	height: 740px;
+	border-radius: 16px !important;
+	display: flex;
+	flex-direction: row;
+	overflow: hidden;
+	position: relative;
 }
 
 /*===========================*/
@@ -19,9 +27,9 @@ body {
 /*===========================*/
 
 .sidebar-navigation {
-	display: inline-block;
 	height: 100%;
-	width: 80px;
+	width: 78px;
+	flex-shrink: 0;
 	background-color: #313443;
 }
 

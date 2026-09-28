@@ -295,7 +295,7 @@ window.addEventListener("message", async function (event) {
 
             $("#css-toggle").prop("checked", users.dark_theme).change();
 
-            $(".main").fadeIn(200);
+            $(".main").css("display", "flex").hide().fadeIn(200);
             openPage("job");
         }
 
