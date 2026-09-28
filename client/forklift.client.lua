@@ -367,135 +367,171 @@ RegisterNetEvent('aurp_trucker:client:allPalletsLoaded', function(locationId)
 end)
 
 -- ============================================================
--- OX_TARGET: NPCs de trade point
+-- OX_TARGET: NPCs de trade point (Proximity Streaming via lib.points)
 -- ============================================================
 
 CreateThread(function()
     Wait(2000)
 
     for _, tp in ipairs(Config.Forklift.TradePoints) do
-        local npcHash = GetHashKey('a_m_m_trucker_01')
-        RequestModel(npcHash)
-        local t = 0
-        while not HasModelLoaded(npcHash) and t < 5000 do Wait(100); t = t + 100 end
+        local point = lib.points.new({
+            coords = tp.coords,
+            distance = 60.0,
+            npc = nil,
+            onEnter = function(self)
+                local npcHash = GetHashKey('a_m_m_trucker_01')
+                RequestModel(npcHash)
+                local t = 0
+                while not HasModelLoaded(npcHash) and t < 3000 do Wait(100); t = t + 100 end
 
-        local npc = CreatePed(4, npcHash,
-            tp.npcCoords.x, tp.npcCoords.y, tp.npcCoords.z, tp.npcCoords.w,
-            false, false)
-        SetEntityInvincible(npc, true)
-        SetBlockingOfNonTemporaryEvents(npc, true)
-        FreezeEntityPosition(npc, true)
-        SetModelAsNoLongerNeeded(npcHash)
+                self.npc = CreatePed(4, npcHash, tp.npcCoords.x, tp.npcCoords.y, tp.npcCoords.z, tp.npcCoords.w, false, false)
+                SetModelAsNoLongerNeeded(npcHash)
 
-        local capturedTp = tp
-        exports.ox_target:addLocalEntity(npc, {
-            {
-                name     = 'aurp_trucker:forklift_' .. tp.id,
-                icon     = 'fas fa-truck-loading',
-                label    = ('Aceitar Ordem — %s'):format(tp.name),
-                distance = 3.0,
-                canInteract = function()
-                    return VP_Trucker_ForkliftActive == nil
-                end,
-                onSelect = function()
-                    if VP_Trucker_ForkliftActive then
-                        lib.notify({ title = 'Forklift', description = 'Você já tem um forklift ativo', type = 'error' })
-                        return
-                    end
+                if self.npc and self.npc ~= 0 and DoesEntityExist(self.npc) then
+                    SetEntityInvincible(self.npc, true)
+                    SetBlockingOfNonTemporaryEvents(self.npc, true)
+                    FreezeEntityPosition(self.npc, true)
 
-                    local ok, result = pcall(lib.callback.await, 'aurp_trucker:rentForklift', false, {
-                        locationId = capturedTp.id,
-                        mode       = 'tradepoint',
-                        expected   = capturedTp.maxPallets,
+                    local capturedTp = tp
+                    exports.ox_target:addLocalEntity(self.npc, {
+                        {
+                            name     = 'aurp_trucker:forklift_' .. tp.id,
+                            icon     = 'fas fa-truck-loading',
+                            label    = ('Aceitar Ordem — %s'):format(tp.name),
+                            distance = 3.0,
+                            canInteract = function()
+                                return VP_Trucker_ForkliftActive == nil
+                            end,
+                            onSelect = function()
+                                if VP_Trucker_ForkliftActive then
+                                    lib.notify({ title = 'Forklift', description = 'Você já tem um forklift ativo', type = 'error' })
+                                    return
+                                end
+
+                                local ok, result = pcall(lib.callback.await, 'aurp_trucker:rentForklift', false, {
+                                    locationId = capturedTp.id,
+                                    mode       = 'tradepoint',
+                                    expected   = capturedTp.maxPallets,
+                                    deliveryVehicle = capturedTp.deliveryVehicle,
+                                })
+
+                                if not ok or not result then
+                                    lib.notify({ title = 'Forklift', description = 'Erro ao alugar forklift', type = 'error' })
+                                    return
+                                end
+                                if not result.success then
+                                    lib.notify({ title = 'Forklift', description = result.reason or 'Erro desconhecido', type = 'error' })
+                                    return
+                                end
+
+                                StartTradePointMission(capturedTp)
+                            end,
+                        }
                     })
-
-                    if not ok or not result then
-                        lib.notify({ title = 'Forklift', description = 'Erro ao alugar forklift', type = 'error' })
-                        return
-                    end
-                    if not result.success then
-                        lib.notify({ title = 'Forklift', description = result.reason or 'Erro desconhecido', type = 'error' })
-                        return
-                    end
-
-                    StartTradePointMission(capturedTp)
-                end,
-            }
+                end
+            end,
+            onExit = function(self)
+                if self.npc and self.npc ~= 0 and DoesEntityExist(self.npc) then
+                    exports.ox_target:removeLocalEntity(self.npc)
+                    DeleteEntity(self.npc)
+                    self.npc = nil
+                end
+            end
         })
 
         AddEventHandler('onResourceStop', function(r)
-            if r == GetCurrentResourceName() and DoesEntityExist(npc) then
-                exports.ox_target:removeLocalEntity(npc)
-                DeleteEntity(npc)
+            if r == GetCurrentResourceName() then
+                if point.npc and point.npc ~= 0 and DoesEntityExist(point.npc) then
+                    exports.ox_target:removeLocalEntity(point.npc)
+                    DeleteEntity(point.npc)
+                end
+                pcall(function() point:remove() end)
             end
         end)
     end
 end)
 
 -- ============================================================
--- OX_TARGET: Props de industry spawn (Modo 2)
+-- OX_TARGET: Props de industry spawn (Modo 2 - Proximity Streaming)
 -- ============================================================
 
 CreateThread(function()
     Wait(2000)
 
     for industryId, spawnCoords in pairs(Config.Forklift.IndustrySpawns) do
-        local propHash = GetHashKey('prop_consite_bagb')
-        RequestModel(propHash)
-        local t = 0
-        while not HasModelLoaded(propHash) and t < 3000 do Wait(100); t = t + 100 end
+        local point = lib.points.new({
+            coords = vector3(spawnCoords.x, spawnCoords.y, spawnCoords.z),
+            distance = 60.0,
+            prop = nil,
+            onEnter = function(self)
+                local propHash = GetHashKey('prop_consite_bagb')
+                RequestModel(propHash)
+                local t = 0
+                while not HasModelLoaded(propHash) and t < 3000 do Wait(100); t = t + 100 end
 
-        local prop = CreateObjectNoOffset(propHash,
-            spawnCoords.x, spawnCoords.y, spawnCoords.z, false, false, false)
-        SetModelAsNoLongerNeeded(propHash)
+                self.prop = CreateObjectNoOffset(propHash, spawnCoords.x, spawnCoords.y, spawnCoords.z, false, false, false)
+                SetModelAsNoLongerNeeded(propHash)
 
-        local capturedId     = industryId
-        local capturedCoords = spawnCoords
+                if self.prop and self.prop ~= 0 and DoesEntityExist(self.prop) then
+                    local capturedId     = industryId
+                    local capturedCoords = spawnCoords
 
-        exports.ox_target:addLocalEntity(prop, {
-            {
-                name     = 'aurp_trucker:industry_forklift_' .. industryId,
-                icon     = 'fas fa-forklift',
-                label    = 'Alugar Forklift ($500)',
-                distance = 3.0,
-                canInteract = function()
-                    -- Só mostrar se player tiver job ativo com origin nesta industry
-                    return VP_Trucker_ForkliftActive == nil
-                        and VP_Trucker_CurrentJobOriginId == capturedId
-                end,
-                onSelect = function()
-                    if VP_Trucker_ForkliftActive then
-                        lib.notify({ title = 'Forklift', description = 'Você já tem um forklift ativo', type = 'error' })
-                        return
-                    end
+                    exports.ox_target:addLocalEntity(self.prop, {
+                        {
+                            name     = 'aurp_trucker:industry_forklift_' .. industryId,
+                            icon     = 'fas fa-forklift',
+                            label    = 'Alugar Forklift ($500)',
+                            distance = 3.0,
+                            canInteract = function()
+                                return VP_Trucker_ForkliftActive == nil
+                                    and VP_Trucker_CurrentJobOriginId == capturedId
+                            end,
+                            onSelect = function()
+                                if VP_Trucker_ForkliftActive then
+                                    lib.notify({ title = 'Forklift', description = 'Você já tem um forklift ativo', type = 'error' })
+                                    return
+                                end
 
-                    local ok, result = pcall(lib.callback.await, 'aurp_trucker:rentForklift', false, {
-                        locationId = capturedId,
-                        mode       = 'industry',
-                        expected   = 1,  -- atualizado quando startIndustryLoad é disparado
+                                local ok, result = pcall(lib.callback.await, 'aurp_trucker:rentForklift', false, {
+                                    locationId = capturedId,
+                                    mode       = 'industry',
+                                    expected   = 1,
+                                })
+
+                                if not ok or not result or not result.success then
+                                    lib.notify({ title = 'Forklift', description = (result and result.reason) or 'Erro ao alugar', type = 'error' })
+                                    return
+                                end
+
+                                local forklift = SpawnVehicle(Config.Forklift.ForkliftModel, capturedCoords)
+                                if forklift then
+                                    SetEntityAsMissionEntity(forklift, true, true)
+                                    spawnedForklift = forklift
+                                end
+
+                                VP_Trucker_ForkliftActive = { locationId = capturedId, mode = 'industry' }
+                                lib.notify({ title = 'Forklift Alugado', description = 'Use a empilhadeira para carregar os pallets do trailer!', type = 'inform' })
+                            end,
+                        }
                     })
-
-                    if not ok or not result or not result.success then
-                        lib.notify({ title = 'Forklift', description = (result and result.reason) or 'Erro ao alugar', type = 'error' })
-                        return
-                    end
-
-                    local forklift = SpawnVehicle(Config.Forklift.ForkliftModel, capturedCoords)
-                    if forklift then
-                        SetEntityAsMissionEntity(forklift, true, true)
-                        spawnedForklift = forklift
-                    end
-
-                    VP_Trucker_ForkliftActive = { locationId = capturedId, mode = 'industry' }
-                    lib.notify({ title = 'Forklift Alugado', description = 'Use a empilhadeira para carregar os pallets do trailer!', type = 'inform' })
-                end,
-            }
+                end
+            end,
+            onExit = function(self)
+                if self.prop and self.prop ~= 0 and DoesEntityExist(self.prop) then
+                    exports.ox_target:removeLocalEntity(self.prop)
+                    DeleteEntity(self.prop)
+                    self.prop = nil
+                end
+            end
         })
 
         AddEventHandler('onResourceStop', function(r)
-            if r == GetCurrentResourceName() and DoesEntityExist(prop) then
-                exports.ox_target:removeLocalEntity(prop)
-                DeleteEntity(prop)
+            if r == GetCurrentResourceName() then
+                if point.prop and point.prop ~= 0 and DoesEntityExist(point.prop) then
+                    exports.ox_target:removeLocalEntity(point.prop)
+                    DeleteEntity(point.prop)
+                end
+                pcall(function() point:remove() end)
             end
         end)
     end
