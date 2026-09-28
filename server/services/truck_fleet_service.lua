@@ -19,11 +19,20 @@ function TruckFleetService.GetPlayerTrucks(citizenId)
     return trucks
 end
 
+local BuyingTruckLock = {}
+local SellingTruckLock = {}
+
 -- Compra de caminhão na concessionária
 function TruckFleetService.BuyTruck(src, citizenId, truckModel)
+    if BuyingTruckLock[citizenId] then
+        return false, 'Transação em andamento, aguarde'
+    end
+    BuyingTruckLock[citizenId] = true
+
     local catalog = Config.LC_Dealership or {}
     local data = catalog[truckModel]
     if not data then
+        BuyingTruckLock[citizenId] = nil
         return false, 'Modelo de caminhão indisponível no catálogo'
     end
 
@@ -31,16 +40,19 @@ function TruckFleetService.BuyTruck(src, citizenId, truckModel)
     local playerStats = DB_GetPlayerStats(citizenId)
     local currentLevel = playerStats and playerStats.level or 1
     if currentLevel < (data.required_level or 0) then
+        BuyingTruckLock[citizenId] = nil
         return false, ('Nível insuficiente. Necessário nível %d'):format(data.required_level)
     end
 
     local price = data.price or 50000
     local balance = Framework.GetPlayerMoney(src, 'bank')
     if balance < price then
+        BuyingTruckLock[citizenId] = nil
         return false, 'Saldo bancário insuficiente'
     end
 
     if not Framework.RemovePlayerMoney(src, 'bank', price, 'Compra de caminhão: ' .. data.name) then
+        BuyingTruckLock[citizenId] = nil
         return false, 'Falha ao processar pagamento bancário'
     end
 
@@ -50,20 +62,28 @@ function TruckFleetService.BuyTruck(src, citizenId, truckModel)
         { citizenId, truckModel }
     )
 
+    BuyingTruckLock[citizenId] = nil
     return true, { truckId = truckId, model = truckModel, name = data.name }
 end
 
 -- Venda de caminhão próprio (70% do valor)
 function TruckFleetService.SellTruck(src, citizenId, truckId)
+    if SellingTruckLock[citizenId] then
+        return false, 'Transação em andamento, aguarde'
+    end
+    SellingTruckLock[citizenId] = true
+
     local truck = MySQL.single.await(
         'SELECT * FROM trucker_trucks WHERE truck_id = ? AND user_id = ? LIMIT 1',
         { truckId, citizenId }
     )
     if not truck then
+        SellingTruckLock[citizenId] = nil
         return false, 'Caminhão não encontrado na sua frota'
     end
 
     if truck.driver and truck.driver > 0 then
+        SellingTruckLock[citizenId] = nil
         return false, 'Desaloque o motorista antes de vender este caminhão'
     end
 
@@ -73,8 +93,14 @@ function TruckFleetService.SellTruck(src, citizenId, truckId)
     local mult = Config.LC_SellMultiplier or 0.70
     local refund = math.floor(basePrice * mult)
 
-    MySQL.query.await('DELETE FROM trucker_trucks WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
+    local affected = MySQL.update.await('DELETE FROM trucker_trucks WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
+    if not affected or affected == 0 then
+        SellingTruckLock[citizenId] = nil
+        return false, 'Caminhão já vendido ou indisponível'
+    end
+
     Framework.AddPlayerMoney(src, 'bank', refund, 'Venda de caminhão: ' .. truck.truck_name)
+    SellingTruckLock[citizenId] = nil
 
     return true, refund
 end

@@ -1213,32 +1213,69 @@ RegisterNetEvent('truck_logistics:deliveredCargo', function()
     -- Confirma entrega do frete
 end)
 
-RegisterNetEvent('truck_logistics:finishContract', function(engine, body, trailerBody)
-    local src = source
+local CompletingContractsLock = {}
+
+local function FinalizeLCContract(src, jobId, parkedManually)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
-    local row = MySQL.single.await([[
-        SELECT * FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
-    ]], { citizenId })
-    if row then
-        -- Conclui e processa autoritativamente
-        local payment = row.base_payment or 2500
-        local dist = row.distance or 2.5
-        Framework.AddMoney(Player, 'bank', payment, 'truck-logistics-finish')
-        MySQL.update.await([[
-            UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ?
-        ]], { row.id })
-        DB_AddPlayerStats(citizenId, payment, dist)
-        ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
-        ActiveLCContracts[citizenId] = nil
-        StartingJobLock[citizenId] = nil
-        TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
-            payment = payment,
-            distance = dist,
-            parkedManually = true
-        })
+
+    if CompletingContractsLock[citizenId] then return end
+    CompletingContractsLock[citizenId] = true
+
+    local row = nil
+    if jobId then
+        row = MySQL.single.await([[
+            SELECT * FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active' LIMIT 1
+        ]], { jobId, citizenId })
+    else
+        row = MySQL.single.await([[
+            SELECT * FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+        ]], { citizenId })
     end
+
+    if not row then
+        CompletingContractsLock[citizenId] = nil
+        return
+    end
+
+    -- Mutação atômica fail-closed: se já foi finalizado concorrentemente, affectedRows será 0
+    local affected = MySQL.update.await([[
+        UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'
+    ]], { row.id })
+
+    if not affected or affected == 0 then
+        CompletingContractsLock[citizenId] = nil
+        return
+    end
+
+    local payment = row.base_payment or 2500
+    local dist = row.distance or 2.5
+
+    if parkedManually then
+        payment = math.floor(payment * 1.05)
+    end
+
+    Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
+    DB_AddPlayerStats(citizenId, payment, dist)
+    ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+
+    ActiveLCContracts[citizenId] = nil
+    StartingJobLock[citizenId] = nil
+
+    TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
+        payment = payment,
+        distance = dist,
+        parkedManually = parkedManually
+    })
+
+    SetTimeout(3000, function()
+        CompletingContractsLock[citizenId] = nil
+    end)
+end
+
+RegisterNetEvent('truck_logistics:finishContract', function(engine, body, trailerBody)
+    FinalizeLCContract(source, nil, true)
 end)
 
 RegisterNetEvent('truck_logistics:buyTruck', function(location, data)
@@ -1272,45 +1309,7 @@ RegisterNetEvent('truck_logistics:sellTruck', function(location, data)
 end)
 
 RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parkedManually)
-    local src = source
-    local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
-
-    local row = MySQL.single.await([[
-        SELECT * FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active'
-    ]], { jobId, citizenId })
-
-    if not row then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Contrato inválido ou já concluído!', 'error')
-        return
-    end
-
-    local payment = row.base_payment or 2500
-    local dist = row.distance or 2.5
-
-    -- Bônus de manobra perfeita manual (+5% $ e +45 XP)
-    if parkedManually then
-        payment = math.floor(payment * 1.05)
-    end
-
-    Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
-
-    MySQL.update.await([[
-        UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ?
-    ]], { jobId })
-
-    DB_AddPlayerStats(citizenId, payment, dist)
-    ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
-
-    ActiveLCContracts[citizenId] = nil
-    StartingJobLock[citizenId] = nil
-
-    TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
-        payment = payment,
-        distance = dist,
-        parkedManually = parkedManually
-    })
+    FinalizeLCContract(source, jobId, parkedManually)
 end)
 
 -- =====================================================
@@ -1497,15 +1496,12 @@ RegisterNetEvent('aurp_trucker:bank:deposit', function(amount)
         return
     end
 
-    local cash = Framework.GetMoney(Player, 'cash') or 0
-    if cash < amount then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Dinheiro em mãos insuficiente!', 'error')
-        return
-    end
-
-    if Framework.RemoveMoney(Player, 'cash', amount, 'trucker-company-deposit') then
-        CompanyService.Deposit(company.id, amount, citizenId)
+    local ok, err = CompanyService.Deposit(company.id, src, amount)
+    if ok then
         TriggerClientEvent('aurp_trucker:notify', src, ('Depositado $%s na conta da empresa!'):format(amount), 'success')
+        TriggerClientEvent('aurp_trucker:client:companyUpdated', src, CompanyService.Get(company.id))
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, err or 'Falha ao realizar depósito.', 'error')
     end
 end)
 
@@ -1525,12 +1521,12 @@ RegisterNetEvent('aurp_trucker:bank:withdraw', function(amount)
         return
     end
 
-    local ok, res = CompanyService.Withdraw(company.id, amount, citizenId)
+    local ok, err = CompanyService.Withdraw(company.id, src, citizenId, amount)
     if ok then
-        Framework.AddMoney(Player, 'cash', amount, 'trucker-company-withdraw')
         TriggerClientEvent('aurp_trucker:notify', src, ('Sacado $%s da conta da empresa!'):format(amount), 'success')
+        TriggerClientEvent('aurp_trucker:client:companyUpdated', src, CompanyService.Get(company.id))
     else
-        TriggerClientEvent('aurp_trucker:notify', src, res or 'Saldo da empresa insuficiente!', 'error')
+        TriggerClientEvent('aurp_trucker:notify', src, err or 'Saldo da empresa insuficiente ou sem permissão!', 'error')
     end
 end)
 

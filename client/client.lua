@@ -64,8 +64,39 @@ end
 local pickupPoint = nil
 local deliveryPoint = nil
 local contractStopPoint = nil
+local lcActiveJob = nil
+local lcDeliveryPoint = nil
+local lcDeliveryBlip = nil
+local isStartingJob = false
+
+local function CleanupLCContract()
+    isStartingJob = false
+    if lcDeliveryPoint then
+        pcall(function() lcDeliveryPoint:remove() end)
+        lcDeliveryPoint = nil
+    end
+    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+        RemoveBlip(lcDeliveryBlip)
+        lcDeliveryBlip = nil
+    end
+    SetWaypointOff()
+    if lib and lib.hideTextUI then
+        lib.hideTextUI()
+    end
+
+    if lcActiveJob then
+        if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
+            DeleteEntity(lcActiveJob.trailer)
+        end
+        if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
+            DeleteEntity(lcActiveJob.truck)
+        end
+        lcActiveJob = nil
+    end
+end
 
 local function ClearJobPoints()
+    CleanupLCContract()
     if pickupPoint then
         pcall(function() pickupPoint:remove() end)
         pickupPoint = nil
@@ -484,7 +515,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "buyTruck" then
         local truckName = data and (data.truck_name or data.model or data.name)
         TriggerServerEvent('aurp_trucker:fleet:buyTruck', truckName)
-        TriggerServerEvent('truck_logistics:buyTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -493,7 +523,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "sellTruck" then
         local truckId = data and (data.truck_id or data.truckId or data.id)
         TriggerServerEvent('aurp_trucker:fleet:sellTruck', truckId)
-        TriggerServerEvent('truck_logistics:sellTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -502,7 +531,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "repairTruck" then
         local truckId = data and (data.id or data.truck_id)
         TriggerServerEvent('aurp_trucker:fleet:repairTruck', truckId, 'all')
-        TriggerServerEvent('truck_logistics:repairTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -511,7 +539,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "upgradeSkill" then
         local skillId = data and data.id
         TriggerServerEvent('aurp_trucker:server:upgradeSkill', skillId)
-        TriggerServerEvent('truck_logistics:upgradeSkill', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -520,7 +547,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "loan" then
         local planId = data and data.loan_id
         TriggerServerEvent('aurp_trucker:loan:takePlan', planId)
-        TriggerServerEvent('truck_logistics:loan', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -529,7 +555,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "payLoan" then
         local loanId = data and data.loan_id
         TriggerServerEvent('aurp_trucker:loan:payOff', loanId)
-        TriggerServerEvent('truck_logistics:payLoan', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -538,7 +563,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "hireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:hireAgency', driverId)
-        TriggerServerEvent('truck_logistics:hireDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -547,7 +571,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "fireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:fireHired', driverId)
-        TriggerServerEvent('truck_logistics:fireDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -557,7 +580,6 @@ RegisterNUICallback('post', function(body, cb)
         local driverId = data and data.driver_id
         local truckId = data and data.truck_id
         TriggerServerEvent('aurp_trucker:driver:setTruck', driverId, truckId)
-        TriggerServerEvent('truck_logistics:setDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -566,7 +588,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "depositMoney" then
         local amount = data and data.amount
         TriggerServerEvent('aurp_trucker:bank:deposit', amount)
-        TriggerServerEvent('truck_logistics:depositMoney', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -575,7 +596,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "withdrawMoney" then
         local amount = data and data.amount
         TriggerServerEvent('aurp_trucker:bank:withdraw', amount)
-        TriggerServerEvent('truck_logistics:withdrawMoney', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -583,7 +603,6 @@ RegisterNUICallback('post', function(body, cb)
 
     if event == "createParty" then
         TriggerServerEvent('aurp_trucker:party:create')
-        TriggerServerEvent('truck_logistics:createParty', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -591,15 +610,11 @@ RegisterNUICallback('post', function(body, cb)
 
     if event == "quitParty" or event == "deleteParty" then
         TriggerServerEvent('aurp_trucker:party:leave')
-        TriggerServerEvent('truck_logistics:quitParty', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
     end
 
-    if event then
-        TriggerServerEvent('truck_logistics:' .. event, 'buccaneer_hq', data)
-    end
     cb(200)
 end)
 
@@ -2359,6 +2374,7 @@ end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName == GetCurrentResourceName() then
+        CleanupLCContract()
         CloseJobBoard()
 
         if jobProgress.pickupBlip then
@@ -2786,11 +2802,6 @@ end)
 -- LC LOGISTICS: QUICK JOBS EXECUTION
 -- =====================================================
 
-local lcActiveJob = nil
-local lcDeliveryPoint = nil
-local lcDeliveryBlip = nil
-local isStartingJob = false
-
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     if not contract or lcActiveJob then return end
     isStartingJob = true
@@ -2799,6 +2810,10 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     -- 1. Spawn do caminhão da firma
     local truckModel = contract.truckModel or 'hauler'
     local truckHash = joaat(truckModel)
+    if not IsModelInCdimage(truckHash) or not IsModelValid(truckHash) then
+        truckModel = 'hauler'
+        truckHash = joaat('hauler')
+    end
     lib.requestModel(truckHash)
     local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
     local truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
@@ -2813,6 +2828,10 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     -- 2. Spawn do reboque designado
     local trailerModel = contract.trailerModel or 'docktrailer'
     local trailerHash = joaat(trailerModel)
+    if not IsModelInCdimage(trailerHash) or not IsModelValid(trailerHash) then
+        trailerModel = 'docktrailer'
+        trailerHash = joaat('docktrailer')
+    end
     lib.requestModel(trailerHash)
     local trspawn = contract.trailerSpawn or vector4(1274.21, -3186.43, 5.91, 90.00)
     local trailer = CreateVehicle(trailerHash, trspawn.x, trspawn.y, trspawn.z, trspawn.w, true, false)
@@ -2859,8 +2878,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         local destX, destY, destZ = dest.x, dest.y, dest.z
         local destH = dest.w or 0.0
         local thisJobId = contract.jobId
-        local isFinished = false
-
+        local currentTextUi = nil
         while lcActiveJob and lcActiveJob.jobId == thisJobId and not isFinished do
             local timer = 1000
             local ped = PlayerPedId()
@@ -2883,9 +2901,16 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
 
                 if distance <= 4.0 and isAligned then
                     DrawMarker(30,destX,destY,destZ-0.6,0,0,0,90.0,destH,0.0,3.0,1.0,10.0,0,255,0,50,0,0,0,0)
-                    lib.showTextUI('[E] Estacionar e Descarregar Carga')
-                    if IsControlJustPressed(0, 38) then
-                        lib.hideTextUI()
+                    if currentTextUi ~= 'park' then
+                        lib.showTextUI('[E] Estacionar e Descarregar Carga')
+                        currentTextUi = 'park'
+                    end
+                    if IsControlJustPressed(0, 38) and not isFinished then
+                        isFinished = true
+                        if currentTextUi ~= nil then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
                         BringVehicleToHalt(tk, 2.5, 1, false)
                         Wait(10)
                         DoScreenFadeOut(500)
@@ -2896,28 +2921,38 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
 
                         TriggerServerEvent("truck_logistics:deliveredCargo")
                         TriggerServerEvent('aurp_trucker:server:completeLCContract', thisJobId, true)
-                        TriggerServerEvent("truck_logistics:finishContract", truckEngine, truckBody, trailerBody)
 
                         PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
                         Wait(1000)
                         DoScreenFadeIn(1000)
-                        isFinished = true
                         break
                     end
                 else
                     if distance <= 15.0 then
-                        lib.showTextUI('Alinhe o caminhão e o reboque na vaga demarcada')
+                        if currentTextUi ~= 'align' then
+                            lib.showTextUI('Alinhe o caminhão e o reboque na vaga demarcada')
+                            currentTextUi = 'align'
+                        end
                     else
-                        lib.hideTextUI()
+                        if currentTextUi ~= nil then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
                     end
                     DrawMarker(30,destX,destY,destZ-0.6,0,0,0,90.0,destH,0.0,3.0,1.0,10.0,255,0,0,50,0,0,0,0)
                 end
             else
-                lib.hideTextUI()
+                if currentTextUi ~= nil then
+                    lib.hideTextUI()
+                    currentTextUi = nil
+                end
             end
             Wait(timer)
         end
-        lib.hideTextUI()
+        if currentTextUi ~= nil then
+            lib.hideTextUI()
+            currentTextUi = nil
+        end
     end)
 end)
 
@@ -2927,27 +2962,7 @@ RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
 end)
 
 RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
-    isStartingJob = false
-    if lcDeliveryPoint then
-        pcall(function() lcDeliveryPoint:remove() end)
-        lcDeliveryPoint = nil
-    end
-    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
-        RemoveBlip(lcDeliveryBlip)
-        lcDeliveryBlip = nil
-    end
-    SetWaypointOff()
-    lib.hideTextUI()
-
-    if lcActiveJob then
-        if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
-            DeleteEntity(lcActiveJob.trailer)
-        end
-        if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
-            DeleteEntity(lcActiveJob.truck)
-        end
-        lcActiveJob = nil
-    end
+    CleanupLCContract()
 
     lib.notify({
         title = 'Entrega Concluída!',
