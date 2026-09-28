@@ -5,6 +5,37 @@
 
 Config = Config or {}
 
+-- Sede Original da Empresa Logística (Terminal Buccaneer Way / Porto de Los Santos)
+Config.LC_Headquarters = {
+    id = "trucker_1",
+    name = "Truck Logistics — Sede Principal",
+    coords = vector3(1208.83, -3115.0, 5.54),
+    pedCoords = vector4(1208.83, -3115.0, 5.54, 90.0),
+    blip = {
+        sprite = 478,
+        color = 4,
+        scale = 0.65,
+        label = "Truck Logistics — Sede Principal"
+    },
+    garage_spawns = {
+        vector4(1250.55, -3162.4, 5.88, 270.00),
+        vector4(1250.76, -3168.05, 5.86, 270.00),
+        vector4(1245.91, -3135.67, 5.62, 270.00),
+        vector4(1246.07, -3142.42, 5.63, 270.00),
+        vector4(1245.93, -3149.04, 5.62, 270.00),
+        vector4(1245.69, -3155.94, 5.60, 270.00),
+    },
+    trailer_spawns = {
+        vector4(1274.21, -3186.43, 5.91, 90.00),
+        vector4(1272.53, -3097.32, 5.91, 90.00),
+        vector4(1273.55, -3088.39, 5.91, 90.00),
+        vector4(1273.47, -3123.78, 5.91, 90.00),
+        vector4(1272.68, -3159.19, 5.91, 90.00),
+        vector4(1275.37, -3174.52, 5.91, 90.00),
+        vector4(1275.04, -3168.83, 5.91, 90.00),
+    }
+}
+
 -- Contratos e Cargas do Mercado de Frete & Trabalhos Rápidos
 Config.LC_Jobs = {
     cancel_job_key = 167, -- F6

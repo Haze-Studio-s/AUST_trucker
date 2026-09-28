@@ -1495,6 +1495,69 @@ CreateThread(function()
     if Config.Debug then
         print("^2[AURP_TRUCKER]^7 NPC despachante criado na central de trabalhos")
     end
+
+    -- Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
+    if Config.LC_Headquarters then
+        local hq = Config.LC_Headquarters
+        blips.lcHq = CreateBlip(
+            hq.coords,
+            hq.blip.sprite or 478,
+            hq.blip.color or 4,
+            hq.blip.label or hq.name,
+            hq.blip.scale or 0.65
+        )
+
+        local lcPedCoords = hq.pedCoords or vector4(hq.coords.x, hq.coords.y, hq.coords.z, 90.0)
+        local lcModel = GetHashKey('s_m_m_dockwork_01')
+        RequestModel(lcModel)
+        while not HasModelLoaded(lcModel) do Wait(10) end
+
+        local lcDispatcher = CreatePed(4, lcModel, lcPedCoords.x, lcPedCoords.y, lcPedCoords.z, lcPedCoords.w, false, true)
+        SetEntityInvincible(lcDispatcher, true)
+        SetBlockingOfNonTemporaryEvents(lcDispatcher, true)
+        FreezeEntityPosition(lcDispatcher, true)
+        SetModelAsNoLongerNeeded(lcModel)
+
+        if lcDispatcher and DoesEntityExist(lcDispatcher) then
+            exports.ox_target:addLocalEntity(lcDispatcher, {
+                {
+                    name     = 'open_lc_job_board',
+                    icon     = 'fas fa-truck-loading',
+                    label    = 'Central de Fretes (Buccaneer Way)',
+                    distance = 3.0,
+                    onSelect = function()
+                        CreateThread(OpenJobBoard)
+                    end,
+                },
+                {
+                    name     = 'rent_truck_lc',
+                    icon     = 'fas fa-truck-moving',
+                    label    = 'Locadora de Caminhões',
+                    distance = 3.0,
+                    onSelect = function()
+                        OpenRentalMenu()
+                    end,
+                },
+                {
+                    name     = 'return_truck_lc',
+                    icon     = 'fas fa-undo-alt',
+                    label    = 'Devolver Caminhão Alugado',
+                    distance = 3.0,
+                    onSelect = function()
+                        ReturnRentedTruck()
+                    end,
+                },
+            })
+
+            AddEventHandler('onResourceStop', function(res)
+                if res ~= GetCurrentResourceName() then return end
+                if lcDispatcher and DoesEntityExist(lcDispatcher) then
+                    exports.ox_target:removeLocalEntity(lcDispatcher)
+                    DeleteEntity(lcDispatcher)
+                end
+            end)
+        end
+    end
 end)
 
 -- Thread para atualizar trabalho ativo na NUI
@@ -2018,6 +2081,9 @@ AddEventHandler('onResourceStop', function(resourceName)
         end
         if blips.trailerCompany then
             RemoveBlip(blips.trailerCompany)
+        end
+        if blips.lcHq then
+            RemoveBlip(blips.lcHq)
         end
 
         -- Limpar blips de localização marcados
