@@ -1,49 +1,62 @@
 /* ============================================================
-   AUST_trucker — Padrão Lation (Lation Modern UI Design System)
-   Dark Theme & Glassmorphism
+   AUST_trucker — Padrão Lation (Lation Modern UI — Emerald Edition)
+   Dark Theme & Glassmorphism Design System
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    --primary-color: #0ea5e9;
-    --primary-color-hover: #0284c7;
-    --primary-gradient: linear-gradient(135deg, #0ea5e9 0%, #38bdf8 100%);
-    --primary-glow: rgba(14, 165, 233, 0.4);
+    /* Lation Signature Emerald Palette */
+    --primary-accent: #10b981;
+    --primary-accent-hover: #059669;
+    --primary-color: #10b981;
+    --primary-color-hover: #059669;
+    --primary-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --primary-glow: rgba(16, 185, 129, 0.45);
 
-    --accent-cyan: #06b6d4;
     --accent-emerald: #10b981;
+    --accent-neon: #6afe87;
+    --accent-cyan: #06b6d4;
     --accent-amber: #f59e0b;
     --accent-rose: #f43f5e;
 
-    --bg-main: rgba(15, 23, 42, 0.95);
+    /* Surfaces */
+    --bg-main: rgba(15, 23, 42, 0.96);
     --bg-sidebar: rgba(30, 41, 59, 0.55);
     --bg-card: rgba(30, 41, 59, 0.7);
     --bg-card-hover: rgba(51, 65, 85, 0.85);
     --bg-input: rgba(255, 255, 255, 0.05);
     --bg-input-focus: rgba(255, 255, 255, 0.09);
 
+    /* Borders & Lines */
     --border-subtle: rgba(255, 255, 255, 0.08);
-    --border-hover: rgba(14, 165, 233, 0.5);
-    --border-active: #0ea5e9;
+    --border-hover: rgba(16, 185, 129, 0.5);
+    --border-active: #10b981;
 
+    /* Typography */
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --text-muted: #64748b;
 
+    /* Radii */
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 14px;
     --radius-xl: 16px;
 
-    --shadow-main: 0 24px 60px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.08);
-    --shadow-card: 0 8px 20px rgba(0, 0, 0, 0.35);
+    /* Shadows (Clean line highlight, zero outer blur to avoid CEF black artifacts) */
+    --shadow-main: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
-/* Base & Font */
+/* Base & Font (100% Transparent, No filters, No shadows on outer viewport) */
 html, body {
     background: transparent !important;
     background-color: transparent !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     margin: 0 !important;
     padding: 0 !important;
     overflow: hidden !important;
@@ -52,7 +65,8 @@ html, body {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    font-family: 'Poppins', -apple-system, sans-serif !important;
+    font-family: 'Poppins', 'Inter', -apple-system, sans-serif !important;
+    box-sizing: border-box !important;
 }
 
 /* Custom Thin Scrollbar */
@@ -61,35 +75,39 @@ html, body {
     height: 5px;
 }
 ::-webkit-scrollbar-track {
-    background: rgba(0, 0, 0, 0.25);
+    background: rgba(0, 0, 0, 0.2);
     border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb {
-    background: rgba(14, 165, 233, 0.35);
+    background: rgba(16, 185, 129, 0.35);
     border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-    background: var(--primary-color);
+    background: var(--primary-accent);
 }
 
-/* Main Container Glassmorphism */
+/* Main Container (Painel Central Único, Isolado e 100% Contido) */
 .backgound-theme, .main {
-    width: 1280px !important;
-    height: 740px !important;
-    max-width: 95vw !important;
-    max-height: 92vh !important;
+    width: 85vw !important;
+    max-width: 1400px !important;
+    min-width: 880px !important;
+    height: 85vh !important;
+    max-height: 800px !important;
+    min-height: 550px !important;
     background: var(--bg-main) !important;
-    backdrop-filter: blur(16px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-xl) !important;
-    box-shadow: var(--shadow-main) !important;
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
     color: var(--text-primary) !important;
     display: flex !important;
     flex-direction: row !important;
     overflow: hidden !important;
     position: relative !important;
     box-sizing: border-box !important;
+    margin: auto !important;
+    isolation: isolate !important;
 }
 
 .main[style*="display: none"] {
@@ -113,6 +131,7 @@ html, body {
     position: relative !important;
     z-index: 10 !important;
     margin: 0 !important;
+    left: 0 !important;
 }
 
 .sidebar-navigation ul {
@@ -123,6 +142,7 @@ html, body {
     padding: 0 !important;
     list-style: none !important;
     width: 100% !important;
+    box-sizing: border-box !important;
 }
 
 .sidebar-navigation ul li {
@@ -135,9 +155,10 @@ html, body {
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     border-left: 3px solid transparent !important;
     border-radius: 0 8px 8px 0 !important;
-    margin-right: 4px !important;
+    margin: 0 4px 0 0 !important;
     padding: 0 !important;
     cursor: pointer !important;
+    box-sizing: border-box !important;
 }
 
 .sidebar-navigation ul li i {
@@ -151,15 +172,16 @@ html, body {
 }
 
 .sidebar-navigation ul li.active {
-    color: var(--primary-color) !important;
-    background: rgba(14, 165, 233, 0.12) !important;
-    border-left-color: var(--primary-color) !important;
+    color: var(--primary-accent) !important;
+    background: rgba(16, 185, 129, 0.15) !important;
+    border-left: 3px solid var(--primary-accent) !important;
+    box-shadow: inset 3px 0 0 var(--primary-accent), 0 0 10px rgba(16, 185, 129, 0.3) !important;
 }
 
 .sidebar-navigation ul li.active i {
-    color: var(--primary-color) !important;
+    color: var(--primary-accent) !important;
     transform: scale(1.08) !important;
-    filter: drop-shadow(0 0 8px var(--primary-glow)) !important;
+    filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5)) !important;
 }
 
 .sidebar-navigation ul li#sidebar-close:hover {
@@ -188,6 +210,7 @@ html, body {
     flex: 1 1 auto !important;
     height: 100% !important;
     width: calc(100% - 78px) !important;
+    min-width: 0 !important;
     position: relative !important;
     overflow: hidden !important;
     display: flex !important;
@@ -226,7 +249,7 @@ html, body {
 }
 
 .text-primary, i.text-primary {
-    color: var(--primary-color) !important;
+    color: var(--primary-accent) !important;
 }
 
 /* Floating Cards with Glow & Hover */
@@ -241,7 +264,7 @@ html, body {
 .card:hover, .card-theme:hover {
     background-color: var(--bg-card-hover) !important;
     border-color: var(--border-hover) !important;
-    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45) !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35) !important;
 }
 
 .card-centering:hover {
@@ -288,55 +311,88 @@ ul.list-inline li.card-theme:hover {
     box-shadow: 0 0 8px var(--primary-glow);
 }
 
-/* Buttons (Padrão Lation - Flat, vibrante e moderno) */
+/* ============================================================
+   Restauração Global de Botões — Padrão Lation (Emerald Edition)
+   Dimensionamento Confortável, Sem Esmagamento, Touch Target 42px+
+   ============================================================ */
+
+.btn, button, input[type="button"], input[type="submit"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    padding: 10px 22px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.3px !important;
+    line-height: 1.2 !important;
+    border-radius: var(--radius-sm) !important;
+    white-space: nowrap !important;
+    text-align: center !important;
+    cursor: pointer !important;
+    flex-shrink: 0 !important;
+    text-transform: none !important;
+    box-sizing: border-box !important;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.btn small, button small {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+
 .btn-primary {
     background: var(--primary-gradient) !important;
     border: none !important;
-    border-radius: var(--radius-sm) !important;
     color: #ffffff !important;
-    font-weight: 600 !important;
-    letter-spacing: 0.3px;
-    padding: 8px 18px !important;
-    box-shadow: 0 4px 14px var(--primary-glow) !important;
-    transition: all 0.2s ease !important;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4), 0 4px 14px rgba(16, 185, 129, 0.25) !important;
 }
 
 .btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px var(--primary-glow) !important;
-    filter: brightness(1.12);
+    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.6), 0 6px 20px rgba(16, 185, 129, 0.35) !important;
+    filter: brightness(1.1) !important;
+    color: #ffffff !important;
 }
 
 .btn-primary:active {
-    transform: translateY(0);
-}
-
-.btn-danger {
-    background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%) !important;
-    border: none !important;
-    border-radius: var(--radius-sm) !important;
-    color: #ffffff !important;
-    font-weight: 600 !important;
-    box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35) !important;
-    transition: all 0.2s ease;
-}
-
-.btn-danger:hover {
-    filter: brightness(1.12);
-    transform: translateY(-1px);
+    transform: translateY(0) !important;
 }
 
 .btn-outline-primary {
-    background: rgba(14, 165, 233, 0.08) !important;
-    border: 1px solid var(--primary-color) !important;
-    color: #7dd3fc !important;
-    border-radius: var(--radius-sm) !important;
-    font-weight: 500 !important;
-    transition: all 0.2s ease;
+    background: rgba(16, 185, 129, 0.08) !important;
+    border: 1px solid var(--primary-accent) !important;
+    color: #6ee7b7 !important;
 }
 
 .btn-outline-primary:hover {
-    background: var(--primary-color) !important;
+    background: var(--primary-accent) !important;
+    color: #ffffff !important;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.5) !important;
+}
+
+.btn-danger, .btn-outline-danger {
+    background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%) !important;
+    border: none !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35) !important;
+}
+
+.btn-danger:hover, .btn-outline-danger:hover {
+    filter: brightness(1.12) !important;
+    transform: translateY(-1px) !important;
+    color: #ffffff !important;
+}
+
+.btn-dark {
+    background: rgba(30, 41, 59, 0.8) !important;
+    border: 1px solid var(--border-subtle) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-dark:hover {
+    background: rgba(51, 65, 85, 0.9) !important;
     color: #ffffff !important;
 }
 
@@ -351,8 +407,8 @@ ul.list-inline li.card-theme:hover {
 
 .form-control:focus, input.form-control:focus, select.form-control:focus {
     background: var(--bg-input-focus) !important;
-    border-color: var(--primary-color) !important;
-    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.2) !important;
+    border-color: var(--primary-accent) !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25) !important;
     color: #ffffff !important;
 }
 
@@ -361,8 +417,9 @@ ul.list-inline li.card-theme:hover {
     background: rgba(15, 23, 42, 0.98) !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
-    box-shadow: var(--shadow-main) !important;
-    backdrop-filter: blur(20px);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
 }
 
 .modal-header, .modal-footer {
@@ -390,11 +447,11 @@ ul.list-inline li.card-theme:hover {
 /* Skills Tree */
 .steps.bg-success {
     background: var(--primary-gradient) !important;
-    box-shadow: 0 0 10px var(--primary-glow);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
 }
 
 .line.bg-success {
-    background: var(--primary-color) !important;
+    background: var(--primary-accent) !important;
 }
 
 .redsteps {
@@ -405,9 +462,9 @@ ul.list-inline li.card-theme:hover {
 }
 
 .redsteps:hover {
-    border-color: var(--primary-color);
+    border-color: var(--primary-accent);
     color: #fff !important;
-    background: rgba(14, 165, 233, 0.15) !important;
+    background: rgba(16, 185, 129, 0.15) !important;
     cursor: pointer;
 }
 
