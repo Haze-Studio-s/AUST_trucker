@@ -1112,20 +1112,33 @@ end)
 -- LC LOGISTICS: QUICK JOBS & FREIGHT CONTRACTS
 -- =====================================================
 
+local ActiveLCContracts = {}
+local StartingJobLock    = {}
+local LastNotifyTime     = {}
+
 local function StartLCContractForPlayer(src, contractId)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
 
-    if JobService.GetActiveByPlayer(citizenId) then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Você já possui uma entrega ativa!', 'error')
+    local now = os.time()
+    if StartingJobLock[citizenId] or ActiveLCContracts[citizenId] or JobService.GetActiveByPlayer(citizenId) then
+        if not LastNotifyTime[citizenId] or (now - LastNotifyTime[citizenId] >= 3) then
+            LastNotifyTime[citizenId] = now
+            TriggerClientEvent('aurp_trucker:notify', src, 'Você já possui uma entrega ativa!', 'error')
+        end
         return
     end
+
+    StartingJobLock[citizenId] = true
 
     contractId = tonumber(contractId) or 1
     local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
     local load = availableLoads[contractId] or availableLoads[1]
-    if not load then return end
+    if not load then
+        StartingJobLock[citizenId] = nil
+        return
+    end
 
     -- Local de entrega autoritativo
     local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
@@ -1169,6 +1182,9 @@ local function StartLCContractForPlayer(src, contractId)
         load.trailer, payment, dist
     })
 
+    ActiveLCContracts[citizenId] = jobId
+    StartingJobLock[citizenId] = nil
+
     local payload = {
         jobId = jobId,
         cargoName = load.name,
@@ -1182,7 +1198,6 @@ local function StartLCContractForPlayer(src, contractId)
     }
 
     TriggerClientEvent('aurp_trucker:client:startLCContract', src, payload)
-    TriggerClientEvent('truck_logistics:startContract', src, 'buccaneer_hq', payload, 1)
 end
 
 RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
@@ -1216,6 +1231,8 @@ RegisterNetEvent('truck_logistics:finishContract', function(engine, body, traile
         ]], { row.id })
         DB_AddPlayerStats(citizenId, payment, dist)
         ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+        ActiveLCContracts[citizenId] = nil
+        StartingJobLock[citizenId] = nil
         TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
             payment = payment,
             distance = dist,
@@ -1285,6 +1302,9 @@ RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parke
 
     DB_AddPlayerStats(citizenId, payment, dist)
     ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+
+    ActiveLCContracts[citizenId] = nil
+    StartingJobLock[citizenId] = nil
 
     TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
         payment = payment,

@@ -465,9 +465,11 @@ RegisterNUICallback('post', function(body, cb)
     if event == "startContract" then
         CloseJobBoard()
         SetNuiFocus(false, false)
+        if lcActiveJob or isStartingJob then return cb(200) end
+        isStartingJob = true
+        SetTimeout(3000, function() isStartingJob = false end)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
-        TriggerServerEvent('truck_logistics:startContract', 'buccaneer_hq', data)
         cb(200)
         return
     end
@@ -604,9 +606,11 @@ end)
 RegisterNUICallback('startJob', function(data, cb)
     CloseJobBoard()
     SetNuiFocus(false, false)
+    if lcActiveJob or isStartingJob then return cb('ok') end
+    isStartingJob = true
+    SetTimeout(3000, function() isStartingJob = false end)
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
-    TriggerServerEvent('truck_logistics:startContract', 'buccaneer_hq', data)
     cb('ok')
 end)
 
@@ -2785,9 +2789,11 @@ end)
 local lcActiveJob = nil
 local lcDeliveryPoint = nil
 local lcDeliveryBlip = nil
+local isStartingJob = false
 
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
-    if not contract then return end
+    if not contract or lcActiveJob then return end
+    isStartingJob = true
     lcActiveJob = contract
 
     -- 1. Spawn do caminhão da firma
@@ -2915,18 +2921,13 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     end)
 end)
 
-RegisterNetEvent('truck_logistics:startContract', function(key, contract_data, location)
-    if contract_data and not lcActiveJob then
-        TriggerEvent('aurp_trucker:client:startLCContract', contract_data)
-    end
-end)
-
 RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
     CloseJobBoard()
     SetNuiFocus(false, false)
 end)
 
 RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
+    isStartingJob = false
     if lcDeliveryPoint then
         pcall(function() lcDeliveryPoint:remove() end)
         lcDeliveryPoint = nil

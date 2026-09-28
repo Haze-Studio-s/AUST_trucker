@@ -504,9 +504,9 @@ window.addEventListener("message", async function (event) {
 
             let partystart_btn = "";
             if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" onclick="startContract(${contract.contract_id},true)" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
             }
-            let button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" onclick="startContract(${contract.contract_id},false)" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+            let button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
             if (contract.progress) {
                 button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                 partystart_btn = "";
@@ -591,7 +591,7 @@ window.addEventListener("message", async function (event) {
         const sorted_dealership = Utils.sortElement(config.dealership, ["required_level", "price"]);
         for (const truck of sorted_dealership) {
             let truckIdentifier = truck.id || truck.name || "";
-            let button_html = `<div class="mx-3 mt-3 mb-2"><button data-model="${truckIdentifier}" data-name="${truckIdentifier}" onclick="buyTruck('${truckIdentifier}')" type="button" class="btn btn-primary btn-block buy-truck-btn"><small>${Utils.translate("dealership_page_buy_button")}</small></button></div> <small class="d-flex justify-content-center text-muted">${Utils.translate("dealership_page_bottom_text")}</small>`;
+            let button_html = `<div class="mx-3 mt-3 mb-2"><button data-model="${truckIdentifier}" data-name="${truckIdentifier}" type="button" class="btn btn-primary btn-block buy-truck-btn"><small>${Utils.translate("dealership_page_buy_button")}</small></button></div> <small class="d-flex justify-content-center text-muted">${Utils.translate("dealership_page_bottom_text")}</small>`;
             let dealership_locked_background = "";
             if (config.player_level < truck.required_level) {
                 button_html = `<div class="mx-3 mt-4 mb-2"><div class="d-flex align-items-center" style="min-height: 35px;"><i class="fa-solid fa-lock text-muted"></i><span class=" ml-2 small">${Utils.translate("trucks_page_unlock").format(truck.required_level)}</span></div></div>`;
@@ -1268,25 +1268,34 @@ $(document).ready(function () {
         $("#new-contracts-2").text(`${baseText} (${timeStr})`);
     }, 1000);
 
-    // Delegação de Eventos para botões gerados dinamicamente no DOM
-    $(document).on("click", ".start-job-btn", function(e) {
+    // Trava de Debounce contra duplo clique / spam
+    let isActionProcessing = false;
+
+    // Delegação de Eventos para botões gerados dinamicamente no DOM (com remoção preventiva de listeners duplicados)
+    $(document).off("click", ".start-job-btn").on("click", ".start-job-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         if (typeof id !== "undefined" && id !== null) {
             startContract(Number(id) || id, false);
         }
     });
 
-    $(document).on("click", ".party-start-job-btn", function(e) {
+    $(document).off("click", ".party-start-job-btn").on("click", ".party-start-job-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         if (typeof id !== "undefined" && id !== null) {
             startContract(Number(id) || id, true);
         }
     });
 
-    $(document).on("click", ".buy-truck-btn", function(e) {
+    $(document).off("click", ".buy-truck-btn").on("click", ".buy-truck-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing) return;
         let model = $(this).attr("data-model") || $(this).attr("data-name");
         if (model) {
             buyTruck(model);
@@ -1305,46 +1314,35 @@ function closeUI() {
     try {
         Utils.post("close", {});
     } catch(e) {}
-    try {
-        let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-        fetch(`https://${parentResource}/close`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({})
-        }).catch(function() {});
-    } catch(e) {}
 }
+
+let isContractStarting = false;
+
 function startContract(contract_id, party) {
-    let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-    try {
-        Utils.post("startContract", { id: contract_id, contractId: contract_id, jobId: contract_id, party: party });
-    } catch(e) {}
-    try {
-        fetch(`https://${parentResource}/startJob`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ id: contract_id, jobId: contract_id, contractId: contract_id, party: party })
-        }).catch(function() {});
-    } catch(e) {}
+    if (isContractStarting) return;
+    isContractStarting = true;
+    setTimeout(() => { isContractStarting = false; }, 2500);
+
+    closeUI();
+    Utils.post("startContract", { id: contract_id, party: party });
 }
+
 function cancelContract(contract_id) {
     Utils.post("cancelContract", { id: contract_id });
 }
+
 function sellTruck(truck_id, truck_name) {
     Utils.showDefaultDangerModal(() => Utils.post("sellTruck", { truck_id: truck_id, truck_name: truck_name }), Utils.translate("confirmation_modal_sell_vehicle"));
 }
+
+let isTruckBuying = false;
+
 function buyTruck(truck_name) {
-    let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-    try {
-        Utils.post("buyTruck", { truck_name: truck_name, model: truck_name, name: truck_name, id: truck_name });
-    } catch(e) {}
-    try {
-        fetch(`https://${parentResource}/buyTruck`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ model: truck_name, truck_name: truck_name, name: truck_name, id: truck_name })
-        }).catch(function() {});
-    } catch(e) {}
+    if (isTruckBuying) return;
+    isTruckBuying = true;
+    setTimeout(() => { isTruckBuying = false; }, 2500);
+
+    Utils.post("buyTruck", { truck_name: truck_name });
 }
 function spawnTruck(truck_id) {
     Utils.post("spawnTruck", { truck_id: truck_id });
