@@ -186,8 +186,9 @@ html, body {
 
 .sidebar-navigation {
 	height: 100%;
-	width: 78px;
+	width: 86px;
 	flex-shrink: 0;
+	box-sizing: border-box;
 }
 
 .sidebar-navigation ul {
@@ -199,34 +200,52 @@ html, body {
 	text-align: center;
 	color: white;
 	height: 100%;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	box-sizing: border-box;
 }
 
 .sidebar-navigation ul li {
-	padding: 18px 0;
+	height: 48px;
+	min-height: 48px;
+	width: 100%;
+	padding: 0;
 	cursor: pointer;
 	transition: all ease-out 120ms;
-    max-height: 60px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	box-sizing: border-box;
 }
 
 .sidebar-navigation ul li i {
-	display: block;
-	font-size: 24px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 20px;
+	width: 28px;
+	height: 28px;
+	margin: 0 auto;
 	transition: all ease 450ms;
-	width: 100%;
 }
 
 .sidebar-navigation ul li .tooltip {
-	display: inline-block;
-	position: relative;
+	position: absolute;
+	left: 92px;
+	top: 50%;
+	transform: translateY(-50%);
+	margin: 0;
 	padding: 8px 15px;
 	border-radius: 3px;
-	margin-top: -26px;
-	left: 90px;
 	opacity: 0;
 	visibility: hidden;
+	pointer-events: none;
 	font-size: 12px;
 	letter-spacing: 0.5px;
 	white-space: nowrap;
+	z-index: 9999;
 }
 
 .sidebar-navigation ul li .tooltip:before {

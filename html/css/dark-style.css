@@ -116,15 +116,15 @@ html, body {
 
 /* Minimalist Sidebar (Lation Style) */
 .sidebar-navigation {
-    width: 78px !important;
-    min-width: 78px !important;
-    max-width: 78px !important;
+    width: 86px !important;
+    min-width: 86px !important;
+    max-width: 86px !important;
     height: 100% !important;
     flex-shrink: 0 !important;
     background: var(--bg-sidebar) !important;
     border-right: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-xl) 0 0 var(--radius-xl) !important;
-    padding: 12px 0 !important;
+    padding: 14px 0 !important;
     display: flex !important;
     flex-direction: column !important;
     box-sizing: border-box !important;
@@ -147,22 +147,31 @@ html, body {
 
 .sidebar-navigation ul li {
     height: 48px !important;
-    max-height: 48px !important;
+    min-height: 48px !important;
+    width: 100% !important;
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
+    position: relative !important;
     color: var(--text-muted) !important;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
     border-left: 3px solid transparent !important;
     border-radius: 0 8px 8px 0 !important;
-    margin: 0 4px 0 0 !important;
+    margin: 0 !important;
     padding: 0 !important;
     cursor: pointer !important;
     box-sizing: border-box !important;
 }
 
 .sidebar-navigation ul li i {
-    font-size: 18px !important;
+    font-size: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 28px !important;
+    height: 28px !important;
+    margin: 0 auto !important;
+    text-align: center !important;
     transition: all 0.2s ease !important;
 }
 
@@ -180,7 +189,7 @@ html, body {
 
 .sidebar-navigation ul li.active i {
     color: var(--primary-accent) !important;
-    transform: scale(1.08) !important;
+    transform: scale(1.1) !important;
     filter: drop-shadow(0 0 8px rgba(16, 185, 129, 0.5)) !important;
 }
 
@@ -193,23 +202,38 @@ html, body {
 }
 
 .sidebar-navigation ul li .tooltip {
-    background: rgba(15, 23, 42, 0.95) !important;
+    position: absolute !important;
+    left: 92px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    margin: 0 !important;
+    display: block !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    background: rgba(15, 23, 42, 0.98) !important;
     color: #f8fafc !important;
-    padding: 6px 12px !important;
+    padding: 6px 14px !important;
     border-radius: var(--radius-sm) !important;
     font-size: 12px !important;
     font-weight: 500 !important;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5) !important;
+    white-space: nowrap !important;
     border: 1px solid var(--border-subtle) !important;
-    left: 86px !important;
-    z-index: 100 !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4) !important;
+    z-index: 9999 !important;
+    transition: opacity 0.2s ease, visibility 0.2s ease !important;
+}
+
+.sidebar-navigation ul li:hover .tooltip {
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 
 /* Pages Container */
 .container-pages {
     flex: 1 1 auto !important;
     height: 100% !important;
-    width: calc(100% - 78px) !important;
+    width: calc(100% - 86px) !important;
     min-width: 0 !important;
     position: relative !important;
     overflow: hidden !important;
