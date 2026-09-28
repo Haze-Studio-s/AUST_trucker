@@ -17,6 +17,7 @@ import { PartyPanel } from './components/convoy/PartyPanel'
 import { NpcDriverPanel } from './components/company/NpcDriverPanel'
 import { NpcEventAlert } from './components/overlay/NpcEventAlert'
 import { AdrPanel } from './components/adr/AdrPanel'
+import { LoanPanel } from './components/loans/LoanPanel'
 
 export default function App() {
   useNUI()
@@ -43,6 +44,7 @@ export default function App() {
           <main className="flex-1 overflow-y-auto p-5 bg-lation-surface">
             {activeTab === 'jobs'       && <JobList />}
             {activeTab === 'garage'     && <GaragePanel />}
+            {activeTab === 'loans'      && <LoanPanel />}
             {activeTab === 'missions'   && <RepoPanel />}
             {activeTab === 'active'     && <ActiveJob />}
             {activeTab === 'company'    && (company ? <CompanyPanel /> : <CompanySetup />)}

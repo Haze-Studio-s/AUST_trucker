@@ -21,16 +21,23 @@ local function CalcRank(level)
     return math.min(6, math.ceil(level / 5))
 end
 
--- XP ganho por entrega = base_payment / 10, ajustado pelo multiplicador de tempo
-local function CalcXP(basePayment, timeMultiplier)
-    return math.max(5, math.floor((basePayment / 10) * timeMultiplier))
+-- XP ganho por entrega = base_payment / 10, ajustado pelo multiplicador de tempo e distância
+local function CalcXP(basePayment, timeMultiplier, distance)
+    local distXP = 0
+    if distance and Config.LC_ExpGain then
+        distXP = math.floor(distance * Config.LC_ExpGain)
+    end
+    local paymentXP = math.floor((basePayment / 10) * (timeMultiplier or 1.0))
+    return math.max(15, math.max(paymentXP, distXP))
 end
 
 -- Calcula o nível correspondente ao XP total acumulado
 local function CalcLevel(xp)
+    local req = Config.LC_RequiredXP or LEVEL_THRESHOLDS
+    local maxLvl = (req == Config.LC_RequiredXP) and 36 or 30
     local level = 1
-    for lvl = 2, 30 do
-        if LEVEL_THRESHOLDS[lvl] <= xp then
+    for lvl = 1, maxLvl do
+        if req[lvl] and xp >= req[lvl] then
             level = lvl
         else
             break
@@ -41,13 +48,13 @@ end
 
 -- Concede XP ao jogador, processa level-ups, notifica o cliente
 -- Returns: { xpGained, newLevel, levelsGained }
-function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier)
-    local xpGained = CalcXP(basePayment, timeMultiplier)
+function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier, distance)
+    local xpGained = CalcXP(basePayment, timeMultiplier, distance)
     local row = DB_AddXP(citizenId, xpGained)
     if not row then return { xpGained = xpGained, levelsGained = 0, newLevel = 1 } end
 
-    local newLevel    = CalcLevel(row.xp)
-    local oldLevel    = row.level
+    local newLevel     = CalcLevel(row.xp)
+    local oldLevel     = row.level
     local levelsGained = newLevel - oldLevel
 
     if levelsGained > 0 then
@@ -138,7 +145,15 @@ end
 -- Compra um nível de skill gastando 1 skill point
 -- Retorna: true | false, motivo (string)
 function ProgressionService.PurchaseSkill(src, citizenId, skillType)
-    local validTypes = { distance = true, valuable = true, fragile = true, speed = true }
+    local validTypes = {
+        distance = true,
+        valuable = true,
+        fragile = true,
+        fast = true,
+        speed = true,
+        illegal = true,
+        product_type = true
+    }
     if not validTypes[skillType] then
         return false, 'Tipo de skill inválido'
     end

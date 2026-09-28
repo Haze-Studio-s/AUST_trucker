@@ -345,6 +345,61 @@ local TABLES = {
         `fee`         INT         NOT NULL,
         `rented_at`   DATETIME    DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- lc_truck_logistics: Frota de Caminhões Próprios e Condição Mecânica
+    [[CREATE TABLE IF NOT EXISTS `trucker_trucks` (
+        `truck_id`     INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id`      VARCHAR(50) NOT NULL,
+        `truck_name`   VARCHAR(50) NOT NULL,
+        `driver`       INT(10) UNSIGNED NULL DEFAULT NULL,
+        `body`         SMALLINT(5) UNSIGNED NOT NULL DEFAULT 1000,
+        `engine`       SMALLINT(5) UNSIGNED NOT NULL DEFAULT 1000,
+        `transmission` SMALLINT(5) UNSIGNED NOT NULL DEFAULT 1000,
+        `wheels`       SMALLINT(5) UNSIGNED NOT NULL DEFAULT 1000,
+        `fuel`         INT(11) UNSIGNED NOT NULL DEFAULT 100,
+        `properties`   LONGTEXT NOT NULL,
+        `garage_id`    VARCHAR(50) NOT NULL DEFAULT 'trucker_1',
+        INDEX `idx_tt_user` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- lc_truck_logistics: Reboques Próprios
+    [[CREATE TABLE IF NOT EXISTS `trucker_trailers` (
+        `trailer_id`   INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id`      VARCHAR(50) NOT NULL,
+        `trailer_name` VARCHAR(50) NOT NULL,
+        `body`         SMALLINT(5) UNSIGNED NOT NULL DEFAULT 1000,
+        `garage_id`    VARCHAR(50) NOT NULL DEFAULT 'trucker_1',
+        `properties`   LONGTEXT NULL DEFAULT NULL,
+        INDEX `idx_tr_user` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- lc_truck_logistics: Sedes e Garagens Adquiridas
+    [[CREATE TABLE IF NOT EXISTS `trucker_garages` (
+        `id`           INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id`      VARCHAR(50) NOT NULL,
+        `garage_id`    VARCHAR(50) NOT NULL,
+        `level`        TINYINT(3) UNSIGNED NOT NULL DEFAULT 1,
+        `max_slots`    TINYINT(3) UNSIGNED NOT NULL DEFAULT 2,
+        `purchased_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_user_garage` (`user_id`, `garage_id`),
+        INDEX `idx_tg_user` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- lc_truck_logistics: Motoristas NPCs Contratados
+    [[CREATE TABLE IF NOT EXISTS `trucker_drivers` (
+        `driver_id`    INT(10) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+        `user_id`      VARCHAR(50) NULL DEFAULT NULL,
+        `name`         VARCHAR(50) NOT NULL DEFAULT '',
+        `product_type` TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        `distance`     TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        `valuable`     TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        `fragile`      TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        `fast`         TINYINT(3) UNSIGNED NOT NULL DEFAULT 0,
+        `price`        INT(10) UNSIGNED NOT NULL DEFAULT 0,
+        `img`          VARCHAR(50) NULL DEFAULT NULL,
+        `truck_id`     INT(10) UNSIGNED NULL DEFAULT NULL,
+        INDEX `idx_td_user` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 }
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)
@@ -358,6 +413,28 @@ local MIGRATIONS = {
     "ALTER TABLE trucker_contracts ADD COLUMN contract_source ENUM('negotiation','resupply','auto') DEFAULT 'negotiation'",
     "ALTER TABLE trucker_contracts ADD COLUMN target_shop_id VARCHAR(80) NULL",
     "ALTER TABLE trucker_contracts ADD COLUMN target_item VARCHAR(50) NULL",
+    -- lc_truck_logistics compatibility: trucker_jobs
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `contract_type` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `cargo_type` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `fragile` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `valuable` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `fast` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `illegal` TINYINT NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_jobs` ADD COLUMN `external_data` TEXT NULL DEFAULT NULL",
+    -- lc_truck_logistics compatibility: trucker_loans
+    "ALTER TABLE `trucker_loans` ADD COLUMN `loan` INT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_loans` ADD COLUMN `remaining_amount` INT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_loans` ADD COLUMN `day_cost` INT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_loans` ADD COLUMN `taxes_on_day` INT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_loans` ADD COLUMN `timer` INT UNSIGNED NOT NULL DEFAULT 0",
+    -- lc_truck_logistics compatibility: skills expansion
+    "ALTER TABLE `trucker_player_skills` MODIFY COLUMN `skill_type` VARCHAR(32) NOT NULL",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `product_type` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `distance_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `valuable_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `fragile_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `fast_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    "ALTER TABLE `trucker_player_progression` ADD COLUMN `illegal_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
 }
 
 ---Garante que todas as tabelas e migrations existam. Chamado dentro de MySQL.ready (main.lua).
@@ -524,14 +601,15 @@ end
 -- ============================================================
 
 function DB_InsertJob(job, convoyId)
-    -- job = { id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, cargo_qty, weight }
+    -- job = { id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal }
     -- convoyId: VARCHAR(36) opcional — nil para jobs individuais
     return MySQL.insert.await(
         [[INSERT INTO trucker_jobs
-          (id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, convoy_id, cargo_qty, weight)
-          VALUES (?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), ?, ?, ?)]],
+          (id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, convoy_id, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal)
+          VALUES (?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), ?, ?, ?, ?, ?, ?, ?, ?, ?)]],
         { job.id, job.origin_id, job.dest_id, job.cargo_item, job.trailer_model,
-          job.base_payment, job.distance, job.expires_at, convoyId or nil, job.cargo_qty or 1, job.weight or 80 }
+          job.base_payment, job.distance, job.expires_at, convoyId or nil, job.cargo_qty or 1, job.weight or 80,
+          job.contract_type or 0, job.cargo_type or job.cargo_item, job.fragile or 0, job.valuable or 0, job.fast or 0, job.illegal or 0 }
     )
 end
 
@@ -659,6 +737,23 @@ function DB_UpsertSkill(citizenId, skillType, newLevel)
           ON DUPLICATE KEY UPDATE skill_level = VALUES(skill_level)]],
         { citizenId, skillType, newLevel }
     )
+
+    local colMap = {
+        distance = 'distance_skill',
+        valuable = 'valuable_skill',
+        fragile = 'fragile_skill',
+        fast = 'fast_skill',
+        speed = 'fast_skill',
+        product_type = 'product_type',
+        illegal = 'illegal_skill',
+    }
+    local col = colMap[skillType]
+    if col then
+        MySQL.update.await(
+            string.format('UPDATE trucker_player_progression SET %s = ? WHERE citizenid = ?', col),
+            { newLevel, citizenId }
+        )
+    end
 end
 
 -- Gasta 1 skill point — retorna número de linhas afetadas (0 = falhou, ponto já foi gasto)

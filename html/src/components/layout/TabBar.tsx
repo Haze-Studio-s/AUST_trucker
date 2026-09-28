@@ -17,7 +17,8 @@ export function TabBar() {
 
   const TABS: { id: TabName; label: string; icon?: string }[] = [
     { id: isRepo ? 'missions' : 'jobs', label: isRepo ? 'Missões Guincho' : 'Fretes Disponíveis' },
-    { id: 'garage',     label: 'Frota & Aluguel' },
+    { id: 'garage',     label: 'Frota & Concessionária' },
+    { id: 'loans',      label: 'Financiamento' },
     { id: 'active',     label: 'Viagem Ativa' },
     { id: 'company',    label: 'Empresa' },
     { id: 'industries', label: 'Indústrias' },

@@ -1,8 +1,19 @@
 import { useEffect, useState } from 'react'
-import { useCompanyStore } from '../../stores/useCompanyStore'
 import { useAppStore } from '../../stores/useAppStore'
 import { fetchNUI } from '../../hooks/useNUI'
-import type { Vehicle, RentalTruck } from '../../types'
+import type { RentalTruck, FleetTruck, DealershipTruck } from '../../types'
+
+const DEFAULT_DEALERSHIP: Record<string, DealershipTruck> = {
+  vetirs: { name: 'Vetir Semi', price: 25000, engine: '10.0L Vetir I6', transmission: '5-Speed', hp: '380', img: 'img/trucks/vetirs.png', driver_bonus: 1, required_level: 0 },
+  blacktop: { name: 'Brute Blacktop', price: 45000, engine: '11.0L Brute I6', transmission: '6-Speed', hp: '420', img: 'img/trucks/blacktop.png', driver_bonus: 2, required_level: 4 },
+  brickades: { name: 'MTL Brickade', price: 60000, engine: '12.5L Turbocharged V8', transmission: '8-Speed', hp: '480', img: 'img/trucks/brickades.png', driver_bonus: 4, required_level: 10 },
+  hauler: { name: 'JoBuilt Hauler', price: 70000, engine: '12.0L Turbocharged V8', transmission: '8-Speed', hp: '500', img: 'img/trucks/hauler.png', driver_bonus: 4, required_level: 12 },
+  aerocab: { name: 'Vapid Tanker', price: 90000, engine: '12.5L Turbocharged V8', transmission: '8-Speed', hp: '565', img: 'img/trucks/aerocab.png', driver_bonus: 6, required_level: 16 },
+  linerunner: { name: 'HVY Linerunner', price: 105000, engine: '14.0L Supercharged V10', transmission: '10-Speed', hp: '580', img: 'img/trucks/linerunner.png', driver_bonus: 6, required_level: 18 },
+  packer: { name: 'MTL Packer', price: 110000, engine: '13.0L Supercharged V8', transmission: '8-Speed', hp: '570', img: 'img/trucks/packer.png', driver_bonus: 6, required_level: 20 },
+  phantom: { name: 'JoBuilt Phantom', price: 130000, engine: '15.0L Turbocharged V12', transmission: '10-Speed', hp: '600', img: 'img/trucks/phantom.png', driver_bonus: 8, required_level: 24 },
+  phantom3: { name: 'JoBuilt Phantom Custom', price: 180000, engine: '16.5L Twin-Turbo V16', transmission: '12-Speed Plus', hp: '650', img: 'img/trucks/phantom3.png', driver_bonus: 10, required_level: 30 }
+}
 
 const DEFAULT_RENTAL_TRUCKS: RentalTruck[] = [
   { model: 'hauler', label: 'Hauler Comercial', fee: 300, deposit: 1500, capacity: '18.000 kg' },
@@ -11,265 +22,300 @@ const DEFAULT_RENTAL_TRUCKS: RentalTruck[] = [
 ]
 
 export function GaragePanel() {
-  const { company, vehicles, setVehicles } = useCompanyStore()
   const { rentalTrucks, activeRental, setActiveRental } = useAppStore()
-  const [renting, setRenting] = useState(false)
-  const [returning, setReturning] = useState(false)
+  const [subTab, setSubTab] = useState<'fleet' | 'dealership' | 'rental'>('fleet')
+  const [fleetTrucks, setFleetTrucks] = useState<FleetTruck[]>([])
+  const [actionLoading, setActionLoading] = useState<number | null>(null)
 
   const availableRentals = rentalTrucks.length > 0 ? rentalTrucks : DEFAULT_RENTAL_TRUCKS
 
+  const loadFleet = async () => {
+    try {
+      const res = await fetchNUI<any>('getInitialData', {})
+      if (res && res.fleetTrucks) {
+        setFleetTrucks(res.fleetTrucks)
+      }
+    } catch {
+      // Dev mode fallback
+    }
+  }
+
   useEffect(() => {
-    if (!company) return
-    fetchNUI<Vehicle[]>('getVehicles', { companyId: company.id })
-      .then(data => setVehicles(data ?? []))
-      .catch(() => {})
-  }, [company?.id, setVehicles])
+    loadFleet()
+  }, [])
+
+  async function handleBuy(model: string) {
+    try {
+      const res = await fetchNUI<{ ok: boolean; truck?: any; reason?: string }>('buyTruck', { model })
+      if (res && res.ok) {
+        loadFleet()
+        setSubTab('fleet')
+      }
+    } catch {}
+  }
+
+  async function handleSell(truckId: number) {
+    setActionLoading(truckId)
+    try {
+      const res = await fetchNUI<{ ok: boolean; refund?: number }>('sellTruck', { truckId })
+      if (res && res.ok) {
+        loadFleet()
+      }
+    } catch {}
+    setActionLoading(null)
+  }
+
+  async function handleRepair(truckId: number, part: string = 'all') {
+    setActionLoading(truckId)
+    try {
+      const res = await fetchNUI<{ ok: boolean; info?: any }>('repairTruck', { truckId, part })
+      if (res && res.ok) {
+        loadFleet()
+      }
+    } catch {}
+    setActionLoading(null)
+  }
 
   async function handleRent(model: string) {
     if (activeRental) return
-    setRenting(true)
     try {
       const res = await fetchNUI<{ ok: boolean; rental?: any; reason?: string }>('rentTruck', { model })
       if (res && res.ok && res.rental) {
         setActiveRental(res.rental)
       }
-    } catch {
-      // Ignorar falha de fetch no Dev
-    }
-    setRenting(false)
+    } catch {}
   }
 
   async function handleReturn() {
-    setReturning(true)
     try {
       const res = await fetchNUI<{ ok: boolean; reason?: string }>('returnTruck', {})
       if (res && res.ok) {
         setActiveRental(null)
       }
-    } catch {
-      // Ignorar
-    }
-    setReturning(false)
-  }
-
-  async function handleRegister() {
-    await fetchNUI('registerVehicle').catch(() => {})
-    if (company) {
-      fetchNUI<Vehicle[]>('getVehicles', { companyId: company.id })
-        .then(data => setVehicles(data ?? []))
-        .catch(() => {})
-    }
-  }
-
-  async function handleRetrieve(plate: string) {
-    await fetchNUI('retrieveVehicle', { plate }).catch(() => {})
-  }
-
-  async function handleStore(plate: string) {
-    await fetchNUI('storeVehicle', { plate }).catch(() => {})
+    } catch {}
   }
 
   return (
-    <div className="space-y-6 select-none">
-      {/* ─── SEÇÃO 1: CENTRAL DE LOCAÇÃO DE CAMINHÕES ─── */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between border-b border-lation-line pb-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded bg-lation-accent" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-lation-content-sec">
-              Locadora de Caminhões
-            </h3>
-            <span className="chip text-[10px] text-lation-accent-soft bg-lation-surface-elevated py-0.5 px-2">
-              Caução Reembolsável
-            </span>
-          </div>
-
-          <span className="text-[11px] text-lation-content-muted">
-            Locação individual por diária
-          </span>
+    <div className="space-y-4 select-none">
+      {/* Sub-Tabs de Navegação */}
+      <div className="flex items-center justify-between border-b border-lation-line pb-2">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSubTab('fleet')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              subTab === 'fleet'
+                ? 'bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border shadow-sm'
+                : 'bg-lation-surface-deep text-lation-content-sec border border-lation-line hover:text-white'
+            }`}
+          >
+            🚛 Minha Frota ({fleetTrucks.length})
+          </button>
+          <button
+            onClick={() => setSubTab('dealership')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              subTab === 'dealership'
+                ? 'bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border shadow-sm'
+                : 'bg-lation-surface-deep text-lation-content-sec border border-lation-line hover:text-white'
+            }`}
+          >
+            🏢 Concessionária
+          </button>
+          <button
+            onClick={() => setSubTab('rental')}
+            className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+              subTab === 'rental'
+                ? 'bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border shadow-sm'
+                : 'bg-lation-surface-deep text-lation-content-sec border border-lation-line hover:text-white'
+            }`}
+          >
+            🔑 Aluguel com Caução
+          </button>
         </div>
+      </div>
 
-        {/* Card de Locação Ativa (Se houver caminhão alugado) */}
-        {activeRental ? (
-          <div className="p-4 rounded-lg bg-lation-surface-band border border-lation-accent bg-gradient-to-r from-emerald-500/10 via-transparent to-transparent flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-lation-btn-bg border border-lation-btn-border flex items-center justify-center text-lation-btn-text text-xl">
-                🚚
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-sm text-white uppercase">{activeRental.model}</span>
-                  <span className="chip text-[10px] font-mono py-0.5 px-1.5 bg-lation-surface-deep text-lation-accent-bright border-lation-line">
-                    PLACA: {activeRental.plate}
-                  </span>
-                </div>
-                <p className="text-xs text-lation-content-sec mt-0.5">
-                  Caução em custódia: <b className="font-mono text-white">R$ {activeRental.deposit?.toLocaleString('pt-BR') || '1.500'}</b> · Taxa diária paga
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={handleReturn}
-              disabled={returning}
-              className="px-4 py-2 rounded-lg text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-all flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {returning ? 'Processando Devolução...' : 'Devolver Caminhão & Reaver Caução'}
-            </button>
-          </div>
-        ) : (
-          /* Grid de Caminhões para Locação */
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {availableRentals.map(truck => (
-              <div
-                key={truck.model}
-                className="p-3.5 rounded-lg bg-lation-surface-deep border border-lation-line hover:border-lation-line-hover hover:bg-lation-surface-hover transition-all flex flex-col justify-between"
+      {/* ABA 1: MINHA FROTA & OFICINA MECÂNICA */}
+      {subTab === 'fleet' && (
+        <div className="space-y-3">
+          {fleetTrucks.length === 0 ? (
+            <div className="p-8 text-center bg-lation-surface-deep border border-lation-line rounded-lg">
+              <span className="text-3xl mb-2 block">🚛</span>
+              <h4 className="text-sm font-bold text-white">Nenhum caminhão próprio na frota</h4>
+              <p className="text-xs text-lation-content-muted mt-1">
+                Adquira seu primeiro veículo na Concessionária para participar do Mercado de Fretes sem taxas de aluguel.
+              </p>
+              <button
+                onClick={() => setSubTab('dealership')}
+                className="mt-4 px-4 py-2 rounded-md bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border text-xs font-bold hover:brightness-110"
               >
-                <div>
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="font-bold text-sm text-white">{truck.label}</h4>
-                      <p className="text-[11px] font-mono text-lation-content-muted uppercase mt-0.5">
-                        Modelo: {truck.model}
-                      </p>
-                    </div>
-                    <span className="chip text-[10px] bg-lation-surface-elevated text-lation-content-sec">
-                      {truck.capacity || '20.000 kg'}
-                    </span>
-                  </div>
+                Abrir Concessionária
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {fleetTrucks.map((truck) => {
+                const catalogItem = DEFAULT_DEALERSHIP[truck.truck_name]
+                const name = catalogItem ? catalogItem.name : truck.truck_name.toUpperCase()
+                const enginePercent = Math.max(0, Math.floor(truck.engine / 10))
+                const bodyPercent = Math.max(0, Math.floor(truck.body / 10))
+                const transPercent = Math.max(0, Math.floor(truck.transmission / 10))
+                const wheelsPercent = Math.max(0, Math.floor(truck.wheels / 10))
+                const isLoading = actionLoading === truck.truck_id
 
-                  {/* Informações de Custo e Caução */}
-                  <div className="mt-3 space-y-1.5 text-xs bg-lation-surface-band p-2 rounded border border-lation-line">
-                    <div className="flex justify-between">
-                      <span className="text-lation-content-muted">Taxa de Locação:</span>
-                      <span className="font-mono font-semibold text-white">R$ {truck.fee.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-lation-content-muted">Caução (Seguro):</span>
-                      <span className="font-mono font-semibold text-lation-accent-bright">
-                        R$ {truck.deposit.toLocaleString('pt-BR')}
+                return (
+                  <div key={truck.truck_id} className="p-4 bg-lation-surface-band border border-lation-line rounded-lg space-y-3">
+                    <div className="flex items-center justify-between border-b border-lation-line/60 pb-2">
+                      <div>
+                        <h4 className="text-sm font-bold text-white">{name}</h4>
+                        <span className="text-[10px] font-mono text-lation-accent-bright font-semibold">
+                          ID: #{truck.truck_id} • Garagem: {truck.garage_id || 'Principal'}
+                        </span>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-lation-btn-text bg-lation-surface-deep border border-lation-line px-2.5 py-1 rounded">
+                        Combustível: {truck.fuel}%
                       </span>
                     </div>
+
+                    {/* Status de Desgaste Mecânico */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="p-2 bg-lation-surface-deep border border-lation-line rounded">
+                        <div className="flex justify-between text-[10px] font-semibold text-lation-content-muted mb-1">
+                          <span>⚙️ Motor</span>
+                          <span className={enginePercent < 50 ? 'text-rose-400' : 'text-emerald-400'}>{enginePercent}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-lation-surface rounded-full overflow-hidden">
+                          <div className={`h-full ${enginePercent < 50 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${enginePercent}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-lation-surface-deep border border-lation-line rounded">
+                        <div className="flex justify-between text-[10px] font-semibold text-lation-content-muted mb-1">
+                          <span>🛡️ Lataria</span>
+                          <span className={bodyPercent < 50 ? 'text-rose-400' : 'text-emerald-400'}>{bodyPercent}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-lation-surface rounded-full overflow-hidden">
+                          <div className={`h-full ${bodyPercent < 50 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${bodyPercent}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-lation-surface-deep border border-lation-line rounded">
+                        <div className="flex justify-between text-[10px] font-semibold text-lation-content-muted mb-1">
+                          <span>🔄 Transmissão</span>
+                          <span className={transPercent < 50 ? 'text-rose-400' : 'text-emerald-400'}>{transPercent}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-lation-surface rounded-full overflow-hidden">
+                          <div className={`h-full ${transPercent < 50 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${transPercent}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="p-2 bg-lation-surface-deep border border-lation-line rounded">
+                        <div className="flex justify-between text-[10px] font-semibold text-lation-content-muted mb-1">
+                          <span>🔘 Pneus</span>
+                          <span className={wheelsPercent < 50 ? 'text-rose-400' : 'text-emerald-400'}>{wheelsPercent}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-lation-surface rounded-full overflow-hidden">
+                          <div className={`h-full ${wheelsPercent < 50 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${wheelsPercent}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Ações da Oficina e Venda */}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => handleRepair(truck.truck_id, 'all')}
+                        disabled={isLoading}
+                        className="flex-1 py-1.5 bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border rounded text-xs font-bold hover:brightness-110"
+                      >
+                        🔧 Reparar Geral
+                      </button>
+                      <button
+                        onClick={() => handleSell(truck.truck_id)}
+                        disabled={isLoading}
+                        className="py-1.5 px-3 bg-rose-500/10 text-rose-400 border border-rose-500/30 rounded text-xs font-bold hover:bg-rose-500/20"
+                      >
+                        💵 Vender (70%)
+                      </button>
+                    </div>
                   </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ABA 2: CONCESSIONÁRIA */}
+      {subTab === 'dealership' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Object.entries(DEFAULT_DEALERSHIP).map(([modelKey, truck]) => (
+            <div key={modelKey} className="p-4 bg-lation-surface-band border border-lation-line rounded-lg flex flex-col justify-between space-y-3">
+              <div>
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-white">{truck.name}</h4>
+                  <span className="font-mono text-xs font-bold text-lation-btn-text">
+                    R$ {truck.price.toLocaleString('pt-BR')}
+                  </span>
                 </div>
 
+                <div className="mt-2 space-y-1 text-[11px] text-lation-content-muted">
+                  <p>• Motor: <span className="text-white font-mono">{truck.engine}</span></p>
+                  <p>• Câmbio: <span className="text-white font-mono">{truck.transmission}</span></p>
+                  <p>• Potência: <span className="text-white font-mono">{truck.hp} HP</span></p>
+                  <p>• Nível Mínimo: <span className="text-lation-accent-bright font-bold">Nível {truck.required_level}</span></p>
+                  <p>• Bônus p/ Motorista: <span className="text-emerald-400 font-bold">+{truck.driver_bonus}%</span></p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => handleBuy(modelKey)}
+                className="w-full py-2 bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border rounded text-xs font-bold hover:brightness-110 tracking-wide"
+              >
+                Comprar Caminhão
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ABA 3: ALUGUEL COM CAUÇÃO */}
+      {subTab === 'rental' && (
+        <div className="space-y-3">
+          {activeRental && (
+            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-emerald-400">Locação Ativa</h4>
+                <p className="text-xs text-white mt-0.5">Placa: <span className="font-mono font-bold">{activeRental.plate}</span></p>
+              </div>
+              <button
+                onClick={handleReturn}
+                className="py-1.5 px-4 bg-rose-500 text-white rounded text-xs font-bold hover:bg-rose-600"
+              >
+                Devolver Caminhão
+              </button>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            {availableRentals.map((r) => (
+              <div key={r.model} className="p-4 bg-lation-surface-band border border-lation-line rounded-lg space-y-2">
+                <h4 className="text-sm font-bold text-white">{r.label}</h4>
+                <p className="text-xs text-lation-content-muted">Diária: <span className="text-white font-mono font-bold">R$ {r.fee}</span></p>
+                <p className="text-xs text-lation-content-muted">Caução: <span className="text-amber-400 font-mono font-bold">R$ {r.deposit}</span></p>
                 <button
-                  onClick={() => handleRent(truck.model)}
-                  disabled={renting}
-                  className="mt-3.5 w-full py-2 rounded text-xs font-bold bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border hover:border-lation-accent hover:text-white shadow-sm transition-all disabled:opacity-50"
+                  onClick={() => handleRent(r.model)}
+                  disabled={!!activeRental}
+                  className={`w-full mt-2 py-1.5 rounded text-xs font-bold ${
+                    activeRental
+                      ? 'bg-lation-surface-deep text-lation-content-muted border border-lation-line cursor-not-allowed'
+                      : 'bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border hover:brightness-110'
+                  }`}
                 >
-                  {renting ? 'Alugando...' : 'Alugar este Caminhão'}
+                  {activeRental ? 'Já possui aluguel ativo' : 'Alugar Caminhão'}
                 </button>
               </div>
             ))}
           </div>
-        )}
-      </div>
-
-      {/* ─── SEÇÃO 2: FROTA EMPRESARIAL / VEÍCULOS PRÓPRIOS ─── */}
-      <div className="space-y-3 pt-2">
-        <div className="flex items-center justify-between border-b border-lation-line pb-2">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded bg-lation-accent-soft" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-lation-content-sec">
-              Frota Própria & Corporativa
-            </h3>
-            {company && (
-              <span className="chip text-[10px] text-lation-accent-bright font-mono py-0.5 px-2">
-                {vehicles.length}/{company.perks?.vehicles || 2} vagas
-              </span>
-            )}
-          </div>
-
-          {!company && (
-            <span className="text-xs text-amber-300">
-              Disponível para membros de empresas registradas
-            </span>
-          )}
         </div>
-
-        {!company ? (
-          <div className="p-4 rounded-lg bg-lation-surface-deep border border-lation-line text-center text-xs text-lation-content-sec">
-            Você não pertence a uma empresa de transporte. Para comprar e gerenciar sua própria frota com até 10 caminhões, funde ou ingresse em uma empresa na aba <b>Empresa</b>.
-          </div>
-        ) : vehicles.length === 0 ? (
-          <div className="p-5 rounded-lg bg-lation-surface-deep border border-lation-line text-center">
-            <p className="text-xs text-lation-content-sec">Nenhum veículo registrado na garagem corporativa.</p>
-            <p className="text-[11px] text-lation-content-muted mt-1">
-              Estacione seu caminhão na vaga da transportadora e clique em Registrar.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {vehicles.map(v => (
-              <div
-                key={v.plate}
-                className="flex items-center justify-between p-3 rounded-lg bg-lation-surface-deep border border-lation-line hover:border-lation-line-hover transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded bg-lation-surface-elevated border border-lation-line flex items-center justify-center font-mono font-bold text-xs text-white">
-                    🚛
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-bold text-xs text-white tracking-wider">{v.plate}</span>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded ${
-                          v.status === 'stored'
-                            ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
-                        }`}
-                      >
-                        {v.status === 'stored' ? 'Disponível na Garagem' : 'Em Circulação'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-lation-content-muted mt-0.5">
-                      {v.model} · {v.vehicle_type || 'Pesado'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {v.status === 'stored' ? (
-                    <button
-                      onClick={() => handleRetrieve(v.plate)}
-                      className="px-3 py-1.5 rounded text-xs font-semibold bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border hover:border-lation-accent hover:text-white transition-all"
-                    >
-                      Retirar Veículo
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => handleStore(v.plate)}
-                      className="px-3 py-1.5 rounded text-xs font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-all"
-                    >
-                      Guardar na Garagem
-                    </button>
-                  )}
-
-                  {company.role === 'owner' && (
-                    <button
-                      onClick={() => fetchNUI('removeVehicle', { plate: v.plate })}
-                      className="px-2.5 py-1.5 rounded text-xs font-medium text-lation-content-muted hover:text-red-400 hover:bg-red-950/30 transition-all"
-                      title="Desvincular da empresa"
-                    >
-                      Remover
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {company && vehicles.length < (company.perks?.vehicles || 2) && (
-          <button
-            onClick={handleRegister}
-            className="w-full py-2.5 rounded-lg text-xs font-semibold bg-lation-surface-elevated hover:bg-lation-surface-hover text-white border border-lation-line-strong hover:border-lation-accent transition-all flex items-center justify-center gap-2"
-          >
-            <span>+ Registrar Caminhão Atual na Frota</span>
-          </button>
-        )}
-      </div>
+      )}
     </div>
   )
 }

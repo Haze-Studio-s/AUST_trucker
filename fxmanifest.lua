@@ -16,6 +16,7 @@ dependencies {
 shared_scripts {
     '@ox_lib/init.lua',
     'config/config.lua',
+    'config/logistics_config.lua',
 }
 
 server_scripts {
@@ -26,6 +27,7 @@ server_scripts {
     'server/services/company_service.lua',
     'server/services/party_service.lua',
     'server/services/loan_service.lua',
+    'server/services/truck_fleet_service.lua',
     'server/services/repo_service.lua',    -- após loan_service (usa LoanService via CheckOverdue)
     'server/flatbed.server.lua',
     'server/services/economy_service.lua',

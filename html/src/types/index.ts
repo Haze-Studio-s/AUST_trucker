@@ -104,15 +104,75 @@ export interface IndustryProduct {
   consumptionPerHour?: number
 }
 
-// Tipo de skill disponível
-export type SkillType = 'distance' | 'valuable' | 'fragile' | 'speed'
+// Tipo de skill disponível (Árvore de 6 ramos do lc_truck_logistics)
+export type SkillType = 'distance' | 'valuable' | 'fragile' | 'fast' | 'speed' | 'product_type' | 'illegal'
 
 // Mapa de skills (ausente = nível 0)
 export interface Skills {
   distance: number
   valuable: number
   fragile:  number
-  speed:    number
+  fast?:    number
+  speed?:   number
+  product_type?: number
+  illegal?: number
+}
+
+export interface FleetTruck {
+  truck_id: number
+  user_id: string
+  truck_name: string
+  driver?: number | null
+  body: number
+  engine: number
+  transmission: number
+  wheels: number
+  fuel: number
+  properties?: string
+  garage_id?: string
+}
+
+export interface DealershipTruck {
+  name: string
+  price: number
+  engine: string
+  transmission: string
+  hp: string
+  img: string
+  driver_bonus: number
+  required_level: number
+}
+
+export interface HiredDriver {
+  driver_id: number
+  user_id: string
+  name: string
+  product_type: number
+  distance_skill: number
+  valuable_skill: number
+  fragile_skill: number
+  fast_skill: number
+  price: number
+  img: string
+  truck_id?: number | null
+}
+
+export interface AgencyDriver {
+  id: number
+  name: string
+  img: string
+  price: number
+  product_type: number
+  distance_skill: number
+  valuable_skill: number
+  fragile_skill: number
+  fast_skill: number
+}
+
+export interface LoanPlan {
+  loan_amount: number
+  interest_rate: number
+  repayment_days: number
 }
 
 // Stats completas (reflete trucker_player_progression)
@@ -154,7 +214,7 @@ export interface ConvoyPayment {
   created_at:      string
 }
 
-export type TabName = 'jobs' | 'missions' | 'active' | 'company' | 'garage' | 'industries' | 'stats' | 'convoy' | 'drivers' | 'adr'
+export type TabName = 'jobs' | 'missions' | 'active' | 'company' | 'garage' | 'loans' | 'industries' | 'stats' | 'convoy' | 'drivers' | 'adr'
 
 export interface AdrCert {
   adr_type:   string

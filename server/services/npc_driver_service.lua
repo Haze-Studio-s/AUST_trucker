@@ -742,6 +742,139 @@ function NpcDriverService.GetByCompany(companyId)
 end
 
 -- ============================================================
+-- LC RECRUITMENT AGENCY & PERSONAL FLEET DRIVERS
+-- ============================================================
+
+local agencyCache = nil
+local lastAgencyGen = 0
+
+function NpcDriverService.GetAgencyCatalog()
+    local now = os.time()
+    if agencyCache and (now - lastAgencyGen < 1200) then
+        return agencyCache
+    end
+
+    agencyCache = {}
+    lastAgencyGen = now
+    local avatars = {
+        'avatar1.png', 'avatar2.png', 'avatar3.png', 'avatar4.png',
+        'avatar5.png', 'avatar6.png', 'avatar7.png', 'avatar8.png'
+    }
+    local names = {
+        'Lucas Silva', 'Mateus Santos', 'Julia Rocha', 'Gabriel Oliveira',
+        'Fernanda Souza', 'Rodrigo Lima', 'Beatriz Costa', 'Diego Martins',
+        'Thiago Ferreira', 'Camila Ribeiro', 'Eduardo Carvalho', 'Larissa Alves'
+    }
+
+    for i = 1, 8 do
+        local distSkill = math.random(0, 3)
+        local valSkill  = math.random(0, 3)
+        local fragSkill = math.random(0, 3)
+        local fastSkill = math.random(0, 3)
+        local totalSkills = distSkill + valSkill + fragSkill + fastSkill
+        local basePrice = math.random(500, 1000)
+        local price = math.floor(basePrice * (1 + (totalSkills * 0.25)))
+
+        table.insert(agencyCache, {
+            id = i,
+            name = names[math.random(#names)],
+            img = 'img/avatar/' .. avatars[math.random(#avatars)],
+            price = price,
+            product_type = math.random(0, 2),
+            distance_skill = distSkill,
+            valuable_skill = valSkill,
+            fragile_skill = fragSkill,
+            fast_skill = fastSkill,
+        })
+    end
+
+    return agencyCache
+end
+
+function NpcDriverService.GetHiredDrivers(citizenId)
+    local drivers = MySQL.query.await(
+        'SELECT * FROM trucker_drivers WHERE user_id = ? ORDER BY driver_id DESC',
+        { citizenId }
+    ) or {}
+    return drivers
+end
+
+function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
+    local catalog = NpcDriverService.GetAgencyCatalog()
+    local driver = catalog[driverIndex]
+    if not driver then
+        return false, 'Candidato não encontrado na agência'
+    end
+
+    local hired = NpcDriverService.GetHiredDrivers(citizenId)
+    local playerStats = DB_GetPlayerStats(citizenId)
+    local lvl = playerStats and playerStats.level or 1
+    local maxDrivers = 1
+    if lvl >= 30 then maxDrivers = 5
+    elseif lvl >= 20 then maxDrivers = 3
+    elseif lvl >= 10 then maxDrivers = 2 end
+
+    if #hired >= maxDrivers then
+        return false, ('Limite de motoristas atingido para seu nível (%d max)'):format(maxDrivers)
+    end
+
+    local balance = Framework.GetPlayerMoney(src, 'bank')
+    if balance < driver.price then
+        return false, 'Saldo bancário insuficiente para contratar'
+    end
+
+    if not Framework.RemovePlayerMoney(src, 'bank', driver.price, 'Contratação de Motorista: ' .. driver.name) then
+        return false, 'Falha ao processar pagamento'
+    end
+
+    local driverId = MySQL.insert.await(
+        [[INSERT INTO trucker_drivers (user_id, name, product_type, distance_skill, valuable_skill, fragile_skill, fast_skill, price, img, truck_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
+        { citizenId, driver.name, driver.product_type, driver.distance_skill, driver.valuable_skill, driver.fragile_skill, driver.fast_skill, driver.price, driver.img }
+    )
+
+    return true, { driverId = driverId, name = driver.name }
+end
+
+function NpcDriverService.AssignTruck(src, citizenId, driverId, truckId)
+    local driver = MySQL.single.await('SELECT * FROM trucker_drivers WHERE driver_id = ? AND user_id = ?', { driverId, citizenId })
+    if not driver then return false, 'Motorista não encontrado' end
+
+    if truckId and truckId > 0 then
+        local truck = MySQL.single.await('SELECT * FROM trucker_trucks WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
+        if not truck then return false, 'Caminhão não encontrado' end
+
+        -- Desaloca outro motorista se já usava o caminhão
+        MySQL.update.await('UPDATE trucker_drivers SET truck_id = NULL WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
+        MySQL.update.await('UPDATE trucker_trucks SET driver = NULL WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
+
+        -- Aloca
+        MySQL.update.await('UPDATE trucker_drivers SET truck_id = ? WHERE driver_id = ? AND user_id = ?', { truckId, driverId, citizenId })
+        MySQL.update.await('UPDATE trucker_trucks SET driver = ? WHERE truck_id = ? AND user_id = ?', { driverId, truckId, citizenId })
+    else
+        -- Desalocar
+        if driver.truck_id then
+            MySQL.update.await('UPDATE trucker_trucks SET driver = NULL WHERE truck_id = ? AND user_id = ?', { driver.truck_id, citizenId })
+        end
+        MySQL.update.await('UPDATE trucker_drivers SET truck_id = NULL WHERE driver_id = ? AND user_id = ?', { driverId, citizenId })
+    end
+
+    return true
+end
+
+function NpcDriverService.FireHiredDriver(src, citizenId, driverId)
+    local driver = MySQL.single.await('SELECT * FROM trucker_drivers WHERE driver_id = ? AND user_id = ?', { driverId, citizenId })
+    if not driver then return false, 'Motorista não encontrado' end
+
+    if driver.truck_id then
+        MySQL.update.await('UPDATE trucker_trucks SET driver = NULL WHERE truck_id = ? AND user_id = ?', { driver.truck_id, citizenId })
+    end
+
+    MySQL.query.await('DELETE FROM trucker_drivers WHERE driver_id = ? AND user_id = ?', { driverId, citizenId })
+    return true
+end
+
+-- ============================================================
 -- INTERVAL (registrado no final do arquivo — fora de funções)
 -- ============================================================
 

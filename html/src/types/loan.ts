@@ -6,6 +6,7 @@ export interface LoanData {
   amount: number             // valor original solicitado
   remaining_balance: number  // saldo devedor atual
   monthly_payment: number    // parcela mínima
+  daily_payment?: number     // parcela diária
   next_payment_at: number | null    // unix timestamp UTC (segundos); null quando quitado
   status: LoanStatus
   is_company_loan: boolean   // true se company_id != null no DB

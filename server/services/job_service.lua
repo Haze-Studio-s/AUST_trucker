@@ -376,13 +376,20 @@ function JobService.Complete(src, payload)
     )
     local payment = math.floor(activeJob.base_payment * skillBonus.paymentMult * timeMult * companyMult * integrityMult)
 
-    -- Decreto governamental: modificador de pagamento de frete
-    local freightMod = 1.0
-    pcall(function() freightMod = exports['AUST_governo']:GetDecreeModifier('freight_pay') end)
-    if freightMod ~= 1.0 then payment = math.floor(payment * freightMod) end
+    -- Bônus de estacionamento manual do caminhoneiro (+45 XP, +5% pagamento)
+    if payload and payload.parkedManually then
+        payment = math.floor(payment * 1.05)
+        ProgressionService.GrantXP(src, citizenId, 450, 1.0, 0)
+        TriggerClientEvent('aurp_trucker:notify', src, 'Bônus de manobra: Estacionamento perfeito manual (+5% $ e +45 XP)!', 'success')
+    end
 
     -- Pagar jogador
     Framework.AddMoney(Player, Config.General.payment.currency, payment, 'aurp-trucker-job')
+
+    -- Desgaste de frota própria (se aplicável)
+    if TruckFleetService and payload and payload.truckId then
+        TruckFleetService.ApplyTripWear(citizenId, payload.truckId, activeJob.distance)
+    end
 
     -- Atualizar DB de stats e conceder XP
     DB_CompleteJob(activeJob.id)
@@ -392,7 +399,7 @@ function JobService.Complete(src, payload)
             'aurp_trucker:auto')
     end
     DB_AddPlayerStats(citizenId, payment, activeJob.distance)
-    ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, timeMult)
+    ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, timeMult, activeJob.distance)
 
     -- Evento externo (vp-sala e outros recursos)
     TriggerEvent('aurp_trucker:jobCompleted', citizenId,

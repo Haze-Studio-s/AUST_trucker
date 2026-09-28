@@ -192,6 +192,12 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             activeRental        = TruckRentalService and TruckRentalService.GetRental(citizenId) or nil,
             playerName          = Framework.GetCharName(Player),
             playerMoney         = Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash') or 0,
+            fleetTrucks         = TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId) or {},
+            dealershipCatalog   = TruckFleetService and TruckFleetService.GetCatalog() or {},
+            loanPlans           = LoanService and LoanService.GetPlans(citizenId) or {},
+            agencyDrivers       = NpcDriverService and NpcDriverService.GetAgencyCatalog() or {},
+            hiredDrivers        = NpcDriverService and NpcDriverService.GetHiredDrivers(citizenId) or {},
+            repairPrices        = Config.LC_RepairPrice or {},
         }
     end)
 
@@ -1023,4 +1029,72 @@ lib.callback.register('aurp_trucker:containerHandler:complete', function(source,
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
     local citizenId = Framework.GetCitizenId(Player)
     return ContainerHandlerService.Complete(citizenId, source, coords)
+end)
+
+-- ============================================================
+-- LC LOGISTICS EXTENDED CALLBACKS
+-- ============================================================
+
+-- Compra na Concessionária
+lib.callback.register('aurp_trucker:buyTruck', function(source, model)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return TruckFleetService.BuyTruck(source, citizenId, model)
+end)
+
+-- Venda de Caminhão Próprio
+lib.callback.register('aurp_trucker:sellTruck', function(source, truckId)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return TruckFleetService.SellTruck(source, citizenId, truckId)
+end)
+
+-- Reparo Mecânico
+lib.callback.register('aurp_trucker:repairTruck', function(source, truckId, part)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return TruckFleetService.RepairTruck(source, citizenId, truckId, part)
+end)
+
+-- Contratação de Empréstimo
+lib.callback.register('aurp_trucker:takeLoanPlan', function(source, planIndex)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+    local citizenId = Framework.GetCitizenId(Player)
+    return LoanService.TakePlan(source, citizenId, tonumber(planIndex) or 1)
+end)
+
+-- Contratação na Agência de Motoristas
+lib.callback.register('aurp_trucker:hireAgencyDriver', function(source, driverIndex)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return NpcDriverService.HireAgencyDriver(source, citizenId, tonumber(driverIndex) or 1)
+end)
+
+-- Alocação de Caminhão para Motorista
+lib.callback.register('aurp_trucker:assignDriverTruck', function(source, driverId, truckId)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return NpcDriverService.AssignTruck(source, citizenId, tonumber(driverId), tonumber(truckId))
+end)
+
+-- Demissão de Motorista da Frota
+lib.callback.register('aurp_trucker:fireAgencyDriver', function(source, driverId)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return NpcDriverService.FireHiredDriver(source, citizenId, tonumber(driverId))
+end)
+
+-- Upgrade de Habilidade (Skill Tree)
+lib.callback.register('aurp_trucker:upgradeSkill', function(source, skillType)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return false, 'Jogador não encontrado' end
+    local citizenId = Framework.GetCitizenId(Player)
+    return ProgressionService.PurchaseSkill(source, citizenId, tostring(skillType))
 end)

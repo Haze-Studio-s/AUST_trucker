@@ -193,6 +193,70 @@ function LoanService.CheckOverdue()
     end
 end
 
+-- Planos do lc_truck_logistics
+function LoanService.GetPlans(citizenId)
+    local plans = Config.LC_Loans and Config.LC_Loans.plans or {
+        { loan_amount = 20000,  interest_rate = 20.0, repayment_days = 15 },
+        { loan_amount = 50000,  interest_rate = 17.5, repayment_days = 20 },
+        { loan_amount = 100000, interest_rate = 15.0, repayment_days = 25 },
+        { loan_amount = 400000, interest_rate = 12.5, repayment_days = 30 },
+    }
+    local playerStats = DB_GetPlayerStats(citizenId)
+    local level = playerStats and playerStats.level or 1
+    local maxAllowed = 40000
+    if level >= 30 then maxAllowed = 600000
+    elseif level >= 20 then maxAllowed = 250000
+    elseif level >= 10 then maxAllowed = 100000 end
+
+    local activeLoan = DB_GetActiveLoan(citizenId)
+
+    return {
+        plans = plans,
+        maxAllowed = maxAllowed,
+        currentLevel = level,
+        activeLoan = activeLoan
+    }
+end
+
+function LoanService.TakePlan(src, citizenId, planIndex)
+    local info = LoanService.GetPlans(citizenId)
+    local plan = info.plans[planIndex]
+    if not plan then
+        return { success = false, reason = 'Plano de empréstimo não encontrado' }
+    end
+
+    if plan.loan_amount > info.maxAllowed then
+        return { success = false, reason = 'Nível de motorista insuficiente para este plano' }
+    end
+
+    local existing = DB_GetActiveLoan(citizenId)
+    if existing then
+        return { success = false, reason = 'Você já possui um empréstimo ativo' }
+    end
+
+    local totalToPay = math.ceil(plan.loan_amount * (1 + (plan.interest_rate / 100)))
+    local dailyPayment = math.ceil(totalToPay / plan.repayment_days)
+    local nextPaymentAt = os.time() + 86400
+
+    local loanId = DB_CreateLoan(citizenId, nil, nil, plan.loan_amount, totalToPay, dailyPayment, nextPaymentAt)
+    if not loanId then
+        return { success = false, reason = 'Erro ao processar empréstimo no banco de dados' }
+    end
+
+    Framework.AddPlayerMoney(src, 'bank', plan.loan_amount, 'Empréstimo Logística: Plano #' .. planIndex)
+
+    return {
+        success = true,
+        loan = {
+            id = loanId,
+            amount = plan.loan_amount,
+            remaining_balance = totalToPay,
+            daily_payment = dailyPayment,
+            days = plan.repayment_days
+        }
+    }
+end
+
 -- Background thread: check overdue loans every CheckInterval seconds
 CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end

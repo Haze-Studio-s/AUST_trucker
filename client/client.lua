@@ -553,6 +553,120 @@ RegisterNUICallback('toggleRecruiting', function(data, cb)
 end)
 
 -- =======================================
+-- NUI CALLBACKS: LC TRUCK LOGISTICS
+-- =======================================
+
+RegisterNUICallback('buyTruck', function(data, cb)
+    local model = data and data.model
+    if not model then return cb({ ok = false, reason = 'Modelo inválido' }) end
+    local ok, res, extra = pcall(lib.callback.await, 'aurp_trucker:buyTruck', false, model)
+    if ok and res then
+        lib.notify({ title = 'Concessionária', description = 'Caminhão adquirido com sucesso!', type = 'success' })
+        cb({ ok = true, truck = extra })
+    else
+        local reason = (type(extra) == 'string' and extra) or (type(res) == 'string' and res) or 'Erro ao comprar caminhão'
+        lib.notify({ title = 'Concessionária', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('sellTruck', function(data, cb)
+    local truckId = data and data.truckId
+    if not truckId then return cb({ ok = false, reason = 'ID inválido' }) end
+    local ok, res, refund = pcall(lib.callback.await, 'aurp_trucker:sellTruck', false, truckId)
+    if ok and res then
+        lib.notify({ title = 'Garagem', description = ('Caminhão vendido por $%d!'):format(refund or 0), type = 'success' })
+        cb({ ok = true, refund = refund })
+    else
+        local reason = (type(refund) == 'string' and refund) or 'Erro ao vender veículo'
+        lib.notify({ title = 'Garagem', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('repairTruck', function(data, cb)
+    local truckId = data and data.truckId
+    local part = data and data.part or 'all'
+    if not truckId then return cb({ ok = false, reason = 'ID inválido' }) end
+    local ok, res, info = pcall(lib.callback.await, 'aurp_trucker:repairTruck', false, truckId, part)
+    if ok and res then
+        lib.notify({ title = 'Oficina', description = ('Veículo reparado! Custo: $%d'):format(info and info.cost or 0), type = 'success' })
+        cb({ ok = true, info = info })
+    else
+        local reason = (type(info) == 'string' and info) or 'Erro ao reparar veículo'
+        lib.notify({ title = 'Oficina', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('takeLoanPlan', function(data, cb)
+    local planIndex = data and data.planIndex or 1
+    local ok, res = pcall(lib.callback.await, 'aurp_trucker:takeLoanPlan', false, planIndex)
+    if ok and res and res.success then
+        lib.notify({ title = 'Banco', description = ('Empréstimo de $%d creditado em sua conta!'):format(res.loan.amount), type = 'success' })
+        cb({ ok = true, loan = res.loan })
+    else
+        local reason = (res and res.reason) or 'Falha ao solicitar empréstimo'
+        lib.notify({ title = 'Banco', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('hireAgencyDriver', function(data, cb)
+    local driverIndex = data and data.driverIndex or 1
+    local ok, res, info = pcall(lib.callback.await, 'aurp_trucker:hireAgencyDriver', false, driverIndex)
+    if ok and res then
+        lib.notify({ title = 'RH & Motoristas', description = ('Motorista %s contratado com sucesso!'):format(info and info.name or ''), type = 'success' })
+        cb({ ok = true, driver = info })
+    else
+        local reason = (type(info) == 'string' and info) or 'Erro ao contratar motorista'
+        lib.notify({ title = 'RH & Motoristas', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('assignDriverTruck', function(data, cb)
+    local driverId = data and data.driverId
+    local truckId = data and data.truckId
+    local ok, res, err = pcall(lib.callback.await, 'aurp_trucker:assignDriverTruck', false, driverId, truckId)
+    if ok and res then
+        lib.notify({ title = 'Frota', description = 'Atribuição atualizada com sucesso!', type = 'success' })
+        cb({ ok = true })
+    else
+        local reason = (type(err) == 'string' and err) or 'Erro ao vincular caminhão'
+        lib.notify({ title = 'Frota', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('fireAgencyDriver', function(data, cb)
+    local driverId = data and data.driverId
+    local ok, res, err = pcall(lib.callback.await, 'aurp_trucker:fireAgencyDriver', false, driverId)
+    if ok and res then
+        lib.notify({ title = 'RH & Motoristas', description = 'Motorista desligado da frota.', type = 'info' })
+        cb({ ok = true })
+    else
+        local reason = (type(err) == 'string' and err) or 'Erro ao demitir motorista'
+        lib.notify({ title = 'RH & Motoristas', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+RegisterNUICallback('upgradeSkill', function(data, cb)
+    local skillType = data and data.skillType
+    if not skillType then return cb({ ok = false, reason = 'Skill inválida' }) end
+    local ok, res, err = pcall(lib.callback.await, 'aurp_trucker:upgradeSkill', false, skillType)
+    if ok and res then
+        lib.notify({ title = 'Especializações', description = ('Habilidade %s aprimorada!'):format(skillType), type = 'success' })
+        cb({ ok = true })
+    else
+        local reason = (type(err) == 'string' and err) or 'Erro ao aprimorar habilidade'
+        lib.notify({ title = 'Especializações', description = reason, type = 'error' })
+        cb({ ok = false, reason = reason })
+    end
+end)
+
+-- =======================================
 -- SISTEMA DE TRABALHOS
 -- =======================================
 

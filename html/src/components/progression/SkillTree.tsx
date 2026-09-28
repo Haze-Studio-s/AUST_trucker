@@ -2,14 +2,46 @@ import { useStatsStore } from '../../stores/useStatsStore'
 import { fetchNUI } from '../../hooks/useNUI'
 import type { SkillType } from '../../types'
 
-const SKILL_META: Record<SkillType, { label: string; icon: string; desc: string }> = {
-  distance: { label: 'Distância',  icon: '🛣️', desc: '+2% p/ nível em rotas ≥10km'              },
-  valuable: { label: 'Valioso',    icon: '💎', desc: '+2% p/ nível em jobs ≥$1.500'             },
-  fragile:  { label: 'Frágil',     icon: '📦', desc: '+2% p/ nível com integridade ≥85%'        },
-  speed:    { label: 'Velocidade', icon: '⚡', desc: '+2% p/ nível no multiplicador de tempo'   },
+const SKILL_META: Record<string, { label: string; icon: string; desc: string; maxDesc?: string }> = {
+  distance: {
+    label: 'Longa Distância',
+    icon: '🛣️',
+    desc: 'Desbloqueia rotas de maior raio e concede até +12% de bônus financeiro.',
+    maxDesc: 'Rotas continentais sem limite de km'
+  },
+  valuable: {
+    label: 'Carga Valiosa',
+    icon: '💎',
+    desc: 'Fretes de alta cotação com bônus de até +12% de pagamento e +60% de XP.',
+    maxDesc: 'Especialista em cargas preciosas'
+  },
+  fragile: {
+    label: 'Carga Frágil',
+    icon: '📦',
+    desc: 'Produtos delicados (vidro, eletrônicos). Até +12% de pagamento e +60% de XP.',
+    maxDesc: 'Mestre em manuseio sem avarias'
+  },
+  fast: {
+    label: 'Entrega Urgente',
+    icon: '⚡',
+    desc: 'Prazos just-in-time exigentes com bônus agressivo de até +12% e +60% de XP.',
+    maxDesc: 'Piloto logístico prioritário'
+  },
+  product_type: {
+    label: 'Certificados ADR',
+    icon: '☣️',
+    desc: 'Habilita classes de produtos perigosos: Explosivos, Gases, Inflamáveis e Tóxicos.',
+    maxDesc: 'Certificação ADR Nível 6 Completa'
+  },
+  illegal: {
+    label: 'Clandestino / Ilegal',
+    icon: '💀',
+    desc: 'Acesso a contratos arriscados no submundo com multiplicador base de 1.8x.',
+    maxDesc: 'Transportador Clandestino Elite'
+  }
 }
 
-const SKILL_TYPES: SkillType[] = ['distance', 'valuable', 'fragile', 'speed']
+const SKILL_TYPES: SkillType[] = ['distance', 'valuable', 'fragile', 'fast', 'product_type', 'illegal']
 const MAX_LEVEL = 6
 
 interface SkillTreeProps {
@@ -21,95 +53,106 @@ export function SkillTree({ onStatsRefresh }: SkillTreeProps) {
   const skillPoints = stats?.skill_points ?? 0
 
   const handlePurchase = async (skillType: SkillType) => {
-    const currentLevel = skills[skillType]
+    const currentLevel = (skills as any)[skillType] ?? 0
     if (currentLevel >= MAX_LEVEL || skillPoints < 1) return
 
-    const result = await fetchNUI<{ success: boolean; error?: string }>(
-      'purchaseSkill',
-      { skillType }
-    )
-    if (result.success) {
-      setSkillLevel(skillType, currentLevel + 1)
-      onStatsRefresh()  // re-fetch stats para atualizar skill_points no store
-    } else {
-      // purchaseSkill failed: handled silently (error shown via lib.notify server-side)
+    try {
+      const result = await fetchNUI<{ ok: boolean; reason?: string }>(
+        'upgradeSkill',
+        { skillType }
+      )
+      if (result && result.ok) {
+        setSkillLevel(skillType, currentLevel + 1)
+        onStatsRefresh()
+      }
+    } catch {
+      // Ignorar falha no Dev
     }
   }
 
-  const totalBonus = Object.values(skills).reduce((sum, lvl) => sum + lvl, 0) * 2
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-txt uppercase tracking-wider">
-          Árvore de Skills
-        </span>
+    <div className="space-y-4 select-none">
+      <div className="flex items-center justify-between border-b border-lation-line pb-2.5">
         <div className="flex items-center gap-2">
-          {totalBonus > 0 && (
-            <span className="text-[10px] text-success-dark font-medium">
-              +{totalBonus}% bônus total
-            </span>
-          )}
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+          <span className="w-2.5 h-2.5 rounded bg-lation-accent" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-lation-content-sec">
+            Árvore de Competências & Especializações (6 Ramos)
+          </h3>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className={`text-[11px] px-3 py-1 rounded-full font-mono font-bold border ${
             skillPoints > 0
-              ? 'bg-warning/20 text-warning'
-              : 'bg-card-alt text-txt-secondary'
+              ? 'bg-lation-btn-bg text-lation-btn-text border-lation-btn-border shadow-[0_0_10px_rgba(16,185,129,0.3)] animate-pulse'
+              : 'bg-lation-surface-deep text-lation-content-muted border-lation-line'
           }`}>
-            {skillPoints} ponto{skillPoints !== 1 ? 's' : ''}
+            {skillPoints} Ponto{skillPoints !== 1 ? 's' : ''} Disponível{skillPoints !== 1 ? 'is' : ''}
           </span>
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {SKILL_TYPES.map((skillType) => {
-          const meta         = SKILL_META[skillType]
-          const level        = skills[skillType]
-          const canUpgrade   = skillPoints > 0 && level < MAX_LEVEL
-          const isMaxed      = level >= MAX_LEVEL
+          const meta = SKILL_META[skillType] || { label: skillType, icon: '⭐', desc: '' }
+          const level = (skills as any)[skillType] ?? 0
+          const canUpgrade = skillPoints > 0 && level < MAX_LEVEL
+          const isMaxed = level >= MAX_LEVEL
 
           return (
             <div
               key={skillType}
-              className="bg-card/60 border border-app-border/50 rounded-lg p-2.5 flex flex-col gap-2"
+              className="bg-lation-surface-band border border-lation-line hover:border-lation-line-focus rounded-lg p-3.5 flex flex-col justify-between transition-all"
             >
-              {/* Cabeçalho */}
-              <div className="text-center">
-                <div className="text-xl leading-none mb-0.5">{meta.icon}</div>
-                <div className="text-[11px] font-semibold text-txt-light">{meta.label}</div>
-                <div className="text-[9px] text-txt-secondary leading-tight mt-0.5">{meta.desc}</div>
+              <div>
+                <div className="flex items-center gap-2.5 mb-2">
+                  <div className="w-9 h-9 rounded-lg bg-lation-surface-deep border border-lation-line flex items-center justify-center text-lg">
+                    {meta.icon}
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-white leading-tight">{meta.label}</h4>
+                    <span className="text-[10px] font-mono text-lation-accent-bright font-semibold">
+                      Nível {level} / {MAX_LEVEL}
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-lation-content-muted leading-relaxed mb-3">
+                  {meta.desc}
+                </p>
               </div>
 
-              {/* Barra de nível */}
-              <div className="flex justify-center gap-0.5">
-                {Array.from({ length: MAX_LEVEL }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`w-5 h-2 rounded-sm transition-colors ${
-                      i < level
-                        ? 'bg-warning'
-                        : 'bg-card-alt'
-                    }`}
-                  />
-                ))}
-              </div>
+              <div className="space-y-2.5 pt-2 border-t border-lation-line/60">
+                {/* Indicadores de nível */}
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: MAX_LEVEL }, (_, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 h-1.5 rounded-sm transition-all ${
+                        i < level
+                          ? 'bg-lation-btn-bg border border-lation-btn-border shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                          : 'bg-lation-surface-deep border border-lation-line'
+                      }`}
+                    />
+                  ))}
+                </div>
 
-              {/* Status / botão */}
-              <div className="text-center">
+                {/* Ação de Aprimoramento */}
                 {isMaxed ? (
-                  <span className="text-[10px] text-success-dark font-semibold">
-                    MÁXIMO (+{level * 2}%)
-                  </span>
-                ) : canUpgrade ? (
+                  <div className="py-1 px-2 text-center rounded bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-bold text-emerald-400 font-mono">
+                    COMPETÊNCIA MAXIMIZADA
+                  </div>
+                ) : (
                   <button
                     onClick={() => handlePurchase(skillType)}
-                    className="w-full text-[10px] bg-warning/20 hover:bg-warning/30 text-warning py-1 rounded transition-colors font-medium"
+                    disabled={!canUpgrade}
+                    className={`w-full py-1.5 rounded text-xs font-bold tracking-wide transition-all ${
+                      canUpgrade
+                        ? 'bg-lation-btn-bg text-lation-btn-text border border-lation-btn-border hover:brightness-110 shadow-sm'
+                        : 'bg-lation-surface-deep text-lation-content-muted border border-lation-line cursor-not-allowed opacity-50'
+                    }`}
                   >
-                    Nível {level + 1} (+{(level + 1) * 2}%)
+                    {canUpgrade ? `Aprimorar para Nível ${level + 1}` : 'Requer Ponto de Habilidade'}
                   </button>
-                ) : (
-                  <span className="text-[10px] text-txt-muted">
-                    {level > 0 ? `Nível ${level} (+${level * 2}%)` : 'Nenhum ponto'}
-                  </span>
                 )}
               </div>
             </div>
