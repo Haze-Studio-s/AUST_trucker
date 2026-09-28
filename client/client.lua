@@ -2805,6 +2805,19 @@ end)
 local function createVehicleMarkersThread(truck, trailer)
     CreateThread(function()
         local timer = 2000
+        local tkMaxZ = 2.0
+        local trMaxZ = 2.0
+
+        if DoesEntityExist(truck) then
+            local _, maxDim = GetModelDimensions(GetEntityModel(truck))
+            if maxDim then tkMaxZ = maxDim.z end
+        end
+
+        if DoesEntityExist(trailer) then
+            local _, maxDim = GetModelDimensions(GetEntityModel(trailer))
+            if maxDim then trMaxZ = maxDim.z end
+        end
+
         while lcActiveJob and (DoesEntityExist(truck) or DoesEntityExist(trailer)) do
             timer = 2000
             local ped = cache.ped or PlayerPedId()
@@ -2817,12 +2830,15 @@ local function createVehicleMarkersThread(truck, trailer)
             )
 
             if not isAttached then
+                local hoverOffset = math.sin(GetGameTimer() / 200.0) * 0.2
+
                 if DoesEntityExist(truck) then
                     local tkCoords = GetEntityCoords(truck)
                     local distTruck = #(pCoords - tkCoords)
                     if distTruck < 50.0 and GetVehiclePedIsIn(ped, false) ~= truck then
                         timer = 2
-                        DrawMarker(0, tkCoords.x, tkCoords.y, tkCoords.z + 4.8,
+                        local pos = GetOffsetFromEntityInWorldCoords(truck, 0.0, 0.0, tkMaxZ + 1.2 + hoverOffset)
+                        DrawMarker(0, pos.x, pos.y, pos.z,
                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                             1.0, 1.0, 1.0,
                             0, 100, 255, 180, false, true, 2, false, nil, nil, false)
@@ -2834,12 +2850,15 @@ local function createVehicleMarkersThread(truck, trailer)
                     local distTrailer = #(pCoords - trCoords)
                     if distTrailer < 50.0 then
                         timer = 2
-                        DrawMarker(0, trCoords.x, trCoords.y, trCoords.z + 4.8,
+                        local pos = GetOffsetFromEntityInWorldCoords(trailer, 0.0, 0.0, trMaxZ + 1.2 + hoverOffset)
+                        DrawMarker(0, pos.x, pos.y, pos.z,
                             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
                             1.0, 1.0, 1.0,
                             0, 100, 255, 180, false, true, 2, false, nil, nil, false)
                     end
                 end
+            else
+                break
             end
 
             Wait(timer)
