@@ -1532,6 +1532,14 @@ RegisterCommand('truckerui', function()
     OpenJobBoard()
 end, false)
 
+RegisterCommand('trucker', function()
+    OpenJobBoard()
+end, false)
+
+RegisterCommand('canceljob', function()
+    ExecuteCommand('clearjob')
+end, false)
+
 
 RegisterCommand('checkactivejob', function()
     if activeJob then
