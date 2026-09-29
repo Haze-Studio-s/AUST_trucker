@@ -31,14 +31,31 @@ local TrailerDoorsOpen = false
 
 function SendMissionNotify(title, message, notifyType)
     PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
-    if exports['lation_ui'] then
-        exports['lation_ui']:Notify({
-            title = title,
-            message = message,
-            type = notifyType or 'info',
-            duration = 10000
-        })
-    else
+
+    local sent = false
+    if GetResourceState('lation_ui') == 'started' then
+        pcall(function()
+            if exports['lation_ui'] and exports['lation_ui'].notify then
+                exports['lation_ui']:notify({
+                    title = title,
+                    message = message,
+                    type = notifyType or 'info',
+                    duration = 10000
+                })
+                sent = true
+            elseif exports['lation_ui'] and exports['lation_ui'].Notify then
+                exports['lation_ui']:Notify({
+                    title = title,
+                    message = message,
+                    type = notifyType or 'info',
+                    duration = 10000
+                })
+                sent = true
+            end
+        end)
+    end
+
+    if not sent then
         lib.notify({
             title = title,
             description = message,
