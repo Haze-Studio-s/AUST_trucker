@@ -619,63 +619,15 @@ local function StartTruckDelivery(src, contractData)
     }
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
-
-    -- FIX 1 & 2: Seta flutuante (tipo 20) e blip sobre o caminhão com notificação de 10 segundos
-    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-        netId = NetworkGetNetworkIdFromEntity(truck),
-        coords = GetEntityCoords(truck),
-        label = "Caminhão Designado",
-        sprite = 477,
-        color = 5,
-        offsetZ = 3.5,
-        notify = "Contrato iniciado! Embarque no seu caminhão designado para iniciar a operação."
-    })
+    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds)
 end
 
 function GlobalStartTruckDelivery(src, contractData)
     StartTruckDelivery(src, contractData)
 end
 
-RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractData)
-    StartTruckDelivery(source, contractData)
-end)
-
 RegisterNetEvent('aurp_trucker:server:startDelivery', function(contractData)
     StartTruckDelivery(source, contractData)
-end)
-
--- ETAPA 1 -> 2: Transição ao Embarcar no Caminhão Designado
-RegisterNetEvent('aust_trucker:server:playerEnteredTruck', function(jobId)
-    local src = source
-    local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then return end
-    if lobby.stage ~= 'STEP_GET_TRUCK' then return end
-
-    lobby.stage = 'STEP_LOAD_CARGO'
-
-    if lobby.cargoType == 'dry' then
-        local forkNetId = (lobby.forklift and DoesEntityExist(lobby.forklift)) and NetworkGetNetworkIdFromEntity(lobby.forklift) or 0
-        local forkCoords = (lobby.forklift and DoesEntityExist(lobby.forklift)) and GetEntityCoords(lobby.forklift) or nil
-        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-            netId = forkNetId,
-            coords = forkCoords,
-            label = "Empilhadeira de Carga",
-            sprite = 543,
-            color = 5,
-            offsetZ = 2.5,
-            notify = "Vá até a empilhadeira e carregue os paletes na carreta."
-        })
-    else
-        local termCoords = (Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.fuelTerminals and Config.CargoTypes.liquid.fuelTerminals[1] and Config.CargoTypes.liquid.fuelTerminals[1].coords) or vector3(1243.0, -3130.0, 5.0)
-        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-            coords = termCoords,
-            label = "Bomba de Abastecimento",
-            sprite = 361,
-            color = 5,
-            offsetZ = 2.0,
-            notify = "Estacione o caminhão na baia e conecte a mangueira na bomba para abastecer o tanque."
-        })
-    end
 end)
 
 -- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox (Caminhão e Empilhadeira)
@@ -931,14 +883,6 @@ RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
         SetEntityRoutingBucket(lobby.trailer, 0)
     end
 
-    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-        coords = lobby.deliveryCoords,
-        label = "Destino da Entrega",
-        sprite = 477,
-        color = 5,
-        offsetZ = 2.0,
-        notify = "Tanque abastecido e mangueira desconectada! Siga a rota traçada no GPS até o destino."
-    })
     TriggerClientEvent('aurp_trucker:client:liquidLoadingCompleted', src, jobId, lobby.deliveryCoords)
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -961,14 +905,6 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         SetEntityRoutingBucket(lobby.trailer, 0)
     end
 
-    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-        coords = lobby.deliveryCoords,
-        label = "Destino da Entrega",
-        sprite = 477,
-        color = 5,
-        offsetZ = 2.0,
-        notify = "Carga assegurada e romaneio assinado! Siga a rota traçada no GPS até o destino."
-    })
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
 

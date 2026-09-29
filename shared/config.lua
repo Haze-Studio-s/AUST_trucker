@@ -72,9 +72,12 @@ Config.Polarix = {
         TrailerSpawnCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
         ForkliftBayCoords = vector4(1246.26, -3168.81, 4.63, 90.0),
         HandlerBayCoords = vector4(1240.20, -3195.10, 5.88, 270.00),
+        LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
         PalletStagingAnchor = vector3(1272.00, -3182.00, 5.90),
         PalletStagingHeading = 180.0,
     },
+
+    LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
 
     -- Configuração e Offsets de Empilhadeira (Forklift) - Extraído do Polarix
     Forklift = {
