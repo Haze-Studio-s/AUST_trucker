@@ -536,7 +536,8 @@ RegisterNUICallback('post', function(body, cb)
         SetTimeout(3000, function() isStartingJob = false end)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
-        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId, contractType)
+        local isParty = data and (data.party == true or data.isParty == true)
+        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId, contractType, isParty)
         cb(200)
         return
     end
@@ -2883,6 +2884,53 @@ local function createVehicleMarkersThread(truck, trailer)
     end)
 end
 
+local function GetSafeVehicleSpawnCoords(baseSpawn, clearRadius)
+    if not baseSpawn then return vector4(1250.55, -3162.4, 5.88, 270.00) end
+    local radius = clearRadius or 4.0
+    local targetX, targetY, targetZ = baseSpawn.x, baseSpawn.y, baseSpawn.z
+    local heading = baseSpawn.w or 0.0
+
+    -- 1. Verificação primária da vaga designada
+    local isOccupied = IsPositionOccupied(targetX, targetY, targetZ, radius, false, true, false, false, false, 0, false)
+    local closestVeh = GetClosestVehicle(targetX, targetY, targetZ, radius, 0, 71)
+
+    if not isOccupied and closestVeh == 0 then
+        return baseSpawn
+    end
+
+    -- 2. Varredura de coordenadas alternativas adjacentes seguras
+    local headingRad = math.rad(heading)
+    local fwdX, fwdY = -math.sin(headingRad), math.cos(headingRad)
+    local sideX, sideY = math.cos(headingRad), math.sin(headingRad)
+
+    local candidateOffsets = {
+        { x = fwdX * 5.0,  y = fwdY * 5.0 },
+        { x = -fwdX * 5.0, y = -fwdY * 5.0 },
+        { x = sideX * 4.2, y = sideY * 4.2 },
+        { x = -sideX * 4.2, y = -sideY * 4.2 },
+        { x = fwdX * 10.0, y = fwdY * 10.0 },
+        { x = -fwdX * 10.0, y = -fwdY * 10.0 },
+    }
+
+    for _, offset in ipairs(candidateOffsets) do
+        local testX = targetX + offset.x
+        local testY = targetY + offset.y
+        local _, groundZ = GetGroundZFor_3dCoord(testX, testY, targetZ + 2.0, false)
+        local testZ = (groundZ and groundZ > 0.0) and (groundZ + 0.15) or targetZ
+
+        local occ = IsPositionOccupied(testX, testY, testZ, radius, false, true, false, false, false, 0, false)
+        local nearVeh = GetClosestVehicle(testX, testY, testZ, radius, 0, 71)
+
+        if not occ and nearVeh == 0 then
+            return vector4(testX, testY, testZ, heading)
+        end
+    end
+
+    -- 3. Fallback de mitigação anti-explosão
+    local _, finalZ = GetGroundZFor_3dCoord(targetX, targetY, targetZ + 2.5, false)
+    return vector4(targetX, targetY, (finalZ and finalZ > 0.0) and (finalZ + 0.1) or targetZ, heading)
+end
+
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     if not contract or lcActiveJob then return end
     isStartingJob = true
@@ -2893,7 +2941,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
 
     local truck = nil
     if isQuickJob then
-        -- 1. Spawn do caminhão da firma (Trabalho Rápido)
+        -- 1. Spawn do caminhão da firma (Trabalho Rápido) com validação de vaga segura
         local truckModel = contract.truckModel or 'hauler'
         local truckHash = joaat(truckModel)
         if not IsModelInCdimage(truckHash) or not IsModelValid(truckHash) then
@@ -2902,9 +2950,11 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         end
         lib.requestModel(truckHash)
         local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
-        truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
-        SetEntityHeading(truck, tspawn.w)
+        local safeTruckSpawn = GetSafeVehicleSpawnCoords(tspawn, 4.2)
+        truck = CreateVehicle(truckHash, safeTruckSpawn.x, safeTruckSpawn.y, safeTruckSpawn.z, safeTruckSpawn.w, true, false)
+        SetEntityHeading(truck, safeTruckSpawn.w)
         SetVehicleOnGroundProperly(truck)
+        SetEntityCollision(truck, true, true)
         SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
         SetEntityAsMissionEntity(truck, true, true)
         SetVehicleHasBeenOwnedByPlayer(truck, true)
@@ -2919,7 +2969,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         end
     end
 
-    -- 2. Spawn do reboque designado
+    -- 2. Spawn do reboque designado com validação de vaga segura
     local trailerModel = contract.trailerModel or 'docktrailer'
     local trailerHash = joaat(trailerModel)
     if not IsModelInCdimage(trailerHash) or not IsModelValid(trailerHash) then
@@ -2928,9 +2978,11 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     end
     lib.requestModel(trailerHash)
     local trspawn = contract.trailerSpawn or vector4(1274.21, -3186.43, 5.91, 90.00)
-    local trailer = CreateVehicle(trailerHash, trspawn.x, trspawn.y, trspawn.z, trspawn.w, true, false)
-    SetEntityHeading(trailer, trspawn.w)
+    local safeTrailerSpawn = GetSafeVehicleSpawnCoords(trspawn, 4.5)
+    local trailer = CreateVehicle(trailerHash, safeTrailerSpawn.x, safeTrailerSpawn.y, safeTrailerSpawn.z, safeTrailerSpawn.w, true, false)
+    SetEntityHeading(trailer, safeTrailerSpawn.w)
     SetVehicleOnGroundProperly(trailer)
+    SetEntityCollision(trailer, true, true)
     SetEntityAsMissionEntity(trailer, true, true)
 
     lcActiveJob.truck = truck
@@ -2953,15 +3005,17 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     EndTextCommandSetBlipName(lcDeliveryBlip)
 
     if isQuickJob then
+        local modeTitle = contract.isParty and ('Comboio Iniciado (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Trabalho Rápido Iniciado!'
         lib.notify({
-            title = 'Trabalho Rápido Iniciado!',
-            description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca!'):format(contract.cargoName, contract.payment),
+            title = modeTitle,
+            description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca com segurança!'):format(contract.cargoName, contract.payment),
             type = 'success',
             duration = 8000
         })
     else
+        local modeTitle = contract.isParty and ('Comboio Próprio (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Frete Próprio Iniciado!'
         lib.notify({
-            title = 'Frete Próprio Iniciado!',
+            title = modeTitle,
             description = ('Carga: %s | Recompensa Integral: $%d\nReboque liberado na doca! Engate seu caminhão.'):format(contract.cargoName, contract.payment),
             type = 'success',
             duration = 8000
