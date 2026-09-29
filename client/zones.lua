@@ -17,7 +17,10 @@ local ActiveObjectiveBlip = nil
 -- GUIA VISUAL EXCLUSIVO: BLIPS E SETA FLUTUANTE (OX_LIB.POINTS)
 -- =======================================================================
 
+local ActiveObjectiveThread = nil
+
 local function ClearObjective()
+    ActiveObjectiveThread = nil
     if ActiveObjectivePoint then
         pcall(function() ActiveObjectivePoint:remove() end)
         ActiveObjectivePoint = nil
@@ -29,32 +32,78 @@ local function ClearObjective()
 end
 Zones.ClearObjective = ClearObjective
 
-local function SetObjective(coords, label, sprite, color, markerOffsetZ)
+local function SetObjective(data, label, sprite, color, markerOffsetZ)
     ClearObjective()
-    if not coords then return end
+    if not data then return end
 
-    local targetCoords = vector3(coords.x, coords.y, coords.z)
-    local offsetZ = markerOffsetZ or 1.6
+    local targetNetId = nil
+    local targetCoords = nil
+    local targetLabel = label or "Objetivo Atual"
+    local targetSprite = sprite or 1
+    local targetColor = color or 5
+    local offsetZ = markerOffsetZ or 3.5
+    local notifyMsg = nil
 
-    -- 1. Blip exclusivo client-side no radar/mapa com rota GPS
-    ActiveObjectiveBlip = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
-    SetBlipSprite(ActiveObjectiveBlip, sprite or 1)
-    SetBlipColour(ActiveObjectiveBlip, color or 5)
-    SetBlipScale(ActiveObjectiveBlip, 0.95)
-    SetBlipRoute(ActiveObjectiveBlip, true)
-    SetBlipRouteColour(ActiveObjectiveBlip, color or 5)
-    BeginTextCommandSetBlipName("STRING")
-    AddTextComponentString(label or "Objetivo Atual")
-    EndTextCommandSetBlipName(ActiveObjectiveBlip)
+    if type(data) == 'table' and (data.netId or data.coords) then
+        targetNetId = data.netId
+        if data.coords then
+            targetCoords = vector3(data.coords.x, data.coords.y, data.coords.z)
+        end
+        targetLabel = data.label or targetLabel
+        targetSprite = data.sprite or targetSprite
+        targetColor = data.color or targetColor
+        offsetZ = data.offsetZ or offsetZ
+        notifyMsg = data.notify
+    elseif type(data) == 'vector3' or (type(data) == 'table' and data.x and data.y and data.z) then
+        targetCoords = vector3(data.x, data.y, data.z)
+    end
 
-    -- 2. Seta Flutuante 3D (DrawMarker tipo 2) via ox_lib.points (0.00ms quando distante)
+    -- Dispara notificação de 10 segundos caso informada
+    if notifyMsg and notifyMsg ~= '' then
+        lib.notify({
+            title = 'Central de Cargas',
+            description = notifyMsg,
+            duration = 10000,
+            type = 'inform'
+        })
+    end
+
+    -- Blip inicial no mapa (caso tenha coordenadas fixas imediatas)
+    if targetCoords and (not targetNetId or targetNetId == 0) then
+        ActiveObjectiveBlip = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+        SetBlipSprite(ActiveObjectiveBlip, targetSprite or 1)
+        SetBlipColour(ActiveObjectiveBlip, targetColor or 5)
+        SetBlipScale(ActiveObjectiveBlip, 0.95)
+        SetBlipRoute(ActiveObjectiveBlip, true)
+        SetBlipRouteColour(ActiveObjectiveBlip, targetColor or 5)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString(targetLabel)
+        EndTextCommandSetBlipName(ActiveObjectiveBlip)
+    end
+
+    -- Identificador único para a thread de monitoramento atual
+    local pointId = math.random(1000, 999999)
+    ActiveObjectiveThread = pointId
+
+    local initialPos = targetCoords or vector3(0.0, 0.0, 0.0)
     ActiveObjectivePoint = lib.points.new({
-        coords = targetCoords,
-        distance = 60.0,
+        coords = initialPos,
+        distance = 80.0,
         nearby = function(self)
             local pos = self.coords
+            if targetNetId and targetNetId ~= 0 then
+                if NetworkDoesNetworkIdExist(targetNetId) then
+                    local ent = NetworkGetEntityFromNetworkId(targetNetId)
+                    if DoesEntityExist(ent) then
+                        pos = GetEntityCoords(ent)
+                        self.coords = pos
+                    end
+                end
+            end
+
+            -- DrawMarker tipo 20: seta apontada para baixo flutuando suavemente exatamente acima do teto
             DrawMarker(
-                2,
+                20,
                 pos.x, pos.y, pos.z + offsetZ,
                 0.0, 0.0, 0.0,
                 180.0, 0.0, 0.0,
@@ -65,8 +114,57 @@ local function SetObjective(coords, label, sprite, color, markerOffsetZ)
             )
         end
     })
+
+    -- Se o objetivo rastreia uma entidade móvel por NetId (Caminhão, Empilhadeira, etc.)
+    if targetNetId and targetNetId ~= 0 then
+        CreateThread(function()
+            local waitTimeout = GetGameTimer() + 6000
+            while not NetworkDoesNetworkIdExist(targetNetId) and GetGameTimer() < waitTimeout do
+                Wait(100)
+            end
+
+            if ActiveObjectiveThread ~= pointId then return end
+
+            local ent = NetworkDoesNetworkIdExist(targetNetId) and NetworkGetEntityFromNetworkId(targetNetId) or 0
+            if ent ~= 0 and DoesEntityExist(ent) then
+                local entPos = GetEntityCoords(ent)
+                if ActiveObjectivePoint then
+                    ActiveObjectivePoint.coords = entPos
+                end
+
+                if ActiveObjectiveBlip and DoesBlipExist(ActiveObjectiveBlip) then
+                    RemoveBlip(ActiveObjectiveBlip)
+                end
+                ActiveObjectiveBlip = AddBlipForEntity(ent)
+                SetBlipSprite(ActiveObjectiveBlip, targetSprite or 477)
+                SetBlipColour(ActiveObjectiveBlip, targetColor or 5)
+                SetBlipScale(ActiveObjectiveBlip, 0.95)
+                SetBlipRoute(ActiveObjectiveBlip, true)
+                SetBlipRouteColour(ActiveObjectiveBlip, targetColor or 5)
+                BeginTextCommandSetBlipName("STRING")
+                AddTextComponentString(targetLabel)
+                EndTextCommandSetBlipName(ActiveObjectiveBlip)
+
+                -- Sincronização periódica da posição macro do ox_lib.points
+                while ActiveObjectiveThread == pointId and DoesEntityExist(ent) do
+                    if ActiveObjectivePoint then
+                        ActiveObjectivePoint.coords = GetEntityCoords(ent)
+                    end
+                    Wait(1000)
+                end
+            end
+        end)
+    end
 end
 Zones.SetObjective = SetObjective
+
+RegisterNetEvent('aust_trucker:client:SetObjective', function(data)
+    SetObjective(data)
+end)
+
+RegisterNetEvent('aust_trucker:client:ClearObjective', function()
+    ClearObjective()
+end)
 
 -- =======================================================================
 -- LIMPEZA GERAL DE ZONAS E TARGETS

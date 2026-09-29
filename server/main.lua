@@ -383,7 +383,7 @@ local function StartTruckDelivery(src, contractData)
 
     for _, coord in ipairs(truckSpawns) do
         if IsSpawnPointClear(coord, 8.0) then
-            truck = CreateVehicle(truckModel, coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+            truck = CreateVehicle(truckModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
             if DoesEntityExist(truck) then
@@ -432,7 +432,7 @@ local function StartTruckDelivery(src, contractData)
 
     for _, coord in ipairs(cargoSpawns) do
         if IsSpawnPointClear(coord, 8.0, { [truck] = true }) then
-            trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+            trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(trailer) then
@@ -462,7 +462,7 @@ local function StartTruckDelivery(src, contractData)
 
         for _, coord in ipairs(forkliftSpawns) do
             if IsSpawnPointClear(coord, 4.0, { [truck] = true, [trailer] = true }) then
-                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
                 if DoesEntityExist(forklift) then
@@ -513,7 +513,7 @@ local function StartTruckDelivery(src, contractData)
             if #pallets >= reqPallets then break end
             if IsSpawnPointClear(coord, 2.5, ignoreEntities) then
                 local pModel = joaat(Config.Polarix.PalletModels[(#pallets % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
-                local pObj = CreateObject(pModel, coord.x, coord.y, coord.z, true, true, false)
+                local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.1, true, true, false)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
@@ -540,7 +540,7 @@ local function StartTruckDelivery(src, contractData)
 
                 if IsSpawnPointClear(pos, 2.0, ignoreEntities) then
                     local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
-                    local pObj = CreateObject(pModel, pos.x, pos.y, pos.z, true, true, false)
+                    local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.1, true, true, false)
                     local waitTimer = GetGameTimer()
                     while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                     if DoesEntityExist(pObj) then
@@ -590,7 +590,7 @@ local function StartTruckDelivery(src, contractData)
         payment = destCfg.reward or 5000,
         xp = destCfg.xp or 200,
         deliveryCoords = destCoords,
-        stage = 'STATUS_LOADING',
+        stage = 'STEP_GET_TRUCK',
         current_object = nil,
         hoseProp = nil,
         hoseConnected = false
@@ -602,7 +602,7 @@ local function StartTruckDelivery(src, contractData)
     local payload = {
         jobId = jobId,
         cargoType = cargoType,
-        stage = 'STATUS_LOADING',
+        stage = 'STEP_GET_TRUCK',
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
         truckPlate = plate,
         truckModel = selectedTruckModel,
@@ -619,6 +619,17 @@ local function StartTruckDelivery(src, contractData)
     }
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
+
+    -- FIX 1 & 2: Seta flutuante (tipo 20) e blip sobre o caminhão com notificação de 10 segundos
+    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+        netId = NetworkGetNetworkIdFromEntity(truck),
+        coords = GetEntityCoords(truck),
+        label = "Caminhão Designado",
+        sprite = 477,
+        color = 5,
+        offsetZ = 3.5,
+        notify = "Contrato iniciado! Embarque no seu caminhão designado para iniciar a operação."
+    })
 end
 
 function GlobalStartTruckDelivery(src, contractData)
@@ -631,6 +642,40 @@ end)
 
 RegisterNetEvent('aurp_trucker:server:startDelivery', function(contractData)
     StartTruckDelivery(source, contractData)
+end)
+
+-- ETAPA 1 -> 2: Transição ao Embarcar no Caminhão Designado
+RegisterNetEvent('aust_trucker:server:playerEnteredTruck', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.stage ~= 'STEP_GET_TRUCK' then return end
+
+    lobby.stage = 'STEP_LOAD_CARGO'
+
+    if lobby.cargoType == 'dry' then
+        local forkNetId = (lobby.forklift and DoesEntityExist(lobby.forklift)) and NetworkGetNetworkIdFromEntity(lobby.forklift) or 0
+        local forkCoords = (lobby.forklift and DoesEntityExist(lobby.forklift)) and GetEntityCoords(lobby.forklift) or nil
+        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+            netId = forkNetId,
+            coords = forkCoords,
+            label = "Empilhadeira de Carga",
+            sprite = 543,
+            color = 5,
+            offsetZ = 2.5,
+            notify = "Vá até a empilhadeira e carregue os paletes na carreta."
+        })
+    else
+        local termCoords = (Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.fuelTerminals and Config.CargoTypes.liquid.fuelTerminals[1] and Config.CargoTypes.liquid.fuelTerminals[1].coords) or vector3(1243.0, -3130.0, 5.0)
+        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+            coords = termCoords,
+            label = "Bomba de Abastecimento",
+            sprite = 361,
+            color = 5,
+            offsetZ = 2.0,
+            notify = "Estacione o caminhão na baia e conecte a mangueira na bomba para abastecer o tanque."
+        })
+    end
 end)
 
 -- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox (Caminhão e Empilhadeira)
@@ -706,13 +751,39 @@ end)
 local function HandlePalletLoaded(src, jobId, slotIndex)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if lobby.stage ~= 'STEP_LOAD_CARGO' and lobby.stage ~= 'STATUS_LOADING' then return end
 
     lobby.loadedCount = lobby.loadedCount + 1
     lobby.current_object = slotIndex
 
     TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
     TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount, lobby.requiredCount)
+
+    if lobby.loadedCount < lobby.requiredCount then
+        local forkNetId = (lobby.forklift and DoesEntityExist(lobby.forklift)) and NetworkGetNetworkIdFromEntity(lobby.forklift) or 0
+        local forkCoords = (lobby.forklift and DoesEntityExist(lobby.forklift)) and GetEntityCoords(lobby.forklift) or nil
+        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+            netId = forkNetId,
+            coords = forkCoords,
+            label = "Empilhadeira de Carga",
+            sprite = 543,
+            color = 5,
+            offsetZ = 2.5,
+            notify = ("Palete acomodado com sucesso! (%d/%d). Continue o carregamento."):format(lobby.loadedCount, lobby.requiredCount)
+        })
+    else
+        lobby.stage = 'STEP_STRAPPING'
+        local trailerRearCoords = GetOffsetFromEntityInWorldCoords(lobby.trailer, 0.0, -5.5, 0.0)
+        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+            coords = trailerRearCoords,
+            label = "Traseira da Carreta (Travar Cintas)",
+            sprite = 478,
+            color = 5,
+            offsetZ = 1.5,
+            notify = "Carregamento concluído! Trave as cintas e assine o romaneio na traseira da carreta."
+        })
+        TriggerClientEvent('aurp_trucker:client:startStrappingStage', src, jobId)
+    end
 end
 
 RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex)
@@ -860,6 +931,14 @@ RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
         SetEntityRoutingBucket(lobby.trailer, 0)
     end
 
+    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+        coords = lobby.deliveryCoords,
+        label = "Destino da Entrega",
+        sprite = 477,
+        color = 5,
+        offsetZ = 2.0,
+        notify = "Tanque abastecido e mangueira desconectada! Siga a rota traçada no GPS até o destino."
+    })
     TriggerClientEvent('aurp_trucker:client:liquidLoadingCompleted', src, jobId, lobby.deliveryCoords)
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -882,6 +961,14 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         SetEntityRoutingBucket(lobby.trailer, 0)
     end
 
+    TriggerClientEvent('aust_trucker:client:SetObjective', src, {
+        coords = lobby.deliveryCoords,
+        label = "Destino da Entrega",
+        sprite = 477,
+        color = 5,
+        offsetZ = 2.0,
+        notify = "Carga assegurada e romaneio assinado! Siga a rota traçada no GPS até o destino."
+    })
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
 
@@ -985,6 +1072,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil
 
+    TriggerClientEvent('aust_trucker:client:ClearObjective', src)
     TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
         payment = payment,
         xp = xp,

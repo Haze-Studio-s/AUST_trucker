@@ -344,7 +344,7 @@ RegisterNUICallback('startJob', HandleStartDeliveryNUI)
 RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     CleanupCurrentJob()
     ActiveJob = payload
-    CurrentStage = 'STATUS_LOADING'
+    CurrentStage = 'STEP_GET_TRUCK'
 
     CreateThread(function()
         -- Aguarda sincronização OneSync das entidades criadas pelo servidor
@@ -410,7 +410,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
+        if trailer and DoesEntityExist(trailer) then
+            SetVehicleOnGroundProperly(trailer)
+            SetEntityCollision(trailer, true, true)
+        end
+
         if forklift and DoesEntityExist(forklift) then
+            SetVehicleOnGroundProperly(forklift)
+            SetEntityCollision(forklift, true, true)
             SetVehicleDoorsLocked(forklift, 1)
             SetVehicleNeedsToBeHotwired(forklift, false)
             if exports.qbx_vehiclekeys then
@@ -418,17 +425,11 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
-        -- Bifurcação Multi-Cargas com ativação imediata do Guia Visual
+        -- Inicialização de módulos conforme o tipo de carga
         if payload.cargoType == 'liquid' then
             if CargoLiquid and CargoLiquid.Setup then
                 CargoLiquid.Setup(ActiveJob, trailer, truck)
             end
-            lib.notify({
-                title = 'Serviço Iniciado!',
-                description = 'Caminhão-tanque liberado com chaves no inventário! Conecte a mangueira na bomba.',
-                type = 'success',
-                duration = 8000
-            })
         else
             if CargoDry and CargoDry.Setup then
                 CargoDry.Setup(ActiveJob, trailer, truck)
@@ -439,22 +440,22 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                     end)
                 end
             end
-
-            -- Guia visual para Carga Seca: Seta flutuante sobre a empilhadeira
-            if forklift and DoesEntityExist(forklift) then
-                if Zones and Zones.SetObjective then
-                    Zones.SetObjective(GetEntityCoords(forklift), "Entrar na Empilhadeira", 543, 5, 2.0)
-                end
-            end
-
-            lib.notify({
-                title = 'Serviço Iniciado!',
-                description = 'Caminhão e empilhadeira liberados com chaves no inventário! Use a empilhadeira para carregar os paletes.',
-                type = 'success',
-                duration = 8000
-            })
         end
     end)
+end)
+
+-- Monitoramento reativo de entrada no caminhão designado (Step 1 -> Step 2)
+lib.onCache('vehicle', function(veh)
+    if veh and ActiveJob and CurrentStage == 'STEP_GET_TRUCK' then
+        local myTruck = JobEntities.truck
+        if not myTruck and ActiveJob.truckNetId and NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
+            myTruck = NetToVeh(ActiveJob.truckNetId)
+        end
+        if myTruck and veh == myTruck then
+            CurrentStage = 'STEP_LOAD_CARGO'
+            TriggerServerEvent('aust_trucker:server:playerEnteredTruck', ActiveJob.jobId)
+        end
+    end
 end)
 
 RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function()
