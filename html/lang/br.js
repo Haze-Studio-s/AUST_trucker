@@ -18,6 +18,10 @@ Lang["br"] = {
 	sidebar_party: "Grupos",
 	sidebar_close: "Fechar",
 
+	confirmation_modal_title: "Confirmação",
+	confirmation_modal_body: "Você tem certeza de que deseja continuar?",
+	confirmation_modal_cancel_button: "Cancelar",
+	confirmation_modal_confirm_button: "Confirmar",
 	confirmation_modal_sell_vehicle: "Você tem certeza de que deseja vender este veículo?",
 	confirmation_modal_delete_party: "Você tem certeza de que deseja excluir este grupo?",
 	confirmation_modal_loan_payoff: "Você tem certeza de que deseja pagar o saldo total de {0}?",

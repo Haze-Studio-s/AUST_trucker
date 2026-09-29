@@ -18,6 +18,10 @@ Lang["de"] = {
 	sidebar_party: "Gruppe",
 	sidebar_close: "Schließen",
 
+	confirmation_modal_title: "Bestätigung",
+	confirmation_modal_body: "Sind Sie sicher, dass Sie fortfahren möchten?",
+	confirmation_modal_cancel_button: "Abbrechen",
+	confirmation_modal_confirm_button: "Bestätigen",
 	confirmation_modal_sell_vehicle: "Bist du sicher, dass du dieses Fahrzeug verkaufen möchtest?",
 	confirmation_modal_delete_party: "Bist du sicher, dass du diese Gruppe löschen möchtest?",
 	confirmation_modal_loan_payoff: "Sind Sie sicher, dass Sie den gesamten Betrag von {0} bezahlen möchten?",

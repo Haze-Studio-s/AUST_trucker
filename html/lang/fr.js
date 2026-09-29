@@ -18,6 +18,10 @@ Lang["fr"] = {
 	sidebar_party: "Faire la fête",
 	sidebar_close: "Fermer",
 
+	confirmation_modal_title: "Confirmation",
+	confirmation_modal_body: "Êtes-vous sûr de vouloir continuer ?",
+	confirmation_modal_cancel_button: "Annuler",
+	confirmation_modal_confirm_button: "Confirmer",
 	confirmation_modal_sell_vehicle: "Êtes-vous sûr de vouloir vendre ce véhicule ?",
 	confirmation_modal_delete_party: "Êtes-vous sûr de vouloir supprimer cette fête ?",
 	confirmation_modal_loan_payoff: "Êtes-vous sûr de vouloir payer le solde total de {0}?",

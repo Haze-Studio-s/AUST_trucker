@@ -18,6 +18,10 @@ Lang["zh-cn"] = {
 	sidebar_party: '联盟车队',
 	sidebar_close: '关闭',
 
+	confirmation_modal_title: '确认',
+	confirmation_modal_body: '您确定要继续吗？',
+	confirmation_modal_cancel_button: '取消',
+	confirmation_modal_confirm_button: '确认',
 	confirmation_modal_sell_vehicle: '您确定要出售这辆车吗？?',
 	confirmation_modal_delete_party: '您确定要删除这个车队吗？',
 	confirmation_modal_loan_payoff: "您确定要支付{0}的全部余额吗?",

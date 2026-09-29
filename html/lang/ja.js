@@ -18,6 +18,10 @@ Lang["ja"] = {
 	sidebar_party: "パーティー",
 	sidebar_close: "閉じる",
 
+	confirmation_modal_title: "確認",
+	confirmation_modal_body: "本当に続行しますか？",
+	confirmation_modal_cancel_button: "キャンセル",
+	confirmation_modal_confirm_button: "確認",
 	confirmation_modal_sell_vehicle: "本当にこの車両を販売しますか?",
 	confirmation_modal_delete_party: "本当にこのパーティーを解散しますか?",
 	confirmation_modal_loan_payoff: "{0}の残高をすべて支払いますか？",

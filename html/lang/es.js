@@ -18,6 +18,10 @@ Lang["es"] = {
   	sidebar_party: "Fiesta",
   	sidebar_close: "Cerrar",
 
+  	confirmation_modal_title: "Confirmación",
+  	confirmation_modal_body: "¿Estás seguro de que deseas continuar?",
+  	confirmation_modal_cancel_button: "Cancelar",
+  	confirmation_modal_confirm_button: "Confirmar",
   	confirmation_modal_sell_vehicle: "¿Estás seguro de que quieres vender este vehículo?",
   	confirmation_modal_delete_party: "¿Estás seguro de que quieres eliminar esta fiesta?",
   	confirmation_modal_loan_payoff: "¿Estás seguro de que quieres pagar el saldo total de {0}?",

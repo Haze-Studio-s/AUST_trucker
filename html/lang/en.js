@@ -18,6 +18,10 @@ Lang["en"] = {
     sidebar_party: "Party",
     sidebar_close: "Close",
 
+    confirmation_modal_title: "Confirmation",
+    confirmation_modal_body: "Are you sure you want to proceed?",
+    confirmation_modal_cancel_button: "Cancel",
+    confirmation_modal_confirm_button: "Confirm",
     confirmation_modal_sell_vehicle: "Are you sure you want to sell this vehicle?",
     confirmation_modal_delete_party: "Are you sure you want to delete this party?",
     confirmation_modal_loan_payoff: "Are you sure you want to pay the entire balance of {0}?",

@@ -2,21 +2,40 @@ let Utils = {};
 
 let locale = "en";
 let format = { currency: "USD", location: "en-US" };
+const defaultTranslations = {
+    "confirmation_modal_title": { br: "Confirmação", en: "Confirmation", es: "Confirmación" },
+    "confirmation_modal_body": { br: "Você tem certeza de que deseja continuar?", en: "Are you sure you want to proceed?", es: "¿Estás seguro de que deseas continuar?" },
+    "confirmation_modal_cancel_button": { br: "Cancelar", en: "Cancel", es: "Cancelar" },
+    "confirmation_modal_confirm_button": { br: "Confirmar", en: "Confirm", es: "Confirmar" },
+};
+
 Utils.translate = function (key) {
+    let curLocale = locale || "br";
     if (typeof Lang === "undefined" || !Lang) {
+        if (defaultTranslations[key]) {
+            return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"];
+        }
         return key;
     }
     if (!locale || !Lang.hasOwnProperty(locale)) {
-        locale = "en";
+        locale = Lang.hasOwnProperty("br") ? "br" : (Lang.hasOwnProperty("en") ? "en" : Object.keys(Lang)[0]);
     }
 
-    let langObj = Lang[locale] || Lang["en"];
-    if (!langObj) return key;
+    let langObj = Lang[locale] || Lang["br"] || Lang["en"];
+    if (!langObj) {
+        if (defaultTranslations[key]) {
+            return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"];
+        }
+        return key;
+    }
 
     const keys = key.split(".");
 
     for (const k of keys) {
         if (!langObj.hasOwnProperty(k)) {
+            if (defaultTranslations[key]) {
+                return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"];
+            }
             return key;
         }
         langObj = langObj[k];
@@ -242,7 +261,7 @@ Utils.showDefaultModal = function (action, body = Utils.translate("confirmation_
         title: Utils.translate("confirmation_modal_title"),
         body,
         buttons: [
-            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-primary", dismiss: true },
+            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-secondary btn-cancel", dismiss: true },
             { text: Utils.translate("confirmation_modal_confirm_button"), class: "btn btn-primary", dismiss: true, action },
         ],
     });
@@ -253,7 +272,7 @@ Utils.showDefaultDangerModal = function (action, body = Utils.translate("confirm
         title: Utils.translate("confirmation_modal_title"),
         body,
         buttons: [
-            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-danger", dismiss: true },
+            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-secondary btn-cancel", dismiss: true },
             { text: Utils.translate("confirmation_modal_confirm_button"), class: "btn btn-danger", dismiss: true, action },
         ],
     });
