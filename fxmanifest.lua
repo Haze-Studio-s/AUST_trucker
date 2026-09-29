@@ -15,9 +15,9 @@ dependencies {
 
 shared_scripts {
     '@ox_lib/init.lua',
-    'shared/config.lua',
     'config/config.lua',
     'config/logistics_config.lua',
+    'shared/config.lua',
     'lang/br.lua',
     'lang/en.lua',
     'lang/locale.lua',

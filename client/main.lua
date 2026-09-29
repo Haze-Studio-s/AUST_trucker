@@ -59,6 +59,7 @@ end
 -- =======================================================================
 
 CreateThread(function()
+    while not Config or not Config.Polarix or not Config.Polarix.Warehouse do Wait(100) end
     local wh = Config.Polarix.Warehouse
     local pedHash = joaat(wh.YardManagerPed or 's_m_m_dockwork_01')
     lib.requestModel(pedHash)

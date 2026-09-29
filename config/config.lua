@@ -2,7 +2,7 @@
 -- AURP_TRUCKER - SISTEMA DE INDÚSTRIAS
 -- =======================================
 
-Config = {}
+Config = Config or {}
 
 -- Configuração de Idioma e Formatação (Sincronização NUI e Servidor)
 Config.lang = 'br'
