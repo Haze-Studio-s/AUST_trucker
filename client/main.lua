@@ -378,32 +378,70 @@ local function StartCouplingWatcher()
 
                                         SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Desça do veículo e abra as portas traseiras da carreta.', 'info')
 
-                                        -- Configuração de ox_target nas portas traseiras (bones e traseira)
+                                        local function ToggleTrailerTrunk(trailer)
+                                            if not trailer or not DoesEntityExist(trailer) then return false end
+                                            local isDoorOpen = GetVehicleDoorAngleRatio(trailer, 5) > 0.0
+
+                                            PlaySoundFrontend(-1, "Toggle_On", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+
+                                            if isDoorOpen then
+                                                -- Fecha a porta/rampa traseira
+                                                SetVehicleDoorShut(trailer, 5, false)
+                                                TrailerDoorsOpen = false
+                                                return false
+                                            else
+                                                -- Abre a porta/rampa traseira completamente
+                                                SetVehicleDoorOpen(trailer, 5, false, false)
+                                                SetVehicleDoorControl(trailer, 5, 1, 1.0)
+                                                TrailerDoorsOpen = true
+                                                return true
+                                            end
+                                        end
+
+                                        -- Configuração de ox_target na traseira do trailer (Toggle Trunk / Porta 5)
                                         exports.ox_target:addLocalEntity(JobEntities.trailer, {
                                             {
-                                                name = 'aust_open_rear_doors',
+                                                name = 'aust_open_trunk',
                                                 icon = 'fa-solid fa-door-open',
-                                                label = 'Abrir Portas Traseiras',
+                                                label = 'Abrir Rampa/Porta-malas',
                                                 distance = 4.0,
                                                 bones = { 'boot', 'door_dside_r', 'door_pside_r' },
                                                 canInteract = function(entity)
-                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' or IsPedInAnyVehicle(cache.ped, false) then return false end
+                                                    if IsPedInAnyVehicle(cache.ped, false) then return false end
+                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' and CurrentStage ~= 'STEP_5_ENTER_FORKLIFT' and CurrentStage ~= 'STEP_6_LOAD_PALLETS' then return false end
+                                                    local isDoorOpen = GetVehicleDoorAngleRatio(entity, 5) > 0.0
+                                                    if isDoorOpen then return false end
                                                     local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
                                                     return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
                                                 end,
                                                 onSelect = function()
-                                                    -- Abertura real e física das portas traseiras
-                                                    SetVehicleDoorOpen(JobEntities.trailer, 4, false, false)
-                                                    SetVehicleDoorOpen(JobEntities.trailer, 5, false, false)
-                                                    SetVehicleDoorControl(JobEntities.trailer, 4, 1, 1.0)
-                                                    SetVehicleDoorControl(JobEntities.trailer, 5, 1, 1.0)
-                                                    TrailerDoorsOpen = true
-
-                                                    SendMissionNotify('Central Logística', 'Portas abertas. Assuma a empilhadeira para iniciar o carregamento.', 'info')
-
-                                                    -- ETAPA 5: Seta passa para a Empilhadeira (Forklift)
-                                                    CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                                                    UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                                    local opened = ToggleTrailerTrunk(JobEntities.trailer)
+                                                    if opened and CurrentStage == 'STEP_4_OPEN_DOORS' then
+                                                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                                        SendMissionNotify('Central Logística', 'Rampa/porta aberta. Assuma a empilhadeira para iniciar o carregamento.', 'info')
+                                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                                    end
+                                                end
+                                            },
+                                            {
+                                                name = 'aust_close_trunk',
+                                                icon = 'fa-solid fa-door-closed',
+                                                label = 'Fechar Rampa/Porta-malas',
+                                                distance = 4.0,
+                                                bones = { 'boot', 'door_dside_r', 'door_pside_r' },
+                                                canInteract = function(entity)
+                                                    if IsPedInAnyVehicle(cache.ped, false) then return false end
+                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' and CurrentStage ~= 'STEP_5_ENTER_FORKLIFT' and CurrentStage ~= 'STEP_6_LOAD_PALLETS' and CurrentStage ~= 'STEP_7_CLOSE_AND_STRAP' then return false end
+                                                    local isDoorOpen = GetVehicleDoorAngleRatio(entity, 5) > 0.0
+                                                    if not isDoorOpen then return false end
+                                                    local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
+                                                    return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
+                                                end,
+                                                onSelect = function()
+                                                    ToggleTrailerTrunk(JobEntities.trailer)
+                                                    if CurrentStage == 'STEP_7_CLOSE_AND_STRAP' then
+                                                        SendMissionNotify('Central Logística', 'Rampa fechada. Agora amarre a carga na traseira com as cintas.', 'info')
+                                                    end
                                                 end
                                             }
                                         })
@@ -427,24 +465,26 @@ local function SetupStrappingStage()
     CurrentStage = 'STEP_7_CLOSE_AND_STRAP'
     ClearObjectiveMarkers(false)
 
-    SendMissionNotify('Central Logística', 'Carregamento finalizado! Feche as portas e amarre a carga na traseira.', 'success')
+    SendMissionNotify('Central Logística', 'Carregamento finalizado! Feche a rampa traseira e amarre a carga na traseira.', 'success')
 
     if not JobEntities.trailer or not DoesEntityExist(JobEntities.trailer) then return end
     local rearPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
 
     -- Seta verde exclusiva na traseira da carreta
-    UpdateMissionObjective('trailer_strap', rearPos, 'Fechar Portas e Amarrar Carga')
+    UpdateMissionObjective('trailer_strap', rearPos, 'Fechar Rampa e Amarrar Carga')
 
     local function PerformCloseAndStrap()
-        -- Fechamento físico das portas
-        SetVehicleDoorShut(JobEntities.trailer, 4, false)
-        SetVehicleDoorShut(JobEntities.trailer, 5, false)
-        TrailerDoorsOpen = false
+        local isDoorOpen = GetVehicleDoorAngleRatio(JobEntities.trailer, 5) > 0.0
+        if isDoorOpen then
+            SendMissionNotify('Central Logística', 'Feche a rampa/porta traseira antes de amarrar a carga!', 'error')
+            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+            return
+        end
 
         -- Barra de progresso de amarração (5 segundos)
         local success = lib.progressBar({
             duration = 5000,
-            label = 'Fechando portas e amarrando carga com cintas...',
+            label = 'Amarrando carga com cintas de segurança...',
             useWhileDead = false,
             canCancel = true,
             disable = { move = true, car = true, combat = true },
@@ -468,7 +508,7 @@ local function SetupStrappingStage()
         {
             name = 'aust_strap_cargo',
             icon = 'fa-solid fa-boxes-packing',
-            label = 'Fechar Portas e Amarrar Carga',
+            label = 'Amarrar Pallets',
             distance = 4.0,
             bones = { 'boot', 'door_dside_r', 'door_pside_r' },
             canInteract = function(entity)

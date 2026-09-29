@@ -148,44 +148,60 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             end
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                local palletEntity = CurrentForkliftPallet
-                                DetachEntity(palletEntity, true, true)
-
-                                -- ETAPA 5: Fixação calculada do palete na caçamba do reboque
-                                local ox, oy, oz = GetTrailerAttachOffset(trailer, loadedCount)
-                                AttachEntityToEntity(
-                                    palletEntity, trailer, 0,
-                                    ox, oy, oz,
-                                    0.0, 0.0, 0.0,
-                                    false, false, true, false, 2, true
-                                )
-                                SetEntityCollision(palletEntity, true, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
-                                FreezeEntityPosition(palletEntity, true)
-
-                                CurrentForkliftPallet = nil
-                                loadedCount = loadedCount + 1
-                                PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-
-                                if TextUIShowing then
-                                    lib.hideTextUI()
-                                    TextUIShowing = nil
-                                end
-
-                                -- Notifica o servidor
-                                TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
-
-                                if onLoadedCb then
-                                    onLoadedCb('dropped', palletEntity, loadedCount, requiredCount)
-                                end
-
-                                if loadedCount >= requiredCount then
-                                    ForkliftModule.StopOperation()
-                                    if onAllLoadedCb then
-                                        onAllLoadedCb()
+                                -- Validação de abertura da porta/rampa traseira (Índice 5 / Trunk)
+                                local doorRatio = GetVehicleDoorAngleRatio(trailer, 5)
+                                if doorRatio <= 0.1 then
+                                    if _G.SendMissionNotify then
+                                        _G.SendMissionNotify('Central Logística', 'Abra a porta traseira da carreta antes de descarregar os pallets.', 'error')
+                                    else
+                                        lib.notify({
+                                            title = 'Central Logística',
+                                            description = 'Abra a porta traseira da carreta antes de descarregar os pallets.',
+                                            type = 'error',
+                                            duration = 10000
+                                        })
                                     end
-                                    break
+                                    PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+                                else
+                                    local palletEntity = CurrentForkliftPallet
+                                    DetachEntity(palletEntity, true, true)
+
+                                    -- Fixação calculada do palete na caçamba do reboque
+                                    local ox, oy, oz = GetTrailerAttachOffset(trailer, loadedCount)
+                                    AttachEntityToEntity(
+                                        palletEntity, trailer, 0,
+                                        ox, oy, oz,
+                                        0.0, 0.0, 0.0,
+                                        false, false, true, false, 2, true
+                                    )
+                                    SetEntityCollision(palletEntity, true, true)
+                                    SetEntityNoCollisionEntity(palletEntity, trailer, true)
+                                    SetEntityNoCollisionEntity(trailer, palletEntity, true)
+                                    FreezeEntityPosition(palletEntity, true)
+
+                                    CurrentForkliftPallet = nil
+                                    loadedCount = loadedCount + 1
+                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+                                    if TextUIShowing then
+                                        lib.hideTextUI()
+                                        TextUIShowing = nil
+                                    end
+
+                                    -- Notifica o servidor
+                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
+
+                                    if onLoadedCb then
+                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount)
+                                    end
+
+                                    if loadedCount >= requiredCount then
+                                        ForkliftModule.StopOperation()
+                                        if onAllLoadedCb then
+                                            onAllLoadedCb()
+                                        end
+                                        break
+                                    end
                                 end
                             end
                         else
