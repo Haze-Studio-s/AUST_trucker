@@ -194,48 +194,13 @@ CreateThread(function()
 end)
 
 -- =======================================================================
--- ETAPA 2: RETIRADA E INSPEÇÃO OBRIGATÓRIA DE SEGURANÇA
+-- ETAPA DE INSPEÇÃO REMOVIDA (FLUXO DIRETO)
 -- =======================================================================
 
 local function SetupVehicleInspection(truck, trailer, jobId)
-    CurrentStage = 'STATUS_INSPECTING'
-
-    -- Garante que o caminhão inicia trancado
-    SetVehicleDoorsLocked(truck, 2)
-
-    local setupFn = (Zones and Zones.SetupInspection) or (_G.Zones and _G.Zones.SetupInspection)
-    if setupFn then
-        setupFn(truck, jobId, function()
-            TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
-        end)
-    else
-        -- Fallback de emergência (ox_target direto) se módulo zones falhar
-        exports.ox_target:addLocalEntity(truck, {
-            {
-                name = 'inspect_truck_safety',
-                icon = 'fa-solid fa-magnifying-glass',
-                label = 'Inspecionar Caminhão e Liberar Chaves',
-                distance = 2.5,
-                onSelect = function()
-                    local ok = lib.progressBar({
-                        duration = 3000,
-                        label = 'Inspecionando veículo...',
-                        useWhileDead = false,
-                        canCancel = true,
-                        disable = { move = true, car = true, combat = true },
-                        anim = { dict = 'mini@repair', clip = 'fixing_a_ped' }
-                    })
-                    if ok then
-                        TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
-                    end
-                end
-            }
-        })
-        lib.notify({
-            title = 'Inspeção de Segurança',
-            description = 'Aproxime-se do caminhão para realizar a inspeção e receber as chaves!',
-            type = 'inform'
-        })
+    CurrentStage = 'STATUS_LOADING'
+    if truck and DoesEntityExist(truck) then
+        SetVehicleDoorsLocked(truck, 1)
     end
 end
 
@@ -379,7 +344,7 @@ RegisterNUICallback('startJob', HandleStartDeliveryNUI)
 RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     CleanupCurrentJob()
     ActiveJob = payload
-    CurrentStage = 'STATUS_INSPECTING'
+    CurrentStage = 'STATUS_LOADING'
 
     CreateThread(function()
         -- Aguarda sincronização OneSync das entidades criadas pelo servidor
@@ -432,72 +397,68 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
             end
 
-            -- ESTADO 2: Caminhão inicia trancado aguardando inspeção obrigatória
-            SetVehicleDoorsLocked(truck, 2)
+            -- Caminhão destrancado imediatamente (inspeção removida)
+            SetVehicleDoorsLocked(truck, 1)
             SetVehicleNeedsToBeHotwired(truck, false)
             SetVehicleHasBeenOwnedByPlayer(truck, true)
 
-            SetupVehicleInspection(truck, trailer, payload.jobId)
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
+            end
+            if exports.ox_fuel then
+                pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
+            end
+        end
+
+        if forklift and DoesEntityExist(forklift) then
+            SetVehicleDoorsLocked(forklift, 1)
+            SetVehicleNeedsToBeHotwired(forklift, false)
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:GiveKeys(forklift) end)
+            end
+        end
+
+        -- Bifurcação Multi-Cargas com ativação imediata do Guia Visual
+        if payload.cargoType == 'liquid' then
+            if CargoLiquid and CargoLiquid.Setup then
+                CargoLiquid.Setup(ActiveJob, trailer, truck)
+            end
+            lib.notify({
+                title = 'Serviço Iniciado!',
+                description = 'Caminhão-tanque liberado com chaves no inventário! Conecte a mangueira na bomba.',
+                type = 'success',
+                duration = 8000
+            })
+        else
+            if CargoDry and CargoDry.Setup then
+                CargoDry.Setup(ActiveJob, trailer, truck)
+            else
+                if trailer and DoesEntityExist(trailer) then
+                    ForkliftModule.SetupTrailerTarget(trailer, payload.jobId, function()
+                        return CurrentStage, ActiveJob.loadedCount or 0, ActiveJob.requiredCount or 4
+                    end)
+                end
+            end
+
+            -- Guia visual para Carga Seca: Seta flutuante sobre a empilhadeira
+            if forklift and DoesEntityExist(forklift) then
+                if Zones and Zones.SetObjective then
+                    Zones.SetObjective(GetEntityCoords(forklift), "Entrar na Empilhadeira", 543, 5, 2.0)
+                end
+            end
+
+            lib.notify({
+                title = 'Serviço Iniciado!',
+                description = 'Caminhão e empilhadeira liberados com chaves no inventário! Use a empilhadeira para carregar os paletes.',
+                type = 'success',
+                duration = 8000
+            })
         end
     end)
 end)
 
-RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truckPlate, truckNetId, forkliftPlate)
-    if not ActiveJob or ActiveJob.jobId ~= jobId then return end
-    CurrentStage = 'STATUS_LOADING'
-
-    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
-        SetVehicleDoorsLocked(JobEntities.truck, 1)
-        SetVehicleNeedsToBeHotwired(JobEntities.truck, false)
-
-        -- Feedback sonoro e visual de destrancar
-        PlaySoundFrontend(-1, "REMOTE_PLYR_DOOR_UNLOCK", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", 1)
-
-        if exports.qbx_vehiclekeys then
-            pcall(function() exports.qbx_vehiclekeys:GiveKeys(JobEntities.truck) end)
-        end
-        if exports.ox_fuel then
-            pcall(function() exports.ox_fuel:SetFuel(JobEntities.truck, 100.0) end)
-        end
-    end
-
-    -- BUG 3 RESOLUTION: Destrancar e sincronizar chaves da empilhadeira no cliente
-    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-        SetVehicleDoorsLocked(JobEntities.forklift, 1)
-        SetVehicleNeedsToBeHotwired(JobEntities.forklift, false)
-        if exports.qbx_vehiclekeys then
-            pcall(function() exports.qbx_vehiclekeys:GiveKeys(JobEntities.forklift) end)
-        end
-    end
-
-    -- Bifurcação Multi-Cargas (Seca vs Líquida)
-    if ActiveJob.cargoType == 'liquid' then
-        if CargoLiquid and CargoLiquid.Setup then
-            CargoLiquid.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
-        end
-        lib.notify({
-            title = 'Inspeção Aprovada!',
-            description = 'Caminhão-tanque liberado e chaves recebidas! Vá até a bomba de combustível para retirar a mangueira.',
-            type = 'success',
-            duration = 8000
-        })
-    else
-        if CargoDry and CargoDry.Setup then
-            CargoDry.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
-        else
-            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                ForkliftModule.SetupTrailerTarget(JobEntities.trailer, jobId, function()
-                    return CurrentStage, ActiveJob.loadedCount or 0, ActiveJob.requiredCount or 4
-                end)
-            end
-        end
-        lib.notify({
-            title = 'Inspeção Aprovada!',
-            description = 'Caminhão liberado e chaves recebidas! Vá até a empilhadeira para iniciar o carregamento.',
-            type = 'success',
-            duration = 8000
-        })
-    end
+RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function()
+    -- Inspeção removida: veículos destrancados no início
 end)
 
 RegisterNetEvent('aurp_trucker:client:startStrappingStage', function(jobId)

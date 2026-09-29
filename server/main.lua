@@ -401,10 +401,30 @@ local function StartTruckDelivery(src, contractData)
     SetEntityDistanceCullingRadius(truck, 400.0)
     SetVehicleNumberPlateText(truck, plate)
 
-    -- ESTADO 2: Caminhão spawna trancado para inspeção obrigatória
-    SetVehicleDoorsLocked(truck, 2)
+    -- Caminhão spawna destrancado e pronto para condução (inspeção removida)
+    SetVehicleDoorsLocked(truck, 1)
 
-    print(("[AUST_Trucker] Vehicle spawned locked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
+    -- ENTREGA IMEDIATA DE CHAVES DO CAMINHÃO (ox_inventory + qbx_vehiclekeys)
+    if exports.ox_inventory then
+        local keyMetadata = {
+            plate = plate,
+            description = "Chave do Veículo - " .. plate
+        }
+        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
+        if not added then
+            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+        end
+    end
+    if exports['qbx_vehiclekeys'] then
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
+    end
+    if exports['qb-vehiclekeys'] then
+        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
+    end
+    TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
+    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
+
+    print(("[AUST_Trucker] Vehicle spawned unlocked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
     -- STEP B: CARGO / TRAILER SPAWN
     local cargoSpawns = wh.CargoSpawns or wh.TrailerSpawns or { wh.TrailerSpawnCoords }
@@ -461,10 +481,29 @@ local function StartTruckDelivery(src, contractData)
         SetEntityRoutingBucket(forklift, bucketId)
         SetEntityDistanceCullingRadius(forklift, 350.0)
 
-        -- BUG 3 RESOLUTION: Placa e destrancamento da empilhadeira
+        -- Placa, destrancamento e chaves imediatas da empilhadeira
         forkliftPlate = ("FORK%04d"):format(math.random(1000, 9999))
         SetVehicleNumberPlateText(forklift, forkliftPlate)
         SetVehicleDoorsLocked(forklift, 1)
+
+        if exports.ox_inventory then
+            local forkKeyMeta = {
+                plate = forkliftPlate,
+                description = "Chave da Empilhadeira - " .. forkliftPlate
+            }
+            local added = exports.ox_inventory:AddItem(src, 'keys', 1, forkKeyMeta)
+            if not added then
+                exports.ox_inventory:AddItem(src, 'vehiclekey', 1, forkKeyMeta)
+            end
+        end
+        if exports['qbx_vehiclekeys'] then
+            pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, forklift) end)
+        end
+        if exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, forkliftPlate) end)
+        end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, forkliftPlate)
+        TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, forkliftPlate)
 
         -- Spawn Dinâmico e Iterativo de Paletes com Verificação de Área Livre
         local palletSpawns = wh.PalletSpawns or {}
@@ -551,7 +590,7 @@ local function StartTruckDelivery(src, contractData)
         payment = destCfg.reward or 5000,
         xp = destCfg.xp or 200,
         deliveryCoords = destCoords,
-        stage = 'STATUS_INSPECTING',
+        stage = 'STATUS_LOADING',
         current_object = nil,
         hoseProp = nil,
         hoseConnected = false
@@ -563,6 +602,7 @@ local function StartTruckDelivery(src, contractData)
     local payload = {
         jobId = jobId,
         cargoType = cargoType,
+        stage = 'STATUS_LOADING',
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
         truckPlate = plate,
         truckModel = selectedTruckModel,

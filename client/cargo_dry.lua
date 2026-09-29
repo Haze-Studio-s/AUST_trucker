@@ -75,6 +75,9 @@ function CargoDry.Setup(jobData, trailer, truck)
                         icon = 'pallet'
                     })
                     ShowingPrompt = true
+                    if Zones and Zones.SetObjective then
+                        Zones.SetObjective(self.coords, "Acomodar Palete na Carreta", 479, 2, 2.5)
+                    end
                 end
 
                 if IsControlJustPressed(0, 38) then -- Tecla E
@@ -86,7 +89,7 @@ function CargoDry.Setup(jobData, trailer, truck)
 
                     local ok = ForkliftModule.LoadPalletOntoTrailer(TrailerEntity, CurrentJobData.jobId, loaded, required)
                     if ok then
-                        -- Servidor recebe o evento aurp_trucker:server:polarixPalletLoaded via ForkliftModule
+                        if Zones and Zones.ClearObjective then Zones.ClearObjective() end
                     end
                 end
             else
@@ -120,7 +123,16 @@ RegisterNetEvent('aurp_trucker:client:dryProgressSync', function(loaded, require
         type = 'inform'
     })
 
-    if loaded >= required then
+    if loaded < required then
+        -- Aponta o objetivo visual para o próximo palete no chão
+        local fl = ForkliftModule.GetPlayerForklift()
+        if fl then
+            local nextPallet = ForkliftModule.GetNearestGroundPallet(fl)
+            if nextPallet and DoesEntityExist(nextPallet) and Zones and Zones.SetObjective then
+                Zones.SetObjective(GetEntityCoords(nextPallet), "Pegar Próximo Palete", 478, 5, 1.2)
+            end
+        end
+    else
         CargoDry.Cleanup()
         TriggerEvent('aurp_trucker:client:startStrappingStage', CurrentJobData.jobId)
     end

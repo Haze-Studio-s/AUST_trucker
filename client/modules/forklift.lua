@@ -148,17 +148,42 @@ function ForkliftModule.LoadPalletOntoTrailer(trailer, jobId, currentLoadedCount
     end
 
     local targetSlot = (currentLoadedCount or 0) + 1
-    if targetSlot > (maxAllowed or trailerConfig.maxPallets or 8) then
+    if targetSlot > (maxAllowed or (trailerConfig and trailerConfig.maxPallets) or 8) then
         lib.notify({ title = 'Capacidade Máxima', description = 'O compartimento da carreta está com a lotação máxima atingida!', type = 'error' })
         return false
     end
 
-    local offset = trailerConfig.attachOffsets[targetSlot] or { x = 0.0, y = 0.0, z = -0.85, rx = 0.0, ry = 0.0, rz = 0.0 }
+    -- REQUIREMENT 3: DYNAMIC PALLET PLACEMENT INSIDE SPAWNED VEHICLE
+    -- Cálculo matemático dinâmico para organização dos volumes sem sobreposição
+    local offset = nil
+    if trailerConfig and trailerConfig.attachOffsets and trailerConfig.attachOffsets[targetSlot] then
+        offset = trailerConfig.attachOffsets[targetSlot]
+    else
+        local isBoxTruck = (trModel == joaat('mule') or trModel == joaat('mule2') or trModel == joaat('mule3') or trModel == joaat('mule4') or trModel == joaat('mule5') or trModel == joaat('pounder') or trModel == joaat('pounder2') or trModel == joaat('biff'))
+
+        if isBoxTruck then
+            -- Caminhões tipo Baú (ex: Mule): Y = 0.0, Y = -1.5, Y = -3.0
+            local startY = 0.0
+            local stepY = 1.5
+            local posY = startY - ((targetSlot - 1) * stepY)
+            offset = { x = 0.0, y = posY, z = 0.15, rx = 0.0, ry = 0.0, rz = 0.0 }
+        else
+            -- Semirreboques e carretas convencionais: 2 colunas lado a lado
+            local col = (targetSlot - 1) % 2
+            local row = math.floor((targetSlot - 1) / 2)
+            local posX = (col == 0) and -0.55 or 0.55
+            local startY = 3.6
+            local stepY = 2.4
+            local posY = startY - (row * stepY)
+            local posZ = (trailerConfig and trailerConfig.bedZ) or -0.85
+            offset = { x = posX, y = posY, z = posZ, rx = 0.0, ry = 0.0, rz = 0.0 }
+        end
+    end
 
     local success = lib.progressCircle({
         duration = 3500,
         position = 'bottom',
-        label = ('Acomodando palete no slot %d/%d...'):format(targetSlot, maxAllowed or trailerConfig.maxPallets),
+        label = ('Acomodando palete no slot %d/%d...'):format(targetSlot, maxAllowed or (trailerConfig and trailerConfig.maxPallets) or 8),
         canCancel = true,
         disable = { move = true, car = true, combat = true },
     })

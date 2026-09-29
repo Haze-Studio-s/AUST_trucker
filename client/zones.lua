@@ -9,13 +9,69 @@ _G.Zones = Zones
 
 local ActivePoints = {}
 local ActiveTargetEntities = {}
-local InspectedParts = {}
 local ShowingPrompt = false
+local ActiveObjectivePoint = nil
+local ActiveObjectiveBlip = nil
+
+-- =======================================================================
+-- GUIA VISUAL EXCLUSIVO: BLIPS E SETA FLUTUANTE (OX_LIB.POINTS)
+-- =======================================================================
+
+function Zones.ClearObjective()
+    if ActiveObjectivePoint then
+        pcall(function() ActiveObjectivePoint:remove() end)
+        ActiveObjectivePoint = nil
+    end
+    if ActiveObjectiveBlip and DoesBlipExist(ActiveObjectiveBlip) then
+        RemoveBlip(ActiveObjectiveBlip)
+        ActiveObjectiveBlip = nil
+    end
+end
+
+function Zones.SetObjective(coords, label, sprite, color, markerOffsetZ)
+    Zones.ClearObjective()
+    if not coords then return end
+
+    local targetCoords = vector3(coords.x, coords.y, coords.z)
+    local offsetZ = markerOffsetZ or 1.6
+
+    -- 1. Blip exclusivo client-side no radar/mapa com rota GPS
+    ActiveObjectiveBlip = AddBlipForCoord(targetCoords.x, targetCoords.y, targetCoords.z)
+    SetBlipSprite(ActiveObjectiveBlip, sprite or 1)
+    SetBlipColour(ActiveObjectiveBlip, color or 5)
+    SetBlipScale(ActiveObjectiveBlip, 0.95)
+    SetBlipRoute(ActiveObjectiveBlip, true)
+    SetBlipRouteColour(ActiveObjectiveBlip, color or 5)
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString(label or "Objetivo Atual")
+    EndTextCommandSetBlipName(ActiveObjectiveBlip)
+
+    -- 2. Seta Flutuante 3D (DrawMarker tipo 2) via ox_lib.points (0.00ms quando distante)
+    ActiveObjectivePoint = lib.points.new({
+        coords = targetCoords,
+        distance = 60.0,
+        nearby = function(self)
+            local pos = self.coords
+            DrawMarker(
+                2,
+                pos.x, pos.y, pos.z + offsetZ,
+                0.0, 0.0, 0.0,
+                180.0, 0.0, 0.0,
+                0.75, 0.75, 0.75,
+                240, 200, 30, 220,
+                true,   -- bobUpAndDown (flutua suavemente para cima/baixo)
+                false, 2, true, nil, nil, false
+            )
+        end
+    })
+end
 
 -- =======================================================================
 -- LIMPEZA GERAL DE ZONAS E TARGETS
 -- =======================================================================
 function Zones.Cleanup()
+    Zones.ClearObjective()
+
     for _, pt in pairs(ActivePoints) do
         if pt then pcall(function() pt:remove() end) end
     end
@@ -32,79 +88,13 @@ function Zones.Cleanup()
         lib.hideTextUI()
         ShowingPrompt = false
     end
-
-    InspectedParts = {}
 end
 
 -- =======================================================================
--- ESTADO 2: INSPEÇÃO DE SEGURANÇA (TRUCK INSPECTION VIA OX_TARGET)
+-- ETAPA DE INSPEÇÃO REMOVIDA (LIBERAÇÃO DIRETA)
 -- =======================================================================
 function Zones.SetupInspection(truck, jobId, onComplete)
-    InspectedParts = {}
-
-    if not truck or not DoesEntityExist(truck) then return end
-    table.insert(ActiveTargetEntities, truck)
-
-    -- Caminhão permanece trancado até a inspeção ser 100% concluída
-    SetVehicleDoorsLocked(truck, 2)
-
-    local checkpoints = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Checkpoints) or {
-        { id = 'tires_front_left', label = 'Verificar Pneus Dianteiros', offset = vector3(-1.2, 2.5, 0.0) },
-        { id = 'engine_hood', label = 'Checar Óleo & Radiador', offset = vector3(0.0, 3.2, 0.5) },
-        { id = 'tires_rear', label = 'Verificar Rodas Traseiras', offset = vector3(-1.2, -1.5, 0.0) },
-    }
-    local totalRequired = #checkpoints
-    local targetOptions = {}
-
-    for _, cp in ipairs(checkpoints) do
-        table.insert(targetOptions, {
-            name = 'inspect_' .. cp.id,
-            icon = 'fa-solid fa-magnifying-glass',
-            label = cp.label,
-            distance = 2.4,
-            canInteract = function()
-                return not InspectedParts[cp.id]
-            end,
-            onSelect = function()
-                local anim = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Animation) or { dict = 'mini@repair', clip = 'fixing_a_ped' }
-                local success = lib.progressBar({
-                    duration = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Duration) or 3000,
-                    label = cp.label .. '...',
-                    useWhileDead = false,
-                    canCancel = true,
-                    disable = { move = true, car = true, combat = true },
-                    anim = { dict = anim.dict, clip = anim.clip }
-                })
-
-                if success then
-                    InspectedParts[cp.id] = true
-                    PlaySoundFrontend(-1, "CHECKPOINT_NORMAL", "HUD_MINI_GAME_SOUNDSET", 0)
-
-                    local inspectedCount = 0
-                    for _ in pairs(InspectedParts) do inspectedCount = inspectedCount + 1 end
-
-                    lib.notify({
-                        title = 'Inspeção de Segurança',
-                        description = ('Item verificado (%d/%d)!'):format(inspectedCount, totalRequired),
-                        type = 'inform'
-                    })
-
-                    if inspectedCount >= totalRequired then
-                        if onComplete then onComplete() end
-                    end
-                end
-            end
-        })
-    end
-
-    exports.ox_target:addLocalEntity(truck, targetOptions)
-
-    lib.notify({
-        title = 'Inspeção Obrigatória (Estado 2)',
-        description = 'Realize a checagem nos pneus e motor do caminhão antes de ligar o veículo!',
-        type = 'warning',
-        duration = 8000
-    })
+    if onComplete then onComplete() end
 end
 
 -- =======================================================================
@@ -170,6 +160,9 @@ function Zones.SetupStrappingAndManifest(trailer, jobId, onComplete)
     if not trailer or not DoesEntityExist(trailer) then return end
     table.insert(ActiveTargetEntities, trailer)
 
+    local rearCoords = GetOffsetFromEntityInWorldCoords(trailer, 0.0, -5.5, 0.5)
+    Zones.SetObjective(rearCoords, "Fixar Cintas e Romaneio", 479, 3, 2.0)
+
     exports.ox_target:addLocalEntity(trailer, {
         {
             name = 'strap_cargo_and_sign_manifest',
@@ -192,6 +185,7 @@ function Zones.SetupStrappingAndManifest(trailer, jobId, onComplete)
                 })
 
                 if success then
+                    Zones.ClearObjective()
                     if onComplete then onComplete() end
                 end
             end
@@ -214,8 +208,11 @@ function Zones.SetupDeliveryPoint(coords, jobId, onUnload)
         pcall(function() ActivePoints['delivery_dest']:remove() end)
     end
 
+    local destCoords = vector3(coords.x, coords.y, coords.z)
+    Zones.SetObjective(destCoords, "Local de Descarregamento", 477, 2, 2.5)
+
     ActivePoints['delivery_dest'] = lib.points.new({
-        coords = vector3(coords.x, coords.y, coords.z),
+        coords = destCoords,
         distance = 15.0,
         onEnter = function()
             lib.showTextUI('[E] Descarregar Mercadoria e Concluir Frete')
@@ -243,6 +240,7 @@ function Zones.SetupDeliveryPoint(coords, jobId, onUnload)
                 })
 
                 if ok then
+                    Zones.ClearObjective()
                     if onUnload then onUnload() end
                 end
             end
