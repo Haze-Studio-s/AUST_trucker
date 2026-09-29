@@ -248,6 +248,16 @@ function ForkliftModule.StopOperation()
         lib.hideTextUI()
         TextUIShowing = nil
     end
+    if CurrentForkliftPallet and DoesEntityExist(CurrentForkliftPallet) then
+        DetachEntity(CurrentForkliftPallet, true, true)
+        CurrentForkliftPallet = nil
+    end
 end
+
+AddEventHandler('onResourceStop', function(res)
+    if res == GetCurrentResourceName() then
+        ForkliftModule.StopOperation()
+    end
+end)
 
 return ForkliftModule

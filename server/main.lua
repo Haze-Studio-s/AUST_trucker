@@ -132,6 +132,38 @@ end
 local PolarixLobbies = {}
 local PlayerPolarixLobbies = {}
 
+local function CleanupLobbyEntities(lobby)
+    if not lobby then return end
+
+    if lobby.src and GetPlayerPing(lobby.src) > 0 then
+        pcall(function() SetPlayerRoutingBucket(lobby.src, 0) end)
+    end
+
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        DeleteEntity(lobby.trailer)
+    end
+
+    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
+        DeleteEntity(lobby.truck)
+    end
+
+    if lobby.forklift and DoesEntityExist(lobby.forklift) then
+        DeleteEntity(lobby.forklift)
+    end
+
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
+    end
+
+    if lobby.pallets then
+        for _, p in ipairs(lobby.pallets) do
+            if p and DoesEntityExist(p) then
+                DeleteEntity(p)
+            end
+        end
+    end
+end
+
 -- Auto-schema idempotente para 0r_trucker
 MySQL.ready(function()
     MySQL.query([[
@@ -1081,4 +1113,32 @@ AddEventHandler('playerDropped', function()
         end
     end
 end)
+
+-- Limpeza ao reiniciar ou parar o resource (OneSync Safe Cleanup)
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+
+    if PolarixLobbies then
+        for _, lobby in pairs(PolarixLobbies) do
+            CleanupLobbyEntities(lobby)
+        end
+        PolarixLobbies = {}
+        PlayerPolarixLobbies = {}
+    end
+
+    if VP_Trucker and VP_Trucker.PlayerJobEntities then
+        for _, data in pairs(VP_Trucker.PlayerJobEntities) do
+            if data.truckNetId then
+                local ent = NetworkGetEntityFromNetworkId(data.truckNetId)
+                if ent and DoesEntityExist(ent) then DeleteEntity(ent) end
+            end
+            if data.trailerNetId then
+                local ent = NetworkGetEntityFromNetworkId(data.trailerNetId)
+                if ent and DoesEntityExist(ent) then DeleteEntity(ent) end
+            end
+        end
+        VP_Trucker.PlayerJobEntities = {}
+    end
+end)
+
 

@@ -28,6 +28,7 @@ local HasRopes = false
 local currentTieIndex = 1
 local currentStrappingIndex = 1
 local ActiveStrappingZoneId = nil
+local DispatcherPed = nil
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
 Config.LoadedPallets = LoadedPallets
@@ -297,13 +298,13 @@ CreateThread(function()
     local pedHash = joaat(wh.YardManagerPed or 's_m_m_dockwork_01')
     lib.requestModel(pedHash)
 
-    local dispatcherPed = CreatePed(4, pedHash, wh.Dispatcher.x, wh.Dispatcher.y, wh.Dispatcher.z - 1.0, wh.Dispatcher.w, false, true)
-    FreezeEntityPosition(dispatcherPed, true)
-    SetEntityInvincible(dispatcherPed, true)
-    SetBlockingOfNonTemporaryEvents(dispatcherPed, true)
-    SetPedCanRagdoll(dispatcherPed, false)
+    DispatcherPed = CreatePed(4, pedHash, wh.Dispatcher.x, wh.Dispatcher.y, wh.Dispatcher.z - 1.0, wh.Dispatcher.w, false, true)
+    FreezeEntityPosition(DispatcherPed, true)
+    SetEntityInvincible(DispatcherPed, true)
+    SetBlockingOfNonTemporaryEvents(DispatcherPed, true)
+    SetPedCanRagdoll(DispatcherPed, false)
 
-    exports.ox_target:addLocalEntity(dispatcherPed, {
+    exports.ox_target:addLocalEntity(DispatcherPed, {
         {
             name = 'aust_open_trucker_tablet',
             icon = 'fa-solid fa-tablet-screen-button',
@@ -922,3 +923,65 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
         ), 'success')
     end
 end)
+
+-- =======================================================================
+-- LIMPEZA SEGURA NO CLIENTE AO REINICIAR/PARAR O RESOURCE
+-- PREVENÇÃO CONTRA CRASH: pennsylvania-oxygen-yankee (DLC_ITYP_REQUEST)
+-- =======================================================================
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName ~= GetCurrentResourceName() then return end
+
+    -- 1. Esconde qualquer TextUI ativa
+    pcall(function() lib.hideTextUI() end)
+
+    -- 2. Interrompe operação da empilhadeira
+    if ForkliftModule and ForkliftModule.StopOperation then
+        ForkliftModule.StopOperation()
+    end
+
+    -- 3. Limpeza de rotas, blips, pontos e objetivos
+    CleanupCurrentJob()
+
+    -- 4. Deleta o ped despachante do pátio
+    if DispatcherPed and DoesEntityExist(DispatcherPed) then
+        pcall(function() exports.ox_target:removeLocalEntity(DispatcherPed) end)
+        DeleteEntity(DispatcherPed)
+        DispatcherPed = nil
+    end
+
+    -- 5. CRÍTICO: Prevenção de corrupção de memória e crash fatal da engine
+    -- Desvincula e deleta imediatamente qualquer objeto criado a partir dos arquétipos .ytyp
+    local trackedModels = {
+        [joaat('sm3d_prop_pallet_1')] = true,
+        [joaat('sm3d_prop_pallet_2')] = true,
+        [joaat('sm3d_prop_pallet_1_rep')] = true,
+        [joaat('sm3d_prop_pallet_1_open')] = true,
+        [joaat('sm3d_prop_pallet_1_broken')] = true,
+        [joaat('sm3d_prop_pallet_empty')] = true,
+        [joaat('sm3d_prop_logi_shelf_1')] = true,
+        [joaat('sm3d_prop_logi_shelf_2')] = true,
+        [joaat('sm3d_prop_logi_shelf_3')] = true,
+        [joaat('prop_cs_fuel_nozle')] = true,
+    }
+
+    local objects = GetGamePool('CObject')
+    for _, obj in ipairs(objects) do
+        if DoesEntityExist(obj) then
+            local model = GetEntityModel(obj)
+            if trackedModels[model] then
+                if IsEntityAttached(obj) then
+                    DetachEntity(obj, false, false)
+                end
+                SetEntityAsMissionEntity(obj, true, true)
+                DeleteObject(obj)
+                DeleteEntity(obj)
+            end
+        end
+    end
+
+    -- 6. Libera referências de modelo
+    for modelHash, _ in pairs(trackedModels) do
+        SetModelAsNoLongerNeeded(modelHash)
+    end
+end)
+
