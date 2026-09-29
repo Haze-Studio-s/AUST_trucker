@@ -5,6 +5,7 @@
 -- =======================================================================
 
 Zones = {}
+_G.Zones = Zones
 
 local ActivePoints = {}
 local ActiveTargetEntities = {}
@@ -53,49 +54,50 @@ function Zones.SetupInspection(truck, jobId, onComplete)
         { id = 'tires_rear', label = 'Verificar Rodas Traseiras', offset = vector3(-1.2, -1.5, 0.0) },
     }
     local totalRequired = #checkpoints
+    local targetOptions = {}
 
     for _, cp in ipairs(checkpoints) do
-        exports.ox_target:addLocalEntity(truck, {
-            {
-                name = 'inspect_' .. cp.id,
-                icon = 'fa-solid fa-magnifying-glass',
-                label = cp.label,
-                distance = 2.4,
-                canInteract = function()
-                    return not InspectedParts[cp.id]
-                end,
-                onSelect = function()
-                    local anim = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Animation) or { dict = 'mini@repair', clip = 'fixing_a_ped' }
-                    local success = lib.progressBar({
-                        duration = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Duration) or 3000,
-                        label = cp.label .. '...',
-                        useWhileDead = false,
-                        canCancel = true,
-                        disable = { move = true, car = true, combat = true },
-                        anim = { dict = anim.dict, clip = anim.clip }
+        table.insert(targetOptions, {
+            name = 'inspect_' .. cp.id,
+            icon = 'fa-solid fa-magnifying-glass',
+            label = cp.label,
+            distance = 2.4,
+            canInteract = function()
+                return not InspectedParts[cp.id]
+            end,
+            onSelect = function()
+                local anim = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Animation) or { dict = 'mini@repair', clip = 'fixing_a_ped' }
+                local success = lib.progressBar({
+                    duration = (Config.Polarix and Config.Polarix.Inspection and Config.Polarix.Inspection.Duration) or 3000,
+                    label = cp.label .. '...',
+                    useWhileDead = false,
+                    canCancel = true,
+                    disable = { move = true, car = true, combat = true },
+                    anim = { dict = anim.dict, clip = anim.clip }
+                })
+
+                if success then
+                    InspectedParts[cp.id] = true
+                    PlaySoundFrontend(-1, "CHECKPOINT_NORMAL", "HUD_MINI_GAME_SOUNDSET", 0)
+
+                    local inspectedCount = 0
+                    for _ in pairs(InspectedParts) do inspectedCount = inspectedCount + 1 end
+
+                    lib.notify({
+                        title = 'Inspeção de Segurança',
+                        description = ('Item verificado (%d/%d)!'):format(inspectedCount, totalRequired),
+                        type = 'inform'
                     })
 
-                    if success then
-                        InspectedParts[cp.id] = true
-                        PlaySoundFrontend(-1, "CHECKPOINT_NORMAL", "HUD_MINI_GAME_SOUNDSET", 0)
-
-                        local inspectedCount = 0
-                        for _ in pairs(InspectedParts) do inspectedCount = inspectedCount + 1 end
-
-                        lib.notify({
-                            title = 'Inspeção de Segurança',
-                            description = ('Item verificado (%d/%d)!'):format(inspectedCount, totalRequired),
-                            type = 'inform'
-                        })
-
-                        if inspectedCount >= totalRequired then
-                            if onComplete then onComplete() end
-                        end
+                    if inspectedCount >= totalRequired then
+                        if onComplete then onComplete() end
                     end
                 end
-            }
+            end
         })
     end
+
+    exports.ox_target:addLocalEntity(truck, targetOptions)
 
     lib.notify({
         title = 'Inspeção Obrigatória (Estado 2)',

@@ -5,6 +5,13 @@
 -- =======================================================================
 
 local ForkliftModule = require('client.modules.forklift')
+local Zones = nil
+local ok, mod = pcall(require, 'client.zones')
+if ok and mod then
+    Zones = mod
+else
+    Zones = rawget(_G, 'Zones') or _G.Zones
+end
 
 local ActiveJob = nil
 local CurrentStage = 'IDLE' -- IDLE, STATUS_INSPECTING, STATUS_LOADING, STATUS_STRAPPING, STATUS_IN_TRANSIT, STATUS_UNLOADING
@@ -37,6 +44,7 @@ end
 
 local function CleanupCurrentJob()
     ClearBlips()
+    if Zones and Zones.Cleanup then Zones.Cleanup() end
     if CargoDry and CargoDry.Cleanup then CargoDry.Cleanup() end
     if CargoLiquid and CargoLiquid.Cleanup then CargoLiquid.Cleanup() end
     if ActiveDeliveryPoint then
@@ -195,9 +203,40 @@ local function SetupVehicleInspection(truck, trailer, jobId)
     -- Garante que o caminhão inicia trancado
     SetVehicleDoorsLocked(truck, 2)
 
-    Zones.SetupInspection(truck, jobId, function()
-        TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
-    end)
+    local setupFn = (Zones and Zones.SetupInspection) or (_G.Zones and _G.Zones.SetupInspection)
+    if setupFn then
+        setupFn(truck, jobId, function()
+            TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
+        end)
+    else
+        -- Fallback de emergência (ox_target direto) se módulo zones falhar
+        exports.ox_target:addLocalEntity(truck, {
+            {
+                name = 'inspect_truck_safety',
+                icon = 'fa-solid fa-magnifying-glass',
+                label = 'Inspecionar Caminhão e Liberar Chaves',
+                distance = 2.5,
+                onSelect = function()
+                    local ok = lib.progressBar({
+                        duration = 3000,
+                        label = 'Inspecionando veículo...',
+                        useWhileDead = false,
+                        canCancel = true,
+                        disable = { move = true, car = true, combat = true },
+                        anim = { dict = 'mini@repair', clip = 'fixing_a_ped' }
+                    })
+                    if ok then
+                        TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
+                    end
+                end
+            }
+        })
+        lib.notify({
+            title = 'Inspeção de Segurança',
+            description = 'Aproxime-se do caminhão para realizar a inspeção e receber as chaves!',
+            type = 'inform'
+        })
+    end
 end
 
 -- =======================================================================
@@ -207,9 +246,37 @@ end
 local function SetupStrappingAndManifest(trailer, jobId)
     CurrentStage = 'STATUS_STRAPPING'
 
-    Zones.SetupStrappingAndManifest(trailer, jobId, function()
-        TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
-    end)
+    local setupFn = (Zones and Zones.SetupStrappingAndManifest) or (_G.Zones and _G.Zones.SetupStrappingAndManifest)
+    if setupFn then
+        setupFn(trailer, jobId, function()
+            TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
+        end)
+    else
+        if trailer and DoesEntityExist(trailer) then
+            exports.ox_target:addLocalEntity(trailer, {
+                {
+                    name = 'strap_cargo_manifest',
+                    icon = 'fa-solid fa-clipboard-check',
+                    label = 'Fixar Cintas e Assinar Romaneio',
+                    distance = 3.5,
+                    onSelect = function()
+                        local ok = lib.progressBar({
+                            duration = 3500,
+                            label = 'Fixando cintas de carga...',
+                            useWhileDead = false,
+                            canCancel = true,
+                            disable = { move = true, car = true, combat = true }
+                        })
+                        if ok then
+                            TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
+                        end
+                    end
+                }
+            })
+        else
+            TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
+        end
+    end
 end
 
 -- =======================================================================
@@ -231,9 +298,46 @@ local function SetupDeliveryDestination(deliveryCoords, jobId, trailer)
     EndTextCommandSetBlipName(ActiveBlips.delivery)
     SetNewWaypoint(deliveryCoords.x, deliveryCoords.y)
 
-    Zones.SetupDeliveryPoint(deliveryCoords, jobId, function()
-        TriggerServerEvent('aurp_trucker:server:completePolarixDelivery', jobId)
-    end)
+    local setupFn = (Zones and Zones.SetupDeliveryPoint) or (_G.Zones and _G.Zones.SetupDeliveryPoint)
+    if setupFn then
+        setupFn(deliveryCoords, jobId, function()
+            TriggerServerEvent('aurp_trucker:server:completePolarixDelivery', jobId)
+        end)
+    else
+        if ActiveDeliveryPoint then
+            pcall(function() ActiveDeliveryPoint:remove() end)
+        end
+        ActiveDeliveryPoint = lib.points.new({
+            coords = deliveryCoords,
+            distance = 25.0,
+            onEnter = function()
+                lib.showTextUI('[E] Descarregar Mercadoria', { position = 'top-center' })
+            end,
+            onExit = function()
+                lib.hideTextUI()
+            end,
+            nearby = function()
+                if IsControlJustPressed(0, 38) then
+                    local ped = cache.ped or PlayerPedId()
+                    if GetVehiclePedIsIn(ped, false) ~= 0 then
+                        lib.notify({ title = 'Entrega', description = 'Estacione o caminhão e desembarque para descarregar!', type = 'error' })
+                        return
+                    end
+                    lib.hideTextUI()
+                    local ok = lib.progressCircle({
+                        duration = 6000,
+                        position = 'bottom',
+                        label = 'Descarregando mercadoria...',
+                        canCancel = true,
+                        disable = { move = true, car = true, combat = true }
+                    })
+                    if ok then
+                        TriggerServerEvent('aurp_trucker:server:completePolarixDelivery', jobId)
+                    end
+                end
+            end
+        })
+    end
 
     lib.notify({
         title = 'Manifesto Emitido (Estado 4)',
