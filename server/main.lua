@@ -164,6 +164,58 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
+-- =======================================================================
+-- ONESYNC SERVER-SIDE AREA CLEARANCE CHECK
+-- =======================================================================
+function IsSpawnPointClear(coords, radius, ignoreEntities)
+    if not coords then return false end
+    local targetCoords = vector3(coords.x, coords.y, coords.z)
+    local checkRadius = radius or 5.0
+    local ignore = ignoreEntities or {}
+
+    -- 1. Veículos no servidor
+    if GetAllVehicles then
+        local vehicles = GetAllVehicles()
+        for _, veh in ipairs(vehicles) do
+            if DoesEntityExist(veh) and not ignore[veh] then
+                local entCoords = GetEntityCoords(veh)
+                if #(targetCoords - entCoords) < checkRadius then
+                    return false
+                end
+            end
+        end
+    end
+
+    -- 2. Pedestres e jogadores no servidor
+    if GetAllPeds then
+        local peds = GetAllPeds()
+        for _, ped in ipairs(peds) do
+            if DoesEntityExist(ped) and not ignore[ped] then
+                local entCoords = GetEntityCoords(ped)
+                local pedRadius = (checkRadius > 3.0) and 3.0 or checkRadius
+                if #(targetCoords - entCoords) < pedRadius then
+                    return false
+                end
+            end
+        end
+    end
+
+    -- 3. Objetos e props no servidor (paletes, caixas, obstáculos)
+    if GetAllObjects then
+        local objects = GetAllObjects()
+        for _, obj in ipairs(objects) do
+            if DoesEntityExist(obj) and not ignore[obj] then
+                local entCoords = GetEntityCoords(obj)
+                if #(targetCoords - entCoords) < checkRadius then
+                    return false
+                end
+            end
+        end
+    end
+
+    return true
+end
+
 -- ETAPA 1: Iniciar Entrega / Contrato Autoritativo (QBOX OneSync)
 local function StartTruckDelivery(src, contractData)
     local Player = Framework.GetPlayer(src)
@@ -325,8 +377,25 @@ local function StartTruckDelivery(src, contractData)
         plate = ("TRK%04d"):format(math.random(1000, 9999))
     end
 
-    local truck = CreateVehicle(truckModel, wh.TruckSpawnCoords.x, wh.TruckSpawnCoords.y, wh.TruckSpawnCoords.z, wh.TruckSpawnCoords.w, true, true)
-    while not DoesEntityExist(truck) do Wait(10) end
+    -- Iteração dinâmica com verificação de área livre no servidor (OneSync)
+    local truckSpawns = wh.TruckSpawns or { wh.TruckSpawnCoords }
+    local truck = nil
+
+    for _, coord in ipairs(truckSpawns) do
+        if IsSpawnPointClear(coord, 8.0) then
+            truck = CreateVehicle(truckModel, coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+            local waitTimer = GetGameTimer()
+            while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+            if DoesEntityExist(truck) then
+                break
+            end
+        end
+    end
+
+    if not truck or not DoesEntityExist(truck) then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de caminhão estão ocupadas ou bloqueadas no momento! Desobstrua a área e tente novamente.', 'error')
+        return
+    end
 
     SetEntityRoutingBucket(truck, bucketId)
     SetEntityDistanceCullingRadius(truck, 400.0)
@@ -337,8 +406,27 @@ local function StartTruckDelivery(src, contractData)
 
     print(("[AUST_Trucker] Vehicle spawned locked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
-    local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
-    while not DoesEntityExist(trailer) do Wait(50) end
+    -- STEP B: CARGO / TRAILER SPAWN
+    local cargoSpawns = wh.CargoSpawns or wh.TrailerSpawns or { wh.TrailerSpawnCoords }
+    local trailer = nil
+
+    for _, coord in ipairs(cargoSpawns) do
+        if IsSpawnPointClear(coord, 8.0, { [truck] = true }) then
+            trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+            local waitTimer = GetGameTimer()
+            while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+            if DoesEntityExist(trailer) then
+                break
+            end
+        end
+    end
+
+    if not trailer or not DoesEntityExist(trailer) then
+        if DoesEntityExist(truck) then DeleteEntity(truck) end
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de carga/carreta estão ocupadas no momento! Tente novamente em instantes.', 'error')
+        return
+    end
+
     SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
 
@@ -350,8 +438,26 @@ local function StartTruckDelivery(src, contractData)
     local reqPallets = contractData.palletCount or 4
 
     if cargoType == 'dry' then
-        forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, wh.ForkliftBayCoords.w, true, true)
-        while not DoesEntityExist(forklift) do Wait(10) end
+        local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
+
+        for _, coord in ipairs(forkliftSpawns) do
+            if IsSpawnPointClear(coord, 4.0, { [truck] = true, [trailer] = true }) then
+                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z, coord.w or 90.0, true, true)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+                if DoesEntityExist(forklift) then
+                    break
+                end
+            end
+        end
+
+        if not forklift or not DoesEntityExist(forklift) then
+            if DoesEntityExist(trailer) then DeleteEntity(trailer) end
+            if DoesEntityExist(truck) then DeleteEntity(truck) end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de empilhadeira estão ocupadas no momento! Desobstrua a área e tente novamente.', 'error')
+            return
+        end
+
         SetEntityRoutingBucket(forklift, bucketId)
         SetEntityDistanceCullingRadius(forklift, 350.0)
 
@@ -360,24 +466,62 @@ local function StartTruckDelivery(src, contractData)
         SetVehicleNumberPlateText(forklift, forkliftPlate)
         SetVehicleDoorsLocked(forklift, 1)
 
-        local anchor = wh.PalletStagingAnchor
-        local rad = math.rad(wh.PalletStagingHeading or 180.0)
-        local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
-        local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
+        -- Spawn Dinâmico e Iterativo de Paletes com Verificação de Área Livre
+        local palletSpawns = wh.PalletSpawns or {}
+        local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
-        for i = 1, reqPallets do
-            local col = (i - 1) % 3
-            local row = math.floor((i - 1) / 3)
-            local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
-            local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+        for _, coord in ipairs(palletSpawns) do
+            if #pallets >= reqPallets then break end
+            if IsSpawnPointClear(coord, 2.5, ignoreEntities) then
+                local pModel = joaat(Config.Polarix.PalletModels[(#pallets % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+                local pObj = CreateObject(pModel, coord.x, coord.y, coord.z, true, true, false)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+                if DoesEntityExist(pObj) then
+                    SetEntityRoutingBucket(pObj, bucketId)
+                    SetEntityDistanceCullingRadius(pObj, 350.0)
+                    ignoreEntities[pObj] = true
+                    table.insert(pallets, pObj)
+                    table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                end
+            end
+        end
 
-            local pObj = CreateObject(pModel, pos.x, pos.y, pos.z, true, true, false)
-            while not DoesEntityExist(pObj) do Wait(50) end
-            SetEntityRoutingBucket(pObj, bucketId)
-            SetEntityDistanceCullingRadius(pObj, 350.0)
+        -- Se a quantidade necessária de paletes for maior que os slots individuais livres, utiliza fallback seguro
+        if #pallets < reqPallets and wh.PalletStagingAnchor then
+            local anchor = wh.PalletStagingAnchor
+            local rad = math.rad(wh.PalletStagingHeading or 180.0)
+            local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
+            local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
 
-            table.insert(pallets, pObj)
-            table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+            for i = #pallets + 1, reqPallets do
+                local col = (i - 1) % 3
+                local row = math.floor((i - 1) / 3)
+                local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
+
+                if IsSpawnPointClear(pos, 2.0, ignoreEntities) then
+                    local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+                    local pObj = CreateObject(pModel, pos.x, pos.y, pos.z, true, true, false)
+                    local waitTimer = GetGameTimer()
+                    while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+                    if DoesEntityExist(pObj) then
+                        SetEntityRoutingBucket(pObj, bucketId)
+                        SetEntityDistanceCullingRadius(pObj, 350.0)
+                        ignoreEntities[pObj] = true
+                        table.insert(pallets, pObj)
+                        table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                    end
+                end
+            end
+        end
+
+        if #pallets < reqPallets then
+            for _, p in ipairs(pallets) do if DoesEntityExist(p) then DeleteEntity(p) end end
+            if DoesEntityExist(forklift) then DeleteEntity(forklift) end
+            if DoesEntityExist(trailer) then DeleteEntity(trailer) end
+            if DoesEntityExist(truck) then DeleteEntity(truck) end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'A área de paletes está obstruída no momento! Desobstrua a zona de carga e tente novamente.', 'error')
+            return
         end
     else
         reqPallets = 100 -- Carga Líquida: 100% de capacidade do tanque
@@ -815,17 +959,26 @@ RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId
     if not lobby or lobby.src ~= src then return end
 
     local wh = Config.Polarix.Warehouse
+    local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
+    local chosenCoord = forkliftSpawns[1]
+
+    for _, coord in ipairs(forkliftSpawns) do
+        if IsSpawnPointClear(coord, 3.5, { [lobby.truck] = true, [lobby.trailer] = true }) then
+            chosenCoord = coord
+            break
+        end
+    end
 
     -- Reposiciona ou respawna forklift se necessário
     if lobby.forklift and DoesEntityExist(lobby.forklift) then
-        SetEntityCoords(lobby.forklift, wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, false, false, false, true)
+        SetEntityCoords(lobby.forklift, chosenCoord.x, chosenCoord.y, chosenCoord.z, false, false, false, true)
     else
-        local forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, wh.ForkliftBayCoords.w, true, true)
+        local forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), chosenCoord.x, chosenCoord.y, chosenCoord.z, chosenCoord.w or 90.0, true, true)
         SetEntityRoutingBucket(forklift, lobby.bucketId)
         lobby.forklift = forklift
     end
 
-    TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', 'Empilhadeira e paletes foram restabelecidos no pátio com segurança.', 'success')
+    TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', 'Empilhadeira restabelecida no pátio com segurança.', 'success')
 end)
 
 -- Limpeza ao desconectar

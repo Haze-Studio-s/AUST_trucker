@@ -32,9 +32,45 @@ Config.Polarix = {
     Warehouse = {
         Dispatcher = vector4(1268.50, -3175.20, 5.91, 180.00),
         YardManagerPed = 's_m_m_dockwork_01',
-        TruckSpawnCoords = vector4(1250.55, -3162.40, 5.88, 270.00),
-        TrailerSpawnCoords = vector4(1239.50, -3162.40, 5.88, 270.00),
-        ForkliftBayCoords = vector4(1253.20, -3180.10, 5.88, 270.00),
+
+        -- Matrizes Dinâmicas de Spawn (OneSync Server-Side Area Clearance)
+        TruckSpawns = {
+            vector4(1245.79, -3155.76, 4.6, 90.0),
+            vector4(1245.79, -3155.76, 4.6, 90.0),
+            vector4(1245.09, -3142.37, 4.55, 90.0),
+            vector4(1244.53, -3135.57, 4.53, 90.0),
+        },
+
+        CargoSpawns = {
+            vector4(1244.53, -3135.57, 4.53, 90.0),
+            vector4(1244.53, -3135.57, 4.53, 90.0),
+            vector4(1272.81, -3098.0, 4.9, 90.0),
+            vector4(1272.81, -3098.0, 4.9, 90.0),
+            vector4(1272.81, -3098.0, 4.9, 90.0),
+            vector4(1272.81, -3098.0, 4.9, 90.0),
+            vector4(1272.81, -3098.0, 4.9, 90.0),
+        },
+
+        ForkliftSpawns = {
+            vector4(1246.26, -3168.81, 4.63, 90.0),
+            vector4(1245.95, -3166.44, 4.61, 90.0),
+            vector4(1246.0, -3164.05, 4.62, 90.0),
+            vector4(1245.79, -3161.35, 4.6, 90.0),
+        },
+
+        PalletSpawns = {
+            vector4(1222.81, -3181.3, 4.53, 90.0),
+            vector4(1222.89, -3184.15, 4.53, 90.0),
+            vector4(1222.89, -3184.15, 4.53, 90.0),
+            vector4(1223.03, -3189.05, 4.53, 90.0),
+            vector4(1229.41, -3179.9, 4.53, 90.0),
+            vector4(1229.41, -3179.9, 4.53, 90.0),
+        },
+
+        -- Compatibilidade e Fallbacks
+        TruckSpawnCoords = vector4(1245.79, -3155.76, 4.6, 90.0),
+        TrailerSpawnCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
+        ForkliftBayCoords = vector4(1246.26, -3168.81, 4.63, 90.0),
         HandlerBayCoords = vector4(1240.20, -3195.10, 5.88, 270.00),
         PalletStagingAnchor = vector3(1272.00, -3182.00, 5.90),
         PalletStagingHeading = 180.0,
