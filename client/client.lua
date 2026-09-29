@@ -68,9 +68,34 @@ local lcActiveJob = nil
 local lcDeliveryPoint = nil
 local lcDeliveryBlip = nil
 local isStartingJob = false
+local lcDockProps = {}
+
+local function CleanupDockCargo()
+    for _, prop in ipairs(lcDockProps) do
+        if DoesEntityExist(prop) then
+            pcall(function() exports.ox_target:removeLocalEntity(prop) end)
+            DeleteEntity(prop)
+        end
+    end
+    lcDockProps = {}
+    if lcActiveJob then
+        pcall(function()
+            if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
+                exports.ox_target:removeLocalEntity(lcActiveJob.trailer)
+            end
+            if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
+                exports.ox_target:removeLocalEntity(lcActiveJob.truck)
+            end
+        end)
+    end
+    if CarrySystem and CarrySystem.IsCarrying() then
+        CarrySystem.Stop()
+    end
+end
 
 local function CleanupLCContract()
     isStartingJob = false
+    CleanupDockCargo()
     if lcDeliveryPoint then
         pcall(function() lcDeliveryPoint:remove() end)
         lcDeliveryPoint = nil
@@ -2931,6 +2956,155 @@ local function GetSafeVehicleSpawnCoords(baseSpawn, clearRadius)
     return vector4(targetX, targetY, (finalZ and finalZ > 0.0) and (finalZ + 0.1) or targetZ, heading)
 end
 
+-- ========================================================
+-- LOGÍSTICA 2.0: OPERAÇÃO DE CARREGAMENTO FÍSICO (ox_target + CarrySystem)
+-- ========================================================
+local function SetupPhysicalLoading(contract, truck, trailer, safeTrailerSpawn, onComplete)
+    if not lcActiveJob then return end
+    lcActiveJob.stage = 'loading'
+    lcActiveJob.loadedCargo = 0
+    local totalCargoNeeded = 3
+    lcActiveJob.totalCargo = totalCargoNeeded
+    lcActiveJob.onLoadingComplete = onComplete
+
+    local cargoNameStr = tostring(contract.cargoName or 'default'):lower()
+    local carryType = 'small_box'
+    if Config.CargoToCarryType then
+        for k, v in pairs(Config.CargoToCarryType) do
+            if cargoNameStr:find(k:lower(), 1, true) then
+                carryType = v
+                break
+            end
+        end
+    end
+    local carryCfg = (Config.CarryProps and Config.CarryProps[carryType]) or { model = 'prop_cs_cardbox_01' }
+    local propModel = carryCfg.model or 'prop_cs_cardbox_01'
+    local propHash = joaat(propModel)
+    lib.requestModel(propHash)
+
+    local rad = math.rad((safeTrailerSpawn.w or 0.0) + 90.0)
+    local sideX = safeTrailerSpawn.x + math.cos(rad) * 3.5
+    local sideY = safeTrailerSpawn.y + math.sin(rad) * 3.5
+
+    for i = 1, totalCargoNeeded do
+        local posX = sideX + (i - 2) * 1.1 * -math.sin(rad)
+        local posY = sideY + (i - 2) * 1.1 * math.cos(rad)
+        local propObj = CreateObject(propHash, posX, posY, safeTrailerSpawn.z, false, false, false)
+        PlaceObjectOnGroundProperly(propObj)
+        FreezeEntityPosition(propObj, true)
+        SetEntityAsMissionEntity(propObj, true, true)
+        table.insert(lcDockProps, propObj)
+
+        exports.ox_target:addLocalEntity(propObj, {
+            {
+                name = 'take_cargo_' .. i,
+                icon = 'fa-solid fa-box-open',
+                label = ('Pegar Carga (%s)'):format(contract.cargoName or 'Mercadoria'),
+                canInteract = function()
+                    return lcActiveJob and lcActiveJob.stage == 'loading' and not CarrySystem.IsCarrying()
+                end,
+                onSelect = function()
+                    local ok = lib.progressBar({
+                        duration = (Config.ManualLoading and Config.ManualLoading.PickupDuration) or 2500,
+                        label = 'Pegando mercadoria da doca...',
+                        useWhileDead = false,
+                        canCancel = true,
+                        disable = { move = true, car = true, combat = true },
+                        anim = { dict = 'pickup_object', clip = 'pickup_low' }
+                    })
+                    if ok then
+                        if DoesEntityExist(propObj) then
+                            pcall(function() exports.ox_target:removeLocalEntity(propObj) end)
+                            DeleteEntity(propObj)
+                        end
+                        CarrySystem.Start(carryType)
+                        lib.notify({
+                            title = 'Carga em Mãos',
+                            description = 'Leve o volume até o veículo para acomodá-lo no compartimento.',
+                            type = 'inform'
+                        })
+                    end
+                end
+            }
+        })
+    end
+
+    local loadTargetVeh = (trailer and trailer ~= 0) and trailer or truck
+    exports.ox_target:addLocalEntity(loadTargetVeh, {
+        {
+            name = 'deposit_cargo_trailer',
+            icon = 'fa-solid fa-dolly',
+            label = 'Acomodar Carga no Compartimento',
+            canInteract = function()
+                return lcActiveJob and lcActiveJob.stage == 'loading' and CarrySystem.IsCarrying()
+            end,
+            onSelect = function()
+                local ok = lib.progressBar({
+                    duration = (Config.ManualLoading and Config.ManualLoading.DepositDuration) or 2000,
+                    label = 'Acomodando mercadoria no compartimento...',
+                    useWhileDead = false,
+                    canCancel = true,
+                    disable = { move = true, car = true, combat = true },
+                    anim = { dict = 'anim@heists@box_carry@', clip = 'idle' }
+                })
+                if ok then
+                    CarrySystem.Stop()
+                    if lcActiveJob and lcActiveJob.stage == 'loading' then
+                        lcActiveJob.loadedCargo = (lcActiveJob.loadedCargo or 0) + 1
+                        if contract.isParty then
+                            TriggerServerEvent('aurp_trucker:server:cargoItemLoaded', contract.jobId)
+                        end
+                        lib.notify({
+                            title = 'Carga Acomodada',
+                            description = ('Volume acondicionado! (%d/%d)'):format(lcActiveJob.loadedCargo, lcActiveJob.totalCargo),
+                            type = 'success'
+                        })
+                        if lcActiveJob.loadedCargo >= lcActiveJob.totalCargo then
+                            lcActiveJob.stage = 'transport'
+                            pcall(function() exports.ox_target:removeLocalEntity(loadTargetVeh) end)
+                            CleanupDockCargo()
+                            lib.notify({
+                                title = 'Carregamento Concluído!',
+                                description = 'Todos os volumes foram acomodados e travados. Siga a rota indicada no GPS!',
+                                type = 'success',
+                                duration = 8000
+                            })
+                            if onComplete then onComplete() end
+                        end
+                    end
+                end
+            end
+        }
+    })
+
+    lib.notify({
+        title = 'Operação de Carregamento',
+        description = ('Carregue fisicamente as %d caixas da doca no compartimento antes de partir!'):format(totalCargoNeeded),
+        type = 'inform',
+        duration = 8000
+    })
+end
+
+RegisterNetEvent('aurp_trucker:client:cargoItemLoadedSync', function()
+    if lcActiveJob and lcActiveJob.stage == 'loading' then
+        lcActiveJob.loadedCargo = (lcActiveJob.loadedCargo or 0) + 1
+        lib.notify({
+            title = 'Carregamento da Equipe',
+            description = ('Um parceiro de comboio acomodou um volume! (%d/%d)'):format(lcActiveJob.loadedCargo, lcActiveJob.totalCargo or 3),
+            type = 'inform'
+        })
+        if lcActiveJob.loadedCargo >= (lcActiveJob.totalCargo or 3) then
+            lcActiveJob.stage = 'transport'
+            CleanupDockCargo()
+            if lcActiveJob.onLoadingComplete then
+                local cb = lcActiveJob.onLoadingComplete
+                lcActiveJob.onLoadingComplete = nil
+                cb()
+            end
+        end
+    end
+end)
+
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     if not contract or lcActiveJob then return end
     isStartingJob = true
@@ -2989,21 +3163,6 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     lcActiveJob.trailer = trailer
     createVehicleMarkersThread(truck, trailer)
 
-    -- 3. Marcar GPS e Blip de Destino
-    local dest = contract.deliveryCoords
-    SetNewWaypoint(dest.x, dest.y)
-
-    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then RemoveBlip(lcDeliveryBlip) end
-    lcDeliveryBlip = AddBlipForCoord(dest.x, dest.y, dest.z)
-    SetBlipSprite(lcDeliveryBlip, 477)
-    SetBlipColour(lcDeliveryBlip, 3)
-    SetBlipScale(lcDeliveryBlip, 0.9)
-    SetBlipRoute(lcDeliveryBlip, true)
-    SetBlipRouteColour(lcDeliveryBlip, 3)
-    BeginTextCommandSetBlipName("STRING")
-    AddTextComponentString("Entrega: " .. (contract.cargoName or "Carga"))
-    EndTextCommandSetBlipName(lcDeliveryBlip)
-
     if isQuickJob then
         local modeTitle = contract.isParty and ('Comboio Iniciado (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Trabalho Rápido Iniciado!'
         lib.notify({
@@ -3031,8 +3190,24 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         end
     end)
 
-    -- 5. Loop de Entrega com DrawMarker 30 autoritativo (Padrão LC Truck Logistics)
-    CreateThread(function()
+    local function StartDeliveryRoute()
+        -- 3. Marcar GPS e Blip de Destino
+        local dest = contract.deliveryCoords
+        SetNewWaypoint(dest.x, dest.y)
+
+        if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then RemoveBlip(lcDeliveryBlip) end
+        lcDeliveryBlip = AddBlipForCoord(dest.x, dest.y, dest.z)
+        SetBlipSprite(lcDeliveryBlip, 477)
+        SetBlipColour(lcDeliveryBlip, 3)
+        SetBlipScale(lcDeliveryBlip, 0.9)
+        SetBlipRoute(lcDeliveryBlip, true)
+        SetBlipRouteColour(lcDeliveryBlip, 3)
+        BeginTextCommandSetBlipName("STRING")
+        AddTextComponentString("Entrega: " .. (contract.cargoName or "Carga"))
+        EndTextCommandSetBlipName(lcDeliveryBlip)
+
+        -- 5. Loop de Entrega com DrawMarker 30 autoritativo (Padrão LC Truck Logistics)
+        CreateThread(function()
         local destX, destY, destZ = dest.x, dest.y, dest.z
         local destH = dest.w or 0.0
         local thisJobId = contract.jobId
@@ -3248,6 +3423,13 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
             currentTextUi = nil
         end
     end)
+    end
+
+    if Config.ManualLoading and Config.ManualLoading.Enabled then
+        SetupPhysicalLoading(contract, truck, trailer, safeTrailerSpawn, StartDeliveryRoute)
+    else
+        StartDeliveryRoute()
+    end
 end)
 
 RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
@@ -3280,6 +3462,7 @@ RegisterNetEvent('aurp_trucker:client:quickJobFinished', function(result)
 end)
 
 RegisterNetEvent('aurp_trucker:client:ownedTruckContractFinished', function(result)
+    CleanupDockCargo()
     if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
         RemoveBlip(lcDeliveryBlip)
         lcDeliveryBlip = nil

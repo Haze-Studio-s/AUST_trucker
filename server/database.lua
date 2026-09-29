@@ -400,6 +400,15 @@ local TABLES = {
         `truck_id`     INT(10) UNSIGNED NULL DEFAULT NULL,
         INDEX `idx_td_user` (`user_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Logística 2.0: aust_trucker_stats para progressão persistente e recompensas
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_stats` (
+        `citizenid` VARCHAR(50) NOT NULL COLLATE 'utf8mb4_unicode_ci',
+        `level` INT(11) NOT NULL DEFAULT 1,
+        `exp` INT(11) NOT NULL DEFAULT 0,
+        `deliveries` INT(11) NOT NULL DEFAULT 0,
+        PRIMARY KEY (`citizenid`) USING BTREE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci]],
 }
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)
@@ -1595,3 +1604,47 @@ function DB_ClearShopPendingContract(shopId, itemName)
         { shopId, itemName }
     )
 end
+
+-- ============================================================
+-- AUST TRUCKER STATS (Logística 2.0 Persistence)
+-- ============================================================
+
+function DB_GetAustTruckerStats(citizenId)
+    local row = MySQL.single.await([[
+        SELECT * FROM aust_trucker_stats WHERE citizenid = ? LIMIT 1
+    ]], { citizenId })
+    if not row then
+        MySQL.insert.await([[
+            INSERT INTO aust_trucker_stats (citizenid, level, exp, deliveries)
+            VALUES (?, 1, 0, 0)
+        ]], { citizenId })
+        return { citizenid = citizenId, level = 1, exp = 0, deliveries = 0 }
+    end
+    return row
+end
+
+function DB_UpdateAustTruckerStats(citizenId, addedExp, addedDeliveries)
+    addedExp = tonumber(addedExp) or 0
+    addedDeliveries = tonumber(addedDeliveries) or 0
+
+    local current = DB_GetAustTruckerStats(citizenId)
+    local newExp = (current.exp or 0) + addedExp
+    local newDeliveries = (current.deliveries or 0) + addedDeliveries
+
+    -- Progressão de nível: 1000 EXP por nível
+    local newLevel = math.max(1, math.floor(newExp / 1000) + 1)
+
+    MySQL.update.await([[
+        UPDATE aust_trucker_stats
+        SET level = ?, exp = ?, deliveries = ?
+        WHERE citizenid = ?
+    ]], { newLevel, newExp, newDeliveries, citizenId })
+
+    return {
+        level = newLevel,
+        exp = newExp,
+        deliveries = newDeliveries,
+        levelsGained = math.max(0, newLevel - (current.level or 1))
+    }
+end
+

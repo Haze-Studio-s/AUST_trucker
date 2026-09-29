@@ -1616,6 +1616,9 @@ local function FinishQuickJobContract(src, jobId, damages)
     local xpMultiplier = bonuses and bonuses.expMultiplier or 1.0
     local xpResult = ProgressionService and ProgressionService.GrantXP(src, citizenId, netPayment, xpMultiplier, dist)
 
+    -- Logística 2.0: Persistência em aust_trucker_stats
+    pcall(DB_UpdateAustTruckerStats, citizenId, xpResult and xpResult.xpGained or 200, 1)
+
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
 
@@ -1698,6 +1701,9 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
     local xpMultiplier = bonuses and bonuses.expMultiplier or 1.0
     local xpResult = ProgressionService and ProgressionService.GrantXP(src, citizenId, payment, xpMultiplier, dist)
 
+    -- Logística 2.0: Persistência em aust_trucker_stats
+    pcall(DB_UpdateAustTruckerStats, citizenId, xpResult and xpResult.xpGained or 250, 1)
+
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
 
@@ -1714,6 +1720,29 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
         CompletingContractsLock[citizenId] = nil
     end)
 end
+
+-- ========================================================
+-- LOGÍSTICA 2.0: SINCRONIZAÇÃO DE CARREGAMENTO COOPERATIVO
+-- ========================================================
+RegisterNetEvent('aurp_trucker:server:cargoItemLoaded', function(jobId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local party = PartyService and PartyService.GetPlayerParty(citizenId)
+    if party and party.members then
+        for _, mCid in ipairs(party.members) do
+            local mPlayer = Framework.GetPlayerByCitizenId(mCid)
+            if mPlayer then
+                local mSrc = Framework.GetSource(mPlayer)
+                if mSrc and mSrc ~= src then
+                    TriggerClientEvent('aurp_trucker:client:cargoItemLoadedSync', mSrc)
+                end
+            end
+        end
+    end
+end)
 
 -- Roteamento Retrocompatível
 local function FinalizeLCContract(src, jobId, parkedManually)
