@@ -279,6 +279,9 @@ function BuildInitialDataForPlayer(source, citizenId)
         local playerLevel = (stats and tonumber(stats.level)) or calculatedLevel
         local playerSkillPoints = (stats and tonumber(stats.skill_points)) or (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or 0
 
+        local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
+        local originCoords = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
+
         for i, load in ipairs(availableLoads) do
             local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
             local def = load.def or {0,0,0,0}
@@ -288,16 +291,20 @@ function BuildInitialDataForPlayer(source, citizenId)
             local illegal = def[4] or 0
             local fast = (i % 3 == 0) and 1 or 0
 
-            local baseDist = 0.8 + ((i * 1.37) % 9.2)
-            local baseDistNum = tonumber(string.format("%.2f", baseDist))
+            local destIndex = ((i - 1) % #deliveryLocs) + 1
+            local dest = deliveryLocs[destIndex] or deliveryLocs[1]
+            local rawDist = #(vector3(dest.x, dest.y, dest.z) - originCoords) / 1000.0
+            local realDist = tonumber(string.format("%.2f", rawDist)) or 1.0
+            if realDist <= 0 then realDist = 1.0 end
+
             local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
-            local baseReward = math.floor(baseDist * rewardRate + 950)
+            local baseReward = math.floor(realDist * rewardRate + 950)
 
             local contractData = {
                 contract_id   = i,
                 contract_name = load.name,
                 contract_type = (i % 2 == 0) and 1 or 0, -- Alterna entre Quick Jobs (0) e Freight Jobs (1)
-                distance      = baseDistNum,
+                distance      = realDist,
                 reward        = baseReward,
                 truck         = truckModel,
                 trailer       = load.trailer,

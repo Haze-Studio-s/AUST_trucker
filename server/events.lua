@@ -1132,22 +1132,48 @@ local function StartLCContractForPlayer(src, contractId)
 
     StartingJobLock[citizenId] = true
 
-    contractId = tonumber(contractId) or 1
+    if not contractId then
+        StartingJobLock[citizenId] = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Frete Inválido', 'Nenhum frete selecionado.', 'error')
+        return
+    end
+
+    contractId = tonumber(contractId)
+    if not contractId or contractId <= 0 then
+        StartingJobLock[citizenId] = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Frete Inválido', 'Identificador de carga inválido.', 'error')
+        return
+    end
+
     local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-    local load = availableLoads[contractId] or availableLoads[1]
+    local load = availableLoads[contractId]
     if not load then
         StartingJobLock[citizenId] = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Frete Indisponível', 'Este frete não está mais disponível no mercado.', 'error')
         return
     end
 
     -- Local de entrega autoritativo
     local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
-    local destIndex = ((contractId - 1) % #deliveryLocs) + 1
-    local dest = deliveryLocs[destIndex]
+    if #deliveryLocs == 0 then
+        StartingJobLock[citizenId] = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Erro de Rota', 'Nenhum destino de entrega configurado.', 'error')
+        return
+    end
 
-    -- Ponto de origem: Buccaneer Way
+    local destIndex = ((contractId - 1) % #deliveryLocs) + 1
+    local dest = deliveryLocs[destIndex] or deliveryLocs[1]
+    if not dest then
+        StartingJobLock[citizenId] = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Erro de Rota', 'Destino do frete inacessível.', 'error')
+        return
+    end
+
+    -- Ponto de origem: Buccaneer Way (Sede Principal)
     local origin = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
-    local dist = #(vector3(dest.x, dest.y, dest.z) - origin) / 1000.0
+    local rawDist = #(vector3(dest.x, dest.y, dest.z) - origin) / 1000.0
+    local dist = tonumber(string.format("%.2f", rawDist)) or 1.0
+    if dist <= 0 then dist = 1.0 end
 
     -- Cálculo autoritativo de pagamento com bônus e taxa da firma (Quick Job)
     local def = load.def or {0,0,0,0}
@@ -1168,11 +1194,11 @@ local function StartLCContractForPlayer(src, contractId)
 
     -- Validação estrita de habilidades requeridas (Fail-Closed)
     if ProgressionService and ProgressionService.CanPlayerAcceptContract then
-        local canAccept, reason = ProgressionService.CanPlayerAcceptContract(citizenId, contractCheck)
+        local canAccept, reason, detailedReason = ProgressionService.CanPlayerAcceptContract(citizenId, contractCheck)
         if not canAccept then
             StartingJobLock[citizenId] = nil
-            local reasonText = _U and _U(reason) or ('Bloqueado por habilidade: ' .. tostring(reason))
-            TriggerClientEvent('aurp_trucker:notify', src, reasonText, 'error')
+            local errorMsg = detailedReason or (reason == 'distance' and ('Distância da rota (%.2f km) excede o limite da sua habilidade.'):format(dist) or ('Requisito de habilidade não atendido: ' .. tostring(reason)))
+            TriggerClientEvent('aurp_trucker:notify', src, 'Frete Bloqueado', errorMsg, 'error')
             return
         end
     end
@@ -1230,12 +1256,26 @@ RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
 end)
 
 RegisterNetEvent('truck_logistics:startContract', function(location, data)
-    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
+    local contractId = nil
+    if type(data) == 'table' then
+        contractId = data.id or data.contract_id or data.contractId or data.jobId
+    elseif type(data) == 'number' or type(data) == 'string' then
+        contractId = data
+    elseif type(location) == 'number' or (type(location) == 'string' and tonumber(location)) then
+        contractId = location
+    end
     StartLCContractForPlayer(source, contractId)
 end)
 
 RegisterNetEvent('truck_logistics:makeContract', function(location, data)
-    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
+    local contractId = nil
+    if type(data) == 'table' then
+        contractId = data.id or data.contract_id or data.contractId or data.jobId
+    elseif type(data) == 'number' or type(data) == 'string' then
+        contractId = data
+    elseif type(location) == 'number' or (type(location) == 'string' and tonumber(location)) then
+        contractId = location
+    end
     StartLCContractForPlayer(source, contractId)
 end)
 

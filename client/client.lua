@@ -365,9 +365,25 @@ RegisterNetEvent('aurp_trucker:client:jobStarted', function(job)
     end
 end)
 
--- Notificação genérica do servidor
-RegisterNetEvent('aurp_trucker:notify', function(title, message, notifType)
-    lib.notify({ title = title, description = message, type = notifType or 'inform' })
+-- Notificação genérica do servidor (suporta chamadas com 2 ou 3 argumentos)
+RegisterNetEvent('aurp_trucker:notify', function(arg1, arg2, arg3)
+    local title, message, notifType
+    if arg3 ~= nil then
+        title = tostring(arg1 or 'Logística')
+        message = tostring(arg2 or '')
+        notifType = arg3 or 'inform'
+    else
+        message = tostring(arg1 or '')
+        notifType = arg2 or 'inform'
+        if notifType == 'error' then
+            title = 'Erro de Logística'
+        elseif notifType == 'success' then
+            title = 'Sucesso'
+        else
+            title = 'Aviso'
+        end
+    end
+    lib.notify({ title = title, description = message, type = notifType })
 end)
 
 -- Atualização de empresa: companyInfo = tabela → entrou/atualizou; nil → saiu
