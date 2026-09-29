@@ -1710,12 +1710,7 @@ local function SafeRequestModel(modelHash, timeoutMs)
     return HasModelLoaded(modelHash)
 end
 
-local hqLocations = {
-    {
-        coords = Config.TrailerCompany.coords, -- Elysian Island: vector3(-1266.0, -3396.0, 13.94)
-        name   = Config.TrailerCompany.name or 'Central Logística (Elysian Island)',
-    }
-}
+local hqLocations = {}
 if Config.LC_Headquarters and Config.LC_Headquarters.coords then
     table.insert(hqLocations, {
         coords = Config.LC_Headquarters.coords, -- Buccaneer Way: vector3(1208.83, -3115.0, 5.54)
@@ -1777,62 +1772,7 @@ end)
 CreateThread(function()
     Wait(500)
 
-    -- 1. Blip Elysian Island
-    blips.trailerCompany = CreateBlip(
-        Config.TrailerCompany.coords,
-        477, -- truck icon
-        5,   -- yellow
-        Config.TrailerCompany.name,
-        0.8
-    )
-
-    -- NPC Elysian Island
-    local elysianCoords = Config.TrailerCompany.coords
-    local elysianHeading = Config.TrailerCompany.spawnCoords and Config.TrailerCompany.spawnCoords.w or 180.0
-    local modelElysian = GetHashKey('a_m_m_business_01')
-    if SafeRequestModel(modelElysian, 4000) then
-        local dispatcherPed = CreatePed(4, modelElysian, elysianCoords.x, elysianCoords.y, elysianCoords.z, elysianHeading, false, true)
-        if dispatcherPed and dispatcherPed ~= 0 and DoesEntityExist(dispatcherPed) then
-            SetEntityInvincible(dispatcherPed, true)
-            SetBlockingOfNonTemporaryEvents(dispatcherPed, true)
-            FreezeEntityPosition(dispatcherPed, true)
-            SetModelAsNoLongerNeeded(modelElysian)
-
-            exports.ox_target:addLocalEntity(dispatcherPed, {
-                {
-                    name     = 'open_job_board',
-                    icon     = 'fas fa-clipboard-list',
-                    label    = 'Central de Trabalhos',
-                    distance = 3.0,
-                    onSelect = function() CreateThread(OpenJobBoard) end,
-                },
-                {
-                    name     = 'rent_truck',
-                    icon     = 'fas fa-truck-moving',
-                    label    = 'Alugar Caminhão (Caução)',
-                    distance = 3.0,
-                    onSelect = function() OpenRentalMenu() end,
-                },
-                {
-                    name     = 'return_truck',
-                    icon     = 'fas fa-undo-alt',
-                    label    = 'Devolver Caminhão Alugado',
-                    distance = 3.0,
-                    onSelect = function() ReturnRentedTruck() end,
-                },
-            })
-
-            AddEventHandler('onResourceStop', function(res)
-                if res ~= GetCurrentResourceName() then return end
-                if dispatcherPed and DoesEntityExist(dispatcherPed) then
-                    exports.ox_target:removeLocalEntity(dispatcherPed)
-                    DeleteEntity(dispatcherPed)
-                end
-            end)
-        end
-    end
-
-    -- 2. Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
+    -- Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
     if Config.LC_Headquarters then
         local hq = Config.LC_Headquarters
         blips.lcHq = CreateBlip(
@@ -2373,9 +2313,6 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
     if jobProgress.deliveryBlip then
         RemoveBlip(jobProgress.deliveryBlip)
     end
-    if blips.trailerCompany then
-        RemoveBlip(blips.trailerCompany)
-    end
 
     -- Limpar blips de localização marcados
     if locationBlips.pickup then
@@ -2406,9 +2343,6 @@ AddEventHandler('onResourceStop', function(resourceName)
         end
         if jobProgress.deliveryBlip then
             RemoveBlip(jobProgress.deliveryBlip)
-        end
-        if blips.trailerCompany then
-            RemoveBlip(blips.trailerCompany)
         end
         if blips.lcHq then
             RemoveBlip(blips.lcHq)

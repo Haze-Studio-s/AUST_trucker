@@ -89,9 +89,9 @@ Config.ContractNegotiation = {
 -- EMPRESA DE TRAILERS
 -- =======================================
 Config.TrailerCompany = {
-    name = "AURP Logistics",
-    coords = vector3(-1266.0, -3396.0, 13.94),
-    spawnCoords = vector4(-1273.44, -3396.24, 13.94, 330.0),
+    name = "Truck Logistics — Sede Principal",
+    coords = vector3(1208.83, -3115.0, 5.54),
+    spawnCoords = vector4(1274.21, -3186.43, 5.91, 90.0),
 
     -- Trailers disponíveis
     trailers = {
@@ -106,11 +106,11 @@ Config.TrailerCompany = {
 -- =======================================
 Config.TruckRental = {
     enabled       = true,
-    pedModel      = 's_m_m_trucker_01',
-    pedCoords     = vector4(-1268.5, -3398.0, 13.94, 330.0),
-    spawnCoords   = vector4(-1279.0, -3400.0, 13.94, 330.0),
-    returnCoords  = vector3(-1279.0, -3400.0, 13.94),
-    returnRadius  = 18.0,
+    pedModel      = 's_m_y_dockwork_01',
+    pedCoords     = vector4(1208.83, -3115.0, 5.54, 90.0),
+    spawnCoords   = vector4(1250.55, -3162.4, 5.88, 270.0),
+    returnCoords  = vector3(1250.55, -3162.4, 5.88),
+    returnRadius  = 25.0,
     depositAmount = 1500, -- Caução devolvida após devolução sem avarias
     rentalFee     = 300,  -- Custo de locação
     trucks = {
