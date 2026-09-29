@@ -162,6 +162,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 SetEntityCollision(palletEntity, true, true)
                                 SetEntityNoCollisionEntity(palletEntity, trailer, true)
                                 SetEntityNoCollisionEntity(trailer, palletEntity, true)
+                                FreezeEntityPosition(palletEntity, true)
 
                                 CurrentForkliftPallet = nil
                                 loadedCount = loadedCount + 1

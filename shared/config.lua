@@ -11,14 +11,18 @@ Config.Polarix = {
     Target = 'ox_target',
     Debug = false,
 
-    -- Modelos de Paletes Oficiais do Polarix e Base GTA
+    -- Props Exclusivos de Paletes Polarix (Sem props genéricos do GTA V)
+    PalletProps = {
+        'sm3d_prop_pallet_1',
+        'sm3d_prop_pallet_2',
+        'sm3d_prop_pallet_1_rep',
+        'sm3d_prop_pallet_1_open',
+    },
     PalletModels = {
         'sm3d_prop_pallet_1',
         'sm3d_prop_pallet_2',
         'sm3d_prop_pallet_1_rep',
-        'prop_boxpile_06a',
-        'prop_boxpile_07d',
-        'prop_pallet_01a',
+        'sm3d_prop_pallet_1_open',
     },
 
     DefaultPalletModel = 'sm3d_prop_pallet_1',
@@ -76,6 +80,12 @@ Config.Polarix = {
     },
 
     LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
+    PalletProps = {
+        'sm3d_prop_pallet_1',
+        'sm3d_prop_pallet_2',
+        'sm3d_prop_pallet_1_rep',
+        'sm3d_prop_pallet_1_open',
+    },
 
     TrailerSpawns = {
         vector4(1272.21, -3159.80, 4.90, 90.0),

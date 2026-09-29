@@ -450,6 +450,7 @@ local function StartTruckDelivery(src, contractData)
     SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
     SetVehicleDoorsLocked(trailer, 1)
+    SetVehicleDoorsLockedForAllPlayers(trailer, false)
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
     local forklift = nil
@@ -486,6 +487,7 @@ local function StartTruckDelivery(src, contractData)
         forkliftPlate = ("FORK%04d"):format(math.random(1000, 9999))
         SetVehicleNumberPlateText(forklift, forkliftPlate)
         SetVehicleDoorsLocked(forklift, 1)
+        SetVehicleDoorsLockedForAllPlayers(forklift, false)
 
         if exports.ox_inventory then
             local forkKeyMeta = {
@@ -506,7 +508,7 @@ local function StartTruckDelivery(src, contractData)
         TriggerClientEvent('vehiclekeys:client:SetOwner', src, forkliftPlate)
         TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, forkliftPlate)
 
-        -- Spawn Dinâmico e Iterativo de Paletes com Verificação de Área Livre
+        -- Spawn Dinâmico e Iterativo de Paletes Polarix com Fixação Física (Zero Limbo)
         local palletSpawns = wh.PalletSpawns or {}
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
@@ -520,6 +522,9 @@ local function StartTruckDelivery(src, contractData)
                 if DoesEntityExist(pObj) then
                     SetEntityRoutingBucket(pObj, bucketId)
                     SetEntityDistanceCullingRadius(pObj, 350.0)
+                    PlaceObjectOnGroundProperly(pObj)
+                    SetEntityCollision(pObj, true, true)
+                    FreezeEntityPosition(pObj, true)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
@@ -547,6 +552,9 @@ local function StartTruckDelivery(src, contractData)
                     if DoesEntityExist(pObj) then
                         SetEntityRoutingBucket(pObj, bucketId)
                         SetEntityDistanceCullingRadius(pObj, 350.0)
+                        PlaceObjectOnGroundProperly(pObj)
+                        SetEntityCollision(pObj, true, true)
+                        FreezeEntityPosition(pObj, true)
                         ignoreEntities[pObj] = true
                         table.insert(pallets, pObj)
                         table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))

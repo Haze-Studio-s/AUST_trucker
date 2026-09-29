@@ -1,8 +1,9 @@
 -- =======================================================================
 -- AUST_trucker — client/main.lua
--- Máquina de Estados Autoritativa (7 Etapas Determinísticas)
+-- Máquina de Estados Autoritativa (9 Etapas Determinísticas)
+-- Notificações Lation com Áudio, Abertura Física Real de Portas,
+-- Props Polarix Exclusivos, Física Anti-Limbo e Gestor de Objetivos
 -- Stack QBOX / OX: ox_lib, ox_target, ox_inventory, OneSync Server-Side Truth
--- Zero Loops Ineficientes — ox_lib.points com nearby adaptativo (0.00ms)
 -- =======================================================================
 
 local ForkliftModule = require('client.modules.forklift')
@@ -11,7 +12,7 @@ local ActiveJob = nil
 local CurrentStage = 'IDLE' 
 -- Estados: IDLE, STEP_1_START, STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER, 
 --          STEP_4_PARK_DOCK, STEP_4_OPEN_DOORS, STEP_5_ENTER_FORKLIFT, 
---          STEP_5_LOAD_PALLETS, STEP_6_CLOSE_AND_STRAP, STEP_7_DELIVERY
+--          STEP_6_LOAD_PALLETS, STEP_7_CLOSE_AND_STRAP, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
 
 local JobEntities = {
     truck = nil,
@@ -25,7 +26,32 @@ local DockWatcherPoint = nil
 local TrailerDoorsOpen = false
 
 -- =======================================================================
--- 4. GESTOR DE OBJETIVOS E MARCADOR VISUAL (SETA VERDE FLUTUANTE)
+-- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
+-- =======================================================================
+
+function SendMissionNotify(title, message, notifyType)
+    PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
+    if exports['lation_ui'] then
+        exports['lation_ui']:Notify({
+            title = title,
+            message = message,
+            type = notifyType or 'info',
+            duration = 10000
+        })
+    else
+        lib.notify({
+            title = title,
+            description = message,
+            type = notifyType or 'info',
+            duration = 10000,
+            position = 'top-right'
+        })
+    end
+end
+_G.SendMissionNotify = SendMissionNotify
+
+-- =======================================================================
+-- GESTOR CENTRALIZADO DE OBJETIVOS E MARCADOR VISUAL (SETA VERDE FLUTUANTE)
 -- =======================================================================
 
 local CurrentObjectivePoint = nil
@@ -78,7 +104,7 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
 
     if not targetCoords then return end
 
-    -- Altura (Z) dinâmica conforme a especificação do usuário
+    -- Alturas (Z) e configurações de Blip
     local offsetZ = 2.0
     local sprite = 477
     local hasRoute = false
@@ -113,7 +139,7 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
         hasRoute = true
     end
 
-    -- Criação ou atualização do Blip no mapa
+    -- Criação do Blip
     local blip = nil
     if isEntity then
         blip = AddBlipForEntity(targetEntity)
@@ -248,7 +274,7 @@ CreateThread(function()
             label = 'Repor Equipamento do Pátio',
             distance = 2.5,
             canInteract = function()
-                return ActiveJob ~= nil and (CurrentStage ~= 'IDLE' and CurrentStage ~= 'STEP_7_DELIVERY')
+                return ActiveJob ~= nil and (CurrentStage ~= 'IDLE' and CurrentStage ~= 'STEP_8_IN_TRANSIT' and CurrentStage ~= 'STEP_9_DELIVERY')
             end,
             onSelect = function()
                 if ActiveJob then
@@ -269,7 +295,7 @@ local function HandleStartDeliveryNUI(data, cb)
     SendNUIMessage({ action = 'hide' })
 
     if ActiveJob then
-        lib.notify({ title = 'Central Logística', description = 'Você já possui uma rota ou entrega em andamento!', type = 'error' })
+        SendMissionNotify('Central Logística', 'Você já possui uma rota ou entrega em andamento!', 'error')
         if cb then cb({ ok = false, message = 'Já em serviço' }) end
         return
     end
@@ -285,7 +311,7 @@ RegisterNUICallback('acceptJob', HandleStartDeliveryNUI)
 RegisterNUICallback('startJob', HandleStartDeliveryNUI)
 
 -- =======================================================================
--- ETAPA 3: MONITORAMENTO DE ACOPLAMENTO DA CARRETA E POSICIONAMENTO NA BAÍA
+-- ETAPA 3 & 4: ACOPLAMENTO DA CARRETA E POSICIONAMENTO NA BAÍA
 -- =======================================================================
 
 local function StartCouplingWatcher()
@@ -299,7 +325,7 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
-                    -- ETAPA 3 CONCLUÍDA -> TRANSIÇÃO PARA POSICIONAR NA BAÍA
+                    -- ETAPA 3 CONCLUÍDA -> ROTA PARA A BAÍA DE CARGA
                     CurrentStage = 'STEP_4_PARK_DOCK'
                     ClearObjectiveMarkers(false)
 
@@ -308,12 +334,7 @@ local function StartCouplingWatcher()
                     -- Atualiza objetivo e rota GPS para a baía demarcada
                     UpdateMissionObjective('dock', dockCoords, 'Baía de Carregamento')
 
-                    lib.notify({
-                        title = 'Central Logística',
-                        description = 'Carreta engatada! Leve o conjunto até a baía demarcada.',
-                        type = 'info',
-                        duration = 10000
-                    })
+                    SendMissionNotify('Central Logística', 'Carreta engatada! Leve o conjunto até a baía demarcada.', 'info')
 
                     -- Monitoramento de estacionamento na baía
                     if DockWatcherPoint then pcall(function() DockWatcherPoint:remove() end) end
@@ -338,34 +359,30 @@ local function StartCouplingWatcher()
                                         local rearCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
                                         UpdateMissionObjective('trailer_doors', rearCoords, 'Portas Traseiras do Reboque')
 
-                                        lib.notify({
-                                            title = 'Central Logística',
-                                            description = 'Caminhão posicionado na baía! Desça do veículo e abra as portas traseiras da carreta.',
-                                            type = 'info',
-                                            duration = 10000
-                                        })
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Desça do veículo e abra as portas traseiras da carreta.', 'info')
 
-                                        -- Configuração de ox_target nas portas traseiras
+                                        -- Configuração de ox_target nas portas traseiras (bones e traseira)
                                         exports.ox_target:addLocalEntity(JobEntities.trailer, {
                                             {
                                                 name = 'aust_open_rear_doors',
                                                 icon = 'fa-solid fa-door-open',
                                                 label = 'Abrir Portas Traseiras',
-                                                distance = 3.5,
-                                                canInteract = function()
-                                                    return CurrentStage == 'STEP_4_OPEN_DOORS' and not IsPedInAnyVehicle(cache.ped, false)
+                                                distance = 4.0,
+                                                bones = { 'boot', 'door_dside_r', 'door_pside_r' },
+                                                canInteract = function(entity)
+                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' or IsPedInAnyVehicle(cache.ped, false) then return false end
+                                                    local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
+                                                    return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
                                                 end,
                                                 onSelect = function()
+                                                    -- Abertura real e física das portas traseiras
                                                     SetVehicleDoorOpen(JobEntities.trailer, 4, false, false)
                                                     SetVehicleDoorOpen(JobEntities.trailer, 5, false, false)
+                                                    SetVehicleDoorAngleRatio(JobEntities.trailer, 4, 1.0)
+                                                    SetVehicleDoorAngleRatio(JobEntities.trailer, 5, 1.0)
                                                     TrailerDoorsOpen = true
 
-                                                    lib.notify({
-                                                        title = 'Central Logística',
-                                                        description = 'Portas abertas. Assuma a empilhadeira para iniciar o carregamento.',
-                                                        type = 'info',
-                                                        duration = 10000
-                                                    })
+                                                    SendMissionNotify('Central Logística', 'Portas abertas. Assuma a empilhadeira para iniciar o carregamento.', 'info')
 
                                                     -- ETAPA 5: Seta passa para a Empilhadeira (Forklift)
                                                     CurrentStage = 'STEP_5_ENTER_FORKLIFT'
@@ -386,19 +403,14 @@ local function StartCouplingWatcher()
 end
 
 -- =======================================================================
--- ETAPA 6: FECHAR PORTAS E AMARRAR A CARGA
+-- ETAPA 7: FECHAR PORTAS E AMARRAR A CARGA
 -- =======================================================================
 
 local function SetupStrappingStage()
-    CurrentStage = 'STEP_6_CLOSE_AND_STRAP'
+    CurrentStage = 'STEP_7_CLOSE_AND_STRAP'
     ClearObjectiveMarkers(false)
 
-    lib.notify({
-        title = 'Central Logística',
-        description = 'Carregamento finalizado! Feche as portas e amarre a carga na traseira.',
-        type = 'success',
-        duration = 10000
-    })
+    SendMissionNotify('Central Logística', 'Carregamento finalizado! Feche as portas e amarre a carga na traseira.', 'success')
 
     if not JobEntities.trailer or not DoesEntityExist(JobEntities.trailer) then return end
     local rearPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
@@ -407,15 +419,15 @@ local function SetupStrappingStage()
     UpdateMissionObjective('trailer_strap', rearPos, 'Fechar Portas e Amarrar Carga')
 
     local function PerformCloseAndStrap()
-        -- Executa fechamento físico das portas
+        -- Fechamento físico das portas
         SetVehicleDoorShut(JobEntities.trailer, 4, false)
         SetVehicleDoorShut(JobEntities.trailer, 5, false)
         TrailerDoorsOpen = false
 
-        -- Barra de progresso de 5 segundos
+        -- Barra de progresso de amarração (5 segundos)
         local success = lib.progressBar({
             duration = 5000,
-            label = 'Amarrando pallets e travando carga...',
+            label = 'Fechando portas e amarrando carga com cintas...',
             useWhileDead = false,
             canCancel = true,
             disable = { move = true, car = true, combat = true },
@@ -440,10 +452,12 @@ local function SetupStrappingStage()
             name = 'aust_strap_cargo',
             icon = 'fa-solid fa-boxes-packing',
             label = 'Fechar Portas e Amarrar Carga',
-            distance = 3.5,
-            canInteract = function()
-                local ped = cache.ped or PlayerPedId()
-                return CurrentStage == 'STEP_6_CLOSE_AND_STRAP' and not IsPedInAnyVehicle(ped, false)
+            distance = 4.0,
+            bones = { 'boot', 'door_dside_r', 'door_pside_r' },
+            canInteract = function(entity)
+                if CurrentStage ~= 'STEP_7_CLOSE_AND_STRAP' or IsPedInAnyVehicle(cache.ped, false) then return false end
+                local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
+                return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
             end,
             onSelect = function()
                 PerformCloseAndStrap()
@@ -453,22 +467,17 @@ local function SetupStrappingStage()
 end
 
 -- =======================================================================
--- ETAPA 7: ETAPA FINAL DE ENTREGA E RECOMPENSA
+-- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA
 -- =======================================================================
 
 local function SetupDeliveryDestination(deliveryCoords, jobId)
-    CurrentStage = 'STEP_7_DELIVERY'
+    CurrentStage = 'STEP_8_IN_TRANSIT'
     ClearObjectiveMarkers(false)
 
     -- Seta verde flutuante e rota GPS para o destino final
     UpdateMissionObjective('delivery', deliveryCoords, 'Destino da Entrega')
 
-    lib.notify({
-        title = 'Central Logística',
-        description = 'Carga amarrada e pronta! Siga a rota indicada até o destino final.',
-        type = 'success',
-        duration = 10000
-    })
+    SendMissionNotify('Central Logística', 'Carga amarrada e pronta! Siga a rota indicada até o destino final.', 'success')
 
     if ActiveDeliveryPoint then
         pcall(function() ActiveDeliveryPoint:remove() end)
@@ -487,11 +496,13 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
             if IsControlJustPressed(0, 38) then -- Tecla E
                 local ped = cache.ped or PlayerPedId()
                 if GetVehiclePedIsIn(ped, false) ~= 0 then
-                    lib.notify({ title = 'Central Logística', description = 'Estacione o caminhão e desembarque para descarregar!', type = 'error' })
+                    SendMissionNotify('Central Logística', 'Estacione o caminhão e desembarque para descarregar!', 'error')
                     return
                 end
 
                 lib.hideTextUI()
+                CurrentStage = 'STEP_9_DELIVERY'
+
                 local ok = lib.progressCircle({
                     duration = 6000,
                     position = 'bottom',
@@ -527,32 +538,22 @@ lib.onCache('vehicle', function(veh)
                 -- Remove a seta do caminhão; seta verde flutuante permanece exclusivamente sobre o trailer
                 UpdateMissionObjective('trailer', JobEntities.trailer, 'Carreta / Carga')
 
-                lib.notify({
-                    title = 'Central Logística',
-                    description = 'Dê marcha-ré e engate a carreta no caminhão.',
-                    type = 'info',
-                    duration = 10000
-                })
+                SendMissionNotify('Central Logística', 'Dê marcha-ré e engate a carreta no caminhão.', 'info')
 
                 StartCouplingWatcher()
             end
         end
     end
 
-    -- ETAPA 5: OPERAÇÃO COM EMPILHADEIRA E TECLA 'G'
+    -- ETAPA 5 & 6: OPERAÇÃO COM EMPILHADEIRA E TECLA 'G'
     if CurrentStage == 'STEP_5_ENTER_FORKLIFT' then
         if JobEntities.forklift and veh == JobEntities.forklift then
             if not TrailerDoorsOpen then
-                lib.notify({
-                    title = 'Central Logística',
-                    description = 'As portas traseiras da carreta precisam ser abertas antes de operar a empilhadeira!',
-                    type = 'error',
-                    duration = 8000
-                })
+                SendMissionNotify('Central Logística', 'As portas traseiras da carreta precisam ser abertas antes de operar a empilhadeira!', 'error')
                 return
             end
 
-            CurrentStage = 'STEP_5_LOAD_PALLETS'
+            CurrentStage = 'STEP_6_LOAD_PALLETS'
 
             -- Ao entrar na empilhadeira, a seta passa para os pallets no pátio
             local firstPallet = GetNextAvailablePallet()
@@ -560,14 +561,9 @@ lib.onCache('vehicle', function(veh)
                 UpdateMissionObjective('pallet', firstPallet, 'Pallet de Carga')
             end
 
-            lib.notify({
-                title = 'Central Logística',
-                description = 'Utilize a empilhadeira para carregar os pallets. Aproxime os garfos e aperte [G].',
-                type = 'info',
-                duration = 10000
-            })
+            SendMissionNotify('Central Logística', 'Utilize a empilhadeira para carregar os pallets. Aproxime os garfos e aperte [G].', 'info')
 
-            -- Inicia o ciclo de manuseio com a tecla [G]
+            -- Inicia ciclo de manuseio com a tecla [G]
             ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total)
                 if action == 'picked' then
                     -- Com o pallet carregado, a seta aponta para o interior/traseira da carreta
@@ -583,7 +579,7 @@ lib.onCache('vehicle', function(veh)
                     end
                 end
             end, function()
-                -- Todos os pallets carregados! Avança para a Etapa 6
+                -- Todos os pallets carregados! Avança para Etapa 7
                 SetupStrappingStage()
             end)
         end
@@ -601,6 +597,13 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     CurrentStage = 'STEP_1_START'
 
     CreateThread(function()
+        -- Pré-carrega todos os modelos exclusivos de paletes Polarix
+        local palletProps = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {}
+        for _, modelName in ipairs(palletProps) do
+            local hash = joaat(modelName)
+            lib.requestModel(hash)
+        end
+
         -- Sincronização OneSync das Entidades
         local truck = nil
         local trailer = nil
@@ -665,12 +668,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             SetVehicleOnGroundProperly(trailer)
             SetEntityCollision(trailer, true, true)
             SetVehicleDoorsLocked(trailer, 1)
+            SetVehicleDoorsLockedForAllPlayers(trailer, false)
         end
 
         if forklift and DoesEntityExist(forklift) then
             SetVehicleOnGroundProperly(forklift)
             SetEntityCollision(forklift, true, true)
             SetVehicleDoorsLocked(forklift, 1)
+            SetVehicleDoorsLockedForAllPlayers(forklift, false)
             SetVehicleNeedsToBeHotwired(forklift, false)
             if exports.qbx_vehiclekeys then
                 pcall(function() exports.qbx_vehiclekeys:GiveKeys(forklift) end)
@@ -681,24 +686,23 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         UpdateMissionObjective('truck', truck, 'Seu Caminhão')
         UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
 
-        -- Notificação (10s)
-        lib.notify({
-            title = 'Central Logística',
-            description = 'Veículos liberados no pátio. Entre no caminhão para iniciar.',
-            type = 'info',
-            duration = 10000
-        })
+        -- Notificação inicial estilo Lation de 10 segundos
+        SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
 
         CurrentStage = 'STEP_2_ENTER_TRUCK'
     end)
 end)
 
+-- Sincronização dos Paletes e Garantia de Física Estática (Anti-Limbo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
     local pallets = {}
     for _, netId in ipairs(palletNetIds) do
         if netId ~= 0 and NetworkDoesNetworkIdExist(netId) then
             local ent = NetworkGetEntityFromNetworkId(netId)
             if DoesEntityExist(ent) then
+                PlaceObjectOnGroundProperly(ent)
+                SetEntityCollision(ent, true, true)
+                FreezeEntityPosition(ent, true)
                 table.insert(pallets, ent)
             end
         end
@@ -716,13 +720,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
     CleanupCurrentJob()
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-    lib.notify({
-        title = 'Central Logística',
-        description = ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
-            summary.payment or 0,
-            summary.xp or 0
-        ),
-        type = 'success',
-        duration = 10000
-    })
+    SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
+        summary.payment or 0,
+        summary.xp or 0
+    ), 'success')
 end)
