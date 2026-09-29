@@ -66,6 +66,28 @@ end
 
 -- Inicialização: aguarda oxmysql estar pronto
 CreateThread(function()
+    -- Auto-sanitização: remove qualquer injeção maliciosa de 'webpack_bundle' de fxmanifest.lua
+    pcall(function()
+        local resPath = GetResourcePath(GetCurrentResourceName())
+        if resPath then
+            local manifestPath = resPath .. '/fxmanifest.lua'
+            local rFile = io.open(manifestPath, 'r')
+            if rFile then
+                local content = rFile:read('*a')
+                rFile:close()
+                if content and content:find('webpack_bundle') then
+                    local clean = content:gsub("[^\r\n]*webpack_bundle[^\r\n]*[\r\n]*", "")
+                    local wFile = io.open(manifestPath, 'w')
+                    if wFile then
+                        wFile:write(clean)
+                        wFile:close()
+                        print('[AUST_trucker] Seguranca: Injecao maliciosa de webpack_bundle purgada com sucesso de fxmanifest.lua.')
+                    end
+                end
+            end
+        end
+    end)
+
     -- oxmysql dispara 'oxmysql:ready' quando conectado
     -- Aguardamos via MySQL.ready para garantir conexão antes de queries
     MySQL.ready(function()
