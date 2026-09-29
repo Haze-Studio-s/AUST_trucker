@@ -299,32 +299,17 @@ local function StartTruckDelivery(src, contractData)
     -- Destranca as portas imediatamente (doors = 1) para permitir livre acesso ao veículo
     SetVehicleDoorsLocked(truck, 1)
 
-    -- STEP 1: ENTREGA DE CHAVE FÍSICA NO INVENTÁRIO (OX_INVENTORY)
+    -- STEP 1: GIVING THE KEY (Job Start via ox_inventory)
     if exports.ox_inventory then
         local keyMetadata = {
             plate = spawnedPlate,
             description = "Truck - " .. spawnedPlate
         }
-        local added = pcall(function()
-            return exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
-        end)
+        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
         if not added then
-            pcall(function()
-                exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
-            end)
+            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
         end
     end
-
-    -- ATRIBUIÇÃO EXPLÍCITA E IMEDIATA DE CHAVES NO SERVIDOR (QBOX STANDARD)
-    if exports['qbx_vehiclekeys'] then
-        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
-        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, spawnedPlate) end)
-    end
-    if exports['qb-vehiclekeys'] then
-        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, spawnedPlate) end)
-    end
-    TriggerClientEvent('vehiclekeys:client:SetOwner', src, spawnedPlate)
-    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, spawnedPlate)
 
     local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
     while not DoesEntityExist(trailer) do Wait(50) end
