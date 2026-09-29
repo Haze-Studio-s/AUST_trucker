@@ -21,4 +21,10 @@ jobs:
         REMOTE_USER: ${{ secrets.VPS_USER }}
         TARGET: /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}
         EXCLUDE: "/.git/, /.github/"
+        ARGS: "-rltgoDzvO --delete"
+        SCRIPT_AFTER: |
+          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}/stream/flatbed3
+          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/cache/files/${{ github.event.repository.name }}
+          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/cache/files/trucks
+
 
