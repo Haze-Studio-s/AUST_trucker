@@ -98,15 +98,16 @@ local function AttachPalletToForklift(forklift, pallet)
     -- 3. Desativa colisões temporariamente para não colidir com os garfos/chassi
     SetEntityCollision(pallet, false, false)
 
-    -- 4. Anexa ao bone 'forks' da empilhadeira
+    -- 4. Anexa ao bone 'forks' da empilhadeira com offset Z rebaixado
     local forkBone = GetEntityBoneIndexByName(forklift, 'forks')
     if forkBone == -1 then forkBone = 0 end
 
+    local offset = Config.ForkliftAttachOffset or vector3(0.0, 1.2, -0.42)
     AttachEntityToEntity(
         pallet, 
         forklift, 
         forkBone, 
-        0.0, 1.2, -0.15, -- Ajuste fino de offset nos garfos
+        offset.x, offset.y, offset.z,
         0.0, 0.0, 0.0, 
         false, false, false, false, 2, true
     )

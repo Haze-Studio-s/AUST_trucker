@@ -25,6 +25,7 @@ local ActiveDeliveryPoint = nil
 local DockWatcherPoint = nil
 local hasRopes = false
 local HasRopes = false
+local currentTieIndex = 1
 local currentStrappingIndex = 1
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
@@ -250,6 +251,7 @@ local function CleanupCurrentJob()
     if LoadedPallets then
         for idx, pData in ipairs(LoadedPallets) do
             if pData.entity and DoesEntityExist(pData.entity) then
+                pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'aust_tie_current_pallet') end)
                 pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'tie_pallet_' .. idx) end)
                 pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
             end
@@ -260,6 +262,7 @@ local function CleanupCurrentJob()
     CurrentStage = 'IDLE'
     hasRopes = false
     HasRopes = false
+    currentTieIndex = 1
     currentStrappingIndex = 1
     LoadedPallets = {}
     LoadedPalletData = LoadedPallets
@@ -411,12 +414,15 @@ end
 -- ETAPA 6 & 7: SISTEMA DE CORDAS E AMARRAÇÃO INDIVIDUAL (PALETE A PALETE)
 -- =======================================================================
 
-local function StartTyingPallet(index)
+local function ExecutePalletTie(index)
     local palletData = LoadedPallets[index]
     if not palletData then return end
 
-    -- 1. Executa o minigame de perícia lib.skillCheck
-    local passed = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
+    -- Remove o target imediatamente para evitar duplo clique
+    pcall(function() exports.ox_target:removeLocalEntity(palletData.entity, 'aust_tie_current_pallet') end)
+
+    -- Minigame de perícia
+    local success = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
 
     lib.progressBar({
         duration = 2500,
@@ -431,46 +437,67 @@ local function StartTyingPallet(index)
         }
     })
 
-    -- 2. Define LoadedPallets[index].isSecured = true e nível de risco
-    palletData.isSecured = true
-
-    if passed then
+    if success then
+        palletData.isSecured = true
         palletData.riskLevel = 0
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
         SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
     else
+        palletData.isSecured = true
         palletData.riskLevel = 'high'
         PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-        SendMissionNotify('Central Logística', 'A amarração ficou frouxa! Cuidado nas curvas para a corda não arrebentar.', 'warning')
+        SendMissionNotify('Atenção', 'A corda ficou frouxa! Cuidado nas curvas.', 'error')
     end
 
-    -- 3. Remove a opção de target desse palete já concluído
-    pcall(function() exports.ox_target:removeLocalEntity(palletData.entity, 'tie_pallet_' .. index) end)
+    -- Avança para o próximo da lista e reconstrói o target
+    currentTieIndex = currentTieIndex + 1
+    SetupNextPalletTarget()
+end
 
-    -- 4. Incrementa o índice ativo
-    currentStrappingIndex = currentStrappingIndex + 1
-
-    -- 5. SE currentStrappingIndex <= #LoadedPallets
-    if currentStrappingIndex <= #LoadedPallets then
-        local nextPallet = LoadedPallets[currentStrappingIndex]
-        if nextPallet and nextPallet.entity and DoesEntityExist(nextPallet.entity) then
-            UpdateMissionObjective('pallet', nextPallet.entity, ('Amarrar Palete (%d/%d)'):format(currentStrappingIndex, #LoadedPallets))
-        end
-        SendMissionNotify('Central Logística', ('Palete %s amarrado! Vá para o palete %s.'):format(index, currentStrappingIndex), 'info')
-    else
-        -- 6. SE todos foram amarrados (currentStrappingIndex > #LoadedPallets)
-        ClearObjectiveMarkers(false)
+function SetupNextPalletTarget()
+    -- 1. Se completou todos os paletes
+    if currentTieIndex > #LoadedPallets then
         hasRopes = false
         HasRopes = false
-        SendMissionNotify('Central Logística', 'Todos os paletes foram amarrados com sucesso! Siga a rota de entrega.', 'success')
+        ClearObjectiveMarkers(false)
+        SendMissionNotify('Central Logística', 'Todos os paletes foram amarrados com sucesso! Siga a rota até o destino.', 'success')
         TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        return
     end
+
+    local currentPallet = LoadedPallets[currentTieIndex]
+    if not currentPallet or not currentPallet.entity or not DoesEntityExist(currentPallet.entity) then
+        currentTieIndex = currentTieIndex + 1
+        SetupNextPalletTarget()
+        return
+    end
+
+    -- 2. Atualiza a seta verde flutuante diretamente para este palete
+    UpdateMissionObjective('pallet', currentPallet.entity, ('Amarrar Palete (%d/%d)'):format(currentTieIndex, #LoadedPallets))
+
+    -- 3. Adiciona ox_target EXCLUSIVAMENTE na entidade atual
+    exports.ox_target:addLocalEntity(currentPallet.entity, {
+        {
+            name = 'aust_tie_current_pallet',
+            icon = 'fas fa-tape',
+            label = ('Amarrar Palete (%s/%s)'):format(currentTieIndex, #LoadedPallets),
+            distance = 2.8,
+            canInteract = function()
+                return (hasRopes or HasRopes) and not currentPallet.isSecured and not IsPedInAnyVehicle(cache.ped, false)
+            end,
+            onSelect = function()
+                ExecutePalletTie(currentTieIndex)
+            end
+        }
+    })
+
+    SendMissionNotify('Central Logística', ('Amarre o palete %s de %s.'):format(currentTieIndex, #LoadedPallets), 'info')
 end
 
 local function StartStrappingPalletsStage()
     CurrentStage = 'STEP_7_STRAP_PALLETS'
     ClearObjectiveMarkers(false)
-    currentStrappingIndex = 1
+    currentTieIndex = 1
 
     if #LoadedPallets == 0 then
         SendMissionNotify('Central Logística', 'Nenhum palete para amarrar! Siga para a entrega.', 'info')
@@ -478,29 +505,7 @@ local function StartStrappingPalletsStage()
         return
     end
 
-    -- Seta verde diretamente no primeiro palete pendente
-    if LoadedPallets[1] and LoadedPallets[1].entity and DoesEntityExist(LoadedPallets[1].entity) then
-        UpdateMissionObjective('pallet', LoadedPallets[1].entity, ('Amarrar Palete (1/%d)'):format(#LoadedPallets))
-    end
-
-    for index, palletData in ipairs(LoadedPallets) do
-        if palletData.entity and DoesEntityExist(palletData.entity) then
-            exports.ox_target:addLocalEntity(palletData.entity, {
-                {
-                    name = 'tie_pallet_' .. index,
-                    icon = 'fas fa-tape',
-                    label = ('Amarrar Palete (%s/%s)'):format(index, #LoadedPallets),
-                    distance = 2.8,
-                    canInteract = function(entity)
-                        return (hasRopes or HasRopes) and not palletData.isSecured and currentStrappingIndex == index and not IsPedInAnyVehicle(cache.ped, false)
-                    end,
-                    onSelect = function(data)
-                        StartTyingPallet(index)
-                    end
-                }
-            })
-        end
-    end
+    SetupNextPalletTarget()
 end
 
 local function SetupRopesStage()
@@ -508,7 +513,7 @@ local function SetupRopesStage()
     ClearObjectiveMarkers(false)
     hasRopes = false
     HasRopes = false
-    currentStrappingIndex = 1
+    currentTieIndex = 1
 
     SendMissionNotify('Central Logística', 'Carregamento finalizado! Vá até a lateral do caminhão e pegue as cintas de amarração.', 'info')
 

@@ -101,7 +101,7 @@ Config.Polarix = {
         VehicleModel = 'forklift',
         AttachBone = 'forks_attach',
         ForkBoneIndex = 3, -- fallback caso o osso nominal falhe
-        AttachOffset = { x = 0.0, y = 1.25, z = -0.15, rx = 0.0, ry = 0.0, rz = 0.0 },
+        AttachOffset = { x = 0.0, y = 1.2, z = -0.42, rx = 0.0, ry = 0.0, rz = 0.0 },
         DeployOffset = { x = 0.0, y = -7.0, z = 0.0 },
         SpawnOffset = { x = 0.0, y = -10.5, z = 0.0 },
         InteractionRadiusFoot = 3.0,
@@ -334,3 +334,5 @@ Config.CargoTypes = {
         leakPenalty = 1500, -- Penalidade financeira se o jogador abandonar/romper a mangueira
     }
 }
+
+Config.ForkliftAttachOffset = vector3(0.0, 1.2, -0.42) -- Eixo Z rebaixado para assentar perfeitamente sobre as lâminas
