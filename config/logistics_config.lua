@@ -271,6 +271,7 @@ Config.LC_DistanceSkill = {
 }
 
 Config.LC_ExpGain = 3.0 -- XP por km percorrido
+Config.exp_gain = Config.LC_ExpGain
 
 Config.LC_Bonus = {
     distance = {
@@ -303,6 +304,8 @@ Config.LC_RequiredXP = {
     [25] = 38200, [26] = 41000, [27] = 43900, [28] = 46900, [29] = 50000, [30] = 53200,
     [31] = 56500, [32] = 59900, [33] = 63400, [34] = 67000, [35] = 70700, [36] = 100000,
 }
+Config.required_xp_to_levelup = Config.LC_RequiredXP
+
 
 -- Agência de Recrutamento & Motoristas NPC
 Config.LC_Drivers = {

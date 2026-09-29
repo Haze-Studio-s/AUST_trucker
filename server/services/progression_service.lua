@@ -21,59 +21,70 @@ local function CalcRank(level)
     return math.min(6, math.ceil(level / 5))
 end
 
--- XP ganho por entrega = base_payment / 10, ajustado pelo multiplicador de tempo e distância
+-- XP ganho por entrega baseado na distância percorrida e multiplicador de XP
 local function CalcXP(basePayment, timeMultiplier, distance)
-    local distXP = 0
-    if distance and Config.LC_ExpGain then
-        distXP = math.floor(distance * Config.LC_ExpGain)
-    end
-    local paymentXP = math.floor((basePayment / 10) * (timeMultiplier or 1.0))
-    return math.max(15, math.max(paymentXP, distXP))
+    local mult = Config.exp_gain or Config.LC_ExpGain or 1.0
+    local dist = tonumber(distance) or 1.0
+    local xp = math.floor(dist * 10 * mult)
+    return math.max(10, xp)
 end
 
--- Calcula o nível correspondente ao XP total acumulado
-function ProgressionService.CalcLevel(xp)
+-- Calcula o nível correspondente ao XP total acumulado baseado em Config.required_xp_to_levelup
+function ProgressionService.GetPlayerLevel(xp)
     xp = tonumber(xp) or 0
-    local req = Config.LC_RequiredXP or LEVEL_THRESHOLDS
-    local maxLvl = (req == Config.LC_RequiredXP) and 36 or 30
-    local level = 1
-    for lvl = 1, maxLvl do
-        if req[lvl] and xp >= req[lvl] then
-            level = lvl
-        else
-            break
+    local thresholds = Config.required_xp_to_levelup or Config.LC_RequiredXP or LEVEL_THRESHOLDS
+    local level = 0
+    for reqLevel, required in pairs(thresholds) do
+        local rLvl = tonumber(reqLevel)
+        local rXP = tonumber(required)
+        if rLvl and rXP and xp >= rXP and rLvl > level then
+            level = rLvl
         end
     end
     return level
 end
+ProgressionService.CalcLevel = ProgressionService.GetPlayerLevel
 local CalcLevel = ProgressionService.CalcLevel
 
--- Concede XP ao jogador, processa level-ups, notifica o cliente
--- Returns: { xpGained, newLevel, levelsGained }
+-- Retorna a quantidade atual de skill points do jogador
+function ProgressionService.GetSkillPoints(citizenId)
+    if not citizenId or citizenId == '' then return 0 end
+    local stats = DB_GetPlayerStats(citizenId)
+    return (stats and tonumber(stats.skill_points)) or 0
+end
+
+-- Concede XP ao jogador, processa level-ups atômicos, notifica o cliente
+-- Returns: { xpGained, newLevel, levelsGained, totalXP, totalSkillPoints }
 function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier, distance)
     local xpGained = CalcXP(basePayment, timeMultiplier, distance)
     local row = DB_AddXP(citizenId, xpGained)
     if not row then return { xpGained = xpGained, levelsGained = 0, newLevel = 1 } end
 
     local newLevel     = CalcLevel(row.xp)
-    local oldLevel     = row.level
-    local levelsGained = newLevel - oldLevel
+    local oldLevel     = tonumber(row.level) or 0
+    local levelsGained = math.max(0, newLevel - oldLevel)
 
     if levelsGained > 0 then
         local newRank = CalcRank(newLevel)
         DB_SetLevelData(citizenId, newLevel, newRank, levelsGained)
-        TriggerClientEvent('aurp_trucker:client:levelUp', src, {
-            newLevel     = newLevel,
-            newRank      = newRank,
-            levelsGained = levelsGained,
-            skillPoints  = levelsGained,  -- 1 ponto por nível ganho
-        })
+        if src and src > 0 then
+            TriggerClientEvent('aurp_trucker:client:levelUp', src, {
+                newLevel     = newLevel,
+                newRank      = newRank,
+                levelsGained = levelsGained,
+                skillPoints  = levelsGained,  -- 1 ponto por nível ganho
+            })
+        end
     end
 
+    local updatedStats = DB_GetPlayerStats(citizenId)
+
     return {
-        xpGained     = xpGained,
-        levelsGained = levelsGained,
-        newLevel     = (levelsGained > 0) and newLevel or oldLevel,
+        xpGained         = xpGained,
+        levelsGained     = levelsGained,
+        newLevel         = (levelsGained > 0) and newLevel or oldLevel,
+        totalXP          = updatedStats and updatedStats.xp or row.xp,
+        totalSkillPoints = updatedStats and updatedStats.skill_points or row.skill_points,
     }
 end
 

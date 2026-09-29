@@ -3029,10 +3029,23 @@ end)
 RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
     CleanupLCContract()
 
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
     lib.notify({
         title = 'Entrega Concluída!',
-        description = ('Recebido: $%d | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, result.distance or 0.0),
+        description = ('Recebido: $%d%s | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, xpText, result.distance or 0.0),
         type = 'success',
         duration = 10000
     })
+
+    RefreshNUIData()
+end)
+
+RegisterNetEvent('aurp_trucker:client:levelUp', function(data)
+    lib.notify({
+        title = 'Subiu de Nível!',
+        description = ('Parabéns! Você alcançou o Nível %d!\nGanhou %d ponto(s) de habilidade.'):format(data.newLevel or 1, data.skillPoints or 1),
+        type = 'success',
+        duration = 8000
+    })
+    RefreshNUIData()
 end)

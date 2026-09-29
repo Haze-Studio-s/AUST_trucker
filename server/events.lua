@@ -1258,7 +1258,7 @@ local function FinalizeLCContract(src, jobId, parkedManually)
 
     Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
     DB_AddPlayerStats(citizenId, payment, dist)
-    ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+    local xpResult = ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
 
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
@@ -1266,7 +1266,10 @@ local function FinalizeLCContract(src, jobId, parkedManually)
     TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
         payment = payment,
         distance = dist,
-        parkedManually = parkedManually
+        parkedManually = parkedManually,
+        xpGained = xpResult and xpResult.xpGained or 0,
+        newLevel = xpResult and xpResult.newLevel or 1,
+        levelsGained = xpResult and xpResult.levelsGained or 0,
     })
 
     SetTimeout(3000, function()

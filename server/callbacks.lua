@@ -256,7 +256,24 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
         local stats = _r.stats or {}
         local skills = _r.skills or {}
         local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
-        local playerLevel = (ProgressionService and ProgressionService.CalcLevel and ProgressionService.CalcLevel(playerXP)) or (stats and stats.level) or 1
+        local playerXP = tonumber(stats and stats.xp) or 0
+        local calculatedLevel = (ProgressionService and ProgressionService.CalcLevel and ProgressionService.CalcLevel(playerXP)) or 0
+        local storedLevel = tonumber(stats and stats.level) or 0
+
+        -- Auto-heal / Sincronização retroativa de nível e skill points
+        if calculatedLevel > storedLevel then
+            local missingPoints = calculatedLevel - storedLevel
+            local newRank = math.min(6, math.ceil(calculatedLevel / 5))
+            DB_SetLevelData(citizenId, calculatedLevel, newRank, missingPoints)
+            if stats then
+                stats.level = calculatedLevel
+                stats.rank = newRank
+                stats.skill_points = (tonumber(stats.skill_points) or 0) + missingPoints
+            end
+        end
+
+        local playerLevel = (stats and tonumber(stats.level)) or calculatedLevel
+        local playerSkillPoints = (stats and tonumber(stats.skill_points)) or (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or 0
 
         for i, load in ipairs(availableLoads) do
             local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
@@ -398,7 +415,7 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                 finished_deliveries = tonumber(stats.total_deliveries) or 0,
                 exp = playerXP,
                 traveled_distance = tonumber(stats.total_distance) or 0.0,
-                skill_points = (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or math.floor(playerLevel / 2),
+                skill_points = playerSkillPoints,
                 product_type = skills.product_type or 0,
                 distance = skills.distance or 0,
                 valuable = skills.valuable or 0,
