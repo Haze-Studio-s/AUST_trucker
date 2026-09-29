@@ -1850,6 +1850,31 @@ RegisterNetEvent('aurp_trucker:server:requestCargoRespawn', function(jobId)
     TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', ('%d volume(s) foram repostos na plataforma da doca.'):format(needed), 'success')
 end)
 
+-- 4. Despacho Expresso de Carga (Carregamento Automático / Imediato)
+RegisterNetEvent('aurp_trucker:server:expressDispatchCargo', function(jobId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local data = ActiveLCContractData[jobId]
+    if not data or data.citizenId ~= citizenId then return end
+
+    data.loadedCount = data.requiredCount or 3
+    data.stage = 'STATUS_IN_TRANSIT'
+
+    TriggerClientEvent('aurp_trucker:client:setJobState', src, jobId, 'STATUS_IN_TRANSIT')
+    TriggerClientEvent('aurp_trucker:notify', src, 'Despacho Expresso Liberado', 'Manifesto de carga validado pela administração. Boa viagem!', 'success')
+
+    if data.isParty and data.partyId and VP_Trucker.Parties[data.partyId] then
+        for mCid, mInfo in pairs(VP_Trucker.Parties[data.partyId].members) do
+            if mInfo.src and mInfo.src ~= src then
+                TriggerClientEvent('aurp_trucker:client:setJobState', mInfo.src, jobId, 'STATUS_IN_TRANSIT')
+            end
+        end
+    end
+end)
+
 -- Compatibilidade retroativa
 RegisterNetEvent('aurp_trucker:server:cargoItemLoaded', function(jobId)
     TriggerEvent('aurp_trucker:server:depositCargoItem', jobId)

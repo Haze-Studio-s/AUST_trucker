@@ -71,6 +71,9 @@ local lcDockBlip = nil
 local lcDockPed = nil
 local isStartingJob = false
 local lcDockProps = {}
+local lcYardEquipment = nil
+local lcAttachedCargo = nil
+local lcPhysicalThreadActive = false
 
 local function CleanupDockCargo()
     for _, prop in ipairs(lcDockProps) do
@@ -80,6 +83,17 @@ local function CleanupDockCargo()
         end
     end
     lcDockProps = {}
+    if lcYardEquipment and DoesEntityExist(lcYardEquipment) then
+        DeleteEntity(lcYardEquipment)
+        lcYardEquipment = nil
+    end
+    if lcAttachedCargo and DoesEntityExist(lcAttachedCargo) then
+        if not IsEntityAttached(lcAttachedCargo) then
+            DeleteEntity(lcAttachedCargo)
+        end
+        lcAttachedCargo = nil
+    end
+    lcPhysicalThreadActive = false
     if lcActiveJob then
         pcall(function()
             if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
@@ -3213,7 +3227,7 @@ local function SpawnDockCargoProps(countToSpawn)
     countToSpawn = countToSpawn or 3
     if countToSpawn <= 0 then return end
 
-    -- Limpa caixas remanescentes antes de criar novas
+    -- Limpa entidades remanescentes antes de criar novas
     for _, prop in ipairs(lcDockProps) do
         if DoesEntityExist(prop) then
             pcall(function() exports.ox_target:removeLocalEntity(prop) end)
@@ -3224,6 +3238,287 @@ local function SpawnDockCargoProps(countToSpawn)
 
     local contract = lcActiveJob
     local cargoNameStr = tostring(contract.cargoName or 'default'):lower()
+    local trailerModel = tostring(contract.trailerModel or ''):lower()
+    local pCfg = Config.PhysicalLoading or {}
+
+    local isContainerMode = (trailerModel == 'trflat' or trailerModel == 'trailers' or cargoNameStr:find('cont', 1, true) ~= nil)
+    local isForkliftMode = (trailerModel == 'mule' or trailerModel == 'mule2' or cargoNameStr:find('palet', 1, true) ~= nil or cargoNameStr:find('forklift', 1, true) ~= nil)
+
+    -- ========================================================
+    -- MODO 1: HANDLER PORTUÁRIO (oConteneur) — BONE frame_2
+    -- ========================================================
+    if isContainerMode and pCfg.Handler then
+        local hCfg = pCfg.Handler
+        local containerHash = joaat(hCfg.ContainerProp or 'prop_contr_03b_ld')
+        lib.requestModel(containerHash)
+
+        local dockRef = contract.dockCoords or vector4(1268.50, -3175.20, 5.91, 180.00)
+        local staging = hCfg.ContainerStagingCoords or vector4(dockRef.x - 12.0, dockRef.y + 15.0, dockRef.z, dockRef.w)
+
+        local container = CreateObjectNoOffset(containerHash, staging.x, staging.y, staging.z, true, false, false)
+        SetEntityHeading(container, staging.w or 0.0)
+        SetEntityAsMissionEntity(container, true, true)
+        SetEntityDynamic(container, true)
+        table.insert(lcDockProps, container)
+
+        -- Spawnar o Handler no pátio caso o jogador ainda não tenha um
+        if not lcYardEquipment or not DoesEntityExist(lcYardEquipment) then
+            local handlerHash = joaat(hCfg.VehicleModel or 'handler')
+            lib.requestModel(handlerHash)
+            local sp = hCfg.SpawnCoords or vector4(dockRef.x - 20.0, dockRef.y + 20.0, dockRef.z, 270.0)
+            local handlerVeh = CreateVehicle(handlerHash, sp.x, sp.y, sp.z, sp.w, true, false)
+            SetVehicleOnGroundProperly(handlerVeh)
+            SetEntityAsMissionEntity(handlerVeh, true, true)
+            if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(handlerVeh) end) end
+            lcYardEquipment = handlerVeh
+        end
+
+        lib.notify({
+            title = 'Operação de Contêiner (Handler)',
+            description = 'Assuma o controle do Handler no pátio, engate a grua (frame_2) no contêiner com [G] e carregue na carreta prancha!',
+            type = 'inform',
+            duration = 10000
+        })
+
+        -- Thread de acoplamento do Handler (Resmon zero em repouso)
+        if not lcPhysicalThreadActive then
+            lcPhysicalThreadActive = true
+            CreateThread(function()
+                local attachedToCrane = false
+                local targetTrailer = (contract.trailer and DoesEntityExist(contract.trailer)) and contract.trailer or 0
+                local currentTextUi = nil
+
+                while lcActiveJob and (lcActiveJob.stage == 'STATUS_LOADING' or lcActiveJob.stage == 'loading') and lcPhysicalThreadActive do
+                    local sleep = 500
+                    local ped = PlayerPedId()
+                    local veh = GetVehiclePedIsIn(ped, false)
+
+                    if veh ~= 0 and GetEntityModel(veh) == joaat(hCfg.VehicleModel or 'handler') then
+                        local craneBone = GetEntityBoneIndexByName(veh, hCfg.CraneBone or 'frame_2')
+                        local cranePos = GetWorldPositionOfEntityBone(veh, craneBone)
+
+                        if not attachedToCrane then
+                            if DoesEntityExist(container) then
+                                local distContainer = #(cranePos - GetEntityCoords(container))
+                                if distContainer <= (hCfg.InteractionRadius or 5.0) then
+                                    sleep = 0
+                                    if currentTextUi ~= 'attach_container' then
+                                        lib.showTextUI('[G] Acoplar Contêiner na Grua')
+                                        currentTextUi = 'attach_container'
+                                    end
+                                    if IsControlJustPressed(0, 47) then -- Tecla G (INPUT_DETONATE)
+                                        AttachEntityToEntity(container, veh, craneBone, 0.0, 1.78, -2.5, 0.0, 0.0, 90.0, false, false, true, false, 0, true)
+                                        attachedToCrane = true
+                                        lcAttachedCargo = container
+                                        PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                                        if currentTextUi then lib.hideTextUI(); currentTextUi = nil end
+                                        lib.notify({
+                                            title = 'Contêiner Içado!',
+                                            description = 'Contêiner acoplado com sucesso. Transporte até a carreta prancha e trave na posição com [G].',
+                                            type = 'success'
+                                        })
+                                    end
+                                else
+                                    if currentTextUi == 'attach_container' then
+                                        lib.hideTextUI()
+                                        currentTextUi = nil
+                                    end
+                                end
+                            end
+                        else
+                            -- Já içado: levar até a carreta prancha e travar
+                            if targetTrailer ~= 0 and DoesEntityExist(targetTrailer) then
+                                local trCoords = GetEntityCoords(targetTrailer)
+                                local distTrailer = #(cranePos - trCoords)
+                                if distTrailer <= 7.0 then
+                                    sleep = 0
+                                    if currentTextUi ~= 'detach_trailer' then
+                                        lib.showTextUI('[G] Travar Contêiner na Carreta')
+                                        currentTextUi = 'detach_trailer'
+                                    end
+                                    if IsControlJustPressed(0, 47) then
+                                        DetachEntity(container, false, true)
+                                        AttachEntityToEntity(container, targetTrailer, hCfg.TrailerBone or 0, 0.0, 0.0, 0.35, 0.0, 0.0, 0.0, 0, false, false, false, 0, true)
+                                        attachedToCrane = false
+                                        lcAttachedCargo = container
+                                        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                        if currentTextUi then lib.hideTextUI(); currentTextUi = nil end
+                                        TriggerServerEvent('aurp_trucker:server:depositCargoItem', contract.jobId)
+                                        lib.notify({
+                                            title = 'Contêiner Travado!',
+                                            description = 'Carga fixada e trancada na carreta com sucesso. Romaneio liberado no terminal!',
+                                            type = 'success'
+                                        })
+                                        break
+                                    end
+                                else
+                                    if currentTextUi == 'detach_trailer' then
+                                        lib.hideTextUI()
+                                        currentTextUi = nil
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        if currentTextUi then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
+                    end
+                    Wait(sleep)
+                end
+                if currentTextUi then lib.hideTextUI() end
+                lcPhysicalThreadActive = false
+            end)
+        end
+        return
+    end
+
+    -- ========================================================
+    -- MODO 2: EMPILHADEIRA (oForklift) — BONE 3 (GARFOS)
+    -- ========================================================
+    if isForkliftMode and pCfg.Forklift then
+        local fCfg = pCfg.Forklift
+        local dockRef = contract.dockCoords or vector4(1268.50, -3175.20, 5.91, 180.00)
+        local palletPool = fCfg.PalletModels or { 'prop_boxpile_06a' }
+
+        -- Spawnar os paletes nos pontos de carga
+        local stagingSpawns = fCfg.PalletStagingCoords or {
+            vector4(dockRef.x + 3.0, dockRef.y - 2.0, dockRef.z, 0.0),
+            vector4(dockRef.x + 5.0, dockRef.y - 2.0, dockRef.z, 0.0),
+            vector4(dockRef.x + 7.0, dockRef.y - 2.0, dockRef.z, 0.0),
+        }
+
+        for i = 1, math.min(countToSpawn, #stagingSpawns) do
+            local pModel = palletPool[math.random(#palletPool)]
+            local pHash = joaat(pModel)
+            lib.requestModel(pHash)
+            local sp = stagingSpawns[i]
+            local palletObj = CreateObjectNoOffset(pHash, sp.x, sp.y, sp.z, true, false, false)
+            SetEntityHeading(palletObj, sp.w or 0.0)
+            SetEntityAsMissionEntity(palletObj, true, true)
+            SetEntityDynamic(palletObj, true)
+            table.insert(lcDockProps, palletObj)
+        end
+
+        -- Spawnar o Forklift se ainda não estiver presente
+        if not lcYardEquipment or not DoesEntityExist(lcYardEquipment) then
+            local forkliftHash = joaat(fCfg.VehicleModel or 'forklift')
+            lib.requestModel(forkliftHash)
+            local sp = fCfg.SpawnCoords or vector4(dockRef.x - 15.0, dockRef.y + 10.0, dockRef.z, 270.0)
+            local forkliftVeh = CreateVehicle(forkliftHash, sp.x, sp.y, sp.z, sp.w, true, false)
+            SetVehicleOnGroundProperly(forkliftVeh)
+            SetEntityAsMissionEntity(forkliftVeh, true, true)
+            if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(forkliftVeh) end) end
+            lcYardEquipment = forkliftVeh
+        end
+
+        lib.notify({
+            title = 'Operação de Empilhadeira (Forklift)',
+            description = 'Assuma a empilhadeira no pátio, erga os paletes nos garfos com [G] e carregue no compartimento do veículo!',
+            type = 'inform',
+            duration = 10000
+        })
+
+        -- Thread de operação do Forklift
+        if not lcPhysicalThreadActive then
+            lcPhysicalThreadActive = true
+            CreateThread(function()
+                local attachedPallet = nil
+                local targetVeh = (contract.trailer and DoesEntityExist(contract.trailer)) and contract.trailer or contract.truck
+                local currentTextUi = nil
+
+                while lcActiveJob and (lcActiveJob.stage == 'STATUS_LOADING' or lcActiveJob.stage == 'loading') and lcPhysicalThreadActive do
+                    local sleep = 500
+                    local ped = PlayerPedId()
+                    local veh = GetVehiclePedIsIn(ped, false)
+
+                    if veh ~= 0 and GetEntityModel(veh) == joaat(fCfg.VehicleModel or 'forklift') then
+                        local forkPos = GetOffsetFromEntityInWorldCoords(veh, 0.0, 1.8, 0.0)
+
+                        if not attachedPallet then
+                            -- Procurar palete mais próximo
+                            local closestPallet, closestDist = nil, 4.0
+                            for _, pObj in ipairs(lcDockProps) do
+                                if DoesEntityExist(pObj) and not IsEntityAttached(pObj) then
+                                    local d = #(forkPos - GetEntityCoords(pObj))
+                                    if d < closestDist then
+                                        closestDist = d
+                                        closestPallet = pObj
+                                    end
+                                end
+                            end
+
+                            if closestPallet then
+                                sleep = 0
+                                if currentTextUi ~= 'attach_pallet' then
+                                    lib.showTextUI('[G] Carregar Palete nos Garfos')
+                                    currentTextUi = 'attach_pallet'
+                                end
+                                if IsControlJustPressed(0, 47) then
+                                    AttachEntityToEntity(closestPallet, veh, fCfg.ForkBoneIndex or 3, 0.04001219901977, 1.1927500134294, -0.51866756839922, 0.0, 0.0, -0.17032877993561, false, false, false, false, 2, true)
+                                    attachedPallet = closestPallet
+                                    lcAttachedCargo = closestPallet
+                                    PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                                    if currentTextUi then lib.hideTextUI(); currentTextUi = nil end
+                                    lib.notify({
+                                        title = 'Palete Carregado!',
+                                        description = 'Leve o palete até a traseira do veículo de carga e pressione [G] para acomodar.',
+                                        type = 'success'
+                                    })
+                                end
+                            else
+                                if currentTextUi == 'attach_pallet' then
+                                    lib.hideTextUI()
+                                    currentTextUi = nil
+                                end
+                            end
+                        else
+                            -- Acomodar no veículo alvo
+                            if targetVeh and DoesEntityExist(targetVeh) then
+                                local bedPos = GetOffsetFromEntityInWorldCoords(targetVeh, 0.0, -3.5, 0.5)
+                                local distBed = #(forkPos - bedPos)
+                                if distBed <= 5.0 then
+                                    sleep = 0
+                                    if currentTextUi ~= 'deposit_pallet' then
+                                        lib.showTextUI('[G] Acomodar Palete no Veículo')
+                                        currentTextUi = 'deposit_pallet'
+                                    end
+                                    if IsControlJustPressed(0, 47) then
+                                        DetachEntity(attachedPallet, false, true)
+                                        AttachEntityToEntity(attachedPallet, targetVeh, fCfg.MuleBone or 0, 0.13276851850662, 0.0, 0.0, 0.0, 0.0, 0.0, 0, false, false, false, 0, true)
+                                        attachedPallet = nil
+                                        lcAttachedCargo = nil
+                                        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                        if currentTextUi then lib.hideTextUI(); currentTextUi = nil end
+                                        TriggerServerEvent('aurp_trucker:server:depositCargoItem', contract.jobId)
+                                    end
+                                else
+                                    if currentTextUi == 'deposit_pallet' then
+                                        lib.hideTextUI()
+                                        currentTextUi = nil
+                                    end
+                                end
+                            end
+                        end
+                    else
+                        if currentTextUi then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
+                    end
+                    Wait(sleep)
+                end
+                if currentTextUi then lib.hideTextUI() end
+                lcPhysicalThreadActive = false
+            end)
+        end
+        return
+    end
+
+    -- ========================================================
+    -- MODO 3: CARREGAMENTO MANUAL DE CAIXAS (CarrySystem)
+    -- ========================================================
     local carryType = 'small_box'
     if Config.CargoToCarryType then
         for k, v in pairs(Config.CargoToCarryType) do
@@ -3502,6 +3797,19 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                     end,
                     onSelect = function()
                         TriggerServerEvent('aurp_trucker:server:requestDockCargo', lcActiveJob.jobId)
+                    end
+                },
+                {
+                    name = 'express_dock_dispatch',
+                    icon = 'fa-solid fa-truck-fast',
+                    label = 'Despacho Expresso (Liberar Manifesto Imediato)',
+                    canInteract = function()
+                        return lcActiveJob and (lcActiveJob.stage == 'STATUS_AWAITING_LOAD' or lcActiveJob.stage == 'awaiting_load' or lcActiveJob.stage == 'STATUS_LOADING' or lcActiveJob.stage == 'loading')
+                    end,
+                    onSelect = function()
+                        if lcActiveJob then
+                            TriggerServerEvent('aurp_trucker:server:expressDispatchCargo', lcActiveJob.jobId)
+                        end
                     end
                 },
                 {
