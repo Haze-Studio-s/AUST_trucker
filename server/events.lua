@@ -1254,18 +1254,13 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         load.trailer, payment, dist, contractType, adr, fragile, valuable, fast, illegal
     })
 
-    local dockCoords = (Config.LC_Headquarters and Config.LC_Headquarters.yard_manager_coords) or vector4(1268.50, -3175.20, 5.91, 180.00)
-
     ActiveLCContracts[citizenId] = jobId
     ActiveLCContractData[jobId] = {
         jobId = jobId,
         citizenId = citizenId,
         src = src,
-        stage = 'STATUS_AWAITING_LOAD',
-        loadedCount = 0,
-        requiredCount = 3,
+        stage = 'STATUS_IN_TRANSIT',
         isParty = false,
-        dockCoords = dockCoords,
         deliveryCoords = dest,
         cargoName = load.name,
     }
@@ -1282,18 +1277,13 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         trailerModel = load.trailer,
         truckSpawn = isQuickJob and truckSpawn or nil,
         trailerSpawn = trailerSpawn,
-        dockCoords = dockCoords,
         deliveryCoords = dest,
         returnCoords = returnCoords,
         payment = payment,
         distance = dist,
-        stage = 'STATUS_AWAITING_LOAD',
-        requiredCount = 3,
+        stage = 'STATUS_IN_TRANSIT',
     }
 
-    if LogisticsServer and LogisticsServer.SpawnJobEntities then
-        LogisticsServer.SpawnJobEntities(src, citizenId, jobId, payload)
-    end
     TriggerClientEvent('aurp_trucker:client:startLCContract', src, payload)
 end
 
@@ -1474,19 +1464,14 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
             load.trailer, memberPayment, dist, contractType, adr, fragile, valuable, fast, illegal
         })
 
-        local dockCoords = (Config.LC_Headquarters and Config.LC_Headquarters.yard_manager_coords) or vector4(1268.50, -3175.20, 5.91, 180.00)
-
         ActiveLCContracts[member.citizenId] = jobId
         ActiveLCContractData[jobId] = {
             jobId = jobId,
             citizenId = member.citizenId,
             src = member.src,
-            stage = 'STATUS_AWAITING_LOAD',
-            loadedCount = 0,
-            requiredCount = 3,
+            stage = 'STATUS_IN_TRANSIT',
             isParty = true,
             partyId = partyId,
-            dockCoords = dockCoords,
             deliveryCoords = memberDest,
             cargoName = load.name,
         }
@@ -1501,7 +1486,6 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
             trailerModel = load.trailer,
             truckSpawn = isQuickJob and truckSpawn or nil,
             trailerSpawn = trailerSpawn,
-            dockCoords = dockCoords,
             deliveryCoords = memberDest,
             returnCoords = returnCoords,
             payment = memberPayment,
@@ -1509,19 +1493,15 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
             isParty = true,
             partyMemberIndex = i,
             totalMembers = N,
-            stage = 'STATUS_AWAITING_LOAD',
-            requiredCount = 3,
+            stage = 'STATUS_IN_TRANSIT',
         }
 
-        if LogisticsServer and LogisticsServer.SpawnJobEntities then
-            LogisticsServer.SpawnJobEntities(member.src, member.citizenId, jobId, memberPayload)
-        end
         TriggerClientEvent('aurp_trucker:client:startLCContract', member.src, memberPayload)
     end
 
     -- Notificar todos os membros sobre a saída do comboio
     for _, m in ipairs(activeMembers) do
-        TriggerClientEvent('aurp_trucker:notify', m.src, 'Comboio Despachado!', ('Serviço em grupo iniciado para %d membros. Siga o GPS até as docas!'):format(N), 'success')
+        TriggerClientEvent('aurp_trucker:notify', m.src, 'Comboio Despachado!', ('Serviço em grupo iniciado para %d membros. Siga a rota de entrega no GPS!'):format(N), 'success')
     end
 end
 
@@ -1677,10 +1657,6 @@ local function FinishQuickJobContract(src, jobId, damages)
         levelsGained = xpResult and xpResult.levelsGained or 0,
     })
 
-    if LogisticsServer and LogisticsServer.CleanupJobEntities then
-        LogisticsServer.CleanupJobEntities(citizenId)
-    end
-
     SetTimeout(3000, function()
         CompletingContractsLock[citizenId] = nil
     end)
@@ -1762,137 +1738,10 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
         levelsGained = xpResult and xpResult.levelsGained or 0,
     })
 
-    if LogisticsServer and LogisticsServer.CleanupJobEntities then
-        LogisticsServer.CleanupJobEntities(citizenId)
-    end
-
     SetTimeout(3000, function()
         CompletingContractsLock[citizenId] = nil
     end)
 end
-
--- ========================================================
--- LOGÍSTICA 2.0: MÁQUINA DE ESTADOS & CARREGAMENTO FÍSICO
--- ========================================================
-
--- 1. Solicitação de Carga na Doca (Gerente de Pátio)
-RegisterNetEvent('aurp_trucker:server:requestDockCargo', function(jobId)
-    local src = source
-    local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
-
-    local data = ActiveLCContractData[jobId]
-    if not data or data.citizenId ~= citizenId then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Erro de Manifesto', 'Nenhum contrato ativo correspondente encontrado.', 'error')
-        return
-    end
-
-    -- Validação de proximidade autoritativa da doca
-    local pPed = GetPlayerPed(src)
-    local pCoords = GetEntityCoords(pPed)
-    local dockVec = vector3(data.dockCoords.x, data.dockCoords.y, data.dockCoords.z)
-    if #(pCoords - dockVec) > 40.0 then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Doca Distante', 'Você precisa se aproximar do Gerente de Pátio na doca para liberar sua carga!', 'error')
-        return
-    end
-
-    data.stage = 'STATUS_LOADING'
-    TriggerClientEvent('aurp_trucker:client:cargoLoadingReady', src, jobId)
-
-    -- Se for party/comboio, notifica os membros
-    if data.isParty and data.partyId and VP_Trucker.Parties[data.partyId] then
-        for mCid, mInfo in pairs(VP_Trucker.Parties[data.partyId].members) do
-            if mInfo.src and mInfo.src ~= src then
-                TriggerClientEvent('aurp_trucker:client:cargoLoadingReady', mInfo.src, jobId)
-            end
-        end
-    end
-end)
-
--- 2. Depósito de Volume de Carga no Caminhão/Reboque (Contador Autoritativo do Servidor)
-RegisterNetEvent('aurp_trucker:server:depositCargoItem', function(jobId)
-    local src = source
-    local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
-
-    local data = ActiveLCContractData[jobId]
-    if not data or data.citizenId ~= citizenId then return end
-    if data.stage ~= 'STATUS_LOADING' then return end
-
-    data.loadedCount = (data.loadedCount or 0) + 1
-    local loaded = data.loadedCount
-    local req = data.requiredCount or 3
-
-    -- Sincronização e Feedback
-    if loaded < req then
-        TriggerClientEvent('aurp_trucker:client:cargoProgressSync', src, loaded, req)
-        if data.isParty and data.partyId and VP_Trucker.Parties[data.partyId] then
-            for mCid, mInfo in pairs(VP_Trucker.Parties[data.partyId].members) do
-                if mInfo.src and mInfo.src ~= src then
-                    TriggerClientEvent('aurp_trucker:client:cargoProgressSync', mInfo.src, loaded, req)
-                end
-            end
-        end
-    else
-        data.stage = 'STATUS_IN_TRANSIT'
-        TriggerClientEvent('aurp_trucker:client:setJobState', src, jobId, 'STATUS_IN_TRANSIT')
-        if data.isParty and data.partyId and VP_Trucker.Parties[data.partyId] then
-            for mCid, mInfo in pairs(VP_Trucker.Parties[data.partyId].members) do
-                if mInfo.src and mInfo.src ~= src then
-                    TriggerClientEvent('aurp_trucker:client:setJobState', mInfo.src, jobId, 'STATUS_IN_TRANSIT')
-                end
-            end
-        end
-    end
-end)
-
--- 3. Reposição de Cargas Perdidas (Sistema de Recuperação / Fallback)
-RegisterNetEvent('aurp_trucker:server:requestCargoRespawn', function(jobId)
-    local src = source
-    local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
-
-    local data = ActiveLCContractData[jobId]
-    if not data or data.citizenId ~= citizenId then return end
-    if data.stage ~= 'STATUS_LOADING' then return end
-
-    local needed = math.max(1, (data.requiredCount or 3) - (data.loadedCount or 0))
-    TriggerClientEvent('aurp_trucker:client:respawnDockProps', src, jobId, needed)
-    TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', ('%d volume(s) foram repostos na plataforma da doca.'):format(needed), 'success')
-end)
-
--- 4. Despacho Expresso de Carga (Carregamento Automático / Imediato)
-RegisterNetEvent('aurp_trucker:server:expressDispatchCargo', function(jobId)
-    local src = source
-    local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
-
-    local data = ActiveLCContractData[jobId]
-    if not data or data.citizenId ~= citizenId then return end
-
-    data.loadedCount = data.requiredCount or 3
-    data.stage = 'STATUS_IN_TRANSIT'
-
-    TriggerClientEvent('aurp_trucker:client:setJobState', src, jobId, 'STATUS_IN_TRANSIT')
-    TriggerClientEvent('aurp_trucker:notify', src, 'Despacho Expresso Liberado', 'Manifesto de carga validado pela administração. Boa viagem!', 'success')
-
-    if data.isParty and data.partyId and VP_Trucker.Parties[data.partyId] then
-        for mCid, mInfo in pairs(VP_Trucker.Parties[data.partyId].members) do
-            if mInfo.src and mInfo.src ~= src then
-                TriggerClientEvent('aurp_trucker:client:setJobState', mInfo.src, jobId, 'STATUS_IN_TRANSIT')
-            end
-        end
-    end
-end)
-
--- Compatibilidade retroativa
-RegisterNetEvent('aurp_trucker:server:cargoItemLoaded', function(jobId)
-    TriggerEvent('aurp_trucker:server:depositCargoItem', jobId)
-end)
 
 -- Roteamento Retrocompatível
 local function FinalizeLCContract(src, jobId, parkedManually)
