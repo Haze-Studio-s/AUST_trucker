@@ -269,6 +269,7 @@ Config.LC_DistanceSkill = {
     [5] = 8.5,
     [6] = 99.0
 }
+Config.distance_skill = Config.LC_DistanceSkill
 
 Config.LC_ExpGain = 3.0 -- XP por km percorrido
 Config.exp_gain = Config.LC_ExpGain
@@ -295,6 +296,7 @@ Config.LC_Bonus = {
         exp_bonus_percentage   = { [1] = 10, [2] = 10, [3] = 10, [4] = 10, [5] = 10, [6] = 10 }
     }
 }
+Config.bonus = Config.LC_Bonus
 
 Config.LC_RequiredXP = {
     [1] = 1000, [2] = 1400, [3] = 1900, [4] = 2500, [5] = 3200, [6] = 4000,

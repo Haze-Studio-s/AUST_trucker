@@ -6,7 +6,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
 :root {
-    /* Lation Signature Emerald Palette */
+    /* Lation Signature Emerald & Amber Palette */
     --primary-accent: #10b981;
     --primary-accent-hover: #059669;
     --primary-color: #10b981;
@@ -16,20 +16,21 @@
 
     --accent-emerald: #10b981;
     --accent-neon: #6afe87;
-    --accent-cyan: #06b6d4;
     --accent-amber: #f59e0b;
+    --accent-amber-glow: rgba(245, 158, 11, 0.4);
     --accent-rose: #f43f5e;
 
-    /* Surfaces */
-    --bg-main: rgba(15, 23, 42, 0.96);
-    --bg-sidebar: rgba(30, 41, 59, 0.55);
-    --bg-card: rgba(30, 41, 59, 0.7);
-    --bg-card-hover: rgba(51, 65, 85, 0.85);
-    --bg-input: rgba(255, 255, 255, 0.05);
-    --bg-input-focus: rgba(255, 255, 255, 0.09);
+    /* OLED Black & Midnight Dark Surfaces (Strict OLED Dark Mode) */
+    --bg-main: #050505;
+    --bg-sidebar: #080808;
+    --bg-card: #0d0d0d;
+    --bg-card-hover: #181818;
+    --bg-card-alt: #121212;
+    --bg-input: #121212;
+    --bg-input-focus: #181818;
 
-    /* Borders & Lines */
-    --border-subtle: rgba(255, 255, 255, 0.08);
+    /* Borders & Lines (Ultra-refined subtle borders) */
+    --border-subtle: rgba(255, 255, 255, 0.06);
     --border-hover: rgba(16, 185, 129, 0.5);
     --border-active: #10b981;
 
@@ -40,13 +41,13 @@
 
     /* Radii */
     --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 16px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
 
-    /* Shadows (Clean line highlight, zero outer blur to avoid CEF black artifacts) */
-    --shadow-main: 0 0 0 1px rgba(255, 255, 255, 0.08);
-    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.25);
+    /* Shadows (Deep Dark Contrast) */
+    --shadow-main: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.6);
 }
 
 /* Base & Font (100% Transparent, No filters, No shadows on outer viewport) */
@@ -211,7 +212,7 @@ html, body {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
-    background: rgba(15, 23, 42, 0.98) !important;
+    background: #121212 !important;
     color: #f8fafc !important;
     padding: 6px 14px !important;
     border-radius: var(--radius-sm) !important;
@@ -410,13 +411,14 @@ ul.list-inline li.card-theme:hover {
 }
 
 .btn-dark {
-    background: rgba(30, 41, 59, 0.8) !important;
+    background: #141414 !important;
     border: 1px solid var(--border-subtle) !important;
     color: var(--text-primary) !important;
 }
 
 .btn-dark:hover {
-    background: rgba(51, 65, 85, 0.9) !important;
+    background: #202020 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
     color: #ffffff !important;
 }
 
@@ -438,10 +440,10 @@ ul.list-inline li.card-theme:hover {
 
 /* Modals */
 .modal-content {
-    background: rgba(15, 23, 42, 0.98) !important;
+    background: #0d0d0d !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
@@ -498,12 +500,13 @@ ul.list-inline li.card-theme:hover {
 
 /* Dealership & Garage */
 .dealership-locked-background {
-    background: rgba(15, 23, 42, 0.6) !important;
+    background: rgba(5, 5, 5, 0.85) !important;
     opacity: 0.75;
 }
 
 /* ============================================================
    ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   Refatorado para OLED Black, Proporção 55/45 e Acentos Amber/Emerald
    ============================================================ */
 
 .skills-page {
@@ -511,7 +514,8 @@ ul.list-inline li.card-theme:hover {
     flex-direction: column;
     height: 100%;
     overflow: hidden;
-    padding: 10px 18px 8px !important;
+    padding: 20px 24px !important;
+    box-sizing: border-box !important;
 }
 
 .skills-page[style*="display: block"] {
@@ -520,92 +524,119 @@ ul.list-inline li.card-theme:hover {
 
 .ets2-skills-header-bar {
     text-align: center;
-    padding: 2px 0 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 10px;
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 14px;
+    flex-shrink: 0;
 }
 
 .ets2-header-title {
     font-family: 'Montserrat', 'Poppins', sans-serif;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
     letter-spacing: 4px;
     color: #f1f5f9;
+    text-transform: uppercase;
     text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .ets2-skills-layout {
     display: grid;
-    grid-template-columns: 1.18fr 0.82fr;
-    gap: 14px;
+    grid-template-columns: 55% calc(45% - 16px);
+    gap: 16px;
     flex: 1;
     min-height: 0;
-    margin-bottom: 6px;
+    height: calc(100% - 46px);
+    box-sizing: border-box;
 }
 
-/* Left Column: Rows */
+/* Left Column: Skill Rows (55% Grid Column) */
 .ets2-skills-list-col {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: 6px;
+    height: 100%;
 }
 
 .ets2-skills-list-col::-webkit-scrollbar {
     width: 4px;
 }
+.ets2-skills-list-col::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
 .ets2-skills-list-col::-webkit-scrollbar-thumb {
-    background: #374151;
-    border-radius: 2px;
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-amber);
 }
 
 .ets2-skill-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 5px 8px;
-    background: linear-gradient(180deg, #2a2c33 0%, #1e2025 50%, #151619 100%);
-    border: 1px solid #3c404b;
-    border-radius: 4px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 2px 4px rgba(0, 0, 0, 0.5);
+    gap: 12px;
+    padding: 8px 12px;
+    background: #0d0d0d;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
     cursor: pointer;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     user-select: none;
+    box-sizing: border-box;
 }
 
 .ets2-skill-row:hover {
-    border-color: #525866;
-    background: linear-gradient(180deg, #32353d 0%, #23252c 50%, #191b1f 100%);
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #141414;
+    transform: translateY(-1px);
 }
 
 .ets2-skill-row.active {
     border-color: #f59e0b !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 10px rgba(245, 158, 11, 0.35) !important;
+    background: linear-gradient(180deg, #18150f 0%, #0d0b08 100%) !important;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.25), inset 0 0 0 1px rgba(245, 158, 11, 0.3) !important;
 }
 
 .ets2-skill-row.active .ets2-skill-label {
     color: #f59e0b !important;
-    text-shadow: 0 0 6px rgba(245, 158, 11, 0.4);
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
 }
 
 .ets2-skill-icon-box {
     width: 42px;
     height: 42px;
     min-width: 42px;
-    border-radius: 3px;
-    background: linear-gradient(180deg, #383c46 0%, #202227 100%);
-    border: 1px solid #4a505e;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(0, 0, 0, 0.5);
+    border-radius: var(--radius-sm);
+    background: #141414;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-skill-icon-box {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: #1c1810;
 }
 
 .ets2-fa-icon {
     color: #d1d5db;
-    font-size: 18px;
+    font-size: 17px;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-fa-icon {
+    color: #f59e0b;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
 }
 
 .ets2-skill-info {
@@ -613,13 +644,13 @@ ul.list-inline li.card-theme:hover {
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 3px;
+    gap: 4px;
     min-width: 0;
 }
 
 .ets2-skill-label {
     font-family: 'Poppins', sans-serif;
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 700;
     color: #e2e8f0;
     letter-spacing: 0.3px;
@@ -627,6 +658,7 @@ ul.list-inline li.card-theme:hover {
     overflow: hidden;
     text-overflow: ellipsis;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: color 0.15s ease;
 }
 
 /* Rank Blocks */
@@ -637,17 +669,18 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-block {
-    width: 27px;
-    height: 20px;
-    border-radius: 2px;
+    width: 28px;
+    height: 18px;
+    border-radius: 3px;
     position: relative;
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .ets2-block.locked {
-    background: linear-gradient(180deg, #585f6e 0%, #3a3f4a 48%, #252830 52%, #18191d 100%);
-    border: 1px solid #202227;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 1px 2px rgba(0, 0, 0, 0.5);
+    background: #181818;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
 }
 
 .ets2-block.unlocked {
@@ -657,9 +690,9 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-block.pending {
-    background: linear-gradient(180deg, #38bdf8 0%, #0284c7 45%, #0369a1 52%, #075985 100%);
-    border: 1px solid #7dd3fc;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 9px rgba(56, 189, 248, 0.85);
+    background: linear-gradient(180deg, #6ee7b7 0%, #10b981 45%, #047857 52%, #064e3b 100%);
+    border: 1px solid #a7f3d0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 8px rgba(16, 185, 129, 0.75);
 }
 
 /* ADR Badges */
@@ -672,17 +705,18 @@ ul.list-inline li.card-theme:hover {
 .ets2-adr-badge {
     width: 25px;
     height: 25px;
-    border-radius: 2px;
+    border-radius: 3px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.4);
+    background: #141414;
     transition: all 0.2s ease;
+    box-sizing: border-box;
 }
 
 .ets2-adr-badge.locked {
     filter: grayscale(100%) opacity(25%);
-    border: 1px solid #2d3139;
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .ets2-adr-badge.unlocked {
@@ -691,14 +725,14 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-adr-badge.pending {
-    filter: drop-shadow(0 0 6px #38bdf8);
-    border: 1px solid #38bdf8;
-    background: rgba(2, 132, 199, 0.25);
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.85));
+    border: 1px solid #10b981;
+    background: rgba(16, 185, 129, 0.15);
 }
 
 .ets2-adr-badge img {
-    width: 21px;
-    height: 21px;
+    width: 20px;
+    height: 20px;
     object-fit: contain;
 }
 
@@ -710,17 +744,17 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-step-btn {
-    width: 26px;
-    height: 26px;
-    border-radius: 2px;
-    background: linear-gradient(180deg, #383c46 0%, #22242a 100%);
-    border: 1px solid #4a505e;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 2px rgba(0, 0, 0, 0.5);
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.5);
     color: #d1d5db;
     font-family: monospace;
     font-size: 15px;
     font-weight: 900;
-    line-height: 24px;
+    line-height: 26px;
     text-align: center;
     cursor: pointer;
     transition: all 0.15s ease;
@@ -729,74 +763,85 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-step-btn:not(:disabled):hover {
-    background: linear-gradient(180deg, #484d5a 0%, #2c2f38 100%);
+    background: #242424;
     color: #f59e0b;
-    border-color: #636b7c;
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
 }
 
 .ets2-step-btn:not(:disabled):active {
-    background: linear-gradient(180deg, #1c1d22 0%, #2f323a 100%);
+    background: #101010;
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 
 .ets2-step-btn:disabled {
-    opacity: 0.22;
+    opacity: 0.18;
     cursor: not-allowed;
 }
 
-/* Right Column: Details Card */
+/* Right Column: Details Panel (45% Grid Column) */
 .ets2-skills-detail-col {
-    background: linear-gradient(180deg, #24272e 0%, #17181c 100%);
-    border: 1px solid #3c404b;
-    border-radius: 4px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 3px 8px rgba(0, 0, 0, 0.5);
+    background: #0d0d0d;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     height: 100%;
+    box-sizing: border-box;
 }
 
 .ets2-unassigned-bar {
-    background: linear-gradient(180deg, #31353e 0%, #202329 100%);
-    border-bottom: 1px solid #141518;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    padding: 6px 12px;
+    background: #121212;
+    border-bottom: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 10px 16px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     font-family: 'Poppins', sans-serif;
-    font-size: 12px;
-    font-weight: 700;
-    color: #cbd5e1;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    flex-shrink: 0;
 }
 
 .ets2-unassigned-num {
     color: #f59e0b;
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 800;
-    text-shadow: 0 0 8px rgba(245, 158, 11, 0.6);
+    text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
 }
 
 .ets2-detail-card {
-    padding: 10px 14px;
+    padding: 14px 16px;
     overflow-y: auto;
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 8px;
+    min-height: 0;
 }
 
 .ets2-detail-card::-webkit-scrollbar {
     width: 4px;
 }
+.ets2-detail-card::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
 .ets2-detail-card::-webkit-scrollbar-thumb {
-    background: #374151;
-    border-radius: 2px;
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-amber);
 }
 
 .ets2-detail-title {
     font-family: 'Poppins', sans-serif;
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 800;
     color: #f59e0b;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
@@ -804,9 +849,9 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-detail-desc {
-    font-size: 11px;
+    font-size: 11.5px;
     color: #94a3b8;
-    line-height: 1.35;
+    line-height: 1.45;
     margin: 0;
 }
 
@@ -814,12 +859,12 @@ ul.list-inline li.card-theme:hover {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    margin-top: 2px;
+    margin-top: 4px;
 }
 
 .ets2-rank-item {
     font-size: 10.5px;
-    line-height: 1.3;
+    line-height: 1.35;
 }
 
 .ets2-rank-item .rank-heading {
@@ -836,38 +881,41 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-rank-item.pending .rank-heading {
-    color: #38bdf8;
+    color: #10b981;
 }
 .ets2-rank-item.pending .rank-perks {
-    color: #7dd3fc;
+    color: #6ee7b7;
 }
 
 .ets2-rank-item.locked .rank-heading {
-    color: #94a3b8;
-}
-.ets2-rank-item.locked .rank-perks {
     color: #64748b;
 }
+.ets2-rank-item.locked .rank-perks {
+    color: #475569;
+}
 
-/* Bottom Action Bar */
-.ets2-skills-bottom-bar {
+/* Integrated Detail Footer (Docked Action Button) */
+.ets2-detail-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle);
+    background: #101010;
+    flex-shrink: 0;
     display: flex;
-    justify-content: center;
     align-items: center;
-    padding: 4px 0 2px;
+    justify-content: center;
 }
 
 .ets2-apply-btn {
-    width: 260px;
-    height: 30px;
-    border-radius: 15px;
-    border: 1px solid #3c404b;
+    width: 100%;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
     font-family: 'Poppins', sans-serif;
-    font-size: 11.5px;
+    font-size: 12px;
     font-weight: 800;
     letter-spacing: 1.5px;
     text-transform: uppercase;
-    transition: all 0.2s ease;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -875,9 +923,11 @@ ul.list-inline li.card-theme:hover {
 }
 
 .ets2-apply-btn:disabled {
-    background: linear-gradient(180deg, #2b2e36 0%, #191a1d 100%);
-    color: #64748b;
+    background: #141414;
+    color: #475569;
+    border: 1px solid rgba(255, 255, 255, 0.04);
     cursor: not-allowed;
+    box-shadow: none;
 }
 
 .ets2-apply-btn:not(:disabled) {
@@ -891,4 +941,14 @@ ul.list-inline li.card-theme:hover {
 .ets2-apply-btn:not(:disabled):hover {
     background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 45%, #d97706 100%);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 18px rgba(245, 158, 11, 0.9);
+    transform: translateY(-1px);
+}
+
+.ets2-apply-btn:not(:disabled):active {
+    transform: translateY(0);
+}
+
+/* Bottom Action Bar (Fallback) */
+.ets2-skills-bottom-bar {
+    display: none;
 }

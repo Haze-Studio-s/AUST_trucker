@@ -34,6 +34,8 @@ end
 local function BuildFallbackLcDados(citizenId, playerMoney)
     return {
         config = {
+            locale = Config.locale or Config.lang or 'br',
+            format = Config.format or { lang = 'br', currency = 'USD', location = 'pt-BR' },
             dealership = Config.LC_Dealership or {},
             repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
             required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
@@ -76,16 +78,18 @@ end
 -- Dados iniciais para abrir a NUI
 -- PERF: queries independentes lançadas em paralelo via Citizen.CreateThread (barrier pattern)
 -- Reduz latência de abertura da NUI de ~15 queries sequenciais para 2 fases paralelas
-lib.callback.register('aurp_trucker:getInitialData', function(source)
-    local Player = Framework.GetPlayer(source)
-    if not Player then
+function BuildInitialDataForPlayer(source, citizenId)
+    local Player = source and Framework.GetPlayer(source)
+    if not citizenId and Player then
+        citizenId = Framework.GetCitizenId(Player)
+    end
+    if not citizenId then
         return {
             lc_dados = BuildFallbackLcDados(nil, 0),
             jobs = {},
             recruitingCompanies = {}
         }
     end
-    local citizenId = Framework.GetCitizenId(Player)
 
     local ok, result = pcall(function()
         local _r       = {}   -- resultados acumulados
@@ -282,26 +286,47 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             local fragile = def[2] or 0
             local valuable = def[3] or 0
             local illegal = def[4] or 0
+            local fast = (i % 3 == 0) and 1 or 0
 
             local baseDist = 0.8 + ((i * 1.37) % 9.2)
+            local baseDistNum = tonumber(string.format("%.2f", baseDist))
             local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
-            local reward = math.floor(baseDist * rewardRate + 950)
+            local baseReward = math.floor(baseDist * rewardRate + 950)
 
-            table.insert(lc_contracts, {
+            local contractData = {
                 contract_id   = i,
                 contract_name = load.name,
                 contract_type = (i % 2 == 0) and 1 or 0, -- Alterna entre Quick Jobs (0) e Freight Jobs (1)
-                distance      = tonumber(string.format("%.2f", baseDist)),
-                reward        = reward,
+                distance      = baseDistNum,
+                reward        = baseReward,
                 truck         = truckModel,
                 trailer       = load.trailer,
                 cargo_type    = adr,
                 fragile       = fragile,
                 valuable      = valuable,
-                fast          = (i % 3 == 0) and 1 or 0,
+                fast          = fast,
                 illegal       = illegal,
                 progress      = nil,
-            })
+            }
+
+            -- Validação de Habilidades e Bloqueio de Contrato (Server-Side)
+            local canAccept, lockType, lockReason = true, nil, nil
+            if ProgressionService and ProgressionService.CanPlayerAcceptContract then
+                canAccept, lockType, lockReason = ProgressionService.CanPlayerAcceptContract(citizenId, contractData)
+            end
+            contractData.locked = not canAccept
+            contractData.lock_type = lockType
+            contractData.lock_reason = lockReason
+
+            -- Aplicação Dinâmica dos Bônus de Skills
+            if ProgressionService and ProgressionService.CalculateContractBonuses then
+                local bonuses = ProgressionService.CalculateContractBonuses(citizenId, contractData)
+                contractData.reward = math.floor(baseReward * bonuses.moneyMultiplier)
+                contractData.bonus_money_pct = bonuses.moneyBonusPct
+                contractData.bonus_exp_pct = bonuses.expBonusPct
+            end
+
+            table.insert(lc_contracts, contractData)
         end
 
         local fleetTrucks = _r.fleetTrucks or (TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId)) or {}
@@ -393,8 +418,13 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             end
         end
 
+        local activeLocale = Config.locale or Config.lang or 'br'
+        local activeFormat = Config.format or { lang = activeLocale, currency = 'USD', location = 'pt-BR' }
+
         local lc_dados = {
             config = {
+                locale = activeLocale,
+                format = activeFormat,
                 dealership = Config.LC_Dealership or {},
                 repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
                 required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
@@ -478,6 +508,37 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
     end
 
     return result
+end
+
+-- Callback principal para o frontend da NUI
+lib.callback.register('aurp_trucker:getInitialData', function(source)
+    local Player = Framework.GetPlayer(source)
+    if not Player then
+        return {
+            lc_dados = BuildFallbackLcDados(nil, 0),
+            jobs = {},
+            recruitingCompanies = {}
+        }
+    end
+    local citizenId = Framework.GetCitizenId(Player)
+    return BuildInitialDataForPlayer(source, citizenId)
+end)
+
+-- Abertura direta padrão truck_logistics:getData / getDataFor(src)
+function getDataFor(src)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local data = BuildInitialDataForPlayer(src, citizenId)
+    local activeLocale = Config.locale or Config.lang or 'br'
+    local activeFormat = Config.format or { lang = activeLocale, currency = 'USD', location = 'pt-BR' }
+    TriggerClientEvent('truck_logistics:open', src, data.lc_dados, { config = { locale = activeLocale, format = activeFormat } })
+end
+exports('getDataFor', getDataFor)
+
+RegisterNetEvent('truck_logistics:getData', function()
+    local src = source
+    getDataFor(src)
 end)
 
 -- Membros da empresa — derivação server-side (não confia no companyId do cliente)

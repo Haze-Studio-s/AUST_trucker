@@ -4,6 +4,15 @@
 
 Config = {}
 
+-- Configuração de Idioma e Formatação (Sincronização NUI e Servidor)
+Config.lang = 'br'
+Config.locale = 'br'
+Config.format = {
+    lang = 'br',
+    currency = 'USD',
+    location = 'pt-BR'
+}
+
 -- Framework suportado: 'qbx' | 'qbcore' | 'esx'
 Config.Framework = 'qbx'
 

@@ -55,7 +55,7 @@ html, body {
 	height: 100%;
 	width: 86px;
 	flex-shrink: 0;
-	background-color: #313443;
+	background-color: #080808;
 	box-sizing: border-box;
 }
 
@@ -105,7 +105,7 @@ html, body {
 	top: 50%;
 	transform: translateY(-50%);
 	margin: 0;
-	background-color: #313443;
+	background-color: #121212;
 	padding: 8px 15px;
 	border-radius: 3px;
 	opacity: 0;
@@ -130,7 +130,7 @@ html, body {
 }
 
 .sidebar-navigation ul li:hover {
-	background-color: #22252e;
+	background-color: #141414;
 }
 
 .sidebar-navigation ul li:hover .tooltip {
@@ -140,11 +140,11 @@ html, body {
 }
 
 .sidebar-navigation ul li.active {
-	background-color: #22252e;
+	background-color: #181818;
 }
 
 .sidebar-navigation ul li.active i {
-	color: #98d7ec;
+	color: #10b981;
 }
 
 /*=========================*/

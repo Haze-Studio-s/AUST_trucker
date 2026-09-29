@@ -1155,12 +1155,36 @@ local function StartLCContractForPlayer(src, contractId)
     local fragile = def[2] or 0
     local valuable = def[3] or 0
     local illegal = def[4] or 0
+    local fast = (contractId % 3 == 0) and 1 or 0
+
+    local contractCheck = {
+        distance = dist,
+        cargo_type = adr,
+        fragile = fragile,
+        valuable = valuable,
+        fast = fast,
+        illegal = illegal
+    }
+
+    -- Validação estrita de habilidades requeridas (Fail-Closed)
+    if ProgressionService and ProgressionService.CanPlayerAcceptContract then
+        local canAccept, reason = ProgressionService.CanPlayerAcceptContract(citizenId, contractCheck)
+        if not canAccept then
+            StartingJobLock[citizenId] = nil
+            local reasonText = _U and _U(reason) or ('Bloqueado por habilidade: ' .. tostring(reason))
+            TriggerClientEvent('aurp_trucker:notify', src, reasonText, 'error')
+            return
+        end
+    end
+
+    local bonusInfo = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractCheck) or { moneyMultiplier = 1.0, expMultiplier = 1.0 }
 
     local baseRate = 1250 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
     -- Quick Job desconta taxa de aluguel de veículo fornecido pela firma (15%)
     local rentalFeePct = (Config.LC_Jobs and Config.LC_Jobs.truck_rental and Config.LC_Jobs.truck_rental.rental_fee_percent) or 15
     local rawPayment = math.floor(dist * baseRate + 1200)
-    local payment = math.floor(rawPayment * (1 - (rentalFeePct / 100)))
+    local basePayment = math.floor(rawPayment * (1 - (rentalFeePct / 100)))
+    local payment = math.floor(basePayment * (bonusInfo.moneyMultiplier or 1.0))
 
     -- Sorteio de vagas livres de spawn na doca
     local garageSpawns = Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns or { vector4(1250.55, -3162.4, 5.88, 270.00) }
@@ -1175,11 +1199,12 @@ local function StartLCContractForPlayer(src, contractId)
     MySQL.insert.await([[
         INSERT INTO trucker_jobs (
             id, status, assigned_citizenid, origin_id, dest_id, cargo_item,
-            trailer_model, base_payment, distance, expires_at, created_at
-        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR), NOW())
+            trailer_model, base_payment, distance, expires_at, created_at,
+            contract_type, cargo_type, fragile, valuable, fast, illegal
+        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR), NOW(), 0, ?, ?, ?, ?, ?)
     ]], {
         jobId, citizenId, ('dest_%d'):format(destIndex), load.name,
-        load.trailer, payment, dist
+        load.trailer, payment, dist, adr, fragile, valuable, fast, illegal
     })
 
     ActiveLCContracts[citizenId] = jobId
@@ -1205,6 +1230,11 @@ RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
 end)
 
 RegisterNetEvent('truck_logistics:startContract', function(location, data)
+    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
+    StartLCContractForPlayer(source, contractId)
+end)
+
+RegisterNetEvent('truck_logistics:makeContract', function(location, data)
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     StartLCContractForPlayer(source, contractId)
 end)
@@ -1249,6 +1279,16 @@ local function FinalizeLCContract(src, jobId, parkedManually)
         return
     end
 
+    local contractData = {
+        distance = row.distance or 2.5,
+        cargo_type = row.cargo_type or 0,
+        fragile = row.fragile or 0,
+        valuable = row.valuable or 0,
+        fast = row.fast or 0,
+        illegal = row.illegal or 0,
+    }
+
+    local bonuses = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractData) or { moneyMultiplier = 1.0, expMultiplier = 1.0, moneyBonusPct = 0, expBonusPct = 0 }
     local payment = row.base_payment or 2500
     local dist = row.distance or 2.5
 
@@ -1258,7 +1298,9 @@ local function FinalizeLCContract(src, jobId, parkedManually)
 
     Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
     DB_AddPlayerStats(citizenId, payment, dist)
-    local xpResult = ProgressionService.GrantXP(src, citizenId, payment, 1.0, dist)
+
+    local xpMultiplier = bonuses and bonuses.expMultiplier or 1.0
+    local xpResult = ProgressionService.GrantXP(src, citizenId, payment, xpMultiplier, dist)
 
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
@@ -1270,6 +1312,8 @@ local function FinalizeLCContract(src, jobId, parkedManually)
         xpGained = xpResult and xpResult.xpGained or 0,
         newLevel = xpResult and xpResult.newLevel or 1,
         levelsGained = xpResult and xpResult.levelsGained or 0,
+        moneyBonusPct = bonuses and bonuses.moneyBonusPct or 0,
+        expBonusPct = bonuses and bonuses.expBonusPct or 0,
     })
 
     SetTimeout(3000, function()

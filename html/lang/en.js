@@ -281,4 +281,12 @@ Lang["en"] = {
     str_invalid_value:"Invalid value",
     str_more_than:"Must be greater than or equal to {0}",
     str_less_than:"Must be less than or equal to {0}",
+
+    contract_page_button_locked: "Locked",
+    contract_locked_adr: "Requires ADR Class {0} Certificate",
+    contract_locked_distance: "Distance exceeds your skill limit ({0} km)",
+    contract_locked_fragile: "Requires Fragile Cargo skill (Level 1)",
+    contract_locked_valuable: "Requires High Value Cargo skill (Level 1)",
+    contract_locked_fast: "Requires Urgent Delivery skill (Level 1)",
+    contract_locked_illegal: "Requires Illegal Cargo specialization",
 };

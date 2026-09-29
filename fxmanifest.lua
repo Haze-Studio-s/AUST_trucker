@@ -17,6 +17,9 @@ shared_scripts {
     '@ox_lib/init.lua',
     'config/config.lua',
     'config/logistics_config.lua',
+    'lang/br.lua',
+    'lang/en.lua',
+    'lang/locale.lua',
 }
 
 server_scripts {

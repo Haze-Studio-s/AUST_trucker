@@ -13,14 +13,27 @@ window.addEventListener("message", async function (event) {
         Utils.setResourceName(item.resourceName);
     }
 
-    if (item.utils && item.utils.config) {
-        Utils.setLocale(item.utils.config.locale || "en");
-        Utils.setFormat(item.utils.config.format || { currency: "USD", location: "en-US" });
-    }
+    let activeLocale = (item.utils && item.utils.config && item.utils.config.locale)
+        || (item.dados && item.dados.config && item.dados.config.locale)
+        || (item.dados && item.dados.locale)
+        || item.locale
+        || (config && config.locale)
+        || "br";
+    let activeFormat = (item.utils && item.utils.config && item.utils.config.format)
+        || (item.dados && item.dados.config && item.dados.config.format)
+        || (item.dados && item.dados.format)
+        || item.format
+        || (config && config.format)
+        || { currency: "USD", location: activeLocale === "br" ? "pt-BR" : "en-US" };
+
+    Utils.setLocale(activeLocale);
+    Utils.setFormat(activeFormat);
 
     if (item.showmenu || item.action === "open") {
         let dados = item.dados || item;
         config = dados.config || {};
+        config.locale = config.locale || activeLocale;
+        config.format = config.format || activeFormat;
         config.cooldown = config.cooldown || 2;
         config.max_emprestimo = config.max_emprestimo || 400000;
         config.player_level = config.player_level || 0;
@@ -49,11 +62,16 @@ window.addEventListener("message", async function (event) {
                 reward: Number(c.reward || c.basePayment) || 1200,
                 truck: c.truck || 'hauler',
                 trailer: c.trailer || c.trailerModel || 'docktrailer',
-                cargo_type: c.cargo_type || 0,
-                fragile: c.fragile || 0,
-                valuable: c.valuable || 0,
-                fast: c.fast || 0,
-                illegal: c.illegal || 0,
+                cargo_type: Number(c.cargo_type) || 0,
+                fragile: Number(c.fragile) || 0,
+                valuable: Number(c.valuable) || 0,
+                fast: Number(c.fast) || 0,
+                illegal: Number(c.illegal) || 0,
+                locked: Boolean(c.locked),
+                lock_type: c.lock_type || null,
+                lock_reason: c.lock_reason || null,
+                bonus_money_pct: Number(c.bonus_money_pct) || 0,
+                bonus_exp_pct: Number(c.bonus_exp_pct) || 0,
                 progress: c.progress || null,
                 external_data: c.external_data || null,
             };
@@ -484,7 +502,42 @@ window.addEventListener("message", async function (event) {
 
         for (const contract of contracts) {
             if (!contract || !contract.distance) continue;
-            if (contract.illegal == 1 && (!users.illegal || users.illegal == 0)) continue;
+
+            // Verificação de bloqueio por requisitos de habilidade (ETS2 style)
+            let userProductType = Number(users.product_type || 0);
+            let userDistance = Number(users.distance || 0);
+            let userFragile = Number(users.fragile || 0);
+            let userValuable = Number(users.valuable || 0);
+            let userFast = Number(users.fast || 0);
+            let userIllegal = Number(users.illegal || 0);
+
+            let distLimits = [6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 999.0];
+            let maxDistAllowed = distLimits[userDistance] || 6.0;
+
+            let isLocked = Boolean(contract.locked);
+            let lockReason = contract.lock_reason || "";
+
+            if (!isLocked) {
+                if (contract.cargo_type > 0 && userProductType < contract.cargo_type) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_adr").format(contract.cargo_type);
+                } else if (contract.distance > maxDistAllowed) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_distance").format(maxDistAllowed.toFixed(1));
+                } else if (contract.fragile == 1 && userFragile < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_fragile");
+                } else if (contract.valuable == 1 && userValuable < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_valuable");
+                } else if (contract.fast == 1 && userFast < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_fast");
+                } else if (contract.illegal == 1 && userIllegal < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_illegal");
+                }
+            }
 
             let icon = "";
             let border = "";
@@ -495,6 +548,10 @@ window.addEventListener("message", async function (event) {
             if (contract.illegal == 1) {
                 border = ` style="border: 1px solid #dc3545;"`;
             }
+            if (isLocked) {
+                border = ` style="border: 1px solid rgba(239, 68, 68, 0.4); opacity: 0.72;"`;
+            }
+
             if (config.dealership && config.dealership[contract.truck]) {
                 icon = `<img src="${config.dealership[contract.truck].img}" class="img-width" alt="${config.dealership[contract.truck].img}">`;
             } else {
@@ -503,13 +560,19 @@ window.addEventListener("message", async function (event) {
             icon += `<img src="img/trailers/${contract.trailer}.png" class="img-width" alt="${contract.trailer}">`;
 
             let partystart_btn = "";
-            if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
-            }
-            let button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
-            if (contract.progress) {
-                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
-                partystart_btn = "";
+            let button = "";
+
+            if (isLocked) {
+                button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
+            } else {
+                if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
+                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                }
+                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                if (contract.progress) {
+                    button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
+                    partystart_btn = "";
+                }
             }
 
             let cargo_badge = "";
@@ -525,15 +588,23 @@ window.addEventListener("message", async function (event) {
             if (contract.fast == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_urgent")}"><img src="img/icons/fast.png" width="30"></div>`;
             if (contract.illegal == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_illegal")}"><img src="img/icons/illegal.png" width="30"></div>`;
 
+            let bonusBadge = (contract.bonus_money_pct && contract.bonus_money_pct > 0)
+                ? `<span class="badge badge-success ml-2" style="font-size: 11px; background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);"><i class="fas fa-arrow-trend-up mr-1"></i>+${contract.bonus_money_pct}% $</span>`
+                : "";
+
+            let lockTag = isLocked
+                ? `<span class="badge badge-danger ml-2" style="font-size: 10px; font-weight: normal; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);"><i class="fas fa-lock mr-1"></i>${lockReason}</span>`
+                : "";
+
             let item_html = `
             <ul class="list list-inline mb-2">
                 <li class="d-flex justify-content-between card-theme"${border}>
                     <div class="d-flex flex-row align-items-center">${icon}
                         <div class="ml-2">
-                            <h6 class="mb-0">${contract.contract_name}</h6>
+                            <h6 class="mb-0 d-flex align-items-center flex-wrap">${contract.contract_name} ${lockTag}</h6>
                             <div class="d-flex flex-row mt-1 text-black-50 date-time">
                                 <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("contract_page_distance").format(Utils.numberFormat(contract.distance, 2))}</span></div>
-                                <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}</span></div>
+                                <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}${bonusBadge}</span></div>
                             </div>
                         </div>
                     </div>
@@ -1544,7 +1615,7 @@ $(document).ready(function () {
     $(document).off("click", ".start-job-btn").on("click", ".start-job-btn", function(e) {
         e.preventDefault();
         e.stopPropagation();
-        if (isActionProcessing) return;
+        if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         if (typeof id !== "undefined" && id !== null) {
             startContract(Number(id) || id, false);
@@ -1554,10 +1625,19 @@ $(document).ready(function () {
     $(document).off("click", ".party-start-job-btn").on("click", ".party-start-job-btn", function(e) {
         e.preventDefault();
         e.stopPropagation();
-        if (isActionProcessing) return;
+        if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         if (typeof id !== "undefined" && id !== null) {
             startContract(Number(id) || id, true);
+        }
+    });
+
+    $(document).off("click", ".locked-job-btn").on("click", ".locked-job-btn", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        let reason = $(this).attr("data-reason") || "Requisito de habilidade não atendido.";
+        if (typeof Utils !== "undefined" && Utils.customAlert) {
+            Utils.customAlert(reason);
         }
     });
 

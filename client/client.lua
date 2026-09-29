@@ -434,6 +434,10 @@ local function OpenJobBoard()
         end
     end
 
+    -- Detectar idioma e formato ativo (Prioridade: config vinda do servidor -> Config.locale -> Config.lang -> "br")
+    local activeLocale = (lcDados and lcDados.config and lcDados.config.locale) or Config.locale or Config.lang or "br"
+    local activeFormat = (lcDados and lcDados.config and lcDados.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
+
     -- Enviar para a interface oficial LC Truck Logistics
     SendNUIMessage({
         showmenu     = true,
@@ -441,8 +445,8 @@ local function OpenJobBoard()
         dados        = lcDados,
         utils        = {
             config = {
-                locale = "en",
-                format = { currency = "USD", location = "en-US" }
+                locale = activeLocale,
+                format = activeFormat,
             },
             lang = {}
         },
@@ -473,9 +477,18 @@ local function RefreshNUIData()
         if not isNUIOpen then return end
         local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
         if ok and data then
+            local lc = data.lc_dados or data
+            local activeLocale = (lc and lc.config and lc.config.locale) or Config.locale or Config.lang or "br"
+            local activeFormat = (lc and lc.config and lc.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
             SendNUIMessage({
                 update = true,
-                dados = data.lc_dados or data,
+                dados = lc,
+                utils = {
+                    config = {
+                        locale = activeLocale,
+                        format = activeFormat,
+                    }
+                }
             })
         end
     end)
@@ -2325,14 +2338,9 @@ RegisterNUICallback('getConvoyHistory', function(data, cb)
 end)
 
 -- Auto-refresh da lista de jobs quando o servidor gera novos
-AddEventHandler('aurp_trucker:client:jobsUpdated', function()
-    if not IsNUIFocused() then return end
-    local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
-    if ok and data then
-        SendNUIMessage({
-            update = true,
-            dados  = data.lc_dados or data,
-        })
+RegisterNetEvent('aurp_trucker:client:jobsUpdated', function()
+    if isNUIOpen or (IsNUIFocused and IsNUIFocused()) then
+        RefreshNUIData()
     end
 end)
 
@@ -3030,14 +3038,40 @@ RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
     CleanupLCContract()
 
     local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local bonusText = ''
+    if result.moneyBonusPct and result.moneyBonusPct > 0 then
+        bonusText = (' (Bônus Habilidade: +%d%% $)'):format(result.moneyBonusPct)
+    end
     lib.notify({
         title = 'Entrega Concluída!',
-        description = ('Recebido: $%d%s | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, xpText, result.distance or 0.0),
+        description = ('Recebido: $%d%s%s | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, bonusText, xpText, result.distance or 0.0),
         type = 'success',
         duration = 10000
     })
 
     RefreshNUIData()
+end)
+
+RegisterNetEvent('truck_logistics:open', function(dados, utils)
+    if isNUIOpen then return end
+    isNUIOpen = true
+    SetNuiFocus(true, true)
+    local activeLocale = (utils and utils.config and utils.config.locale) or (dados and dados.config and dados.config.locale) or Config.locale or Config.lang or "br"
+    local activeFormat = (utils and utils.config and utils.config.format) or (dados and dados.config and dados.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
+    SendNUIMessage({
+        showmenu     = true,
+        update       = false,
+        dados        = dados,
+        utils        = {
+            config = {
+                locale = activeLocale,
+                format = activeFormat,
+            },
+            lang = {}
+        },
+        resourceName = GetCurrentResourceName(),
+        action       = 'open',
+    })
 end)
 
 RegisterNetEvent('aurp_trucker:client:levelUp', function(data)
