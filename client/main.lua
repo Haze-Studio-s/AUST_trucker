@@ -395,8 +395,8 @@ local function StartCouplingWatcher()
                                                     -- Abertura real e física das portas traseiras
                                                     SetVehicleDoorOpen(JobEntities.trailer, 4, false, false)
                                                     SetVehicleDoorOpen(JobEntities.trailer, 5, false, false)
-                                                    SetVehicleDoorAngleRatio(JobEntities.trailer, 4, 1.0)
-                                                    SetVehicleDoorAngleRatio(JobEntities.trailer, 5, 1.0)
+                                                    SetVehicleDoorControl(JobEntities.trailer, 4, 1, 1.0)
+                                                    SetVehicleDoorControl(JobEntities.trailer, 5, 1, 1.0)
                                                     TrailerDoorsOpen = true
 
                                                     SendMissionNotify('Central Logística', 'Portas abertas. Assuma a empilhadeira para iniciar o carregamento.', 'info')
