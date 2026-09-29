@@ -61,6 +61,8 @@ server_scripts {
 
 client_scripts {
     'client/modules/forklift.lua',
+    'client/cargo_dry.lua',
+    'client/cargo_liquid.lua',
     'client/main.lua',
     'client/carry_system.lua',             -- v19: CarrySystem (antes de todos)
     'client/client.lua',

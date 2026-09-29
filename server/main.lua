@@ -153,6 +153,7 @@ local function CleanupLobbyEntities(lobby)
     if lobby.truck and DoesEntityExist(lobby.truck) then DeleteEntity(lobby.truck) end
     if lobby.trailer and DoesEntityExist(lobby.trailer) then DeleteEntity(lobby.trailer) end
     if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then DeleteEntity(lobby.hoseProp) end
     if lobby.pallets then
         for _, p in ipairs(lobby.pallets) do
             if p and DoesEntityExist(p) then DeleteEntity(p) end
@@ -284,7 +285,39 @@ local function StartTruckDelivery(src, contractData)
 
     local wh = Config.Polarix.Warehouse
     local truckModel = joaat(selectedTruckModel)
-    local trailerModel = joaat(contractData.trailerModel or 'trailers2')
+
+    -- RESOLUÇÃO DO TIPO DE CARGA (Seca vs Líquida)
+    local cargoType = contractData.cargoType
+    if not cargoType or (cargoType ~= 'dry' and cargoType ~= 'liquid') then
+        local tModel = string.lower(contractData.trailerModel or '')
+        local cName = string.lower(contractData.name or '')
+        if tModel == 'tanker' or tModel == 'tanker2' or tModel == 'armytanker' or string.find(tModel, 'tanker') or string.find(cName, 'tanque') or string.find(cName, 'combust') or string.find(cName, 'oleo') or string.find(cName, 'óleo') or string.find(cName, 'querosene') or string.find(cName, 'solvente') then
+            cargoType = 'liquid'
+        else
+            cargoType = 'dry'
+        end
+    end
+
+    local typeConfig = Config.CargoTypes and Config.CargoTypes[cargoType]
+    if not typeConfig then typeConfig = Config.CargoTypes.dry end
+
+    local requestedTrailer = contractData.trailerModel or typeConfig.defaultTrailer
+    local trailerModel = joaat(requestedTrailer)
+
+    -- Validação autoritativa do modelo da carreta contra a lista permitida
+    local isAllowedTrailer = false
+    if typeConfig.allowedTrailers then
+        for _, allowedHash in ipairs(typeConfig.allowedTrailers) do
+            if trailerModel == allowedHash then
+                isAllowedTrailer = true
+                break
+            end
+        end
+    end
+
+    if not isAllowedTrailer then
+        trailerModel = joaat(typeConfig.defaultTrailer or (cargoType == 'liquid' and 'tanker' or 'trailers2'))
+    end
 
     -- STEP A: SPAWN AND PLATE ENFORCEMENT
     local plate = selectedPlate
@@ -302,7 +335,7 @@ local function StartTruckDelivery(src, contractData)
     -- Explicitly unlock the doors (state 1)
     SetVehicleDoorsLocked(truck, 1)
 
-    print(("[AUST_Trucker] Vehicle spawned with plate: %s for player %s"):format(plate, tostring(src)))
+    print(("[AUST_Trucker] Vehicle spawned with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
     -- STEP B: DUAL-LAYER KEY ASSIGNMENT (JOB START)
     -- 1st Layer (Physical Item via ox_inventory)
@@ -332,33 +365,39 @@ local function StartTruckDelivery(src, contractData)
     SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
 
-    -- ETAPA 3: Spawn da Empilhadeira e Paletes
-    local forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, wh.ForkliftBayCoords.w, true, true)
-    while not DoesEntityExist(forklift) do Wait(50) end
-    SetEntityRoutingBucket(forklift, bucketId)
-    SetEntityDistanceCullingRadius(forklift, 350.0)
-
-    local reqPallets = contractData.palletCount or 4
+    -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
+    local forklift = nil
     local pallets = {}
     local palletNetIds = {}
-    local anchor = wh.PalletStagingAnchor
-    local rad = math.rad(wh.PalletStagingHeading or 180.0)
-    local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
-    local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
+    local reqPallets = contractData.palletCount or 4
 
-    for i = 1, reqPallets do
-        local col = (i - 1) % 3
-        local row = math.floor((i - 1) / 3)
-        local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
-        local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+    if cargoType == 'dry' then
+        forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, wh.ForkliftBayCoords.w, true, true)
+        while not DoesEntityExist(forklift) do Wait(50) end
+        SetEntityRoutingBucket(forklift, bucketId)
+        SetEntityDistanceCullingRadius(forklift, 350.0)
 
-        local pObj = CreateObject(pModel, pos.x, pos.y, pos.z, true, true, false)
-        while not DoesEntityExist(pObj) do Wait(50) end
-        SetEntityRoutingBucket(pObj, bucketId)
-        SetEntityDistanceCullingRadius(pObj, 350.0)
+        local anchor = wh.PalletStagingAnchor
+        local rad = math.rad(wh.PalletStagingHeading or 180.0)
+        local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
+        local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
 
-        table.insert(pallets, pObj)
-        table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+        for i = 1, reqPallets do
+            local col = (i - 1) % 3
+            local row = math.floor((i - 1) / 3)
+            local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
+            local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+
+            local pObj = CreateObject(pModel, pos.x, pos.y, pos.z, true, true, false)
+            while not DoesEntityExist(pObj) do Wait(50) end
+            SetEntityRoutingBucket(pObj, bucketId)
+            SetEntityDistanceCullingRadius(pObj, 350.0)
+
+            table.insert(pallets, pObj)
+            table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+        end
+    else
+        reqPallets = 100 -- Carga Líquida: 100% de capacidade do tanque
     end
 
     local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
@@ -369,8 +408,9 @@ local function StartTruckDelivery(src, contractData)
         src = src,
         citizenId = citizenId,
         bucketId = bucketId,
+        cargoType = cargoType,
         truck = truck,
-        truckPlate = spawnedPlate,
+        truckPlate = plate,
         truckModel = selectedTruckModel,
         isOwned = isOwned,
         trailer = trailer,
@@ -379,11 +419,14 @@ local function StartTruckDelivery(src, contractData)
         palletNetIds = palletNetIds,
         loadedCount = 0,
         requiredCount = reqPallets,
-        cargoName = contractData.name or 'Paletes Industriais',
+        cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or 'Paletes Industriais'),
         payment = destCfg.reward or 5000,
         xp = destCfg.xp or 200,
         deliveryCoords = destCoords,
-        stage = 'STATUS_INSPECTING'
+        stage = 'STATUS_INSPECTING',
+        current_object = nil,
+        hoseProp = nil,
+        hoseConnected = false
     }
 
     PolarixLobbies[jobId] = lobbyData
@@ -391,13 +434,14 @@ local function StartTruckDelivery(src, contractData)
 
     local payload = {
         jobId = jobId,
+        cargoType = cargoType,
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
-        truckPlate = spawnedPlate,
+        truckPlate = plate,
         truckModel = selectedTruckModel,
         truckMods = savedMods,
         isOwned = isOwned,
         trailerNetId = NetworkGetNetworkIdFromEntity(trailer),
-        forkliftNetId = NetworkGetNetworkIdFromEntity(forklift),
+        forkliftNetId = forklift and DoesEntityExist(forklift) and NetworkGetNetworkIdFromEntity(forklift) or 0,
         palletNetIds = palletNetIds,
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
@@ -448,18 +492,169 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds)
 end)
 
--- ETAPA 3: Acomodação do Palete na Carreta
-RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex)
-    local src = source
+-- ETAPA 3: Acomodação do Palete na Carreta (Carga Seca)
+local function HandlePalletLoaded(src, jobId, slotIndex)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
     if lobby.stage ~= 'STATUS_LOADING' then return end
 
     lobby.loadedCount = lobby.loadedCount + 1
+    lobby.current_object = slotIndex
+
     TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
+    TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount, lobby.requiredCount)
+end
+
+RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex)
+    HandlePalletLoaded(source, jobId, slotIndex)
 end)
 
--- ETAPA 4: Validação de Cintas e Liberação de Rota GPS
+RegisterNetEvent('aurp_trucker:server:attachPalletToTrailer', function(jobId, slotIndex)
+    HandlePalletLoaded(source, jobId, slotIndex)
+end)
+
+-- =======================================================================
+-- SISTEMA DE CARGA LÍQUIDA: GERENCIAMENTO DE MANGUEIRA E ABASTECIMENTO
+-- =======================================================================
+
+-- 1. Pegar Mangueira na Bomba
+RegisterNetEvent('aurp_trucker:server:pickupHose', function(jobId, terminalId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.stage ~= 'STATUS_LOADING' then return end
+
+    local ped = GetPlayerPed(src)
+    local pCoords = GetEntityCoords(ped)
+
+    -- Validação de proximidade autoritativa do terminal
+    local terminal = nil
+    if Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.fuelTerminals then
+        for _, term in ipairs(Config.CargoTypes.liquid.fuelTerminals) do
+            if term.id == terminalId then
+                terminal = term
+                break
+            end
+        end
+    end
+
+    if terminal and #(pCoords - terminal.coords) > 15.0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Você está muito afastado da bomba para retirar a mangueira!', 'error')
+        return
+    end
+
+    -- Criação OneSync autoritativa do prop de mangueira no routing bucket do jogador
+    local hoseModel = joaat('prop_cs_fuel_nozle')
+    local hoseObj = CreateObject(hoseModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
+    while not DoesEntityExist(hoseObj) do Wait(10) end
+    SetEntityRoutingBucket(hoseObj, lobby.bucketId)
+    SetEntityDistanceCullingRadius(hoseObj, 200.0)
+
+    lobby.hoseProp = hoseObj
+    lobby.hoseConnected = false
+
+    local hoseNetId = NetworkGetNetworkIdFromEntity(hoseObj)
+    TriggerClientEvent('aurp_trucker:client:hosePickedUp', src, jobId, hoseNetId)
+end)
+
+-- 2. Conectar Mangueira na Carreta-Tanque
+RegisterNetEvent('aurp_trucker:server:connectHose', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.stage ~= 'STATUS_LOADING' then return end
+
+    local ped = GetPlayerPed(src)
+    local pCoords = GetEntityCoords(ped)
+    local trailerCoords = GetEntityCoords(lobby.trailer)
+
+    if #(pCoords - trailerCoords) > 12.0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Você está muito distante da carreta para conectar a mangueira!', 'error')
+        return
+    end
+
+    lobby.hoseConnected = true
+    TriggerClientEvent('aurp_trucker:client:hoseConnected', src, jobId)
+end)
+
+-- 3. Cancelar Mangueira (ex: Entrada em Veículo)
+RegisterNetEvent('aurp_trucker:server:cancelHose', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
+    end
+    lobby.hoseProp = nil
+    lobby.hoseConnected = false
+
+    TriggerClientEvent('aurp_trucker:client:hoseCancelled', src, jobId)
+end)
+
+-- 4. Rompimento de Mangueira e Vazamento (Distância > 9.0m)
+RegisterNetEvent('aurp_trucker:server:hoseLeak', function(jobId)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
+    end
+    lobby.hoseProp = nil
+    lobby.hoseConnected = false
+
+    local penalty = (Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.leakPenalty) or 1500
+    if exports.qbx_core then
+        exports.qbx_core:RemoveMoney(src, 'bank', penalty, 'trucker-hose-leak')
+    else
+        Framework.RemoveMoney(Player, 'bank', penalty, 'trucker-hose-leak')
+    end
+
+    TriggerClientEvent('aurp_trucker:client:playLeakPtfx', src, jobId, penalty)
+end)
+
+-- 5. Desconectar Mangueira e Finalizar Carregamento Líquido
+RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+
+    local ped = GetPlayerPed(src)
+    local pCoords = GetEntityCoords(ped)
+    local trailerCoords = GetEntityCoords(lobby.trailer)
+
+    if #(pCoords - trailerCoords) > 10.0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Aproxime-se da carreta para desconectar a mangueira com segurança!', 'error')
+        return
+    end
+
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
+    end
+    lobby.hoseProp = nil
+    lobby.hoseConnected = false
+
+    lobby.stage = 'STATUS_IN_TRANSIT'
+    lobby.loadedCount = 100
+
+    -- Migração suave para o Routing Bucket 0 (mundo aberto)
+    SetPlayerRoutingBucket(src, 0)
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        SetEntityRoutingBucket(lobby.truck, 0)
+    end
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        SetEntityRoutingBucket(lobby.trailer, 0)
+    end
+
+    TriggerClientEvent('aurp_trucker:client:liquidLoadingCompleted', src, jobId, lobby.deliveryCoords)
+    TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
+end)
+
+-- ETAPA 4: Validação de Cintas e Liberação de Rota GPS (Carga Seca)
 RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
@@ -567,6 +762,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
 
     -- Empilhadeira e paletes da baia são limpos
     if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then DeleteEntity(lobby.hoseProp) end
     if lobby.pallets then
         for _, p in ipairs(lobby.pallets) do
             if p and DoesEntityExist(p) then DeleteEntity(p) end

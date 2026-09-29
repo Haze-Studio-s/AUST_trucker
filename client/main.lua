@@ -37,6 +37,8 @@ end
 
 local function CleanupCurrentJob()
     ClearBlips()
+    if CargoDry and CargoDry.Cleanup then CargoDry.Cleanup() end
+    if CargoLiquid and CargoLiquid.Cleanup then CargoLiquid.Cleanup() end
     if ActiveDeliveryPoint then
         pcall(function() ActiveDeliveryPoint:remove() end)
         ActiveDeliveryPoint = nil
@@ -66,12 +68,13 @@ local function OpenPolarixContractMenu()
 
     local options = {
         {
-            title = 'Carga Industrial: Componentes Eletrônicos',
-            description = 'Destino: Sandy Shores | Recompensa: $6.500 | 4 Paletes',
+            title = 'Carga Seca: Componentes Eletrônicos',
+            description = 'Destino: Sandy Shores | Recompensa: $6.500 | 4 Paletes (Empilhadeira)',
             icon = 'boxes-stacked',
             onSelect = function()
                 TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
                     name = 'Componentes Eletrônicos',
+                    cargoType = 'dry',
                     palletCount = 4,
                     level_required = 1,
                     trailerModel = 'trailers2'
@@ -79,12 +82,13 @@ local function OpenPolarixContractMenu()
             end
         },
         {
-            title = 'Carga Pesada: Maquinário & Ferramentas',
-            description = 'Destino: Paleto Bay | Recompensa: $8.500 | 6 Paletes',
+            title = 'Carga Seca: Maquinário & Ferramentas',
+            description = 'Destino: Paleto Bay | Recompensa: $8.500 | 6 Paletes (Empilhadeira)',
             icon = 'pallet',
             onSelect = function()
                 TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
                     name = 'Maquinário & Ferramentas',
+                    cargoType = 'dry',
                     palletCount = 6,
                     level_required = 1,
                     trailerModel = 'trailers2'
@@ -92,15 +96,30 @@ local function OpenPolarixContractMenu()
             end
         },
         {
-            title = 'Logística Express: Alimentos Refrigerados',
-            description = 'Destino: Grapeseed | Recompensa: $5.200 | 4 Paletes',
-            icon = 'snowflake',
+            title = 'Carga Líquida: Combustível Automotivo',
+            description = 'Destino: LSIA Freight Yard | Recompensa: $7.200 | Tanque (Mangueira)',
+            icon = 'gas-pump',
             onSelect = function()
                 TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
-                    name = 'Alimentos Refrigerados',
-                    palletCount = 4,
+                    name = 'Combustível Automotivo',
+                    cargoType = 'liquid',
+                    palletCount = 100,
                     level_required = 1,
-                    trailerModel = 'trailers2'
+                    trailerModel = 'tanker'
+                })
+            end
+        },
+        {
+            title = 'Carga Líquida: Querosene de Aviação',
+            description = 'Destino: Sandy Shores | Recompensa: $8.900 | Tanque (Mangueira)',
+            icon = 'oil-can',
+            onSelect = function()
+                TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
+                    name = 'Querosene de Aviação',
+                    cargoType = 'liquid',
+                    palletCount = 100,
+                    level_required = 1,
+                    trailerModel = 'tanker2'
                 })
             end
         }
@@ -108,7 +127,7 @@ local function OpenPolarixContractMenu()
 
     lib.registerContext({
         id = 'aust_polarix_contract_menu',
-        title = 'Central de Cargas & Paletes',
+        title = 'Central de Cargas & Logística (Seca e Líquida)',
         options = options
     })
     lib.showContext('aust_polarix_contract_menu')
@@ -455,19 +474,39 @@ RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truck
         end
     end
 
-    -- Configura o ox_target na carreta para receber os paletes
-    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-        ForkliftModule.SetupTrailerTarget(JobEntities.trailer, jobId, function()
-            return CurrentStage, ActiveJob.loadedCount or 0, ActiveJob.requiredCount or 4
-        end)
+    -- Bifurcação Multi-Cargas (Seca vs Líquida)
+    if ActiveJob.cargoType == 'liquid' then
+        if CargoLiquid and CargoLiquid.Setup then
+            CargoLiquid.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
+        end
+        lib.notify({
+            title = 'Inspeção Aprovada!',
+            description = 'Caminhão-tanque liberado e chaves recebidas! Vá até a bomba de combustível para retirar a mangueira.',
+            type = 'success',
+            duration = 8000
+        })
+    else
+        if CargoDry and CargoDry.Setup then
+            CargoDry.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
+        else
+            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                ForkliftModule.SetupTrailerTarget(JobEntities.trailer, jobId, function()
+                    return CurrentStage, ActiveJob.loadedCount or 0, ActiveJob.requiredCount or 4
+                end)
+            end
+        end
+        lib.notify({
+            title = 'Inspeção Aprovada!',
+            description = 'Caminhão liberado e chaves recebidas! Vá até a empilhadeira para iniciar o carregamento.',
+            type = 'success',
+            duration = 8000
+        })
     end
+end)
 
-    lib.notify({
-        title = 'Inspeção Aprovada!',
-        description = 'Caminhão liberado e chaves recebidas! Vá até a empilhadeira para iniciar o carregamento.',
-        type = 'success',
-        duration = 8000
-    })
+RegisterNetEvent('aurp_trucker:client:startStrappingStage', function(jobId)
+    if not ActiveJob or ActiveJob.jobId ~= jobId then return end
+    SetupStrappingAndManifest(JobEntities.trailer, jobId)
 end)
 
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)

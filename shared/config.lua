@@ -192,3 +192,83 @@ Config.Polarix = {
         }
     }
 }
+
+-- =======================================================================
+-- SISTEMA MULTI-CARGAS: DEFINIÇÕES DE CARGA SECA E LÍQUIDA
+-- =======================================================================
+Config.CargoTypes = {
+    dry = {
+        label = 'Carga Seca (Paletes)',
+        allowedTrailers = {
+            joaat('trailers2'),
+            joaat('trailers'),
+            joaat('trflat'),
+            joaat('docktrailer'),
+            joaat('mule'),
+            joaat('mule2'),
+            joaat('mule3'),
+            joaat('mule4'),
+            joaat('pounder'),
+            joaat('pounder2'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+            joaat('biff'),
+        },
+        defaultTrailer = 'trailers2',
+        forkliftModel = 'forklift',
+    },
+    liquid = {
+        label = 'Carga Líquida (Tanque / Combustível)',
+        allowedTrailers = {
+            joaat('tanker'),
+            joaat('tanker2'),
+            joaat('armytanker'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+        },
+        defaultTrailer = 'tanker',
+        fuelTerminals = {
+            {
+                id = 'buccaneer_pump_1',
+                name = 'Bomba 01 — Terminal Portuário Buccaneer',
+                coords = vector3(1272.50, -3168.20, 5.90),
+                pumpCoords = vector4(1272.50, -3168.20, 5.90, 90.0),
+                propModel = 'prop_gas_pump_1d',
+                hoseModel = 'prop_cs_fuel_nozle',
+                radius = 2.5
+            },
+            {
+                id = 'murrieta_refinery_pump',
+                name = 'Bomba 02 — Refinaria El Burro Heights',
+                coords = vector3(2732.10, 1475.20, 24.50),
+                pumpCoords = vector4(2732.10, 1475.20, 24.50, 0.0),
+                propModel = 'prop_gas_pump_1d',
+                hoseModel = 'prop_cs_fuel_nozle',
+                radius = 2.5
+            },
+            {
+                id = 'paleto_fuel_depot',
+                name = 'Bomba 03 — Depósito Paleto Bay',
+                coords = vector3(170.15, 6429.50, 31.40),
+                pumpCoords = vector4(170.15, 6429.50, 31.40, 45.0),
+                propModel = 'prop_gas_pump_1d',
+                hoseModel = 'prop_cs_fuel_nozle',
+                radius = 2.5
+            }
+        },
+        tankerAttachOffset = vector3(-1.45, -2.5, 0.5), -- Engate lateral da mangueira
+        fillDuration = 12000, -- 12 segundos para encher 100%
+        maxDistance = 9.0, -- Distância máxima entre o jogador e o caminhão-tanque durante o enchimento
+        leakPenalty = 1500, -- Penalidade financeira se o jogador abandonar/romper a mangueira
+    }
+}
