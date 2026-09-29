@@ -489,7 +489,7 @@ RegisterKeyMapping('+trucker_close_ui', 'Fechar painel caminhoneiro', 'keyboard'
 
 local function RefreshNUIData()
     if not isNUIOpen then return end
-    SetTimeout(350, function()
+    SetTimeout(50, function()
         if not isNUIOpen then return end
         local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
         if ok and data then
@@ -497,6 +497,7 @@ local function RefreshNUIData()
             local activeLocale = (lc and lc.config and lc.config.locale) or Config.locale or Config.lang or "br"
             local activeFormat = (lc and lc.config and lc.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
             SendNUIMessage({
+                action = 'open',
                 update = true,
                 dados = lc,
                 utils = {
@@ -509,6 +510,10 @@ local function RefreshNUIData()
         end
     end)
 end
+
+RegisterNetEvent('aurp_trucker:client:refreshNUI', function()
+    RefreshNUIData()
+end)
 
 -- NUI Callbacks: Protocolo LC Logistics (Utils.post)
 RegisterNUICallback('post', function(body, cb)
@@ -631,14 +636,66 @@ RegisterNUICallback('post', function(body, cb)
     end
 
     if event == "createParty" then
-        TriggerServerEvent('aurp_trucker:party:create')
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyCreate', false, data)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Grupo de transporte criado com sucesso!', type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Falha ao criar grupo.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "joinParty" then
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyJoin', false, data)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Você ingressou no grupo com sucesso!', type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Falha ao ingressar no grupo.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "inviteParty" or event == "invitePartyMember" then
+        local targetId = data and (data.targetId or data.id or data.source or data.target)
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyInvite', false, targetId)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = ('Convite enviado ao jogador ID %s!'):format(tostring(targetId)), type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Jogador não encontrado ou offline.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        cb(200)
+        return
+    end
+
+    if event == "kickParty" then
+        local userId = data and (data.user_id or data.citizenid or data.cid)
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyKick', false, userId)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Membro removido do grupo.', type = 'info' })
+        else
+            local reason = (res and res.reason) or 'Erro ao remover membro.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
         RefreshNUIData()
         cb(200)
         return
     end
 
     if event == "quitParty" or event == "deleteParty" then
-        TriggerServerEvent('aurp_trucker:party:leave')
+        if event == "deleteParty" then
+            pcall(lib.callback.await, 'aurp_trucker:partyDisband', false)
+            lib.notify({ title = 'Grupos', description = 'Grupo dissolvido.', type = 'info' })
+        else
+            pcall(lib.callback.await, 'aurp_trucker:partyLeave', false)
+            lib.notify({ title = 'Grupos', description = 'Você saiu do grupo.', type = 'info' })
+        end
         RefreshNUIData()
         cb(200)
         return

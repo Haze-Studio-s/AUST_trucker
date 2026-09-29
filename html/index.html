@@ -268,36 +268,116 @@
 					</div>
 				</div>
 				<div class="pages party-page" style="height: 100%;">
-					<div class="row" style="height: 100%;">
-						<div class="col-md-12" style="height: 100%;">
-							<div id="party-title-div" class="col-12 mt-3 mb-3">
-								
+					<div class="lation-party-wrapper">
+						<div id="party-title-div" class="lation-party-header-bar">
+							<div>
+								<div class="lation-party-header-title"><i class="fas fa-users-gear text-emerald"></i> GRUPOS & CONVOYS</div>
+								<div class="lation-party-header-desc">Crie frotas colaborativas, compartilhe fretes e viaje em comboio com outros motoristas.</div>
 							</div>
-							<div id="party-form-container-base" class="party-body-initial card-theme">
-								<img src="img/party.png" alt="party">
-								<div class="party-buttons">
-									<div class="party-create">
-										<button id="party-create-btn" onclick="createParty()" class="btn btn-primary"></button>
-									</div>
-									<div class="party-join">
-										<button id="party-join-btn" onclick="joinParty()" class="btn btn-primary"></button>
-									</div>
-								</div>
-								<form id="party-form-create" class="party-form" role="form" style="opacity: 0; max-height: 0; padding: 0px; margin: 0px;">
-									<div id="party-form-container-create">
+						</div>
 
+						<!-- View 1: When player has NO active party (Create or Join) -->
+						<div id="party-form-container-base" style="display: none;">
+							<div class="lation-party-tabs">
+								<button type="button" class="lation-tab-btn active" id="tab-btn-create-party" onclick="switchPartyTab('create')">
+									<i class="fas fa-plus-circle"></i> Criar Novo Grupo
+								</button>
+								<button type="button" class="lation-tab-btn" id="tab-btn-join-party" onclick="switchPartyTab('join')">
+									<i class="fas fa-arrow-right-to-bracket"></i> Ingressar por Nome / Código
+								</button>
+							</div>
+
+							<!-- Pane Create Party -->
+							<div id="party-tab-create" class="lation-party-form-card">
+								<form id="party-form-create" onsubmit="event.preventDefault(); submitCreateParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome da Frota / Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-shield-halved"></i>
+											<input id="party-name" name="name" type="text" maxlength="30" placeholder="Ex: TransRota 66" required>
+										</div>
 									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Descrição / Lema <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-quote-left"></i>
+											<input id="party-desc" name="desc" type="text" maxlength="200" placeholder="Ex: Foco em cargas pesadas e comboios noturnos" required>
+										</div>
+									</div>
+
+									<div class="row">
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Senha (Opcional)</label>
+												<div class="lation-input-box">
+													<i class="fas fa-lock"></i>
+													<input id="party-password" name="password" type="password" maxlength="20" placeholder="Livre se vazio">
+												</div>
+											</div>
+										</div>
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Confirmar Senha</label>
+												<div class="lation-input-box">
+													<i class="fas fa-check-double"></i>
+													<input id="party-password-confirm" name="password-confirm" type="password" maxlength="20" placeholder="Repita a senha">
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Limite de Vagas da Frota</label>
+										<div class="lation-slots-selector">
+											<div class="lation-slot-pill" data-slots="2" onclick="selectPartySlots(2)">2 VAGAS</div>
+											<div class="lation-slot-pill active" data-slots="4" onclick="selectPartySlots(4)">4 VAGAS</div>
+											<div class="lation-slot-pill" data-slots="6" onclick="selectPartySlots(6)">6 VAGAS</div>
+										</div>
+										<input type="hidden" id="party-members" name="members" value="4">
+									</div>
+
+									<div id="party-create-error" class="ShowPasswordNotMatchesError text-danger font-small-2 mb-2" style="display:none;">
+										* As senhas digitadas não coincidem.
+									</div>
+
+									<button type="submit" id="submit-party-form" class="lation-btn lation-btn-primary btn-block">
+										<i class="fas fa-circle-check mr-2"></i> CRIAR GRUPO DE TRANSPORTE
+									</button>
 								</form>
-								<form id="party-form-join" class="party-form" role="form" style="opacity: 0; max-height: 0; padding: 0px; margin: 0px;">
-									<div id="party-form-container-join">
+							</div>
 
+							<!-- Pane Join Party -->
+							<div id="party-tab-join" class="lation-party-form-card" style="display: none;">
+								<form id="party-form-join" onsubmit="event.preventDefault(); submitJoinParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome ou Código do Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-hashtag"></i>
+											<input id="party-name-join" name="name" type="text" placeholder="Digite o nome ou o código (ex: TRK-8F2A)" required>
+										</div>
 									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Senha de Acesso (se houver)</label>
+										<div class="lation-input-box">
+											<i class="fas fa-key"></i>
+											<input id="party-password-join" name="password" type="password" placeholder="Digite a senha (se aplicável)">
+										</div>
+									</div>
+
+									<div id="party-join-error" class="text-danger font-small-2 mb-2" style="display:none;"></div>
+
+									<button type="submit" id="submit-party-form-join" class="lation-btn lation-btn-accent btn-block">
+										<i class="fas fa-arrow-right-to-bracket mr-2"></i> INGRESSAR NO GRUPO
+									</button>
 								</form>
 							</div>
+						</div>
 
-							<div id="party-container-members" style="max-height: calc(100% - var(--party-title-height)); overflow: auto;">
-								
-							</div>
+						<!-- View 2: When player HAS active party (Dashboard) -->
+						<div id="party-container-members" style="display: none; height: calc(100% - 70px); overflow: auto;">
+							<!-- Dynamically populated by panel.js -->
 						</div>
 					</div>
 				</div>

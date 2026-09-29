@@ -233,10 +233,14 @@ function BuildInitialDataForPlayer(source, citizenId)
                 local membersPayload = {}
                 for cid, info in pairs(party.members) do
                     table.insert(membersPayload, {
-                        citizenid = cid,
-                        name      = info.src and GetCharName(info.src) or cid,
-                        isLeader  = (cid == party.leader),
-                        online    = info.src ~= nil,
+                        citizenid           = cid,
+                        user_id             = cid,
+                        name                = info.src and GetCharName(info.src) or cid,
+                        isLeader            = (cid == party.leader),
+                        owner               = (cid == party.leader and 1 or 0),
+                        online              = info.src ~= nil,
+                        joined_at           = info.joined_at or os.time(),
+                        finished_deliveries = info.finished_deliveries or 0,
                     })
                 end
                 local convoyActive = false
@@ -244,11 +248,16 @@ function BuildInitialDataForPlayer(source, citizenId)
                     if convoy.partyId == myPartyId then convoyActive = true; break end
                 end
                 partyPayload = {
+                    id           = myPartyId,
                     partyId      = myPartyId,
+                    code         = party.code or string.upper(string.sub(myPartyId, 1, 6)),
+                    name         = party.name or ('Grupo #' .. string.upper(string.sub(myPartyId, 1, 6))),
+                    description  = party.description or 'Grupo de transporte cooperativo',
                     isLeader     = (party.leader == citizenId),
+                    owner        = (party.leader == citizenId and 1 or 0),
                     members      = membersPayload,
                     convoyActive = convoyActive,
-                    maxSize      = party.maxSize,
+                    maxSize      = party.maxSize or 4,
                 }
             end
         end
@@ -409,6 +418,9 @@ function BuildInitialDataForPlayer(source, citizenId)
         local partyMembersList = {}
         if partyPayload then
             partyObj = {
+                id            = partyPayload.partyId,
+                partyId       = partyPayload.partyId,
+                code          = partyPayload.code,
                 name          = partyPayload.name or ('Grupo #' .. partyPayload.partyId),
                 description   = partyPayload.description or 'Grupo de transporte cooperativo',
                 owner         = partyPayload.isLeader and 1 or 0,
@@ -418,9 +430,13 @@ function BuildInitialDataForPlayer(source, citizenId)
             }
             for _, m in ipairs(partyPayload.members) do
                 table.insert(partyMembersList, {
-                    user_id = m.citizenid,
-                    name    = m.name,
-                    owner   = m.isLeader,
+                    user_id             = m.citizenid or m.user_id,
+                    citizenid           = m.citizenid or m.user_id,
+                    name                = m.name,
+                    owner               = m.isLeader or (m.owner == 1),
+                    online              = m.online,
+                    joined_at           = m.joined_at or os.time(),
+                    finished_deliveries = m.finished_deliveries or 0,
                 })
             end
         end
@@ -911,30 +927,41 @@ end)
 -- PARTY / CONVOY CALLBACKS (Fase 3A)
 -- =============================================
 
-lib.callback.register('aurp_trucker:partyCreate', function(source)
-    local partyId, err = PartyService.Create(source)
+lib.callback.register('aurp_trucker:partyCreate', function(source, data)
+    local partyId, err = PartyService.Create(source, data)
     return { success = partyId ~= nil, partyId = partyId, reason = err }
 end)
 
-lib.callback.register('aurp_trucker:partyInvite', function(source, targetName)
-    -- H-05: Validar targetName antes de chamar :lower() — evita crash se nil/não-string
-    if type(targetName) ~= 'string' or targetName == '' or #targetName > 64 then
-        return { success = false, reason = 'Nome inválido' }
-    end
-    -- Buscar targetSrc pelo nome do personagem (ou Steam name como fallback)
-    local targetSrc = nil
-    local searchLower = targetName:lower()
-    for _, playerSrc in ipairs(GetPlayers()) do
-        local s = tonumber(playerSrc)
-        local charName = GetCharName(s):lower()
-        local steamName = (GetPlayerName(s) or ''):lower()
-        if charName:find(searchLower, 1, true) or steamName:find(searchLower, 1, true) then
-            targetSrc = s; break
+lib.callback.register('aurp_trucker:partyJoin', function(source, data)
+    local nameOrCode = data and (data.name or data.code or data.nameOrCode or data.target)
+    local pass = data and (data.pass or data.password)
+    local ok, res = PartyService.Join(source, nameOrCode, pass)
+    return { success = ok == true, partyId = (ok and res) or nil, reason = (not ok and res) or nil }
+end)
+
+lib.callback.register('aurp_trucker:partyInvite', function(source, target)
+    local targetSrc = tonumber(target)
+    if not targetSrc and type(target) == 'string' and target ~= '' then
+        local searchLower = target:lower()
+        for _, playerSrc in ipairs(GetPlayers()) do
+            local s = tonumber(playerSrc)
+            local charName = GetCharName(s):lower()
+            local steamName = (GetPlayerName(s) or ''):lower()
+            if charName:find(searchLower, 1, true) or steamName:find(searchLower, 1, true) then
+                targetSrc = s; break
+            end
         end
     end
-    if not targetSrc then return { success = false, reason = 'Jogador não encontrado' } end
+    if not targetSrc then
+        return { success = false, reason = 'Jogador não encontrado ou offline.' }
+    end
 
     local ok, err = PartyService.Invite(source, targetSrc)
+    return { success = ok, reason = err }
+end)
+
+lib.callback.register('aurp_trucker:partyKick', function(source, targetCid)
+    local ok, err = PartyService.Kick(source, targetCid)
     return { success = ok, reason = err }
 end)
 

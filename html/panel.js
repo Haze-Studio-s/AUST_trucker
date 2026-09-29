@@ -29,7 +29,16 @@ window.addEventListener("message", async function (event) {
     Utils.setLocale(activeLocale);
     Utils.setFormat(activeFormat);
 
-    if (item.showmenu || item.action === "open") {
+    if (item.action === "partyUpdate") {
+        if (item.party) {
+            renderLationParty(item.party, item.party.members_list || item.party.members || []);
+        } else {
+            renderLationParty(null, []);
+        }
+        return;
+    }
+
+    if (item.showmenu || item.action === "open" || item.update) {
         let dados = item.dados || item;
         config = dados.config || {};
         config.locale = config.locale || activeLocale;
@@ -291,44 +300,7 @@ window.addEventListener("message", async function (event) {
             $("#illegal-skill-desc").empty();
             $("#illegal-skill-desc").append(Utils.translate("skills_page_illegal_desc"));
 
-            let form = document.getElementById("party-form-create");
-            form.style.opacity = "0";
-            form.style.maxHeight = "0";
-            form.style.fontSize = "0";
-            form.style.position = "absolute";
-
-            let formJoin = document.getElementById("party-form-join");
-            formJoin.style.opacity = "0";
-            formJoin.style.maxHeight = "0";
-            formJoin.style.fontSize = "0";
-            formJoin.style.position = "absolute";
-
-            $("#party-form-container-create").empty();
-            $("#party-form-container-create").append(`
-				<input id="party-name" maxlength="30" class="input-party form-control form-control-sm" name="name" type="text" placeholder="${Utils.translate("party_page_name")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-desc" maxlength="300" class="input-party form-control form-control-sm" name="desc" type="text" placeholder="${Utils.translate("party_page_subtitle")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-password" maxlength="20" class="input-party form-control form-control-sm input-pass" name="password" type="password" placeholder="${Utils.translate("party_page_password")}">
-				<input id="party-password-confirm" maxlength="20" class="input-party form-control form-control-sm input-pass" name="password-confirm" type="password" placeholder="${Utils.translate("party_page_password_confirm")}">
-				<div class="ShowPasswordNotMatchesError" style="display:none;">${Utils.translate("party_page_password_mismatch")}</div>
-				<div class="party-members-container">
-					<input id="party-members" max="${config.party.max_members}" style="margin-bottom: 0px;" name="members" class="input-party form-control form-control-sm" type="number" placeholder="${Utils.translate("party_page_members")}" oninput="Utils.invalidMsg(this,1,${config.party.max_members});" required>
-					<span>${Utils.currencyFormat(0)}</span>
-				</div>
-				<div class="ShowSubmitErrorCreate" style="display:none;"></div>
-				<button class="btn btn-primary btn-block submit-party-form btn-sm" id="submit-party-form">${Utils.translate("party_page_finish_button").format(Utils.currencyFormat(config.party.price_to_create), Utils.currencyFormat(0))}</button>
-			`);
-            $("#party-create-btn").empty();
-            $("#party-create-btn").append(`${Utils.translate("party_page_create")}`);
-            $("#party-join-btn").empty();
-            $("#party-join-btn").append(`${Utils.translate("party_page_join")}`);
-
-            $("#party-form-container-join").empty();
-            $("#party-form-container-join").append(`
-				<input id="party-name-join" class="input-party form-control form-control-sm" name="name" type="text" placeholder="${Utils.translate("party_page_name")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-password-join" class="input-party form-control form-control-sm input-pass" name="password" type="password" placeholder="${Utils.translate("party_page_password")}">
-				<div class="ShowSubmitErrorJoin" style="display:none;"></div>
-				<button class="btn btn-primary btn-block submit-party-form btn-sm" id="submit-party-form-join">${Utils.translate("party_page_finish_button_2")}</button>
-			`);
+            switchPartyTab('create');
 
             $(".sidebar-navigation ul li").removeClass("active");
             $("#sidebar-job").addClass("active");
@@ -1028,73 +1000,7 @@ window.addEventListener("message", async function (event) {
             }
         }
 
-        if (trucker_party != undefined) {
-            let quit_str = `<button onclick="quitParty()" class="btn btn-danger">${Utils.translate("party_quit")}</button>`;
-            if (trucker_party.owner == 1) {
-                quit_str = `<button onclick="deleteParty()" class="btn btn-danger">${Utils.translate("party_delete")}</button>`;
-            }
-            $("#party-title-div").empty();
-            $("#party-title-div").append(`
-				<h4 class="text-uppercase">${trucker_party.name} <small>(${trucker_party.members_count}/${trucker_party.members})</small></h4>
-				<div class="party-title-container">
-					<p>${trucker_party.description}</p>
-					${quit_str}
-				</div>
-			`);
-
-            $("#party-form-container-base").css("display", "none");
-            $("#party-container-members").css("display", "");
-
-            $("#party-container-members").empty();
-            for (const member of trucker_party_members) {
-                let kick_str = "";
-                if (trucker_party.owner == 1 && trucker_party.user_id != member.user_id) {
-                    kick_str = `<button onclick="kickParty(\'${member.user_id}\')" class="btn btn-danger">${Utils.translate("party_kick")}</button>`;
-                }
-                let owner_str = "";
-                if (member.owner) {
-                    owner_str = `<div data-tooltip-location="left" data-tooltip="${Utils.translate("party_leader")}"><img src="img/icons/crown.png" width="30"></div>`;
-                }
-                let online_str = "fas fa-xmark-circle xicon";
-                if (member.online) {
-                    online_str = "fas fa-check-circle checkicon";
-                }
-                $("#party-container-members").append(`
-					<ul class="list list-inline mb-2">
-						<li class="d-flex justify-content-between card-theme">
-							<div class="d-flex flex-row align-items-center"><i class="${online_str}" aria-hidden="true"></i>
-								<div class="ml-2">
-									<h6 class="mb-0">${member.name} ${member.firstname ?? ""}</h6>
-									<div class="d-flex flex-row mt-1 text-black-50 date-time">
-										<div>
-											<i class="fas fa-route"></i><span class="ml-2">${Utils.translate("party_finished_deliveries").format(member.finished_deliveries)}</span>
-										</div>
-										<div class="ml-3">
-											<i class="fas fa-clock"></i><span class="ml-2">${Utils.translate("party_joined_time").format(Utils.timeConverter(member.joined_at))}</span>
-										</div>
-									</div>
-								</div>
-							</div>
-							<div class="d-flex flex-row align-items-center">
-								<div class="d-flex flex-column mr-2">
-									<div class="profile-image">
-										${owner_str}
-									</div>
-								</div>
-								${kick_str}
-							</div>
-						</li>
-					</ul>
-				`);
-            }
-        } else {
-            $("#party-title-div").html(`
-				<h4 class="text-uppercase">${Utils.translate("party_page_title")}</h4>
-				<p>${Utils.translate("party_page_desc")}</p>
-			`);
-            $("#party-form-container-base").css("display", "");
-            $("#party-container-members").css("display", "none");
-        }
+        renderLationParty(trucker_party, trucker_party_members);
 
         $(function () {
             $(".input-pass").blur(function () {
@@ -1476,62 +1382,210 @@ function openPage(pageN) {
     $(":root").css(`--${pageN}-title-height`, titleHeight + footerHeight + "px");
 }
 
-function createParty() {
-    let form = document.getElementById("party-form-create");
-    let form2 = document.getElementById("party-form-join");
-    if (form.style.opacity === "1" || form2.style.opacity === "1") {
-        form.style.opacity = "0";
-        form.style.maxHeight = "0";
-        form.style.fontSize = "0";
-
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-        setTimeout(function () {
-            form.style.position = "absolute";
-        }, 300);
-        setTimeout(function () {
-            form2.style.position = "absolute";
-        }, 300);
+function switchPartyTab(tab) {
+    if (tab === 'create') {
+        $("#tab-btn-create-party").addClass("active");
+        $("#tab-btn-join-party").removeClass("active");
+        $("#party-tab-create").show();
+        $("#party-tab-join").hide();
     } else {
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-
-        form.style.opacity = "1";
-        form.style.maxHeight = "1000px";
-        form.style.fontSize = "15px";
-        form.style.position = "";
+        $("#tab-btn-join-party").addClass("active");
+        $("#tab-btn-create-party").removeClass("active");
+        $("#party-tab-join").show();
+        $("#party-tab-create").hide();
     }
 }
 
-function joinParty() {
-    let form = document.getElementById("party-form-join");
-    let form2 = document.getElementById("party-form-create");
-    if (form.style.opacity === "1" || form2.style.opacity === "1") {
-        form.style.opacity = "0";
-        form.style.maxHeight = "0";
-        form.style.fontSize = "0";
+function selectPartySlots(slots) {
+    $(".lation-slot-pill").removeClass("active");
+    $(`.lation-slot-pill[data-slots="${slots}"]`).addClass("active");
+    $("#party-members").val(slots);
+}
 
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-        setTimeout(function () {
-            form.style.position = "absolute";
-        }, 300);
-        setTimeout(function () {
-            form2.style.position = "absolute";
-        }, 300);
-    } else {
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
+function submitCreateParty() {
+    let name = $("#party-name").val();
+    let desc = $("#party-desc").val();
+    let pass = $("#party-password").val() || "";
+    let cpass = $("#party-password-confirm").val() || "";
+    let members = parseInt($("#party-members").val()) || 4;
 
-        form.style.opacity = "1";
-        form.style.maxHeight = "1000px";
-        form.style.fontSize = "15px";
-        form.style.position = "";
+    if (pass && cpass && pass !== cpass) {
+        $("#party-create-error").show();
+        return;
     }
+    $("#party-create-error").hide();
+
+    Utils.post("createParty", { name, desc, pass, cpass, members });
+}
+
+function submitJoinParty() {
+    let name = $("#party-name-join").val();
+    let pass = $("#party-password-join").val() || "";
+
+    if (!name || name.trim() === "") {
+        $("#party-join-error").text("Por favor, informe o nome ou código da frota.").show();
+        return;
+    }
+    $("#party-join-error").hide();
+
+    Utils.post("joinParty", { name: name.trim(), pass });
+}
+
+function submitInviteParty() {
+    let targetId = $("#party-invite-target-id").val();
+    if (!targetId || parseInt(targetId) <= 0) {
+        alert("Por favor, digite um ID de jogador válido.");
+        return;
+    }
+    Utils.post("inviteParty", { targetId: parseInt(targetId) });
+    $("#party-invite-target-id").val("");
+}
+
+function copyPartyCode(code) {
+    if (!code) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+            alert(`Código #${code} copiado para a área de transferência!`);
+        });
+    } else {
+        alert(`Código da frota: #${code}`);
+    }
+}
+
+function createParty() {
+    switchPartyTab('create');
+}
+
+function joinParty() {
+    switchPartyTab('join');
+}
+
+function renderLationParty(party, members) {
+    if (!members) members = [];
+
+    if (!party) {
+        // Player has no party
+        $("#party-title-div").html(`
+            <div>
+                <div class="lation-party-header-title"><i class="fas fa-users-gear text-emerald"></i> GRUPOS & CONVOYS</div>
+                <div class="lation-party-header-desc">Crie frotas colaborativas, compartilhe fretes e viaje em comboio com outros motoristas.</div>
+            </div>
+        `);
+        $("#party-form-container-base").show();
+        $("#party-container-members").hide().empty();
+        switchPartyTab('create');
+        return;
+    }
+
+    // Player is in an active party
+    $("#party-form-container-base").hide();
+    $("#party-container-members").show().empty();
+
+    let isOwner = party.owner == 1 || party.isLeader === true;
+    let codeStr = party.code || (party.partyId ? party.partyId.substring(0, 6).toUpperCase() : (party.id ? party.id.substring(0, 6).toUpperCase() : "TRK"));
+    let membersCount = party.members_count || members.length || 1;
+    let maxMembers = party.members || party.maxSize || 4;
+
+    let quitBtnStr = isOwner
+        ? `<button class="lation-btn lation-btn-danger" onclick="deleteParty()"><i class="fas fa-trash-can mr-2"></i> Dissolver Frota</button>`
+        : `<button class="lation-btn lation-btn-danger" onclick="quitParty()"><i class="fas fa-right-from-bracket mr-2"></i> Sair da Frota</button>`;
+
+    // Header Overview
+    let overviewHtml = `
+        <div class="lation-party-overview">
+            <div class="lation-party-top-row">
+                <div class="lation-party-name-box">
+                    <i class="fas fa-shield-halved text-emerald font-large-1"></i>
+                    <div>
+                        <div class="lation-party-name">${party.name || 'Frota de Logística'}</div>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="lation-code-badge" onclick="copyPartyCode('${codeStr}')" title="Clique para copiar código">
+                                <i class="fas fa-hashtag mr-1"></i> CÓDIGO: #${codeStr} <i class="fas fa-copy ml-1"></i>
+                            </span>
+                            <span class="lation-status-pill ml-2">
+                                <i class="fas fa-circle-dot mr-1 text-emerald"></i> ATIVO
+                            </span>
+                            <span class="lation-slots-pill ml-2">
+                                <i class="fas fa-users mr-1"></i> ${membersCount} / ${maxMembers} VAGAS
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    ${quitBtnStr}
+                </div>
+            </div>
+            <p class="lation-party-desc">${party.description || 'Transporte e Logística Colaborativa'}</p>
+        </div>
+    `;
+
+    // Leader Invite Bar
+    let inviteBarHtml = "";
+    if (isOwner) {
+        inviteBarHtml = `
+            <div class="lation-invite-panel">
+                <div class="lation-invite-title">
+                    <i class="fas fa-user-plus text-emerald mr-2"></i> CONVIDAR MOTORISTA POR ID DO SERVIDOR
+                </div>
+                <div class="lation-invite-form">
+                    <input type="number" id="party-invite-target-id" min="1" placeholder="ID do Servidor (ex: 1, 5)" class="lation-invite-input">
+                    <button type="button" class="lation-btn lation-btn-primary" onclick="submitInviteParty()">
+                        <i class="fas fa-paper-plane mr-1"></i> Enviar Convite
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Members Grid
+    let membersGridHtml = `
+        <div class="lation-members-section-title">
+            <i class="fas fa-id-card text-emerald"></i> MOTORISTAS DA FROTA (${members.length})
+        </div>
+        <div class="lation-members-grid">
+    `;
+
+    for (const member of members) {
+        let memberIsLeader = member.owner === 1 || member.owner === true || member.isLeader === true || (party.user_id && party.user_id === member.user_id);
+        let isOnline = member.online !== false;
+        let onlineDotClass = isOnline ? "lation-online-dot" : "lation-online-dot offline";
+        let avatarLeaderClass = memberIsLeader ? "leader-avatar" : "";
+
+        let roleBadge = memberIsLeader
+            ? `<span class="lation-role-badge leader"><i class="fas fa-crown mr-1"></i> LÍDER DA FROTA</span>`
+            : `<span class="lation-role-badge member"><i class="fas fa-truck mr-1"></i> MOTORISTA</span>`;
+
+        let kickBtn = "";
+        if (isOwner && !memberIsLeader) {
+            kickBtn = `<button class="lation-btn-kick" onclick="kickParty('${member.user_id || member.citizenid}')" title="Expulsar"><i class="fas fa-user-xmark mr-1"></i> Expulsar</button>`;
+        }
+
+        let deliveries = member.finished_deliveries != null ? member.finished_deliveries : 0;
+        let joinedTimeStr = member.joined_at ? Utils.timeConverter(member.joined_at) : 'Ativo';
+
+        membersGridHtml += `
+            <div class="lation-member-card ${memberIsLeader ? 'is-leader-card' : ''}">
+                <div class="lation-member-header">
+                    <div class="lation-avatar-wrapper ${avatarLeaderClass}">
+                        <i class="fas ${memberIsLeader ? 'fa-user-tie' : 'fa-user'}"></i>
+                        <span class="${onlineDotClass}"></span>
+                    </div>
+                    <div class="lation-member-info">
+                        <div class="lation-member-name" title="${member.name}">${member.name}</div>
+                        ${roleBadge}
+                    </div>
+                </div>
+                <div class="lation-member-stats">
+                    <span><i class="fas fa-route mr-1 text-emerald"></i> Entregas: <strong>${deliveries}</strong></span>
+                    <span><i class="fas fa-clock mr-1 text-info"></i> <strong>${joinedTimeStr}</strong></span>
+                </div>
+                ${kickBtn}
+            </div>
+        `;
+    }
+    membersGridHtml += `</div>`;
+
+    $("#party-container-members").append(overviewHtml + inviteBarHtml + membersGridHtml);
 }
 
 $(document).ready(function () {
@@ -1559,18 +1613,12 @@ $(document).ready(function () {
 
     $("#party-form-create").on("submit", function (e) {
         e.preventDefault();
-        let form = $("#party-form-create").serializeArray();
-        if (form[2].value !== form[3].value) {
-            $(".ShowPasswordNotMatchesError").show();
-            return;
-        }
-        Utils.post("createParty", { name: form[0].value, desc: form[1].value, pass: form[2].value, cpass: form[3].value, members: form[4].value });
+        submitCreateParty();
     });
 
     $("#party-form-join").on("submit", function (e) {
         e.preventDefault();
-        let form = $("#party-form-join").serializeArray();
-        Utils.post("joinParty", { name: form[0].value, pass: form[1].value });
+        submitJoinParty();
     });
 
     $("#form-deposit-money").on("submit", function (e) {

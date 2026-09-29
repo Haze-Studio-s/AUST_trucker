@@ -1618,13 +1618,53 @@ RegisterNetEvent('aurp_trucker:bank:withdraw', function(amount)
 end)
 
 -- Party: Criar Grupo
-RegisterNetEvent('aurp_trucker:party:create', function()
+RegisterNetEvent('aurp_trucker:party:create', function(data)
     local src = source
-    local partyId, err = PartyService.Create(src)
+    local partyId, err = PartyService.Create(src, data)
     if partyId then
         TriggerClientEvent('aurp_trucker:notify', src, 'Grupo de transporte criado!', 'success')
     else
         TriggerClientEvent('aurp_trucker:notify', src, err or 'Falha ao criar grupo', 'error')
+    end
+end)
+
+-- Party: Entrar no Grupo (por nome/código e senha)
+RegisterNetEvent('aurp_trucker:party:join', function(data)
+    local src = source
+    local nameOrCode = data and (data.name or data.code or data.nameOrCode or data.target)
+    local pass = data and (data.pass or data.password)
+    local ok, res = PartyService.Join(src, nameOrCode, pass)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Você ingressou no grupo com sucesso!', 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, res or 'Falha ao ingressar no grupo.', 'error')
+    end
+end)
+
+-- Party: Convidar Jogador por ID
+RegisterNetEvent('aurp_trucker:party:invite', function(targetId)
+    local src = source
+    local targetSrc = tonumber(targetId)
+    if not targetSrc then
+        TriggerClientEvent('aurp_trucker:notify', src, 'ID de jogador inválido.', 'error')
+        return
+    end
+    local ok, err = PartyService.Invite(src, targetSrc)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, ('Convite enviado ao jogador ID %d!'):format(targetSrc), 'success')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, err or 'Falha ao enviar convite.', 'error')
+    end
+end)
+
+-- Party: Expulsar Membro do Grupo
+RegisterNetEvent('aurp_trucker:party:kick', function(targetCid)
+    local src = source
+    local ok, err = PartyService.Kick(src, targetCid)
+    if ok then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Membro removido do grupo.', 'info')
+    else
+        TriggerClientEvent('aurp_trucker:notify', src, err or 'Falha ao expulsar membro.', 'error')
     end
 end)
 

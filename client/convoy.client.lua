@@ -67,6 +67,7 @@ RegisterNetEvent('aurp_trucker:client:partyUpdate', function(data)
 
     -- Notificar NUI
     SendNUIMessage({ action = 'partyUpdate', party = party })
+    TriggerEvent('aurp_trucker:client:refreshNUI')
 end)
 
 -- Party dissolvido pelo líder
@@ -82,6 +83,7 @@ RegisterNetEvent('aurp_trucker:client:partyDisbanded', function()
     end
     ConvoyState.memberBlips = {}
     SendNUIMessage({ action = 'partyUpdate', party = nil })
+    TriggerEvent('aurp_trucker:client:refreshNUI')
 end)
 
 -- Convoy iniciado pelo líder
@@ -105,21 +107,23 @@ end)
 
 -- Convite de party recebido
 RegisterNetEvent('aurp_trucker:client:partyInvite', function(data)
-    -- data = { partyId, leaderName }
+    -- data = { partyId, partyName, leaderName }
     CreateThread(function()
         local confirm = lib.alertDialog({
-            header   = 'Convite de Convoy',
-            content  = (data.leaderName or 'Alguém') .. ' convidou você para um convoy.',
+            header   = 'Convite de Grupo de Transporte',
+            content  = ('%s convidou você para o grupo "%s". Deseja aceitar o convite?'):format(data.leaderName or 'Um motorista', data.partyName or 'Logística'),
             centered = true,
             cancel   = true,
         })
         if confirm == 'confirm' then
-            -- M-01: pcall previne crash silencioso da thread em timeout/erro do server-callback
             local ok, result = pcall(lib.callback.await, 'aurp_trucker:partyAccept', false, data.partyId)
             if not ok then
-                lib.notify({ title = 'Party', description = 'Falha ao conectar ao servidor', type = 'error' })
+                lib.notify({ title = 'Grupos', description = 'Falha ao conectar ao servidor', type = 'error' })
             elseif result and not result.success then
-                lib.notify({ title = 'Party', description = result.reason or 'Erro ao entrar no party', type = 'error' })
+                lib.notify({ title = 'Grupos', description = result.reason or 'Erro ao entrar no grupo', type = 'error' })
+            else
+                lib.notify({ title = 'Grupos', description = 'Você ingressou no grupo com sucesso!', type = 'success' })
+                TriggerEvent('aurp_trucker:client:refreshNUI')
             end
         end
     end)

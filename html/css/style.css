@@ -1398,4 +1398,540 @@ body {
 /* Bottom Action Bar (Fallback) */
 .ets2-skills-bottom-bar {
     display: none;
+}
+
+/* ============================================================
+   LATION MODERN UI (EMERALD / OLED DARK) — PARTY & CONVOY SYSTEM
+   ============================================================ */
+
+.lation-party-wrapper {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 15px 15px 15px;
+    overflow-y: auto;
+    font-family: 'Inter', 'Poppins', sans-serif;
+    color: #e2e8f0;
+    box-sizing: border-box;
+}
+
+/* Header Bar */
+.lation-party-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 4px solid #10b981;
+    border-radius: 8px;
+    padding: 12px 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.lation-party-header-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+}
+
+.lation-party-header-desc {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+/* Segmented Tabs (Create / Join) */
+.lation-party-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    background: #121316;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lation-tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.lation-tab-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lation-tab-btn.active {
+    background: #1b3b2d;
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+/* Lation Card Form Container */
+.lation-party-form-card {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    max-width: 680px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.lation-form-group {
+    margin-bottom: 16px;
+}
+
+.lation-input-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.lation-input-box {
+    display: flex;
+    align-items: center;
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    padding: 0 12px;
+    transition: all 0.2s ease;
+}
+
+.lation-input-box:focus-within {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.lation-input-box i {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-right: 10px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.lation-input-box input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #f8fafc;
+    padding: 10px 0;
+    font-size: 0.88rem;
+    font-family: inherit;
+}
+
+.lation-input-box input::placeholder {
+    color: #475569;
+}
+
+/* Slot Selector Pills */
+.lation-slots-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.lation-slot-pill {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    transition: all 0.2s ease;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-slot-pill:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.lation-slot-pill.active {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+/* Lation Buttons */
+.lation-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    outline: none;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.lation-btn-primary {
+    background: #1b3b2d;
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.lation-btn-primary:hover {
+    background: #234c3a;
+    border-color: #34d399;
+    color: #ffffff;
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+}
+
+.lation-btn-accent {
+    background: #132438;
+    border-color: #38bdf8;
+    color: #7dd3fc;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.lation-btn-accent:hover {
+    background: #1a334f;
+    border-color: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+    transform: translateY(-1px);
+}
+
+.lation-btn-danger {
+    background: #35202b;
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #ff9f87;
+}
+
+.lation-btn-danger:hover {
+    background: #472637;
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
+}
+
+/* ================= Active Party Dashboard ================= */
+.lation-party-overview {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid #10b981;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.lation-party-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.lation-party-name-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lation-party-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.03em;
+}
+
+.lation-code-badge {
+    background: #0f1013;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #6afe87;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.lation-code-badge:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+
+.lation-status-pill {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+}
+
+.lation-slots-pill {
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-party-desc {
+    color: #94a3b8;
+    font-size: 0.86rem;
+    margin-top: 8px;
+    margin-bottom: 0;
+}
+
+/* Invite Bar */
+.lation-invite-panel {
+    background: #111216;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 8px;
+    padding: 12px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.lation-invite-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+}
+
+.lation-invite-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    max-width: 420px;
+    justify-content: flex-end;
+}
+
+.lation-invite-input {
+    background: #0a0b0d;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-size: 0.88rem;
+    outline: none;
+    width: 220px;
+    transition: border-color 0.2s;
+}
+
+.lation-invite-input:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Members Grid */
+.lation-members-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lation-members-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    overflow-y: auto;
+    padding-bottom: 10px;
+}
+
+.lation-member-card {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.lation-member-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.lation-member-card.is-leader-card {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: linear-gradient(180deg, #17181f 0%, #14151a 100%);
+}
+
+.lation-member-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lation-avatar-wrapper {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    background: #1f2128;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lation-avatar-wrapper.leader-avatar {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.lation-online-dot {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #10b981;
+    border: 2px solid #14151a;
+    box-shadow: 0 0 6px #10b981;
+}
+
+.lation-online-dot.offline {
+    background: #64748b;
+    box-shadow: none;
+}
+
+.lation-member-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.lation-member-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lation-role-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-top: 3px;
+}
+
+.lation-role-badge.leader {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.lation-role-badge.member {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.lation-member-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0f1013;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.lation-member-stats strong {
+    color: #f1f5f9;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-btn-kick {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ff9f87;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: flex-end;
+}
+
+.lation-btn-kick:hover {
+    background: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
