@@ -695,20 +695,28 @@ end)
 
 -- Sincronização dos Paletes e Garantia de Física Estática (Anti-Limbo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
-    local pallets = {}
-    for _, netId in ipairs(palletNetIds) do
-        if netId ~= 0 and NetworkDoesNetworkIdExist(netId) then
-            local ent = NetworkGetEntityFromNetworkId(netId)
-            if DoesEntityExist(ent) then
-                PlaceObjectOnGroundProperly(ent)
-                SetEntityCollision(ent, true, true)
-                FreezeEntityPosition(ent, true)
-                table.insert(pallets, ent)
+    CreateThread(function()
+        local pallets = {}
+        for _, netId in ipairs(palletNetIds) do
+            if netId and netId ~= 0 then
+                local timeout = GetGameTimer() + 5000
+                while not NetworkDoesNetworkIdExist(netId) and GetGameTimer() < timeout do
+                    Wait(50)
+                end
+                if NetworkDoesNetworkIdExist(netId) then
+                    local ent = NetworkGetEntityFromNetworkId(netId)
+                    if DoesEntityExist(ent) then
+                        PlaceObjectOnGroundProperly(ent)
+                        SetEntityCollision(ent, true, true)
+                        FreezeEntityPosition(ent, true)
+                        table.insert(pallets, ent)
+                    end
+                end
             end
         end
-    end
-    JobEntities.pallets = pallets
-    ForkliftModule.SetMissionPallets(pallets)
+        JobEntities.pallets = pallets
+        ForkliftModule.SetMissionPallets(pallets)
+    end)
 end)
 
 RegisterNetEvent('aurp_trucker:client:polarixReadyForTransit', function(deliveryCoords)

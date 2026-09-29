@@ -520,8 +520,6 @@ local function StartTruckDelivery(src, contractData)
                 if DoesEntityExist(pObj) then
                     SetEntityRoutingBucket(pObj, bucketId)
                     SetEntityDistanceCullingRadius(pObj, 350.0)
-                    PlaceObjectOnGroundProperly(pObj)
-                    SetEntityCollision(pObj, true, true)
                     FreezeEntityPosition(pObj, true)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
@@ -550,8 +548,6 @@ local function StartTruckDelivery(src, contractData)
                     if DoesEntityExist(pObj) then
                         SetEntityRoutingBucket(pObj, bucketId)
                         SetEntityDistanceCullingRadius(pObj, 350.0)
-                        PlaceObjectOnGroundProperly(pObj)
-                        SetEntityCollision(pObj, true, true)
                         FreezeEntityPosition(pObj, true)
                         ignoreEntities[pObj] = true
                         table.insert(pallets, pObj)
