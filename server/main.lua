@@ -163,9 +163,8 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
--- ETAPA 1: Validação de Nível e Inicialização do Lobby
-RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractData)
-    local src = source
+-- ETAPA 1: Iniciar Entrega / Contrato Autoritativo (QBOX OneSync)
+local function StartTruckDelivery(src, contractData)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -174,6 +173,18 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     if PlayerPolarixLobbies[citizenId] then
         TriggerClientEvent('aurp_trucker:notify', src, 'Contrato em Andamento', 'Você já possui uma rota ou contrato em andamento!', 'error')
         return
+    end
+
+    -- Se recebeu apenas jobId ou contractId numérico do tablet NUI (JobList / acceptJob)
+    if contractData.jobId or contractData.contractId or contractData.id then
+        local rawId = contractData.jobId or contractData.contractId or contractData.id
+        local numId = tonumber(rawId)
+        if numId and Config.LC_Jobs and Config.LC_Jobs.available_loads and Config.LC_Jobs.available_loads[numId] then
+            local load = Config.LC_Jobs.available_loads[numId]
+            contractData.name = contractData.name or load.name
+            contractData.palletCount = contractData.palletCount or 4
+            contractData.trailerModel = contractData.trailerModel or load.trailer
+        end
     end
 
     -- Consulta nível na tabela 0r_trucker
@@ -275,14 +286,29 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     local truckModel = joaat(selectedTruckModel)
     local trailerModel = joaat(contractData.trailerModel or 'trailers2')
 
-    -- ETAPA 2: Spawns Autoritativos no Servidor
+    -- ETAPA 2: Spawns Autoritativos no Servidor (OneSync)
     local truck = CreateVehicle(truckModel, wh.TruckSpawnCoords.x, wh.TruckSpawnCoords.y, wh.TruckSpawnCoords.z, wh.TruckSpawnCoords.w, true, true)
     while not DoesEntityExist(truck) do Wait(50) end
+
     SetEntityRoutingBucket(truck, bucketId)
     SetEntityDistanceCullingRadius(truck, 400.0)
     SetVehicleNumberPlateText(truck, selectedPlate)
-    -- O caminhão deve ser instanciado trancado no servidor para a etapa de inspeção
-    SetVehicleDoorsLocked(truck, 2)
+
+    local spawnedPlate = GetVehicleNumberPlateText(truck) or selectedPlate
+
+    -- Destranca as portas imediatamente (doors = 1) para permitir livre acesso ao veículo
+    SetVehicleDoorsLocked(truck, 1)
+
+    -- ATRIBUIÇÃO EXPLÍCITA E IMEDIATA DE CHAVES NO SERVIDOR (QBOX STANDARD)
+    if exports['qbx_vehiclekeys'] then
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, spawnedPlate) end)
+    end
+    if exports['qb-vehiclekeys'] then
+        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, spawnedPlate) end)
+    end
+    TriggerClientEvent('vehiclekeys:client:SetOwner', src, spawnedPlate)
+    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, spawnedPlate)
 
     local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
     while not DoesEntityExist(trailer) do Wait(50) end
@@ -327,7 +353,7 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
         citizenId = citizenId,
         bucketId = bucketId,
         truck = truck,
-        truckPlate = selectedPlate,
+        truckPlate = spawnedPlate,
         truckModel = selectedTruckModel,
         isOwned = isOwned,
         trailer = trailer,
@@ -349,7 +375,7 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     local payload = {
         jobId = jobId,
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
-        truckPlate = selectedPlate,
+        truckPlate = spawnedPlate,
         truckModel = selectedTruckModel,
         truckMods = savedMods,
         isOwned = isOwned,
@@ -363,6 +389,14 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     }
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
+end
+
+RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractData)
+    StartTruckDelivery(source, contractData)
+end)
+
+RegisterNetEvent('aurp_trucker:server:startDelivery', function(contractData)
+    StartTruckDelivery(source, contractData)
 end)
 
 -- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox

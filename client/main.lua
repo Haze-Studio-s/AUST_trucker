@@ -344,6 +344,31 @@ local function SetupDeliveryDestination(deliveryCoords, jobId, trailer)
 end
 
 -- =======================================================================
+-- CALLBACKS NUI: INICIAR ENTREGA (START DELIVERY)
+-- =======================================================================
+
+local function HandleStartDeliveryNUI(data, cb)
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'closeUI' })
+    SendNUIMessage({ action = 'hide' })
+
+    if ActiveJob then
+        lib.notify({ title = 'Logística', description = 'Você já possui uma rota ou entrega em andamento!', type = 'error' })
+        if cb then cb({ ok = false, message = 'Já em serviço' }) end
+        return
+    end
+
+    local payload = data or {}
+    TriggerServerEvent('aurp_trucker:server:startDelivery', payload)
+
+    if cb then cb('ok') end
+end
+
+RegisterNUICallback('startDelivery', HandleStartDeliveryNUI)
+RegisterNUICallback('acceptJob', HandleStartDeliveryNUI)
+RegisterNUICallback('startJob', HandleStartDeliveryNUI)
+
+-- =======================================================================
 -- EVENTOS DE REDE (RECEBIMENTO E MUDANÇA DE ESTADO)
 -- =======================================================================
 
@@ -361,7 +386,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             local start = GetGameTimer()
             while not NetworkDoesNetworkIdExist(payload.truckNetId) and GetGameTimer() - start < 6000 do Wait(100) end
             if NetworkDoesNetworkIdExist(payload.truckNetId) then
-                truck = NetworkGetEntityFromNetworkId(payload.truckNetId)
+                truck = NetToVeh(payload.truckNetId)
             end
         end
 
@@ -369,7 +394,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             local start = GetGameTimer()
             while not NetworkDoesNetworkIdExist(payload.trailerNetId) and GetGameTimer() - start < 6000 do Wait(100) end
             if NetworkDoesNetworkIdExist(payload.trailerNetId) then
-                trailer = NetworkGetEntityFromNetworkId(payload.trailerNetId)
+                trailer = NetToVeh(payload.trailerNetId)
             end
         end
 
@@ -381,8 +406,9 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             SetEntityCollision(truck, true, true)
 
             -- Sincroniza placa e tuning/mods salvos do caminhão próprio
-            if payload.truckPlate and payload.truckPlate ~= '' then
-                SetVehicleNumberPlateText(truck, payload.truckPlate)
+            local truckPlate = payload.truckPlate or GetVehicleNumberPlateText(truck)
+            if truckPlate and truckPlate ~= '' then
+                SetVehicleNumberPlateText(truck, truckPlate)
             end
 
             if payload.truckMods then
@@ -392,8 +418,19 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
             end
 
-            -- Assegura que o caminhão permaneça trancado até a inspeção
-            SetVehicleDoorsLocked(truck, 2)
+            -- CLIENT-SIDE FALLBACK / SYNC (QBOX STANDARD):
+            -- Explicitamente destranca as portas e garante chaves para o jogador
+            SetVehicleDoorsLocked(truck, 1)
+            SetVehicleNeedsToBeHotwired(truck, false)
+            SetVehicleHasBeenOwnedByPlayer(truck, true)
+
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
+            end
+            if exports.ox_fuel then
+                pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
+            end
+
             SetupVehicleInspection(truck, trailer, payload.jobId)
         end
     end)
