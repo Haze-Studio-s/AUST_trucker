@@ -1116,7 +1116,7 @@ local ActiveLCContracts = {}
 local StartingJobLock    = {}
 local LastNotifyTime     = {}
 
-local function StartLCContractForPlayer(src, contractId)
+local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -1151,6 +1151,25 @@ local function StartLCContractForPlayer(src, contractId)
         StartingJobLock[citizenId] = nil
         TriggerClientEvent('aurp_trucker:notify', src, 'Frete Indisponível', 'Este frete não está mais disponível no mercado.', 'error')
         return
+    end
+
+    -- Determinar se é Trabalho Rápido (0) ou Caminhão Próprio (1)
+    local isQuickJob = true
+    if contractTypeOverride ~= nil then
+        isQuickJob = (tonumber(contractTypeOverride) == 0)
+    else
+        isQuickJob = (contractId % 2 ~= 0)
+    end
+    local contractType = isQuickJob and 0 or 1
+
+    -- Se for Frete com Caminhão Próprio, validar se o jogador possui ao menos um caminhão na frota
+    if not isQuickJob and TruckFleetService and TruckFleetService.GetPlayerTrucks then
+        local myTrucks = TruckFleetService.GetPlayerTrucks(citizenId)
+        if not myTrucks or #myTrucks == 0 then
+            StartingJobLock[citizenId] = nil
+            TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão Próprio Requerido', 'Você precisa adquirir um caminhão próprio na concessionária para aceitar este frete!', 'error')
+            return
+        end
     end
 
     -- Local de entrega autoritativo
@@ -1206,9 +1225,10 @@ local function StartLCContractForPlayer(src, contractId)
     local bonusInfo = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractCheck) or { moneyMultiplier = 1.0, expMultiplier = 1.0 }
 
     local baseRate = 1250 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
-    -- Quick Job desconta taxa de aluguel de veículo fornecido pela firma (15%)
-    local rentalFeePct = (Config.LC_Jobs and Config.LC_Jobs.truck_rental and Config.LC_Jobs.truck_rental.rental_fee_percent) or 15
     local rawPayment = math.floor(dist * baseRate + 1200)
+
+    -- Quick Job desconta taxa de aluguel de veículo fornecido pela firma (15%), enquanto Caminhão Próprio recebe 100% integral
+    local rentalFeePct = isQuickJob and ((Config.LC_Jobs and Config.LC_Jobs.truck_rental and Config.LC_Jobs.truck_rental.rental_fee_percent) or 15) or 0
     local basePayment = math.floor(rawPayment * (1 - (rentalFeePct / 100)))
     local payment = math.floor(basePayment * (bonusInfo.moneyMultiplier or 1.0))
 
@@ -1227,23 +1247,28 @@ local function StartLCContractForPlayer(src, contractId)
             id, status, assigned_citizenid, origin_id, dest_id, cargo_item,
             trailer_model, base_payment, distance, expires_at, created_at,
             contract_type, cargo_type, fragile, valuable, fast, illegal
-        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR), NOW(), 0, ?, ?, ?, ?, ?)
+        ) VALUES (?, 'active', ?, 'buccaneer_hq', ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 2 HOUR), NOW(), ?, ?, ?, ?, ?, ?)
     ]], {
         jobId, citizenId, ('dest_%d'):format(destIndex), load.name,
-        load.trailer, payment, dist, adr, fragile, valuable, fast, illegal
+        load.trailer, payment, dist, contractType, adr, fragile, valuable, fast, illegal
     })
 
     ActiveLCContracts[citizenId] = jobId
     StartingJobLock[citizenId] = nil
 
+    local returnCoords = (Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns and Config.LC_Headquarters.garage_spawns[1]) or vector4(1250.55, -3162.4, 5.88, 270.00)
+
     local payload = {
         jobId = jobId,
         cargoName = load.name,
-        truckModel = truckModel,
+        isQuickJob = isQuickJob,
+        contractType = contractType,
+        truckModel = isQuickJob and truckModel or nil,
         trailerModel = load.trailer,
-        truckSpawn = truckSpawn,
+        truckSpawn = isQuickJob and truckSpawn or nil,
         trailerSpawn = trailerSpawn,
         deliveryCoords = dest,
+        returnCoords = returnCoords,
         payment = payment,
         distance = dist,
     }
@@ -1251,41 +1276,48 @@ local function StartLCContractForPlayer(src, contractId)
     TriggerClientEvent('aurp_trucker:client:startLCContract', src, payload)
 end
 
-RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId)
-    StartLCContractForPlayer(source, contractId)
+RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId, contractType)
+    StartLCContractForPlayer(source, contractId, contractType)
 end)
 
 RegisterNetEvent('truck_logistics:startContract', function(location, data)
     local contractId = nil
+    local contractType = nil
     if type(data) == 'table' then
         contractId = data.id or data.contract_id or data.contractId or data.jobId
+        contractType = data.contract_type or data.contractType
     elseif type(data) == 'number' or type(data) == 'string' then
         contractId = data
     elseif type(location) == 'number' or (type(location) == 'string' and tonumber(location)) then
         contractId = location
     end
-    StartLCContractForPlayer(source, contractId)
+    StartLCContractForPlayer(source, contractId, contractType)
 end)
 
 RegisterNetEvent('truck_logistics:makeContract', function(location, data)
     local contractId = nil
+    local contractType = nil
     if type(data) == 'table' then
         contractId = data.id or data.contract_id or data.contractId or data.jobId
+        contractType = data.contract_type or data.contractType
     elseif type(data) == 'number' or type(data) == 'string' then
         contractId = data
     elseif type(location) == 'number' or (type(location) == 'string' and tonumber(location)) then
         contractId = location
     end
-    StartLCContractForPlayer(source, contractId)
+    StartLCContractForPlayer(source, contractId, contractType)
 end)
 
 RegisterNetEvent('truck_logistics:deliveredCargo', function()
-    -- Confirma entrega do frete
+    -- Confirma entrega do frete no destino
 end)
 
 local CompletingContractsLock = {}
 
-local function FinalizeLCContract(src, jobId, parkedManually)
+-- ========================================================
+-- CONCLUSÃO: TRABALHO RÁPIDO (QUICK JOB) COM VISTORIA DE DANOS
+-- ========================================================
+local function FinishQuickJobContract(src, jobId, damages)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -1309,7 +1341,7 @@ local function FinalizeLCContract(src, jobId, parkedManually)
         return
     end
 
-    -- Mutação atômica fail-closed: se já foi finalizado concorrentemente, affectedRows será 0
+    -- Mutação atômica fail-closed
     local affected = MySQL.update.await([[
         UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'
     ]], { row.id })
@@ -1319,47 +1351,182 @@ local function FinalizeLCContract(src, jobId, parkedManually)
         return
     end
 
+    local grossPayment = row.base_payment or 2500
+    local dist = row.distance or 2.5
+
+    -- Cálculo de Vistoria de Danos Mecânicos e Lataria
+    damages = damages or {}
+    local engineHealth = tonumber(damages.engineHealth) or 1000.0
+    local bodyHealth = tonumber(damages.bodyHealth) or 1000.0
+    local burstTires = tonumber(damages.burstTires) or 0
+
+    if engineHealth > 1000.0 then engineHealth = 1000.0 end
+    if bodyHealth > 1000.0 then bodyHealth = 1000.0 end
+    if engineHealth < 0.0 then engineHealth = 0.0 end
+    if bodyHealth < 0.0 then bodyHealth = 0.0 end
+
+    local engineLoss = math.max(0.0, (1000.0 - engineHealth) / 1000.0)
+    local bodyLoss = math.max(0.0, (1000.0 - bodyHealth) / 1000.0)
+    local damageRatio = (engineLoss * 0.6) + (bodyLoss * 0.4)
+
+    local rawPenalty = math.floor(grossPayment * damageRatio * 0.45) + (burstTires * 150)
+    -- Teto seguro de penalidade: máximo de 50% de dedução
+    local maxPenalty = math.floor(grossPayment * 0.50)
+    local damageDeduction = math.min(rawPenalty, maxPenalty)
+
+    -- Mínimo de 10% garantido para assegurar fail-closed sem saldo nulo/negativo
+    local minGuaranteed = math.floor(grossPayment * 0.10)
+    local netPayment = math.max(grossPayment - damageDeduction, minGuaranteed)
+
+    Framework.AddMoney(Player, 'bank', netPayment, 'aurp-trucker-quick-job')
+    DB_AddPlayerStats(citizenId, netPayment, dist)
+
     local contractData = {
-        distance = row.distance or 2.5,
+        distance = dist,
         cargo_type = row.cargo_type or 0,
         fragile = row.fragile or 0,
         valuable = row.valuable or 0,
         fast = row.fast or 0,
         illegal = row.illegal or 0,
     }
-
-    local bonuses = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractData) or { moneyMultiplier = 1.0, expMultiplier = 1.0, moneyBonusPct = 0, expBonusPct = 0 }
-    local payment = row.base_payment or 2500
-    local dist = row.distance or 2.5
-
-    if parkedManually then
-        payment = math.floor(payment * 1.05)
-    end
-
-    Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-lc-contract')
-    DB_AddPlayerStats(citizenId, payment, dist)
-
+    local bonuses = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractData) or { expMultiplier = 1.0, moneyBonusPct = 0, expBonusPct = 0 }
     local xpMultiplier = bonuses and bonuses.expMultiplier or 1.0
-    local xpResult = ProgressionService.GrantXP(src, citizenId, payment, xpMultiplier, dist)
+    local xpResult = ProgressionService and ProgressionService.GrantXP(src, citizenId, netPayment, xpMultiplier, dist)
 
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
 
-    TriggerClientEvent('aurp_trucker:client:lcContractFinished', src, {
-        payment = payment,
+    TriggerClientEvent('aurp_trucker:client:quickJobFinished', src, {
+        grossPayment = grossPayment,
+        damageDeduction = damageDeduction,
+        netPayment = netPayment,
         distance = dist,
-        parkedManually = parkedManually,
+        engineHealth = engineHealth,
+        bodyHealth = bodyHealth,
+        burstTires = burstTires,
         xpGained = xpResult and xpResult.xpGained or 0,
         newLevel = xpResult and xpResult.newLevel or 1,
         levelsGained = xpResult and xpResult.levelsGained or 0,
-        moneyBonusPct = bonuses and bonuses.moneyBonusPct or 0,
-        expBonusPct = bonuses and bonuses.expBonusPct or 0,
     })
 
     SetTimeout(3000, function()
         CompletingContractsLock[citizenId] = nil
     end)
 end
+
+-- ========================================================
+-- CONCLUSÃO: CAMINHÃO PRÓPRIO (OWNED TRUCK / FREIGHT) 100% INTEGRAL
+-- ========================================================
+local function FinishOwnedTruckContract(src, jobId, parkedManually)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    if CompletingContractsLock[citizenId] then return end
+    CompletingContractsLock[citizenId] = true
+
+    local row = nil
+    if jobId then
+        row = MySQL.single.await([[
+            SELECT * FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active' LIMIT 1
+        ]], { jobId, citizenId })
+    else
+        row = MySQL.single.await([[
+            SELECT * FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+        ]], { citizenId })
+    end
+
+    if not row then
+        CompletingContractsLock[citizenId] = nil
+        return
+    end
+
+    -- Mutação atômica fail-closed
+    local affected = MySQL.update.await([[
+        UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'
+    ]], { row.id })
+
+    if not affected or affected == 0 then
+        CompletingContractsLock[citizenId] = nil
+        return
+    end
+
+    local payment = row.base_payment or 2500
+    local dist = row.distance or 2.5
+
+    -- Bônus de 5% por alinhamento e estacionamento manual na vaga
+    if parkedManually then
+        payment = math.floor(payment * 1.05)
+    end
+
+    -- Pagamento 100% integral sem desconto de aluguel ou reparos
+    Framework.AddMoney(Player, 'bank', payment, 'aurp-trucker-owned-freight')
+    DB_AddPlayerStats(citizenId, payment, dist)
+
+    local contractData = {
+        distance = dist,
+        cargo_type = row.cargo_type or 0,
+        fragile = row.fragile or 0,
+        valuable = row.valuable or 0,
+        fast = row.fast or 0,
+        illegal = row.illegal or 0,
+    }
+    local bonuses = (ProgressionService and ProgressionService.CalculateContractBonuses) and ProgressionService.CalculateContractBonuses(citizenId, contractData) or { expMultiplier = 1.0, moneyBonusPct = 0, expBonusPct = 0 }
+    local xpMultiplier = bonuses and bonuses.expMultiplier or 1.0
+    local xpResult = ProgressionService and ProgressionService.GrantXP(src, citizenId, payment, xpMultiplier, dist)
+
+    ActiveLCContracts[citizenId] = nil
+    StartingJobLock[citizenId] = nil
+
+    TriggerClientEvent('aurp_trucker:client:ownedTruckContractFinished', src, {
+        payment = payment,
+        distance = dist,
+        parkedManually = parkedManually,
+        xpGained = xpResult and xpResult.xpGained or 0,
+        newLevel = xpResult and xpResult.newLevel or 1,
+        levelsGained = xpResult and xpResult.levelsGained or 0,
+    })
+
+    SetTimeout(3000, function()
+        CompletingContractsLock[citizenId] = nil
+    end)
+end
+
+-- Roteamento Retrocompatível
+local function FinalizeLCContract(src, jobId, parkedManually)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local row = nil
+    if jobId then
+        row = MySQL.single.await([[
+            SELECT contract_type FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active' LIMIT 1
+        ]], { jobId, citizenId })
+    else
+        row = MySQL.single.await([[
+            SELECT contract_type FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+        ]], { citizenId })
+    end
+
+    if row and row.contract_type == 1 then
+        FinishOwnedTruckContract(src, jobId, parkedManually)
+    else
+        FinishQuickJobContract(src, jobId, { engineHealth = 1000, bodyHealth = 1000, burstTires = 0 })
+    end
+end
+
+RegisterNetEvent('aurp_trucker:server:finishQuickJobContract', function(jobId, damages)
+    FinishQuickJobContract(source, jobId, damages)
+end)
+
+RegisterNetEvent('aurp_trucker:server:finishOwnedTruckContract', function(jobId, parkedManually)
+    FinishOwnedTruckContract(source, jobId, parkedManually)
+end)
+
+RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parkedManually)
+    FinalizeLCContract(source, jobId, parkedManually)
+end)
 
 RegisterNetEvent('truck_logistics:finishContract', function(engine, body, trailerBody)
     FinalizeLCContract(source, nil, true)
@@ -1393,10 +1560,6 @@ RegisterNetEvent('truck_logistics:sellTruck', function(location, data)
     else
         TriggerClientEvent('aurp_trucker:notify', src, refund or 'Falha ao vender caminhão', 'error')
     end
-end)
-
-RegisterNetEvent('aurp_trucker:server:completeLCContract', function(jobId, parkedManually)
-    FinalizeLCContract(source, jobId, parkedManually)
 end)
 
 -- =====================================================

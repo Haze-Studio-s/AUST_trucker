@@ -88,7 +88,8 @@ local function CleanupLCContract()
         if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
             DeleteEntity(lcActiveJob.trailer)
         end
-        if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
+        -- Apenas deletar o caminhão se for veículo alugado de Quick Job! Nunca deletar caminhão próprio do jogador!
+        if lcActiveJob.isQuickJob and lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
             DeleteEntity(lcActiveJob.truck)
         end
         lcActiveJob = nil
@@ -534,7 +535,8 @@ RegisterNUICallback('post', function(body, cb)
         isStartingJob = true
         SetTimeout(3000, function() isStartingJob = false end)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
-        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
+        local contractType = data and (data.contract_type or data.contractType or data.type)
+        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId, contractType)
         cb(200)
         return
     end
@@ -2886,23 +2888,36 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     isStartingJob = true
     lcActiveJob = contract
 
-    -- 1. Spawn do caminhão da firma
-    local truckModel = contract.truckModel or 'hauler'
-    local truckHash = joaat(truckModel)
-    if not IsModelInCdimage(truckHash) or not IsModelValid(truckHash) then
-        truckModel = 'hauler'
-        truckHash = joaat('hauler')
+    local isQuickJob = (contract.isQuickJob ~= false) and (contract.contractType ~= 1)
+    lcActiveJob.isQuickJob = isQuickJob
+
+    local truck = nil
+    if isQuickJob then
+        -- 1. Spawn do caminhão da firma (Trabalho Rápido)
+        local truckModel = contract.truckModel or 'hauler'
+        local truckHash = joaat(truckModel)
+        if not IsModelInCdimage(truckHash) or not IsModelValid(truckHash) then
+            truckModel = 'hauler'
+            truckHash = joaat('hauler')
+        end
+        lib.requestModel(truckHash)
+        local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
+        truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
+        SetEntityHeading(truck, tspawn.w)
+        SetVehicleOnGroundProperly(truck)
+        SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
+        SetEntityAsMissionEntity(truck, true, true)
+        SetVehicleHasBeenOwnedByPlayer(truck, true)
+        if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end) end
+        if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end) end
+    else
+        -- Caminhão Próprio (Frete): utiliza o caminhão atual do jogador se presente
+        local ped = PlayerPedId()
+        local currentVeh = GetVehiclePedIsIn(ped, false)
+        if currentVeh ~= 0 then
+            truck = currentVeh
+        end
     end
-    lib.requestModel(truckHash)
-    local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
-    local truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
-    SetEntityHeading(truck, tspawn.w)
-    SetVehicleOnGroundProperly(truck)
-    SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
-    SetEntityAsMissionEntity(truck, true, true)
-    SetVehicleHasBeenOwnedByPlayer(truck, true)
-    if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end) end
-    if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end) end
 
     -- 2. Spawn do reboque designado
     local trailerModel = contract.trailerModel or 'docktrailer'
@@ -2937,17 +2952,26 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     AddTextComponentString("Entrega: " .. (contract.cargoName or "Carga"))
     EndTextCommandSetBlipName(lcDeliveryBlip)
 
-    lib.notify({
-        title = 'Quick Job Iniciado!',
-        description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca!'):format(contract.cargoName, contract.payment),
-        type = 'success',
-        duration = 8000
-    })
+    if isQuickJob then
+        lib.notify({
+            title = 'Trabalho Rápido Iniciado!',
+            description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca!'):format(contract.cargoName, contract.payment),
+            type = 'success',
+            duration = 8000
+        })
+    else
+        lib.notify({
+            title = 'Frete Próprio Iniciado!',
+            description = ('Carga: %s | Recompensa Integral: $%d\nReboque liberado na doca! Engate seu caminhão.'):format(contract.cargoName, contract.payment),
+            type = 'success',
+            duration = 8000
+        })
+    end
 
     -- 4. Registro de Entidades e Chaves no Servidor
     CreateThread(function()
-        local truckNetId = SafeGetNetworkId(truck)
-        local trailerNetId = SafeGetNetworkId(trailer)
+        local truckNetId = truck and SafeGetNetworkId(truck) or nil
+        local trailerNetId = trailer and SafeGetNetworkId(trailer) or nil
         if truckNetId or trailerNetId then
             TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNetId, trailerNetId)
         end
@@ -2959,6 +2983,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         local destH = dest.w or 0.0
         local thisJobId = contract.jobId
         local currentTextUi = nil
+        local isFinished = false
         while lcActiveJob and lcActiveJob.jobId == thisJobId and not isFinished do
             local timer = 1000
             local ped = PlayerPedId()
@@ -2980,7 +3005,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                 local isAligned = (vehDiff <= 10.0) and (trDiff <= 10.0) and isAttached
 
                 if distance <= 4.0 and isAligned then
-                    DrawMarker(30,destX,destY,destZ-0.6,0,0,0,90.0,destH,0.0,3.0,1.0,10.0,0,255,0,50,0,0,0,0)
+                    DrawMarker(30, destX, destY, destZ-0.6, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
                     if currentTextUi ~= 'park' then
                         lib.showTextUI('[E] Estacionar e Descarregar Carga')
                         currentTextUi = 'park'
@@ -2991,21 +3016,156 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                             lib.hideTextUI()
                             currentTextUi = nil
                         end
-                        BringVehicleToHalt(tk, 2.5, 1, false)
-                        Wait(10)
+                        BringVehicleToHalt(veh ~= 0 and veh or tk, 2.5, 1, false)
+                        Wait(100)
                         DoScreenFadeOut(500)
                         Wait(500)
-                        local trailerBody = (tr ~= 0 and DoesEntityExist(tr)) and GetVehicleBodyHealth(tr) or 1000
-                        local truckEngine = (tk ~= 0 and DoesEntityExist(tk)) and GetVehicleEngineHealth(tk) or 1000
-                        local truckBody = (tk ~= 0 and DoesEntityExist(tk)) and GetVehicleBodyHealth(tk) or 1000
+
+                        -- Desengatar e deletar APENAS o reboque/carga
+                        if tr ~= 0 and DoesEntityExist(tr) then
+                            DetachEntity(tr, true, true)
+                            DeleteEntity(tr)
+                        end
+                        if lcActiveJob then lcActiveJob.trailer = nil end
+
+                        if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+                            RemoveBlip(lcDeliveryBlip)
+                            lcDeliveryBlip = nil
+                        end
+                        SetWaypointOff()
 
                         TriggerServerEvent("truck_logistics:deliveredCargo")
-                        TriggerServerEvent('aurp_trucker:server:completeLCContract', thisJobId, true)
 
-                        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-                        Wait(1000)
-                        DoScreenFadeIn(1000)
-                        break
+                        if not isQuickJob then
+                            -- ========================================================
+                            -- CAMINHÃO PRÓPRIO (OWNED TRUCK / FRETE)
+                            -- ========================================================
+                            -- O caminhão do jogador é 100% PRESERVADO (sem remoção nem teleporte)
+                            -- Conclusão e crédito integral de 100% imediatos no destino!
+                            TriggerServerEvent('aurp_trucker:server:finishOwnedTruckContract', thisJobId, true)
+                            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                            Wait(600)
+                            DoScreenFadeIn(800)
+                            break
+                        else
+                            -- ========================================================
+                            -- TRABALHO RÁPIDO (QUICK JOB)
+                            -- ========================================================
+                            -- Caminhão alugado NÃO é deletado aqui.
+                            -- Jogador deve conduzir o veículo de volta à base.
+                            DoScreenFadeIn(800)
+                            lib.notify({
+                                title = 'Carga Entregue!',
+                                description = 'Reboque descarregado com sucesso! Devolva o caminhão da firma na central de logística para receber seu pagamento.',
+                                type = 'inform',
+                                duration = 9000
+                            })
+
+                            local returnCoords = contract.returnCoords or vector4(1250.55, -3162.4, 5.88, 270.00)
+                            SetNewWaypoint(returnCoords.x, returnCoords.y)
+
+                            lcDeliveryBlip = AddBlipForCoord(returnCoords.x, returnCoords.y, returnCoords.z)
+                            SetBlipSprite(lcDeliveryBlip, 357)
+                            SetBlipColour(lcDeliveryBlip, 5)
+                            SetBlipScale(lcDeliveryBlip, 0.95)
+                            SetBlipRoute(lcDeliveryBlip, true)
+                            SetBlipRouteColour(lcDeliveryBlip, 5)
+                            BeginTextCommandSetBlipName("STRING")
+                            AddTextComponentString("Devolução: Central de Logística")
+                            EndTextCommandSetBlipName(lcDeliveryBlip)
+
+                            -- Thread de devolução e vistoria na central
+                            CreateThread(function()
+                                local retX, retY, retZ = returnCoords.x, returnCoords.y, returnCoords.z
+                                local retTextUi = nil
+                                local returning = false
+                                while lcActiveJob and lcActiveJob.jobId == thisJobId and not returning do
+                                    local sleep = 1000
+                                    local p = PlayerPedId()
+                                    local cVeh = GetVehiclePedIsIn(p, false)
+                                    local pos = GetEntityCoords(p)
+                                    local distRet = #(pos - vector3(retX, retY, retZ))
+
+                                    if distRet <= 60.0 then
+                                        sleep = 2
+                                        DrawMarker(1, retX, retY, retZ - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 4.0, 1.2, 255, 180, 0, 140, false, false, 2, false, nil, nil, false)
+
+                                        if distRet <= 4.5 then
+                                            local isRental = (cVeh ~= 0) and (cVeh == tk or (DoesEntityExist(tk) and cVeh == tk) or (tk and cVeh ~= 0))
+                                            if isRental then
+                                                if retTextUi ~= 'return' then
+                                                    lib.showTextUI('[E] Devolver Caminhão da Firma')
+                                                    retTextUi = 'return'
+                                                end
+
+                                                if IsControlJustPressed(0, 38) then
+                                                    returning = true
+                                                    if retTextUi then
+                                                        lib.hideTextUI()
+                                                        retTextUi = nil
+                                                    end
+
+                                                    BringVehicleToHalt(cVeh, 2.5, 1, false)
+                                                    Wait(100)
+                                                    DoScreenFadeOut(500)
+                                                    Wait(500)
+
+                                                    local engH = GetVehicleEngineHealth(cVeh)
+                                                    local bdyH = GetVehicleBodyHealth(cVeh)
+                                                    local burst = 0
+                                                    for tIdx = 0, 7 do
+                                                        if IsVehicleTyreBurst(cVeh, tIdx, false) then
+                                                            burst = burst + 1
+                                                        end
+                                                    end
+
+                                                    TaskLeaveVehicle(p, cVeh, 0)
+                                                    Wait(200)
+                                                    if DoesEntityExist(cVeh) then
+                                                        DeleteEntity(cVeh)
+                                                    end
+                                                    if tk ~= cVeh and DoesEntityExist(tk) then
+                                                        DeleteEntity(tk)
+                                                    end
+
+                                                    TriggerServerEvent('aurp_trucker:server:finishQuickJobContract', thisJobId, {
+                                                        engineHealth = engH,
+                                                        bodyHealth = bdyH,
+                                                        burstTires = burst
+                                                    })
+
+                                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                                    Wait(800)
+                                                    DoScreenFadeIn(800)
+                                                    break
+                                                end
+                                            else
+                                                if retTextUi ~= 'not_rental' then
+                                                    lib.showTextUI('Você precisa estar no caminhão da firma para devolvê-lo!')
+                                                    retTextUi = 'not_rental'
+                                                end
+                                            end
+                                        else
+                                            if retTextUi then
+                                                lib.hideTextUI()
+                                                retTextUi = nil
+                                            end
+                                        end
+                                    else
+                                        if retTextUi then
+                                            lib.hideTextUI()
+                                            retTextUi = nil
+                                        end
+                                    end
+                                    Wait(sleep)
+                                end
+                                if retTextUi then
+                                    lib.hideTextUI()
+                                    retTextUi = nil
+                                end
+                            end)
+                            break
+                        end
                     end
                 else
                     if distance <= 15.0 then
@@ -3041,6 +3201,61 @@ RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
     SetNuiFocus(false, false)
 end)
 
+RegisterNetEvent('aurp_trucker:client:quickJobFinished', function(result)
+    CleanupLCContract()
+
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local deductionText = (result.damageDeduction and result.damageDeduction > 0)
+        and (' | Deduções de Reparos: -$%d'):format(result.damageDeduction)
+        or ' | Sem avarias'
+
+    lib.notify({
+        title = 'Caminhão da Firma Devolvido!',
+        description = ('Bruto: $%d%s\nLíquido Recebido: $%d%s | Rota: %.2f km'):format(
+            result.grossPayment or 0,
+            deductionText,
+            result.netPayment or 0,
+            xpText,
+            result.distance or 0.0
+        ),
+        type = 'success',
+        duration = 10000
+    })
+
+    RefreshNUIData()
+end)
+
+RegisterNetEvent('aurp_trucker:client:ownedTruckContractFinished', function(result)
+    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+        RemoveBlip(lcDeliveryBlip)
+        lcDeliveryBlip = nil
+    end
+    SetWaypointOff()
+    if lib and lib.hideTextUI then lib.hideTextUI() end
+    if lcActiveJob and lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
+        DeleteEntity(lcActiveJob.trailer)
+    end
+    lcActiveJob = nil
+    isStartingJob = false
+
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local bonusText = (result.parkedManually) and ' (+5% Vaga)' or ''
+
+    lib.notify({
+        title = 'Frete Concluído!',
+        description = ('Pagamento integral de $%d%s creditado na sua conta!%s | Rota: %.2f km'):format(
+            result.payment or 0,
+            bonusText,
+            xpText,
+            result.distance or 0.0
+        ),
+        type = 'success',
+        duration = 10000
+    })
+
+    RefreshNUIData()
+end)
+
 RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
     CleanupLCContract()
 
@@ -3051,7 +3266,7 @@ RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
     end
     lib.notify({
         title = 'Entrega Concluída!',
-        description = ('Recebido: $%d%s%s | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, bonusText, xpText, result.distance or 0.0),
+        description = ('Recebido: $%d%s%s | Distância: %.2f km'):format(result.payment or 0, bonusText, xpText, result.distance or 0.0),
         type = 'success',
         duration = 10000
     })
