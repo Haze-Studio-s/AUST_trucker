@@ -27,6 +27,7 @@ local hasRopes = false
 local HasRopes = false
 local currentTieIndex = 1
 local currentStrappingIndex = 1
+local ActiveStrappingZoneId = nil
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
 Config.LoadedPallets = LoadedPallets
@@ -248,6 +249,11 @@ local function CleanupCurrentJob()
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.forklift) end)
     end
 
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
+
     if LoadedPallets then
         for idx, pData in ipairs(LoadedPallets) do
             if pData.entity and DoesEntityExist(pData.entity) then
@@ -418,8 +424,11 @@ local function ExecutePalletTie(index)
     local palletData = LoadedPallets[index]
     if not palletData then return end
 
-    -- Remove o target imediatamente para evitar duplo clique
-    pcall(function() exports.ox_target:removeLocalEntity(palletData.entity, 'aust_tie_current_pallet') end)
+    -- Destrói a zona ativa imediatamente para evitar múltiplos cliques ou disparos simultâneos
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
 
     -- Minigame de perícia
     local success = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
@@ -449,12 +458,18 @@ local function ExecutePalletTie(index)
         SendMissionNotify('Atenção', 'A corda ficou frouxa! Cuidado nas curvas.', 'error')
     end
 
-    -- Avança para o próximo da lista e reconstrói o target
+    -- Avança para o próximo da lista e reconstrói a zona do próximo palete
     currentTieIndex = currentTieIndex + 1
     SetupNextPalletTarget()
 end
 
 function SetupNextPalletTarget()
+    -- Garante que qualquer zona ativa anterior seja destruída
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
+
     -- 1. Se completou todos os paletes
     if currentTieIndex > #LoadedPallets then
         hasRopes = false
@@ -472,22 +487,35 @@ function SetupNextPalletTarget()
         return
     end
 
-    -- 2. Atualiza a seta verde flutuante diretamente para este palete
-    UpdateMissionObjective('pallet', currentPallet.entity, ('Amarrar Palete (%d/%d)'):format(currentTieIndex, #LoadedPallets))
+    -- 2. Captura coordenadas mundiais tridimensionais em tempo real onde o palete está na caçamba
+    local pCoords = GetEntityCoords(currentPallet.entity)
+    if not pCoords or pCoords == vector3(0, 0, 0) then
+        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+            pCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 0.0, 0.5)
+        end
+    end
 
-    -- 3. Adiciona ox_target EXCLUSIVAMENTE na entidade atual
-    exports.ox_target:addLocalEntity(currentPallet.entity, {
-        {
-            name = 'aust_tie_current_pallet',
-            icon = 'fas fa-tape',
-            label = ('Amarrar Palete (%s/%s)'):format(currentTieIndex, #LoadedPallets),
-            distance = 2.8,
-            canInteract = function()
-                return (hasRopes or HasRopes) and not currentPallet.isSecured and not IsPedInAnyVehicle(cache.ped, false)
-            end,
-            onSelect = function()
-                ExecutePalletTie(currentTieIndex)
-            end
+    -- 3. Move a seta verde flutuante diretamente para o topo deste palete
+    UpdateMissionObjective('pallet', pCoords, ('Amarrar Palete (%d/%d)'):format(currentTieIndex, #LoadedPallets))
+
+    -- 4. Cria a zona esférica de interação do ox_target EXCLUSIVAMENTE sobre a posição mundial do palete
+    ActiveStrappingZoneId = exports.ox_target:addSphereZone({
+        coords = pCoords,
+        radius = 2.0,
+        debug = false,
+        options = {
+            {
+                name = 'aust_tie_current_pallet',
+                icon = 'fas fa-tape',
+                label = ('Amarrar Palete (%s/%s)'):format(currentTieIndex, #LoadedPallets),
+                distance = 3.5,
+                canInteract = function()
+                    return (hasRopes or HasRopes) and not currentPallet.isSecured and not IsPedInAnyVehicle(cache.ped, false)
+                end,
+                onSelect = function()
+                    ExecutePalletTie(currentTieIndex)
+                end
+            }
         }
     })
 
@@ -566,6 +594,11 @@ end
 local function SetupDeliveryDestination(deliveryCoords, jobId)
     CurrentStage = 'STEP_8_IN_TRANSIT'
     ClearObjectiveMarkers(false)
+
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
 
     -- Remove eventuais alvos remanescentes nos paletes
     for idx, pData in ipairs(LoadedPallets) do
