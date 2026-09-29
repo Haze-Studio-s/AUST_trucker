@@ -529,22 +529,32 @@ RegisterNUICallback('post', function(body, cb)
     end
 
     if event == "startContract" then
-        CloseJobBoard()
-        SetNuiFocus(false, false)
-        if lcActiveJob or isStartingJob then return cb(200) end
-        isStartingJob = true
-        SetTimeout(3000, function() isStartingJob = false end)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
         local isParty = data and (data.party == true or data.isParty == true)
+        print(("^2[AUST_Trucker Client] startContract NUI Callback: ID=%s, type=%s, party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
+        CloseJobBoard()
+        SetNuiFocus(false, false)
+        if lcActiveJob then
+            print("^3[AUST_Trucker Client] startContract ignored: lcActiveJob is already active! Use /clearjob if stuck.^7")
+            lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+            return cb(200)
+        end
+        if isStartingJob then
+            print("^3[AUST_Trucker Client] startContract ignored: isStartingJob cooldown active.^7")
+            return cb(200)
+        end
+        isStartingJob = true
+        SetTimeout(3000, function() isStartingJob = false end)
         TriggerServerEvent('aurp_trucker:server:startLCContract', contractId, contractType, isParty)
         cb(200)
         return
     end
 
     if event == "cancelContract" then
+        print("^3[AUST_Trucker Client] cancelContract NUI Callback invoked^7")
         ExecuteCommand('canceljob')
-        TriggerServerEvent('truck_logistics:cancelContract', 'buccaneer_hq', data)
+        TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
         cb(200)
         return
     end
@@ -708,12 +718,17 @@ RegisterNUICallback('post', function(body, cb)
 end)
 
 RegisterNUICallback('startJob', function(data, cb)
+    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
+    print(("^2[AUST_Trucker Client] NUI startJob received: ID=%s^7"):format(tostring(contractId)))
     CloseJobBoard()
     SetNuiFocus(false, false)
-    if lcActiveJob or isStartingJob then return cb('ok') end
+    if lcActiveJob then
+        lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+        return cb('ok')
+    end
+    if isStartingJob then return cb('ok') end
     isStartingJob = true
     SetTimeout(3000, function() isStartingJob = false end)
-    local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
     cb('ok')
 end)
@@ -785,7 +800,8 @@ RegisterNUICallback('returnTruck', function(data, cb)
 end)
 
 RegisterNUICallback('acceptJob', function(data, cb)
-    local jobId = data.jobId
+    local jobId = data and (data.jobId or data.id or data.contractId or data.contract_id)
+    print(("^2[AUST_Trucker Client] NUI acceptJob received with jobId: %s^7"):format(tostring(jobId)))
 
     if not jobId then
         lib.notify({ title = 'Erro', description = 'ID do trabalho inválido', type = 'error' })
@@ -793,16 +809,16 @@ RegisterNUICallback('acceptJob', function(data, cb)
         return
     end
 
-    -- Fechar UI imediatamente para jogador ver o mapa
     CloseJobBoard()
+    SetNuiFocus(false, false)
 
-    -- Enviar para servidor para aceitar o job
-    TriggerServerEvent('aurp_trucker:acceptJob', jobId)
-
-    if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 Solicitando job ao servidor: " .. jobId)
+    if tonumber(jobId) then
+        print(("^2[AUST_Trucker Client] Routing numeric jobId %s to startLCContract^7"):format(tostring(jobId)))
+        TriggerServerEvent('aurp_trucker:server:startLCContract', tonumber(jobId), data.contractType or 0, false)
+    else
+        print(("^2[AUST_Trucker Client] Routing string jobId %s to aurp_trucker:acceptJob^7"):format(tostring(jobId)))
+        TriggerServerEvent('aurp_trucker:acceptJob', jobId)
     end
-
     cb('ok')
 end)
 
@@ -1996,7 +2012,10 @@ RegisterCommand('checktrailer', function()
 end, false)
 
 RegisterCommand('clearjob', function()
-    if currentJob then
+    CleanupLCContract()
+    TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+
+    if currentJob or activeJob or lcActiveJob then
         if jobProgress.pickupBlip then
             RemoveBlip(jobProgress.pickupBlip)
         end
@@ -2016,7 +2035,9 @@ RegisterCommand('clearjob', function()
 
         currentJob = nil
         VP_Trucker_CurrentJobOriginId = nil
-        activeJob = nil -- Limpar activeJob também
+        activeJob = nil
+        lcActiveJob = nil
+        isStartingJob = false
         jobProgress = {
             stage = nil,
             startTime = nil,
@@ -2024,7 +2045,6 @@ RegisterCommand('clearjob', function()
             deliveryBlip = nil
         }
 
-        -- Atualizar NUI se estiver aberta
         if isNUIOpen then
             SendNUIMessage({
                 action = 'updateActiveJob',
@@ -2034,14 +2054,14 @@ RegisterCommand('clearjob', function()
 
         ShowNotification(
             'Trabalho Cancelado',
-            'Seu trabalho foi cancelado',
+            'Seu trabalho e veículos foram cancelados e limpos com sucesso.',
             'info'
         )
     else
         ShowNotification(
             'Nenhum Trabalho',
-            'Você não possui trabalho ativo',
-            'error'
+            'Nenhum trabalho ativo detectado. Estado redefinido.',
+            'info'
         )
     end
 end, false)
@@ -3173,6 +3193,7 @@ local function StartDeliveryRoute()
 end
 
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
+    print(("^2[AUST_Trucker Client] aurp_trucker:client:startLCContract received for job: %s^7"):format(tostring(contract and contract.jobId)))
     if not contract or lcActiveJob then return end
     isStartingJob = true
     lcActiveJob = contract
@@ -3185,22 +3206,43 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         local truck = nil
         local trailer = nil
 
-        if isQuickJob and contract.truckModel and contract.truckSpawn then
-            local truckHash = joaat(contract.truckModel)
-            lib.requestModel(truckHash)
-            local safeTruckCoords = GetSafeVehicleSpawnCoords(contract.truckSpawn, 4.0)
-            truck = CreateVehicle(truckHash, safeTruckCoords.x, safeTruckCoords.y, safeTruckCoords.z, safeTruckCoords.w, true, false)
-            SetEntityAsMissionEntity(truck, true, true)
-            SetVehicleOnGroundProperly(truck)
-            SetVehicleNeedsToBeHotwired(truck, false)
-            SetVehicleHasBeenOwnedByPlayer(truck, true)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
+        if isQuickJob then
+            if contract.truckNetId then
+                local timeout = 0
+                while (not truck or not DoesEntityExist(truck)) and timeout < 50 do
+                    Wait(100)
+                    truck = NetworkGetEntityFromNetworkId(contract.truckNetId)
+                    timeout = timeout + 1
+                end
             end
-            if exports.ox_fuel then
-                pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
+
+            if not truck or not DoesEntityExist(truck) then
+                if contract.truckModel and contract.truckSpawn then
+                    local truckHash = joaat(contract.truckModel)
+                    lib.requestModel(truckHash)
+                    local safeTruckCoords = GetSafeVehicleSpawnCoords(contract.truckSpawn, 4.0)
+                    truck = CreateVehicle(truckHash, safeTruckCoords.x, safeTruckCoords.y, safeTruckCoords.z, safeTruckCoords.w, true, false)
+                end
             end
-            lcActiveJob.truck = truck
+
+            if truck and DoesEntityExist(truck) then
+                SetEntityAsMissionEntity(truck, true, true)
+                SetVehicleOnGroundProperly(truck)
+                SetVehicleNeedsToBeHotwired(truck, false)
+                SetVehicleHasBeenOwnedByPlayer(truck, true)
+                SetVehicleDoorsLocked(truck, 1)
+                if contract.truckPlate then
+                    SetVehicleNumberPlateText(truck, contract.truckPlate)
+                end
+                if exports.qbx_vehiclekeys then
+                    pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
+                end
+                if exports.ox_fuel then
+                    pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
+                end
+                lcActiveJob.truck = truck
+                lcActiveJob.truckPlate = contract.truckPlate
+            end
         end
 
         if contract.trailerModel and contract.trailerSpawn then

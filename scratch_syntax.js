@@ -24,7 +24,7 @@ function checkFile(path) {
     console.log(path + ' scanned ' + lineNum + ' lines without quote anomalies.');
 }
 
-checkFile('c:/Users/J2K/Desktop/txData/Qbox_B984EB.base/resources/[mods]/AUST_trucker/client/zones.lua');
 checkFile('c:/Users/J2K/Desktop/txData/Qbox_B984EB.base/resources/[mods]/AUST_trucker/server/main.lua');
 checkFile('c:/Users/J2K/Desktop/txData/Qbox_B984EB.base/resources/[mods]/AUST_trucker/client/client.lua');
 checkFile('c:/Users/J2K/Desktop/txData/Qbox_B984EB.base/resources/[mods]/AUST_trucker/server/events.lua');
+checkFile('c:/Users/J2K/Desktop/txData/Qbox_B984EB.base/resources/[mods]/AUST_trucker/client/main.lua');

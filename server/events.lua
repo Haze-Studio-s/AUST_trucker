@@ -15,6 +15,7 @@ end
 
 RegisterNetEvent('aurp_trucker:acceptJob', function(jobId)
     local src = source
+    print(("^2[AUST_Trucker Server] aurp_trucker:acceptJob received from src %s with jobId: %s^7"):format(tostring(src), tostring(jobId)))
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -1121,12 +1122,18 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
+    print(("^2[AUST_Trucker Server] StartLCContractForPlayer: src=%s, citizenId=%s, contractId=%s, typeOverride=%s^7"):format(
+        tostring(src), tostring(citizenId), tostring(contractId), tostring(contractTypeOverride)
+    ))
 
     local now = os.time()
     if StartingJobLock[citizenId] or ActiveLCContracts[citizenId] or JobService.GetActiveByPlayer(citizenId) then
+        print(("^3[AUST_Trucker Server] Player %s BLOCKED: Already has active contract (ActiveLC: %s, JobService: %s, Lock: %s)^7"):format(
+            tostring(citizenId), tostring(ActiveLCContracts[citizenId]), tostring(JobService.GetActiveByPlayer(citizenId) ~= nil), tostring(StartingJobLock[citizenId])
+        ))
         if not LastNotifyTime[citizenId] or (now - LastNotifyTime[citizenId] >= 3) then
             LastNotifyTime[citizenId] = now
-            TriggerClientEvent('aurp_trucker:notify', src, 'Você já possui uma entrega ativa!', 'error')
+            TriggerClientEvent('aurp_trucker:notify', src, 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', 'error')
         end
         return
     end
@@ -1254,6 +1261,54 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         load.trailer, payment, dist, contractType, adr, fragile, valuable, fast, illegal
     })
 
+    -- OneSync Server-Side Spawn & Dual-Layer Key Management
+    local truckNetId = nil
+    local truckPlate = nil
+    local truckEntity = nil
+
+    if isQuickJob and truckSpawn then
+        local modelHash = joaat(truckModel or 'hauler')
+        truckEntity = CreateVehicle(modelHash, truckSpawn.x, truckSpawn.y, truckSpawn.z, truckSpawn.w, true, true)
+        while not DoesEntityExist(truckEntity) do Wait(10) end
+
+        truckPlate = ("TRK%05d"):format(math.random(10000, 99999))
+        SetVehicleNumberPlateText(truckEntity, truckPlate)
+        SetVehicleDoorsLocked(truckEntity, 1)
+
+        print(("[AUST_Trucker] Quick Job truck spawned with plate: %s for player %s"):format(truckPlate, tostring(src)))
+
+        -- Dual-Layer Key Assignment:
+        -- 1. ox_inventory physical item
+        local keyMetadata = {
+            plate = truckPlate,
+            description = "Chave do Veículo - " .. truckPlate
+        }
+        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
+        if not added then
+            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+        end
+
+        -- 2. Framework key registration
+        if exports.qbx_vehiclekeys then
+            pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, truckEntity) end)
+            pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, truckPlate) end)
+        elseif exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:GiveKeys(truckPlate) end)
+        end
+        TriggerClientEvent('aurp_trucker:client:giveVehicleKeys', src, truckPlate)
+
+        truckNetId = NetworkGetNetworkIdFromEntity(truckEntity)
+    elseif not isQuickJob then
+        local myTrucks = TruckFleetService and TruckFleetService.GetPlayerTrucks and TruckFleetService.GetPlayerTrucks(citizenId)
+        local ownedPlate = (myTrucks and myTrucks[1] and myTrucks[1].plate) or nil
+        if ownedPlate then
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, ownedPlate) end)
+            end
+            TriggerClientEvent('aurp_trucker:client:giveVehicleKeys', src, ownedPlate)
+        end
+    end
+
     ActiveLCContracts[citizenId] = jobId
     ActiveLCContractData[jobId] = {
         jobId = jobId,
@@ -1263,6 +1318,9 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         isParty = false,
         deliveryCoords = dest,
         cargoName = load.name,
+        truckPlate = truckPlate,
+        truckEntity = truckEntity,
+        truckNetId = truckNetId,
     }
     StartingJobLock[citizenId] = nil
 
@@ -1274,6 +1332,8 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         isQuickJob = isQuickJob,
         contractType = contractType,
         truckModel = isQuickJob and truckModel or nil,
+        truckNetId = truckNetId,
+        truckPlate = truckPlate,
         trailerModel = load.trailer,
         truckSpawn = isQuickJob and truckSpawn or nil,
         trailerSpawn = trailerSpawn,
@@ -1506,14 +1566,87 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
 end
 
 RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId, contractType, isParty)
+    local src = source
+    print(("^2[AUST_Trucker Server] aurp_trucker:server:startLCContract received from src %s (contractId: %s, type: %s, isParty: %s)^7"):format(
+        tostring(src), tostring(contractId), tostring(contractType), tostring(isParty)
+    ))
     if isParty then
-        StartPartyLCContract(source, contractId, contractType)
+        StartPartyLCContract(src, contractId, contractType)
     else
-        StartLCContractForPlayer(source, contractId, contractType)
+        StartLCContractForPlayer(src, contractId, contractType)
     end
 end)
 
+RegisterNetEvent('aurp_trucker:server:cancelActiveLCContract', function()
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local jobId = ActiveLCContracts[citizenId]
+    if jobId and ActiveLCContractData[jobId] then
+        local contractInfo = ActiveLCContractData[jobId]
+        local truckPlate = contractInfo.truckPlate
+        if truckPlate then
+            pcall(function()
+                local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+                if not removed then
+                    exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+                end
+            end)
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+            end
+            print(("[AUST_Trucker] Cancelled job: key stripped for plate %s"):format(truckPlate))
+        end
+        if contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+            DeleteEntity(contractInfo.truckEntity)
+        end
+        ActiveLCContractData[jobId] = nil
+    end
+
+    ActiveLCContracts[citizenId] = nil
+    StartingJobLock[citizenId] = nil
+    print(("[AUST_Trucker Server] Cancelled active contract for player %s (src: %s)"):format(tostring(citizenId), tostring(src)))
+    TriggerClientEvent('aurp_trucker:notify', src, 'Contrato Cancelado', 'Sua entrega foi cancelada e os veículos foram removidos.', 'info')
+end)
+
+RegisterNetEvent('truck_logistics:cancelContract', function(location, data)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local jobId = ActiveLCContracts[citizenId]
+    if jobId and ActiveLCContractData[jobId] then
+        local contractInfo = ActiveLCContractData[jobId]
+        local truckPlate = contractInfo.truckPlate
+        if truckPlate then
+            pcall(function()
+                local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+                if not removed then
+                    exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+                end
+            end)
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+            end
+        end
+        if contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+            DeleteEntity(contractInfo.truckEntity)
+        end
+        ActiveLCContractData[jobId] = nil
+    end
+
+    ActiveLCContracts[citizenId] = nil
+    StartingJobLock[citizenId] = nil
+    print(("[AUST_Trucker Server] truck_logistics:cancelContract processed for player %s"):format(tostring(citizenId)))
+    TriggerClientEvent('aurp_trucker:notify', src, 'Contrato Cancelado', 'Sua entrega foi cancelada.', 'info')
+end)
+
 RegisterNetEvent('truck_logistics:startContract', function(location, data)
+    local src = source
+    print(("^2[AUST_Trucker Server] truck_logistics:startContract received from src %s^7"):format(tostring(src)))
     local contractId = nil
     local contractType = nil
     local isParty = false
@@ -1527,13 +1660,15 @@ RegisterNetEvent('truck_logistics:startContract', function(location, data)
         contractId = location
     end
     if isParty then
-        StartPartyLCContract(source, contractId, contractType)
+        StartPartyLCContract(src, contractId, contractType)
     else
-        StartLCContractForPlayer(source, contractId, contractType)
+        StartLCContractForPlayer(src, contractId, contractType)
     end
 end)
 
 RegisterNetEvent('truck_logistics:makeContract', function(location, data)
+    local src = source
+    print(("^2[AUST_Trucker Server] truck_logistics:makeContract received from src %s^7"):format(tostring(src)))
     local contractId = nil
     local contractType = nil
     local isParty = false
@@ -1547,9 +1682,9 @@ RegisterNetEvent('truck_logistics:makeContract', function(location, data)
         contractId = location
     end
     if isParty then
-        StartPartyLCContract(source, contractId, contractType)
+        StartPartyLCContract(src, contractId, contractType)
     else
-        StartLCContractForPlayer(source, contractId, contractType)
+        StartLCContractForPlayer(src, contractId, contractType)
     end
 end)
 
@@ -1640,6 +1775,26 @@ local function FinishQuickJobContract(src, jobId, damages)
 
     -- Logística 2.0: Persistência em aust_trucker_stats
     pcall(DB_UpdateAustTruckerStats, citizenId, xpResult and xpResult.xpGained or 200, 1)
+
+    -- Step C: Key Removal & Vehicle Deletion on Finish
+    local contractInfo = ActiveLCContractData[jobId]
+    local truckPlate = contractInfo and contractInfo.truckPlate
+    if truckPlate then
+        pcall(function()
+            local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+            if not removed then
+                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+            end
+        end)
+        if exports.qbx_vehiclekeys then
+            pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+        end
+        print(("[AUST_Trucker] Vehicle key stripped for plate %s from player %s"):format(truckPlate, tostring(src)))
+    end
+    if contractInfo and contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+        DeleteEntity(contractInfo.truckEntity)
+    end
+    ActiveLCContractData[jobId] = nil
 
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
