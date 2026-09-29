@@ -64,6 +64,25 @@ function ForkliftModule.GetNearestGroundPallet(forklift)
     return bestEntity
 end
 
+local function GetTrailerAttachOffset(trailer, loadedIndex)
+    if trailer and DoesEntityExist(trailer) and Config and Config.Polarix and Config.Polarix.CompatibleTrailers then
+        local model = GetEntityModel(trailer)
+        for tName, tData in pairs(Config.Polarix.CompatibleTrailers) do
+            if joaat(tName) == model and tData.attachOffsets then
+                local offset = tData.attachOffsets[loadedIndex + 1]
+                if offset then
+                    return offset.x, offset.y, offset.z
+                end
+            end
+        end
+    end
+    -- Fallback dinâmico organizado em fileiras duplas
+    local col = (loadedIndex % 2 == 0) and -0.55 or 0.55
+    local row = math.floor(loadedIndex / 2)
+    local yOffset = 3.0 - (row * 2.2)
+    return col, yOffset, -0.85
+end
+
 function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb)
     OperationActive = true
     local loadedCount = 0
@@ -88,10 +107,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             local _, boneIndex = GetForkliftForksCoords(forklift)
                             FreezeEntityPosition(targetPallet, false)
 
-                            -- STEP 6: Fixação autoritativa do palete nos garfos com colisão desativada
+                            -- Fixação autoritativa do palete nos garfos com colisão desativada
                             AttachEntityToEntity(
                                 targetPallet, forklift, boneIndex,
-                                0.0, 1.2, -0.4,
+                                0.0, 1.25, -0.15,
                                 0.0, 0.0, 0.0,
                                 false, false, false, false, 2, true
                             )
@@ -132,11 +151,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local palletEntity = CurrentForkliftPallet
                                 DetachEntity(palletEntity, true, true)
 
-                                -- STEP 6: Cálculo dinâmico do deslocamento longitudinal
-                                local yOffset = -0.5 - (loadedCount * 1.5)
+                                -- ETAPA 5: Fixação calculada do palete na caçamba do reboque
+                                local ox, oy, oz = GetTrailerAttachOffset(trailer, loadedCount)
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
-                                    0.0, yOffset, 0.1,
+                                    ox, oy, oz,
                                     0.0, 0.0, 0.0,
                                     false, false, true, false, 2, true
                                 )

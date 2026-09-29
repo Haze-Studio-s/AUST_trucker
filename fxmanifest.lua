@@ -124,3 +124,5 @@ data_file 'VEHICLE_METADATA_FILE' 'data/vetirs_vehicles.meta'
 data_file 'VEHICLE_VARIATION_FILE' 'data/vetirs_carvariations.meta'
 data_file 'DLC_TEXT_FILE' 'data/vetirs_dlctext.meta'
 
+data_file 'DLC_ITYP_REQUEST' 'stream/sm3d_prop_logi_shelf_def.ytyp'
+data_file 'DLC_ITYP_REQUEST' 'stream/sm3d_prop_pallets_def.ytyp'

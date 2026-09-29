@@ -13,16 +13,15 @@ Config.Polarix = {
 
     -- Modelos de Paletes Oficiais do Polarix e Base GTA
     PalletModels = {
-        'ex_prop_crate_tob_sc',
+        'sm3d_prop_pallet_1',
+        'sm3d_prop_pallet_2',
+        'sm3d_prop_pallet_1_rep',
         'prop_boxpile_06a',
         'prop_boxpile_07d',
-        'prop_boxpile_02b',
         'prop_pallet_01a',
-        'prop_contr_03b_ld',
-        'sm3d_prop_pallet_1', -- Suporte nativo ao custom stream se presente
     },
 
-    DefaultPalletModel = 'prop_boxpile_06a',
+    DefaultPalletModel = 'sm3d_prop_pallet_1',
     ContainerModel = 'prop_contr_03b_ld',
 
     PalletWeightKg = 1000,
