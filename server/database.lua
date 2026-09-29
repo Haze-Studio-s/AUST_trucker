@@ -601,15 +601,28 @@ end
 -- ============================================================
 
 function DB_InsertJob(job, convoyId)
-    -- job = { id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal }
-    -- convoyId: VARCHAR(36) opcional — nil para jobs individuais
+    local cargoType = tonumber(job.cargo_type)
+    if not cargoType and type(job.cargo_type) == 'string' then
+        local adrMap = {
+            ['explosives'] = 1,
+            ['gases'] = 2,
+            ['flammable_liquid'] = 3,
+            ['flammable_solids'] = 4,
+            ['toxic'] = 5,
+            ['corrosives'] = 6,
+            ['environmental'] = 5
+        }
+        cargoType = adrMap[job.cargo_type] or 0
+    end
+    cargoType = cargoType or 0
+
     return MySQL.insert.await(
         [[INSERT INTO trucker_jobs
           (id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, convoy_id, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal)
           VALUES (?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), ?, ?, ?, ?, ?, ?, ?, ?, ?)]],
         { job.id, job.origin_id, job.dest_id, job.cargo_item, job.trailer_model,
           job.base_payment, job.distance, job.expires_at, convoyId or nil, job.cargo_qty or 1, job.weight or 80,
-          job.contract_type or 0, job.cargo_type or job.cargo_item, job.fragile or 0, job.valuable or 0, job.fast or 0, job.illegal or 0 }
+          tonumber(job.contract_type) or 0, cargoType, tonumber(job.fragile) or 0, tonumber(job.valuable) or 0, tonumber(job.fast) or 0, tonumber(job.illegal) or 0 }
     )
 end
 
