@@ -42,13 +42,12 @@ Config.Polarix = {
         },
 
         TrailerSpawns = {
-            vector4(1244.53, -3135.57, 4.53, 90.0),
-            vector4(1244.53, -3135.57, 4.53, 90.0),
-            vector4(1272.81, -3098.0, 4.9, 90.0),
-            vector4(1272.81, -3098.0, 4.9, 90.0),
-            vector4(1272.81, -3098.0, 4.9, 90.0),
-            vector4(1272.81, -3098.0, 4.9, 90.0),
-            vector4(1272.81, -3098.0, 4.9, 90.0),
+            vector4(1272.21, -3159.80, 4.90, 90.0),
+            vector4(1274.77, -3169.75, 4.90, 90.0),
+            vector4(1276.19, -3184.77, 4.90, 90.0),
+            vector4(1274.23, -3124.46, 4.90, 90.0),
+            vector4(1275.04, -3097.47, 4.90, 90.0),
+            vector4(1275.68, -3192.90, 4.90, 90.0),
         },
 
         ForkliftSpawns = {
@@ -69,7 +68,7 @@ Config.Polarix = {
 
         -- Compatibilidade e Fallbacks
         TruckSpawnCoords = vector4(1245.79, -3155.76, 4.6, 90.0),
-        TrailerSpawnCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
+        TrailerSpawnCoords = vector4(1272.21, -3159.80, 4.90, 90.0),
         ForkliftBayCoords = vector4(1246.26, -3168.81, 4.63, 90.0),
         HandlerBayCoords = vector4(1240.20, -3195.10, 5.88, 270.00),
         LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
@@ -80,13 +79,12 @@ Config.Polarix = {
     LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
 
     TrailerSpawns = {
-        vector4(1244.53, -3135.57, 4.53, 90.0),
-        vector4(1244.53, -3135.57, 4.53, 90.0),
-        vector4(1272.81, -3098.0, 4.9, 90.0),
-        vector4(1272.81, -3098.0, 4.9, 90.0),
-        vector4(1272.81, -3098.0, 4.9, 90.0),
-        vector4(1272.81, -3098.0, 4.9, 90.0),
-        vector4(1272.81, -3098.0, 4.9, 90.0),
+        vector4(1272.21, -3159.80, 4.90, 90.0),
+        vector4(1274.77, -3169.75, 4.90, 90.0),
+        vector4(1276.19, -3184.77, 4.90, 90.0),
+        vector4(1274.23, -3124.46, 4.90, 90.0),
+        vector4(1275.04, -3097.47, 4.90, 90.0),
+        vector4(1275.68, -3192.90, 4.90, 90.0),
     },
 
     -- Configuração e Offsets de Empilhadeira (Forklift) - Extraído do Polarix

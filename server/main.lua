@@ -427,11 +427,11 @@ local function StartTruckDelivery(src, contractData)
     print(("[AUST_Trucker] Vehicle spawned unlocked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
     -- STEP B: TRAILER SPAWN
-    local trailerSpawns = Config.TrailerSpawns or (wh and (wh.TrailerSpawns or wh.CargoSpawns)) or { wh.TrailerSpawnCoords }
+    local trailerSpawns = Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
     local trailer = nil
 
     for _, coord in ipairs(trailerSpawns) do
-        if IsSpawnPointClear(coord, 8.0, { [truck] = true }) then
+        if IsSpawnPointClear(coord, 9.0, { [truck] = true }) then
             trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
@@ -449,6 +449,7 @@ local function StartTruckDelivery(src, contractData)
 
     SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
+    SetVehicleDoorsLocked(trailer, 1)
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
     local forklift = nil
