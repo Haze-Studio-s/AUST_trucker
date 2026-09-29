@@ -15,6 +15,7 @@ dependencies {
 
 shared_scripts {
     '@ox_lib/init.lua',
+    'shared/config.lua',
     'config/config.lua',
     'config/logistics_config.lua',
     'lang/br.lua',
@@ -59,6 +60,8 @@ server_scripts {
 }
 
 client_scripts {
+    'client/modules/forklift.lua',
+    'client/main.lua',
     'client/carry_system.lua',             -- v19: CarrySystem (antes de todos)
     'client/client.lua',
     'client/hud.client.lua',
