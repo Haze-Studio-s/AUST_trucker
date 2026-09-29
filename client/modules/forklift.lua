@@ -83,6 +83,35 @@ local function GetTrailerAttachOffset(trailer, loadedIndex)
     return col, yOffset, 0.35
 end
 
+local function AttachPalletToForklift(forklift, pallet)
+    -- 1. Garante controle de rede sobre o prop
+    local timeout = 2000
+    while not NetworkHasControlOfEntity(pallet) and timeout > 0 do
+        NetworkRequestControlOfEntity(pallet)
+        Wait(50)
+        timeout = timeout - 50
+    end
+
+    -- 2. Descongela a posição no mundo
+    FreezeEntityPosition(pallet, false)
+
+    -- 3. Desativa colisões temporariamente para não colidir com os garfos/chassi
+    SetEntityCollision(pallet, false, false)
+
+    -- 4. Anexa ao bone 'forks' da empilhadeira
+    local forkBone = GetEntityBoneIndexByName(forklift, 'forks')
+    if forkBone == -1 then forkBone = 0 end
+
+    AttachEntityToEntity(
+        pallet, 
+        forklift, 
+        forkBone, 
+        0.0, 1.2, -0.15, -- Ajuste fino de offset nos garfos
+        0.0, 0.0, 0.0, 
+        false, false, false, false, 2, true
+    )
+end
+
 function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb)
     OperationActive = true
     local loadedCount = 0
@@ -104,17 +133,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
 
                         if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                            local _, boneIndex = GetForkliftForksCoords(forklift)
-                            FreezeEntityPosition(targetPallet, false)
-
-                            -- Fixação autoritativa do palete nos garfos com colisão desativada
-                            AttachEntityToEntity(
-                                targetPallet, forklift, boneIndex,
-                                0.0, 1.25, -0.15,
-                                0.0, 0.0, 0.0,
-                                false, false, false, false, 2, true
-                            )
-                            SetEntityCollision(targetPallet, false, false)
+                            AttachPalletToForklift(forklift, targetPallet)
 
                             CurrentForkliftPallet = targetPallet
                             PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
@@ -149,6 +168,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
                                 local palletEntity = CurrentForkliftPallet
+
+                                -- Garante controle de rede antes de desanexar/anexar
+                                local timeout = 2000
+                                while not NetworkHasControlOfEntity(palletEntity) and timeout > 0 do
+                                    NetworkRequestControlOfEntity(palletEntity)
+                                    Wait(50)
+                                    timeout = timeout - 50
+                                end
+
                                 DetachEntity(palletEntity, true, true)
 
                                 -- Fixação calculada do palete na caçamba do reboque

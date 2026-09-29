@@ -23,8 +23,12 @@ local JobEntities = {
 
 local ActiveDeliveryPoint = nil
 local DockWatcherPoint = nil
+local hasRopes = false
 local HasRopes = false
-local LoadedPalletData = {}
+local currentStrappingIndex = 1
+local LoadedPallets = {}
+local LoadedPalletData = LoadedPallets
+Config.LoadedPallets = LoadedPallets
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -243,9 +247,10 @@ local function CleanupCurrentJob()
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.forklift) end)
     end
 
-    if LoadedPalletData then
-        for _, pData in ipairs(LoadedPalletData) do
+    if LoadedPallets then
+        for idx, pData in ipairs(LoadedPallets) do
             if pData.entity and DoesEntityExist(pData.entity) then
+                pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'tie_pallet_' .. idx) end)
                 pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
             end
         end
@@ -253,8 +258,12 @@ local function CleanupCurrentJob()
 
     ActiveJob = nil
     CurrentStage = 'IDLE'
+    hasRopes = false
     HasRopes = false
-    LoadedPalletData = {}
+    currentStrappingIndex = 1
+    LoadedPallets = {}
+    LoadedPalletData = LoadedPallets
+    Config.LoadedPallets = LoadedPallets
     JobEntities = { truck = nil, trailer = nil, forklift = nil, pallets = {} }
     SetWaypointOff()
 end
@@ -402,74 +411,91 @@ end
 -- ETAPA 6 & 7: SISTEMA DE CORDAS E AMARRAÇÃO INDIVIDUAL (PALETE A PALETE)
 -- =======================================================================
 
+local function StartTyingPallet(index)
+    local palletData = LoadedPallets[index]
+    if not palletData then return end
+
+    -- 1. Executa o minigame de perícia lib.skillCheck
+    local passed = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
+
+    lib.progressBar({
+        duration = 2500,
+        label = 'Ajustando cinta de carga...',
+        useWhileDead = false,
+        canCancel = false,
+        disable = { move = true, car = true, combat = true },
+        anim = {
+            dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+            clip = 'machinic_loop_meano',
+            flag = 49
+        }
+    })
+
+    -- 2. Define LoadedPallets[index].isSecured = true e nível de risco
+    palletData.isSecured = true
+
+    if passed then
+        palletData.riskLevel = 0
+        PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+        SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
+    else
+        palletData.riskLevel = 'high'
+        PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+        SendMissionNotify('Central Logística', 'A amarração ficou frouxa! Cuidado nas curvas para a corda não arrebentar.', 'warning')
+    end
+
+    -- 3. Remove a opção de target desse palete já concluído
+    pcall(function() exports.ox_target:removeLocalEntity(palletData.entity, 'tie_pallet_' .. index) end)
+
+    -- 4. Incrementa o índice ativo
+    currentStrappingIndex = currentStrappingIndex + 1
+
+    -- 5. SE currentStrappingIndex <= #LoadedPallets
+    if currentStrappingIndex <= #LoadedPallets then
+        local nextPallet = LoadedPallets[currentStrappingIndex]
+        if nextPallet and nextPallet.entity and DoesEntityExist(nextPallet.entity) then
+            UpdateMissionObjective('pallet', nextPallet.entity, ('Amarrar Palete (%d/%d)'):format(currentStrappingIndex, #LoadedPallets))
+        end
+        SendMissionNotify('Central Logística', ('Palete %s amarrado! Vá para o palete %s.'):format(index, currentStrappingIndex), 'info')
+    else
+        -- 6. SE todos foram amarrados (currentStrappingIndex > #LoadedPallets)
+        ClearObjectiveMarkers(false)
+        hasRopes = false
+        HasRopes = false
+        SendMissionNotify('Central Logística', 'Todos os paletes foram amarrados com sucesso! Siga a rota de entrega.', 'success')
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+    end
+end
+
 local function StartStrappingPalletsStage()
     CurrentStage = 'STEP_7_STRAP_PALLETS'
     ClearObjectiveMarkers(false)
+    currentStrappingIndex = 1
 
-    local function UpdateNextPalletObjective()
-        local targetPalletData = nil
-        for _, pData in ipairs(LoadedPalletData) do
-            if not pData.isSecured and not pData.lost and pData.entity and DoesEntityExist(pData.entity) then
-                targetPalletData = pData
-                break
-            end
-        end
-
-        if targetPalletData then
-            UpdateMissionObjective('pallet', targetPalletData.entity, 'Amarrar Palete')
-        else
-            -- Todos os paletes foram amarrados! Avança para o destino final
-            ClearObjectiveMarkers(false)
-            SendMissionNotify('Central Logística', 'Todos os paletes amarrados com sucesso! Carga pronta para transporte.', 'success')
-            TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
-        end
+    if #LoadedPallets == 0 then
+        SendMissionNotify('Central Logística', 'Nenhum palete para amarrar! Siga para a entrega.', 'info')
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        return
     end
 
-    UpdateNextPalletObjective()
+    -- Seta verde diretamente no primeiro palete pendente
+    if LoadedPallets[1] and LoadedPallets[1].entity and DoesEntityExist(LoadedPallets[1].entity) then
+        UpdateMissionObjective('pallet', LoadedPallets[1].entity, ('Amarrar Palete (1/%d)'):format(#LoadedPallets))
+    end
 
-    for idx, pData in ipairs(LoadedPalletData) do
-        local pEnt = pData.entity
-        if pEnt and DoesEntityExist(pEnt) then
-            exports.ox_target:addLocalEntity(pEnt, {
+    for index, palletData in ipairs(LoadedPallets) do
+        if palletData.entity and DoesEntityExist(palletData.entity) then
+            exports.ox_target:addLocalEntity(palletData.entity, {
                 {
-                    name = 'aust_strap_pallet_' .. idx,
-                    icon = 'fa-solid fa-boxes-packing',
-                    label = 'Amarrar Palete',
+                    name = 'tie_pallet_' .. index,
+                    icon = 'fas fa-tape',
+                    label = ('Amarrar Palete (%s/%s)'):format(index, #LoadedPallets),
                     distance = 2.8,
-                    canInteract = function()
-                        return CurrentStage == 'STEP_7_STRAP_PALLETS' and HasRopes and not pData.isSecured and not IsPedInAnyVehicle(cache.ped, false)
+                    canInteract = function(entity)
+                        return (hasRopes or HasRopes) and not palletData.isSecured and currentStrappingIndex == index and not IsPedInAnyVehicle(cache.ped, false)
                     end,
-                    onSelect = function()
-                        -- Minigame de perícia lib.skillCheck
-                        local passed = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
-
-                        lib.progressBar({
-                            duration = 2500,
-                            label = 'Ajustando cinta de carga...',
-                            useWhileDead = false,
-                            canCancel = false,
-                            disable = { move = true, car = true, combat = true },
-                            anim = {
-                                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
-                                clip = 'machinic_loop_meano',
-                                flag = 49
-                            }
-                        })
-
-                        pData.isSecured = true
-                        pcall(function() exports.ox_target:removeLocalEntity(pEnt, 'aust_strap_pallet_' .. idx) end)
-
-                        if passed then
-                            pData.riskLevel = 0
-                            PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                            SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
-                        else
-                            pData.riskLevel = 'high'
-                            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-                            SendMissionNotify('Central Logística', 'A amarração ficou frouxa! Cuidado nas curvas para a corda não arrebentar.', 'warning')
-                        end
-
-                        UpdateNextPalletObjective()
+                    onSelect = function(data)
+                        StartTyingPallet(index)
                     end
                 }
             })
@@ -480,7 +506,9 @@ end
 local function SetupRopesStage()
     CurrentStage = 'STEP_6_GET_ROPES'
     ClearObjectiveMarkers(false)
+    hasRopes = false
     HasRopes = false
+    currentStrappingIndex = 1
 
     SendMissionNotify('Central Logística', 'Carregamento finalizado! Vá até a lateral do caminhão e pegue as cintas de amarração.', 'info')
 
@@ -497,7 +525,7 @@ local function SetupRopesStage()
             label = 'Pegar Cintas/Cordas de Amarração',
             distance = 2.8,
             canInteract = function()
-                return CurrentStage == 'STEP_6_GET_ROPES' and not HasRopes and not IsPedInAnyVehicle(cache.ped, false)
+                return CurrentStage == 'STEP_6_GET_ROPES' and not hasRopes and not HasRopes and not IsPedInAnyVehicle(cache.ped, false)
             end,
             onSelect = function()
                 local ok = lib.progressBar({
@@ -514,6 +542,7 @@ local function SetupRopesStage()
                 })
 
                 if ok then
+                    hasRopes = true
                     HasRopes = true
                     PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
                     SendMissionNotify('Central Logística', 'Cintas recolhidas! Amarre cada palete individualmente no reboque.', 'info')
@@ -534,8 +563,9 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
     ClearObjectiveMarkers(false)
 
     -- Remove eventuais alvos remanescentes nos paletes
-    for _, pData in ipairs(LoadedPalletData) do
+    for idx, pData in ipairs(LoadedPallets) do
         if pData.entity and DoesEntityExist(pData.entity) then
+            pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'tie_pallet_' .. idx) end)
             pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
         end
     end
@@ -678,7 +708,7 @@ lib.onCache('vehicle', function(veh)
                     end
                 elseif action == 'dropped' then
                     -- Registra o palete carregado para a futura amarração individual
-                    table.insert(LoadedPalletData, {
+                    table.insert(LoadedPallets, {
                         entity = palletEnt,
                         isSecured = false,
                         riskLevel = 0,
