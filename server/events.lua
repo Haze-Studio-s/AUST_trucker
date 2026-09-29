@@ -1291,7 +1291,6 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         -- 2. Framework key registration
         if exports.qbx_vehiclekeys then
             pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, truckEntity) end)
-            pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, truckPlate) end)
         elseif exports['qb-vehiclekeys'] then
             pcall(function() exports['qb-vehiclekeys']:GiveKeys(truckPlate) end)
         end
@@ -1302,9 +1301,6 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         local myTrucks = TruckFleetService and TruckFleetService.GetPlayerTrucks and TruckFleetService.GetPlayerTrucks(citizenId)
         local ownedPlate = (myTrucks and myTrucks[1] and myTrucks[1].plate) or nil
         if ownedPlate then
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(src, ownedPlate) end)
-            end
             TriggerClientEvent('aurp_trucker:client:giveVehicleKeys', src, ownedPlate)
         end
     end
@@ -1594,8 +1590,8 @@ RegisterNetEvent('aurp_trucker:server:cancelActiveLCContract', function()
                     exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
                 end
             end)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+            if exports.qbx_vehiclekeys and contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, contractInfo.truckEntity) end)
             end
             print(("[AUST_Trucker] Cancelled job: key stripped for plate %s"):format(truckPlate))
         end
@@ -1628,8 +1624,8 @@ RegisterNetEvent('truck_logistics:cancelContract', function(location, data)
                     exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
                 end
             end)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+            if exports.qbx_vehiclekeys and contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+                pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, contractInfo.truckEntity) end)
             end
         end
         if contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
@@ -1786,8 +1782,8 @@ local function FinishQuickJobContract(src, jobId, damages)
                 exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
             end
         end)
-        if exports.qbx_vehiclekeys then
-            pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, truckPlate) end)
+        if exports.qbx_vehiclekeys and contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
+            pcall(function() exports.qbx_vehiclekeys:RemoveKeys(src, contractInfo.truckEntity) end)
         end
         print(("[AUST_Trucker] Vehicle key stripped for plate %s from player %s"):format(truckPlate, tostring(src)))
     end

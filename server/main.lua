@@ -320,7 +320,6 @@ local function StartTruckDelivery(src, contractData)
     -- 2nd Layer (Framework Permission via qbx_vehiclekeys)
     if exports['qbx_vehiclekeys'] then
         pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
-        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, plate) end)
     end
     if exports['qb-vehiclekeys'] then
         pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
@@ -534,7 +533,6 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
             if lobby.truck and DoesEntityExist(lobby.truck) then
                 pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, lobby.truck) end)
             end
-            pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, truckPlate) end)
         end
         if exports['qb-vehiclekeys'] then
             pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, truckPlate) end)
