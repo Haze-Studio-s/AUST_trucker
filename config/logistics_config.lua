@@ -33,7 +33,8 @@ Config.LC_Headquarters = {
         vector4(1272.68, -3159.19, 5.91, 90.00),
         vector4(1275.37, -3174.52, 5.91, 90.00),
         vector4(1275.04, -3168.83, 5.91, 90.00),
-    }
+    },
+    yard_manager_coords = vector4(1268.50, -3175.20, 5.91, 180.00),
 }
 
 -- Contratos e Cargas do Mercado de Frete & Trabalhos Rápidos
@@ -516,4 +517,12 @@ Config.LC_RepairPrice = {
     wheels = 100,
     body = 100,
     fuel = 10
+}
+
+-- Logística 2.0: Carregamento Físico Manual
+Config.ManualLoading = {
+    Enabled = true,
+    RequiredCrates = 3,
+    PickupDuration = 2500,
+    DepositDuration = 2000,
 }
