@@ -21,3 +21,4 @@ jobs:
         REMOTE_USER: ${{ secrets.VPS_USER }}
         TARGET: /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}
         EXCLUDE: "/.git/, /.github/"
+
