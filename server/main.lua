@@ -180,21 +180,6 @@ MySQL.ready(function()
     ]])
 end)
 
-local function CleanupLobbyEntities(lobby)
-    if not lobby then return end
-    if lobby.truck and DoesEntityExist(lobby.truck) then DeleteEntity(lobby.truck) end
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then DeleteEntity(lobby.trailer) end
-    if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
-    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then DeleteEntity(lobby.hoseProp) end
-    if lobby.pallets then
-        for _, p in ipairs(lobby.pallets) do
-            if p and DoesEntityExist(p) then DeleteEntity(p) end
-        end
-    end
-    if lobby.src and GetPlayerPing(lobby.src) > 0 then
-        SetPlayerRoutingBucket(lobby.src, 0)
-    end
-end
 
 -- =======================================================================
 -- ONESYNC SERVER-SIDE AREA CLEARANCE CHECK
@@ -364,8 +349,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     local jobId = math.random(100000, 999999)
-    local bucketId = 100 + (jobId % 900)
-    SetPlayerRoutingBucket(src, bucketId)
+    local bucketId = 0 -- Mundo compartilhado padrão (Bucket 0)
 
     local wh = Config.Polarix.Warehouse
     local truckModel = joaat(selectedTruckModel)
@@ -429,7 +413,6 @@ local function StartTruckDelivery(src, contractData)
         return
     end
 
-    SetEntityRoutingBucket(truck, bucketId)
     SetEntityDistanceCullingRadius(truck, 400.0)
     SetVehicleNumberPlateText(truck, plate)
 
@@ -479,7 +462,6 @@ local function StartTruckDelivery(src, contractData)
         return
     end
 
-    SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
     SetVehicleDoorsLocked(trailer, 1)
 
@@ -511,7 +493,6 @@ local function StartTruckDelivery(src, contractData)
             return
         end
 
-        SetEntityRoutingBucket(forklift, bucketId)
         SetEntityDistanceCullingRadius(forklift, 350.0)
 
         -- Placa, destrancamento e chaves imediatas da empilhadeira
@@ -550,7 +531,6 @@ local function StartTruckDelivery(src, contractData)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
-                    SetEntityRoutingBucket(pObj, bucketId)
                     SetEntityDistanceCullingRadius(pObj, 350.0)
                     FreezeEntityPosition(pObj, true)
                     ignoreEntities[pObj] = true
@@ -578,7 +558,6 @@ local function StartTruckDelivery(src, contractData)
                     local waitTimer = GetGameTimer()
                     while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                     if DoesEntityExist(pObj) then
-                        SetEntityRoutingBucket(pObj, bucketId)
                         SetEntityDistanceCullingRadius(pObj, 350.0)
                         FreezeEntityPosition(pObj, true)
                         ignoreEntities[pObj] = true
@@ -815,7 +794,6 @@ RegisterNetEvent('aurp_trucker:server:pickupHose', function(jobId, terminalId)
     local hoseModel = joaat('prop_cs_fuel_nozle')
     local hoseObj = CreateObject(hoseModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
     while not DoesEntityExist(hoseObj) do Wait(10) end
-    SetEntityRoutingBucket(hoseObj, lobby.bucketId)
     SetEntityDistanceCullingRadius(hoseObj, 200.0)
 
     lobby.hoseProp = hoseObj
@@ -909,15 +887,6 @@ RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
     lobby.stage = 'STATUS_IN_TRANSIT'
     lobby.loadedCount = 100
 
-    -- Migração suave para o Routing Bucket 0 (mundo aberto)
-    SetPlayerRoutingBucket(src, 0)
-    if lobby.truck and DoesEntityExist(lobby.truck) then
-        SetEntityRoutingBucket(lobby.truck, 0)
-    end
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        SetEntityRoutingBucket(lobby.trailer, 0)
-    end
-
     TriggerClientEvent('aurp_trucker:client:liquidLoadingCompleted', src, jobId, lobby.deliveryCoords)
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -930,15 +899,6 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     if lobby.loadedCount < lobby.requiredCount then return end
 
     lobby.stage = 'STATUS_IN_TRANSIT'
-
-    -- Migração suave para o Routing Bucket 0 (mundo aberto)
-    SetPlayerRoutingBucket(src, 0)
-    if lobby.truck and DoesEntityExist(lobby.truck) then
-        SetEntityRoutingBucket(lobby.truck, 0)
-    end
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        SetEntityRoutingBucket(lobby.trailer, 0)
-    end
 
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -1094,7 +1054,6 @@ RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId
         SetEntityCoords(lobby.forklift, chosenCoord.x, chosenCoord.y, chosenCoord.z, false, false, false, true)
     else
         local forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), chosenCoord.x, chosenCoord.y, chosenCoord.z, chosenCoord.w or 90.0, true, true)
-        SetEntityRoutingBucket(forklift, lobby.bucketId)
         lobby.forklift = forklift
     end
 

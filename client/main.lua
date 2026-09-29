@@ -340,6 +340,10 @@ local function HandleStartDeliveryNUI(data, cb)
     SendNUIMessage({ action = 'closeUI' })
     SendNUIMessage({ action = 'hide' })
 
+    local ped = cache.ped or PlayerPedId()
+    SetEntityVisible(ped, true)
+    ResetEntityAlpha(ped)
+
     if ActiveJob then
         SendMissionNotify('Central Logística', 'Você já possui uma rota ou entrega em andamento!', 'error')
         if cb then cb({ ok = false, message = 'Já em serviço' }) end
@@ -815,11 +819,17 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
+        local playerPed = cache.ped or PlayerPedId()
+        SetEntityVisible(playerPed, true)
+        ResetEntityAlpha(playerPed)
+
         JobEntities.truck = truck
         JobEntities.trailer = trailer
         JobEntities.forklift = forklift
 
         if truck and DoesEntityExist(truck) then
+            SetEntityVisible(truck, true)
+            ResetEntityAlpha(truck)
             SetVehicleOnGroundProperly(truck)
             SetEntityCollision(truck, true, true)
             SetVehicleDoorsLocked(truck, 1)
@@ -847,6 +857,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         end
 
         if trailer and DoesEntityExist(trailer) then
+            SetEntityVisible(trailer, true)
+            ResetEntityAlpha(trailer)
             SetVehicleOnGroundProperly(trailer)
             SetEntityCollision(trailer, true, true)
             SetVehicleDoorsLocked(trailer, 1)
@@ -854,6 +866,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         end
 
         if forklift and DoesEntityExist(forklift) then
+            SetEntityVisible(forklift, true)
+            ResetEntityAlpha(forklift)
             SetVehicleOnGroundProperly(forklift)
             SetEntityCollision(forklift, true, true)
             SetVehicleDoorsLocked(forklift, 1)
@@ -888,6 +902,8 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                 if NetworkDoesNetworkIdExist(netId) then
                     local ent = NetworkGetEntityFromNetworkId(netId)
                     if DoesEntityExist(ent) then
+                        SetEntityVisible(ent, true)
+                        ResetEntityAlpha(ent)
                         PlaceObjectOnGroundProperly(ent)
                         SetEntityCollision(ent, true, true)
                         FreezeEntityPosition(ent, true)
