@@ -58,6 +58,66 @@ end
 -- ETAPA 1: INÍCIO DE TURNO E CONTRATO (NPC DESPACHANTE OX_TARGET)
 -- =======================================================================
 
+local function OpenPolarixContractMenu()
+    if ActiveJob then
+        lib.notify({ title = 'Logística', description = 'Você já possui um frete ativo em andamento!', type = 'error' })
+        return
+    end
+
+    local options = {
+        {
+            title = 'Carga Industrial: Componentes Eletrônicos',
+            description = 'Destino: Sandy Shores | Recompensa: $6.500 | 4 Paletes',
+            icon = 'boxes-stacked',
+            onSelect = function()
+                TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
+                    name = 'Componentes Eletrônicos',
+                    palletCount = 4,
+                    level_required = 1,
+                    trailerModel = 'trailers2'
+                })
+            end
+        },
+        {
+            title = 'Carga Pesada: Maquinário & Ferramentas',
+            description = 'Destino: Paleto Bay | Recompensa: $8.500 | 6 Paletes',
+            icon = 'pallet',
+            onSelect = function()
+                TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
+                    name = 'Maquinário & Ferramentas',
+                    palletCount = 6,
+                    level_required = 1,
+                    trailerModel = 'trailers2'
+                })
+            end
+        },
+        {
+            title = 'Logística Express: Alimentos Refrigerados',
+            description = 'Destino: Grapeseed | Recompensa: $5.200 | 4 Paletes',
+            icon = 'snowflake',
+            onSelect = function()
+                TriggerServerEvent('aurp_trucker:server:startPolarixContract', {
+                    name = 'Alimentos Refrigerados',
+                    palletCount = 4,
+                    level_required = 1,
+                    trailerModel = 'trailers2'
+                })
+            end
+        }
+    }
+
+    lib.registerContext({
+        id = 'aust_polarix_contract_menu',
+        title = 'Central de Cargas & Paletes',
+        options = options
+    })
+    lib.showContext('aust_polarix_contract_menu')
+end
+
+RegisterCommand('polarixcontract', function()
+    OpenPolarixContractMenu()
+end, false)
+
 CreateThread(function()
     while not Config or not Config.Polarix or not Config.Polarix.Warehouse do Wait(100) end
     local wh = Config.Polarix.Warehouse
@@ -71,6 +131,15 @@ CreateThread(function()
     SetPedCanRagdoll(dispatcherPed, false)
 
     exports.ox_target:addLocalEntity(dispatcherPed, {
+        {
+            name = 'aust_open_polarix_contracts',
+            icon = 'fa-solid fa-clipboard-list',
+            label = 'Contratos de Paletes & Carregamento',
+            distance = 2.5,
+            onSelect = function()
+                OpenPolarixContractMenu()
+            end
+        },
         {
             name = 'aust_open_trucker_tablet',
             icon = 'fa-solid fa-tablet-screen-button',
@@ -310,18 +379,37 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         if truck and DoesEntityExist(truck) then
             SetVehicleOnGroundProperly(truck)
             SetEntityCollision(truck, true, true)
+
+            -- Sincroniza placa e tuning/mods salvos do caminhão próprio
+            if payload.truckPlate and payload.truckPlate ~= '' then
+                SetVehicleNumberPlateText(truck, payload.truckPlate)
+            end
+
+            if payload.truckMods then
+                local modsData = type(payload.truckMods) == 'string' and json.decode(payload.truckMods) or payload.truckMods
+                if modsData and type(modsData) == 'table' then
+                    lib.setVehicleProperties(truck, modsData)
+                end
+            end
+
+            -- Assegura que o caminhão permaneça trancado até a inspeção
+            SetVehicleDoorsLocked(truck, 2)
             SetupVehicleInspection(truck, trailer, payload.jobId)
         end
     end)
 end)
 
-RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId)
+RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truckPlate, truckNetId)
     if not ActiveJob or ActiveJob.jobId ~= jobId then return end
     CurrentStage = 'STATUS_LOADING'
 
     if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
         SetVehicleDoorsLocked(JobEntities.truck, 1)
         SetVehicleNeedsToBeHotwired(JobEntities.truck, false)
+
+        -- Feedback sonoro e visual de destrancar
+        PlaySoundFrontend(-1, "REMOTE_PLYR_DOOR_UNLOCK", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", 1)
+
         if exports.qbx_vehiclekeys then
             pcall(function() exports.qbx_vehiclekeys:GiveKeys(JobEntities.truck) end)
         end
@@ -339,7 +427,7 @@ RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId)
 
     lib.notify({
         title = 'Inspeção Aprovada!',
-        description = 'Chaves entregues! Assuma a empilhadeira na baia demarcada e carregue a carreta.',
+        description = 'Caminhão liberado e chaves recebidas! Vá até a empilhadeira para iniciar o carregamento.',
         type = 'success',
         duration = 8000
     })

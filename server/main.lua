@@ -169,6 +169,7 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
+    contractData = contractData or {}
 
     if PlayerPolarixLobbies[citizenId] then
         TriggerClientEvent('aurp_trucker:notify', src, 'Contrato em Andamento', 'Você já possui uma rota ou contrato em andamento!', 'error')
@@ -185,12 +186,93 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
         return
     end
 
+    -- ETAPA 1.5: Resolução Autoritativa de Caminhão (Frota trucker_trucks ou Garagem player_vehicles vs Alugado)
+    local selectedTruckModel = nil
+    local selectedPlate = nil
+    local savedMods = nil
+    local isOwned = false
+
+    -- 1. Verificação por placa informada no contrato
+    if contractData.truckPlate and contractData.truckPlate ~= '' then
+        local pRow = MySQL.single.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ? AND plate = ? LIMIT 1', { citizenId, contractData.truckPlate })
+        if pRow then
+            selectedTruckModel = pRow.vehicle
+            selectedPlate = pRow.plate
+            savedMods = pRow.mods
+            isOwned = true
+        else
+            local tRow = MySQL.single.await('SELECT truck_name, properties FROM trucker_trucks WHERE user_id = ? AND properties LIKE ? LIMIT 1', { citizenId, '%' .. contractData.truckPlate .. '%' })
+            if tRow then
+                selectedTruckModel = tRow.truck_name
+                selectedPlate = contractData.truckPlate
+                savedMods = tRow.properties
+                isOwned = true
+            end
+        end
+    end
+
+    -- 2. Busca na frota interna do script (trucker_trucks)
+    if not selectedTruckModel then
+        local fleetTrucks = MySQL.query.await('SELECT truck_id, truck_name, properties FROM trucker_trucks WHERE user_id = ? ORDER BY truck_id DESC LIMIT 1', { citizenId })
+        if fleetTrucks and fleetTrucks[1] then
+            local t = fleetTrucks[1]
+            selectedTruckModel = t.truck_name
+            local props = json.decode(t.properties or '{}') or {}
+            selectedPlate = props.plate
+            savedMods = t.properties
+            isOwned = true
+        end
+    end
+
+    -- 3. Busca na garagem de veículos do jogador (player_vehicles) por cavalos mecânicos
+    if not selectedTruckModel then
+        local validModels = {
+            'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'vetirs', 'pounder', 'pounder2', 'biff'
+        }
+        if Config.TruckRental and Config.TruckRental.trucks then
+            for _, trk in ipairs(Config.TruckRental.trucks) do
+                table.insert(validModels, trk.model)
+            end
+        end
+        if Config.LC_Dealership then
+            for k in pairs(Config.LC_Dealership) do
+                table.insert(validModels, k)
+            end
+        end
+
+        local pVehicles = MySQL.query.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ?', { citizenId }) or {}
+        for _, pv in ipairs(pVehicles) do
+            local pvModel = string.lower(pv.vehicle or '')
+            for _, vm in ipairs(validModels) do
+                if pvModel == string.lower(vm) then
+                    selectedTruckModel = pv.vehicle
+                    selectedPlate = pv.plate
+                    savedMods = pv.mods
+                    isOwned = true
+                    break
+                end
+            end
+            if selectedTruckModel then break end
+        end
+    end
+
+    -- 4. Fallback: Caminhão de Serviço Padrão / Alugado
+    if not selectedTruckModel then
+        selectedTruckModel = contractData.truckModel or (Config.Truck and Config.Truck.model) or 'hauler'
+        selectedPlate = ('RENT%04d'):format(math.random(1000, 9999))
+        isOwned = false
+    end
+
+    if not selectedPlate or selectedPlate == '' then
+        selectedPlate = ('TRK%05d'):format(math.random(10000, 99999))
+    end
+
     local jobId = math.random(100000, 999999)
     local bucketId = 100 + (jobId % 900)
     SetPlayerRoutingBucket(src, bucketId)
 
     local wh = Config.Polarix.Warehouse
-    local truckModel = joaat(contractData.truckModel or 'hauler')
+    local truckModel = joaat(selectedTruckModel)
     local trailerModel = joaat(contractData.trailerModel or 'trailers2')
 
     -- ETAPA 2: Spawns Autoritativos no Servidor
@@ -198,6 +280,9 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     while not DoesEntityExist(truck) do Wait(50) end
     SetEntityRoutingBucket(truck, bucketId)
     SetEntityDistanceCullingRadius(truck, 400.0)
+    SetVehicleNumberPlateText(truck, selectedPlate)
+    -- O caminhão deve ser instanciado trancado no servidor para a etapa de inspeção
+    SetVehicleDoorsLocked(truck, 2)
 
     local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
     while not DoesEntityExist(trailer) do Wait(50) end
@@ -242,6 +327,9 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
         citizenId = citizenId,
         bucketId = bucketId,
         truck = truck,
+        truckPlate = selectedPlate,
+        truckModel = selectedTruckModel,
+        isOwned = isOwned,
         trailer = trailer,
         forklift = forklift,
         pallets = pallets,
@@ -261,6 +349,10 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     local payload = {
         jobId = jobId,
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
+        truckPlate = selectedPlate,
+        truckModel = selectedTruckModel,
+        truckMods = savedMods,
+        isOwned = isOwned,
         trailerNetId = NetworkGetNetworkIdFromEntity(trailer),
         forkliftNetId = NetworkGetNetworkIdFromEntity(forklift),
         palletNetIds = palletNetIds,
@@ -273,14 +365,35 @@ RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractDa
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
 end)
 
--- ETAPA 2: Validação de Inspeção Concluída
+-- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox
 RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
 
+    -- Validação de proximidade autoritativa do servidor
+    local ped = GetPlayerPed(src)
+    local pedCoords = GetEntityCoords(ped)
+    local truckCoords = GetEntityCoords(lobby.truck)
+    if #(pedCoords - truckCoords) > 25.0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está muito afastado do caminhão para validar a inspeção!', 'error')
+        return
+    end
+
     lobby.stage = 'STATUS_LOADING'
-    TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId)
+
+    -- Destranca portas no servidor
+    SetVehicleDoorsLocked(lobby.truck, 1)
+
+    -- Entrega autoritativa de chaves no servidor (qbx_vehiclekeys)
+    if exports['qbx_vehiclekeys'] then
+        pcall(function()
+            exports['qbx_vehiclekeys']:GiveKeys(src, lobby.truck)
+        end)
+    end
+
+    local truckNetId = NetworkGetNetworkIdFromEntity(lobby.truck)
+    TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId, lobby.truckPlate, truckNetId)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds)
 end)
 
@@ -303,6 +416,16 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     if lobby.loadedCount < lobby.requiredCount then return end
 
     lobby.stage = 'STATUS_IN_TRANSIT'
+
+    -- Migração suave para o Routing Bucket 0 (mundo aberto)
+    SetPlayerRoutingBucket(src, 0)
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        SetEntityRoutingBucket(lobby.truck, 0)
+    end
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        SetEntityRoutingBucket(lobby.trailer, 0)
+    end
+
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
 
@@ -343,8 +466,24 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     -- Atualiza aust_trucker_stats para manter paridade estatística do painel
     pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
-    -- Limpeza de OneSync e restauração de Routing Bucket
-    CleanupLobbyEntities(lobby)
+    -- Carreta é entregue e excluída
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        DeleteEntity(lobby.trailer)
+    end
+
+    -- Caminhão: se for alugado é removido; se for próprio do jogador, permanece no mundo com ele
+    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
+        DeleteEntity(lobby.truck)
+    end
+
+    -- Empilhadeira e paletes da baia são limpos
+    if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
+    if lobby.pallets then
+        for _, p in ipairs(lobby.pallets) do
+            if p and DoesEntityExist(p) then DeleteEntity(p) end
+        end
+    end
+
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil
 
