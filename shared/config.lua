@@ -41,7 +41,7 @@ Config.Polarix = {
             vector4(1244.53, -3135.57, 4.53, 90.0),
         },
 
-        CargoSpawns = {
+        TrailerSpawns = {
             vector4(1244.53, -3135.57, 4.53, 90.0),
             vector4(1244.53, -3135.57, 4.53, 90.0),
             vector4(1272.81, -3098.0, 4.9, 90.0),
@@ -78,6 +78,16 @@ Config.Polarix = {
     },
 
     LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
+
+    TrailerSpawns = {
+        vector4(1244.53, -3135.57, 4.53, 90.0),
+        vector4(1244.53, -3135.57, 4.53, 90.0),
+        vector4(1272.81, -3098.0, 4.9, 90.0),
+        vector4(1272.81, -3098.0, 4.9, 90.0),
+        vector4(1272.81, -3098.0, 4.9, 90.0),
+        vector4(1272.81, -3098.0, 4.9, 90.0),
+        vector4(1272.81, -3098.0, 4.9, 90.0),
+    },
 
     -- Configuração e Offsets de Empilhadeira (Forklift) - Extraído do Polarix
     Forklift = {

@@ -426,11 +426,11 @@ local function StartTruckDelivery(src, contractData)
 
     print(("[AUST_Trucker] Vehicle spawned unlocked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
-    -- STEP B: CARGO / TRAILER SPAWN
-    local cargoSpawns = wh.CargoSpawns or wh.TrailerSpawns or { wh.TrailerSpawnCoords }
+    -- STEP B: TRAILER SPAWN
+    local trailerSpawns = Config.TrailerSpawns or (wh and (wh.TrailerSpawns or wh.CargoSpawns)) or { wh.TrailerSpawnCoords }
     local trailer = nil
 
-    for _, coord in ipairs(cargoSpawns) do
+    for _, coord in ipairs(trailerSpawns) do
         if IsSpawnPointClear(coord, 8.0, { [truck] = true }) then
             trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
             local waitTimer = GetGameTimer()
@@ -443,7 +443,7 @@ local function StartTruckDelivery(src, contractData)
 
     if not trailer or not DoesEntityExist(trailer) then
         if DoesEntityExist(truck) then DeleteEntity(truck) end
-        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de carga/carreta estão ocupadas no momento! Tente novamente em instantes.', 'error')
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de carreta/reboque estão ocupadas no momento! Tente novamente em instantes.', 'error')
         return
     end
 
