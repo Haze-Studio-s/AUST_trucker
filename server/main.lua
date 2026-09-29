@@ -396,6 +396,7 @@ local function StartTruckDelivery(src, contractData)
     -- Iteração dinâmica com verificação de área livre no servidor (OneSync)
     local truckSpawns = wh.TruckSpawns or { wh.TruckSpawnCoords }
     local truck = nil
+    local chosenTruckCoord = nil
 
     for _, coord in ipairs(truckSpawns) do
         if IsSpawnPointClear(coord, 8.0) then
@@ -403,6 +404,7 @@ local function StartTruckDelivery(src, contractData)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
             if DoesEntityExist(truck) then
+                chosenTruckCoord = coord
                 break
             end
         end
@@ -444,6 +446,7 @@ local function StartTruckDelivery(src, contractData)
     -- STEP B: TRAILER SPAWN
     local trailerSpawns = Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
     local trailer = nil
+    local chosenTrailerCoord = nil
 
     for _, coord in ipairs(trailerSpawns) do
         if IsSpawnPointClear(coord, 9.0, { [truck] = true }) then
@@ -451,6 +454,7 @@ local function StartTruckDelivery(src, contractData)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(trailer) then
+                chosenTrailerCoord = coord
                 break
             end
         end
@@ -468,6 +472,7 @@ local function StartTruckDelivery(src, contractData)
     -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
     local forklift = nil
     local forkliftPlate = nil
+    local chosenForkliftCoord = nil
     local pallets = {}
     local palletNetIds = {}
     local reqPallets = contractData.palletCount or 4
@@ -481,6 +486,7 @@ local function StartTruckDelivery(src, contractData)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
                 if DoesEntityExist(forklift) then
+                    chosenForkliftCoord = coord
                     break
                 end
             end
@@ -618,12 +624,15 @@ local function StartTruckDelivery(src, contractData)
         cargoType = cargoType,
         stage = 'STEP_GET_TRUCK',
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
+        truckCoords = chosenTruckCoord and vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z),
         truckPlate = plate,
         truckModel = selectedTruckModel,
         truckMods = savedMods,
         isOwned = isOwned,
         trailerNetId = NetworkGetNetworkIdFromEntity(trailer),
+        trailerCoords = chosenTrailerCoord and vector3(chosenTrailerCoord.x, chosenTrailerCoord.y, chosenTrailerCoord.z),
         forkliftNetId = forklift and DoesEntityExist(forklift) and NetworkGetNetworkIdFromEntity(forklift) or 0,
+        forkliftCoords = chosenForkliftCoord and vector3(chosenForkliftCoord.x, chosenForkliftCoord.y, chosenForkliftCoord.z),
         forkliftPlate = forkliftPlate,
         palletNetIds = palletNetIds,
         cargoName = lobbyData.cargoName,
@@ -631,6 +640,10 @@ local function StartTruckDelivery(src, contractData)
         loadedCount = 0,
         deliveryCoords = destCoords
     }
+
+    print(("[AUST_Trucker] Dispatching polarixJobStarted to player %s for job %s (Truck NetID: %s, Trailer NetID: %s)"):format(
+        tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId)
+    ))
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds)

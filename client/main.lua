@@ -137,7 +137,7 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
     if objType == 'truck' then
         offsetZ = 2.8
         sprite = 477
-        hasRoute = false
+        hasRoute = true
     elseif objType == 'trailer' then
         offsetZ = 2.8
         sprite = 479
@@ -188,10 +188,10 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
     -- Marcador visual tipo 20 (Chevron / seta apontando para baixo) via ox_lib.points
     local point = lib.points.new({
         coords = targetCoords,
-        distance = 80.0,
+        distance = 150.0,
         nearby = function(self)
             local pos = self.coords
-            if isEntity and DoesEntityExist(targetEntity) then
+            if isEntity and targetEntity and DoesEntityExist(targetEntity) then
                 pos = GetEntityCoords(targetEntity)
                 self.coords = pos
             end
@@ -285,6 +285,24 @@ local function GetNextAvailablePallet()
             return p
         end
     end
+    return nil
+end
+
+local function WaitForNetworkEntity(netId, maxTimeoutMs)
+    if not netId or netId == 0 then return nil end
+    local timeout = GetGameTimer() + (maxTimeoutMs or 10000)
+
+    while GetGameTimer() < timeout do
+        if NetworkDoesNetworkIdExist(netId) then
+            local ent = NetworkGetEntityFromNetworkId(netId)
+            if ent and ent ~= 0 and DoesEntityExist(ent) then
+                return ent
+            end
+        end
+        Wait(100)
+    end
+
+    print(("^3[AUST_Trucker] Aviso: Timeout aguardando entidade física para NetID %s^7"):format(tostring(netId)))
     return nil
 end
 
@@ -705,6 +723,81 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
 end
 
 -- =======================================================================
+-- TRANSIÇÕES DA MÁQUINA DE ESTADOS: ETAPAS DO CAMINHÃO
+-- =======================================================================
+
+local function OnPlayerEnteredTruck(truck)
+    if CurrentStage ~= 'STEP_2_ENTER_TRUCK' then return end
+    CurrentStage = 'STEP_3_COUPLE_TRAILER'
+
+    JobEntities.truck = truck
+
+    PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
+
+    -- Remove a seta do caminhão; seta verde flutuante passa para a carreta
+    local trailerTarget = (JobEntities.trailer and DoesEntityExist(JobEntities.trailer) and JobEntities.trailer)
+        or (ActiveJob and ActiveJob.trailerCoords)
+
+    UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga')
+
+    SendMissionNotify('Central Logística', 'Dê marcha-ré e engate a carreta no caminhão.', 'info')
+
+    StartCouplingWatcher()
+end
+
+local function StartTruckSeatWatcher(truck)
+    CreateThread(function()
+        while CurrentStage == 'STEP_2_ENTER_TRUCK' and ActiveJob do
+            local ped = cache.ped or PlayerPedId()
+            local currentVeh = GetVehiclePedIsIn(ped, false)
+            if currentVeh ~= 0 then
+                local isTargetTruck = false
+                if truck and DoesEntityExist(truck) and currentVeh == truck then
+                    isTargetTruck = true
+                elseif JobEntities.truck and DoesEntityExist(JobEntities.truck) and currentVeh == JobEntities.truck then
+                    isTargetTruck = true
+                elseif ActiveJob and ActiveJob.truckNetId and NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
+                    local netVeh = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
+                    if netVeh ~= 0 and currentVeh == netVeh then
+                        isTargetTruck = true
+                    end
+                end
+
+                if isTargetTruck then
+                    local seatPed = GetPedInVehicleSeat(currentVeh, -1)
+                    if seatPed == ped then
+                        OnPlayerEnteredTruck(currentVeh)
+                        break
+                    end
+                end
+            end
+            Wait(250)
+        end
+    end)
+end
+
+local function StartMissionStep1(truck, trailer, forklift)
+    CurrentStage = 'STEP_2_ENTER_TRUCK'
+
+    -- 1. Criação do blip e rota no GPS direcionando para o caminhão
+    -- 2. Ativação da seta verde flutuante (marcador chevron tipo 20) sobre o teto do caminhão
+    local truckTarget = (truck and DoesEntityExist(truck) and truck) or (ActiveJob and ActiveJob.truckCoords)
+    UpdateMissionObjective('truck', truckTarget, 'Seu Caminhão')
+
+    -- Blip secundário da carreta/carga
+    local trailerTarget = (trailer and DoesEntityExist(trailer) and trailer) or (ActiveJob and ActiveJob.trailerCoords)
+    if trailerTarget then
+        UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga', true)
+    end
+
+    -- 3. Disparo da notificação sonora de 10 segundos
+    SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
+
+    -- 4. Monitoramento ativo do assento do motorista
+    StartTruckSeatWatcher(truck)
+end
+
+-- =======================================================================
 -- MONITORAMENTO REATIVO DE VEÍCULOS (OX_LIB CACHE)
 -- =======================================================================
 
@@ -713,17 +806,20 @@ lib.onCache('vehicle', function(veh)
 
     -- ETAPA 2: ENTRAR NO CAMINHÃO
     if CurrentStage == 'STEP_2_ENTER_TRUCK' then
+        local isTargetTruck = false
         if JobEntities.truck and veh == JobEntities.truck then
+            isTargetTruck = true
+        elseif ActiveJob and ActiveJob.truckNetId and NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
+            local netVeh = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
+            if netVeh ~= 0 and veh == netVeh then
+                isTargetTruck = true
+            end
+        end
+
+        if isTargetTruck then
             local pedSeat = GetPedInVehicleSeat(veh, -1)
             if pedSeat == cache.ped then
-                CurrentStage = 'STEP_3_COUPLE_TRAILER'
-
-                -- Remove a seta do caminhão; seta verde flutuante permanece exclusivamente sobre o trailer
-                UpdateMissionObjective('trailer', JobEntities.trailer, 'Carreta / Carga')
-
-                SendMissionNotify('Central Logística', 'Dê marcha-ré e engate a carreta no caminhão.', 'info')
-
-                StartCouplingWatcher()
+                OnPlayerEnteredTruck(veh)
             end
         end
     end
@@ -783,40 +879,25 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     CurrentStage = 'STEP_1_START'
 
     CreateThread(function()
-        -- Pré-carrega todos os modelos exclusivos de paletes Polarix
-        local palletProps = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {}
-        for _, modelName in ipairs(palletProps) do
-            local hash = joaat(modelName)
-            lib.requestModel(hash)
-        end
+        -- Pré-carregamento assíncrono e protegido dos modelos de palete (sem travar a inicialização)
+        CreateThread(function()
+            local palletProps = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {}
+            for _, modelName in ipairs(palletProps) do
+                pcall(function()
+                    local hash = joaat(modelName)
+                    if IsModelInCdimage(hash) or IsModelValid(hash) then
+                        RequestModel(hash)
+                    end
+                end)
+            end
+        end)
 
-        -- Sincronização OneSync das Entidades
-        local truck = nil
-        local trailer = nil
+        -- 1. Espera ativa e segura pela existência física das entidades no cliente (Timeout 10s)
+        local truck = WaitForNetworkEntity(payload.truckNetId, 10000)
+        local trailer = WaitForNetworkEntity(payload.trailerNetId, 10000)
         local forklift = nil
-
-        if payload.truckNetId and payload.truckNetId ~= 0 then
-            local start = GetGameTimer()
-            while not NetworkDoesNetworkIdExist(payload.truckNetId) and GetGameTimer() - start < 6000 do Wait(100) end
-            if NetworkDoesNetworkIdExist(payload.truckNetId) then
-                truck = NetToVeh(payload.truckNetId)
-            end
-        end
-
-        if payload.trailerNetId and payload.trailerNetId ~= 0 then
-            local start = GetGameTimer()
-            while not NetworkDoesNetworkIdExist(payload.trailerNetId) and GetGameTimer() - start < 6000 do Wait(100) end
-            if NetworkDoesNetworkIdExist(payload.trailerNetId) then
-                trailer = NetToVeh(payload.trailerNetId)
-            end
-        end
-
         if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
-            local start = GetGameTimer()
-            while not NetworkDoesNetworkIdExist(payload.forkliftNetId) and GetGameTimer() - start < 6000 do Wait(100) end
-            if NetworkDoesNetworkIdExist(payload.forkliftNetId) then
-                forklift = NetToVeh(payload.forkliftNetId)
-            end
+            forklift = WaitForNetworkEntity(payload.forkliftNetId, 10000)
         end
 
         local playerPed = cache.ped or PlayerPedId()
@@ -878,14 +959,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
-        -- Marcadores visuais: Seta verde flutuante e blip apontando para o caminhão e para o trailer
-        UpdateMissionObjective('truck', truck, 'Seu Caminhão')
-        UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
-
-        -- Notificação inicial estilo Lation de 10 segundos
-        SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
-
-        CurrentStage = 'STEP_2_ENTER_TRUCK'
+        -- 2. Inicialização sequencial e determinística da Etapa 1
+        StartMissionStep1(truck, trailer, forklift)
     end)
 end)
 
@@ -895,20 +970,14 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
         local pallets = {}
         for _, netId in ipairs(palletNetIds) do
             if netId and netId ~= 0 then
-                local timeout = GetGameTimer() + 5000
-                while not NetworkDoesNetworkIdExist(netId) and GetGameTimer() < timeout do
-                    Wait(50)
-                end
-                if NetworkDoesNetworkIdExist(netId) then
-                    local ent = NetworkGetEntityFromNetworkId(netId)
-                    if DoesEntityExist(ent) then
-                        SetEntityVisible(ent, true)
-                        ResetEntityAlpha(ent)
-                        PlaceObjectOnGroundProperly(ent)
-                        SetEntityCollision(ent, true, true)
-                        FreezeEntityPosition(ent, true)
-                        table.insert(pallets, ent)
-                    end
+                local ent = WaitForNetworkEntity(netId, 8000)
+                if ent and DoesEntityExist(ent) then
+                    SetEntityVisible(ent, true)
+                    ResetEntityAlpha(ent)
+                    PlaceObjectOnGroundProperly(ent)
+                    SetEntityCollision(ent, true, true)
+                    FreezeEntityPosition(ent, true)
+                    table.insert(pallets, ent)
                 end
             end
         end
