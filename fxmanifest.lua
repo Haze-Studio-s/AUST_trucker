@@ -61,6 +61,7 @@ server_scripts {
 
 client_scripts {
     'client/modules/forklift.lua',
+    'client/zones.lua',
     'client/cargo_dry.lua',
     'client/cargo_liquid.lua',
     'client/main.lua',

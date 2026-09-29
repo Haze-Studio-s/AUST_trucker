@@ -332,33 +332,10 @@ local function StartTruckDelivery(src, contractData)
     SetEntityDistanceCullingRadius(truck, 400.0)
     SetVehicleNumberPlateText(truck, plate)
 
-    -- Explicitly unlock the doors (state 1)
-    SetVehicleDoorsLocked(truck, 1)
+    -- ESTADO 2: Caminhão spawna trancado para inspeção obrigatória
+    SetVehicleDoorsLocked(truck, 2)
 
-    print(("[AUST_Trucker] Vehicle spawned with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
-
-    -- STEP B: DUAL-LAYER KEY ASSIGNMENT (JOB START)
-    -- 1st Layer (Physical Item via ox_inventory)
-    if exports.ox_inventory then
-        local keyMetadata = {
-            plate = plate,
-            description = "Truck Key - " .. plate
-        }
-        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
-        if not added then
-            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
-        end
-    end
-
-    -- 2nd Layer (Framework Permission via qbx_vehiclekeys)
-    if exports['qbx_vehiclekeys'] then
-        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
-    end
-    if exports['qb-vehiclekeys'] then
-        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
-    end
-    TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
-    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
+    print(("[AUST_Trucker] Vehicle spawned locked with plate: %s for player %s (Cargo: %s)"):format(plate, tostring(src), cargoType))
 
     local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
     while not DoesEntityExist(trailer) do Wait(50) end
@@ -367,15 +344,21 @@ local function StartTruckDelivery(src, contractData)
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
     local forklift = nil
+    local forkliftPlate = nil
     local pallets = {}
     local palletNetIds = {}
     local reqPallets = contractData.palletCount or 4
 
     if cargoType == 'dry' then
         forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), wh.ForkliftBayCoords.x, wh.ForkliftBayCoords.y, wh.ForkliftBayCoords.z, wh.ForkliftBayCoords.w, true, true)
-        while not DoesEntityExist(forklift) do Wait(50) end
+        while not DoesEntityExist(forklift) do Wait(10) end
         SetEntityRoutingBucket(forklift, bucketId)
         SetEntityDistanceCullingRadius(forklift, 350.0)
+
+        -- BUG 3 RESOLUTION: Placa e destrancamento da empilhadeira
+        forkliftPlate = ("FORK%04d"):format(math.random(1000, 9999))
+        SetVehicleNumberPlateText(forklift, forkliftPlate)
+        SetVehicleDoorsLocked(forklift, 1)
 
         local anchor = wh.PalletStagingAnchor
         local rad = math.rad(wh.PalletStagingHeading or 180.0)
@@ -415,6 +398,7 @@ local function StartTruckDelivery(src, contractData)
         isOwned = isOwned,
         trailer = trailer,
         forklift = forklift,
+        forkliftPlate = forkliftPlate,
         pallets = pallets,
         palletNetIds = palletNetIds,
         loadedCount = 0,
@@ -442,6 +426,7 @@ local function StartTruckDelivery(src, contractData)
         isOwned = isOwned,
         trailerNetId = NetworkGetNetworkIdFromEntity(trailer),
         forkliftNetId = forklift and DoesEntityExist(forklift) and NetworkGetNetworkIdFromEntity(forklift) or 0,
+        forkliftPlate = forkliftPlate,
         palletNetIds = palletNetIds,
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
@@ -452,6 +437,10 @@ local function StartTruckDelivery(src, contractData)
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
 end
 
+function GlobalStartTruckDelivery(src, contractData)
+    StartTruckDelivery(src, contractData)
+end
+
 RegisterNetEvent('aurp_trucker:server:startPolarixContract', function(contractData)
     StartTruckDelivery(source, contractData)
 end)
@@ -460,7 +449,7 @@ RegisterNetEvent('aurp_trucker:server:startDelivery', function(contractData)
     StartTruckDelivery(source, contractData)
 end)
 
--- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox
+-- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox (Caminhão e Empilhadeira)
 RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
@@ -477,18 +466,55 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
 
     lobby.stage = 'STATUS_LOADING'
 
-    -- Destranca portas no servidor
+    -- Destranca portas do caminhão no servidor
     SetVehicleDoorsLocked(lobby.truck, 1)
 
-    -- Entrega autoritativa de chaves no servidor (qbx_vehiclekeys)
+    -- ENTREGA AUTORITATIVA DE CHAVES DO CAMINHÃO (ox_inventory + qbx_vehiclekeys)
+    if exports.ox_inventory then
+        local keyMetadata = {
+            plate = lobby.truckPlate,
+            description = "Truck Key - " .. lobby.truckPlate
+        }
+        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
+        if not added then
+            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+        end
+    end
+
     if exports['qbx_vehiclekeys'] then
-        pcall(function()
-            exports['qbx_vehiclekeys']:GiveKeys(src, lobby.truck)
-        end)
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, lobby.truck) end)
+    end
+    if exports['qb-vehiclekeys'] then
+        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, lobby.truckPlate) end)
+    end
+    TriggerClientEvent('vehiclekeys:client:SetOwner', src, lobby.truckPlate)
+    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, lobby.truckPlate)
+
+    -- BUG 3 RESOLUTION: ENTREGA AUTORITATIVA DE CHAVES DA EMPILHADEIRA (ox_inventory + qbx_vehiclekeys)
+    if lobby.cargoType == 'dry' and lobby.forkliftPlate then
+        if exports.ox_inventory then
+            local forkKeyMeta = {
+                plate = lobby.forkliftPlate,
+                description = "Forklift Key - " .. lobby.forkliftPlate
+            }
+            local added = exports.ox_inventory:AddItem(src, 'keys', 1, forkKeyMeta)
+            if not added then
+                exports.ox_inventory:AddItem(src, 'vehiclekey', 1, forkKeyMeta)
+            end
+        end
+
+        if exports['qbx_vehiclekeys'] and lobby.forklift and DoesEntityExist(lobby.forklift) then
+            pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, lobby.forklift) end)
+        end
+        if exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, lobby.forkliftPlate) end)
+        end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, lobby.forkliftPlate)
+        TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, lobby.forkliftPlate)
     end
 
     local truckNetId = NetworkGetNetworkIdFromEntity(lobby.truck)
-    TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId, lobby.truckPlate, truckNetId)
+    TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId, lobby.truckPlate, truckNetId, lobby.forkliftPlate)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds)
 end)
 
@@ -696,41 +722,44 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
     end
 
-    -- STEP C: DUAL-LAYER KEY REMOVAL (JOB FINISH)
+    -- STEP C: DUAL-LAYER KEY REMOVAL (TRUCK & FORKLIFT)
+    local platesToRemove = {}
     local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
-    if truckPlate then
-        print(("[AUST_Trucker] Delivery completed. Removing keys for plate: %s (Player: %s)"):format(truckPlate, tostring(src)))
+    if truckPlate then table.insert(platesToRemove, { plate = truckPlate, entity = lobby.truck }) end
+    if lobby.forkliftPlate then table.insert(platesToRemove, { plate = lobby.forkliftPlate, entity = lobby.forklift }) end
 
-        -- 1st Layer: Physical item removal
+    for _, pData in ipairs(platesToRemove) do
+        local targetPlate = pData.plate
+        print(("[AUST_Trucker] Removing key for plate: %s (Player: %s)"):format(targetPlate, tostring(src)))
+
+        -- 1st Layer: Physical item removal via ox_inventory
         if exports.ox_inventory then
-            local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+            local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = targetPlate })
             if not removed then
-                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = targetPlate })
             end
 
             -- Varredura por slots para assegurar limpeza completa de itens com a placa
             local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
             for _, slotData in ipairs(slots) do
-                if slotData.metadata and slotData.metadata.plate == truckPlate then
+                if slotData.metadata and slotData.metadata.plate == targetPlate then
                     exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
                 end
             end
             local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
             for _, slotData in ipairs(vehKeySlots) do
-                if slotData.metadata and slotData.metadata.plate == truckPlate then
+                if slotData.metadata and slotData.metadata.plate == targetPlate then
                     exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
                 end
             end
         end
 
-        -- 2nd Layer: Framework permission removal
-        if exports['qbx_vehiclekeys'] then
-            if lobby.truck and DoesEntityExist(lobby.truck) then
-                pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, lobby.truck) end)
-            end
+        -- 2nd Layer: Framework permission removal (qbx_vehiclekeys & qb-vehiclekeys)
+        if exports['qbx_vehiclekeys'] and pData.entity and DoesEntityExist(pData.entity) then
+            pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, pData.entity) end)
         end
         if exports['qb-vehiclekeys'] then
-            pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, truckPlate) end)
+            pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, targetPlate) end)
         end
     end
 

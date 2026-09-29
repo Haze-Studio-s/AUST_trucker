@@ -546,7 +546,12 @@ RegisterNUICallback('post', function(body, cb)
         end
         isStartingJob = true
         SetTimeout(3000, function() isStartingJob = false end)
-        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId, contractType, isParty)
+        TriggerServerEvent('aurp_trucker:server:startDelivery', {
+            id = contractId,
+            contractId = contractId,
+            contractType = contractType,
+            isParty = isParty
+        })
         cb(200)
         return
     end
@@ -729,7 +734,10 @@ RegisterNUICallback('startJob', function(data, cb)
     if isStartingJob then return cb('ok') end
     isStartingJob = true
     SetTimeout(3000, function() isStartingJob = false end)
-    TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
+    TriggerServerEvent('aurp_trucker:server:startDelivery', {
+        id = contractId,
+        contractId = contractId
+    })
     cb('ok')
 end)
 
@@ -813,8 +821,13 @@ RegisterNUICallback('acceptJob', function(data, cb)
     SetNuiFocus(false, false)
 
     if tonumber(jobId) then
-        print(("^2[AUST_Trucker Client] Routing numeric jobId %s to startLCContract^7"):format(tostring(jobId)))
-        TriggerServerEvent('aurp_trucker:server:startLCContract', tonumber(jobId), data.contractType or 0, false)
+        print(("^2[AUST_Trucker Client] Routing numeric jobId %s to startDelivery^7"):format(tostring(jobId)))
+        TriggerServerEvent('aurp_trucker:server:startDelivery', {
+            id = tonumber(jobId),
+            contractId = tonumber(jobId),
+            contractType = data.contractType or 0,
+            isParty = false
+        })
     else
         print(("^2[AUST_Trucker Client] Routing string jobId %s to aurp_trucker:acceptJob^7"):format(tostring(jobId)))
         TriggerServerEvent('aurp_trucker:acceptJob', jobId)

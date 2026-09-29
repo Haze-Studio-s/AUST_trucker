@@ -190,71 +190,14 @@ end)
 -- =======================================================================
 
 local function SetupVehicleInspection(truck, trailer, jobId)
-    InspectedParts = {}
     CurrentStage = 'STATUS_INSPECTING'
 
     -- Garante que o caminhão inicia trancado
     SetVehicleDoorsLocked(truck, 2)
 
-    local checkpoints = Config.Polarix.Inspection.Checkpoints
-    local totalRequired = #checkpoints
-
-    for _, cp in ipairs(checkpoints) do
-        local cpOffset = cp.offset
-        local cpPoint = lib.points.new({
-            coords = GetOffsetFromEntityInWorldCoords(truck, cpOffset.x, cpOffset.y, cpOffset.z),
-            distance = 1.8,
-        })
-
-        exports.ox_target:addLocalEntity(truck, {
-            {
-                name = 'inspect_' .. cp.id,
-                icon = 'fa-solid fa-magnifying-glass',
-                label = cp.label,
-                distance = 2.2,
-                canInteract = function()
-                    return CurrentStage == 'STATUS_INSPECTING' and not InspectedParts[cp.id]
-                end,
-                onSelect = function()
-                    local anim = Config.Polarix.Inspection.Animation
-                    local success = lib.progressBar({
-                        duration = Config.Polarix.Inspection.Duration or 3000,
-                        label = cp.label .. '...',
-                        useWhileDead = false,
-                        canCancel = true,
-                        disable = { move = true, car = true, combat = true },
-                        anim = { dict = anim.dict, clip = anim.clip }
-                    })
-
-                    if success then
-                        InspectedParts[cp.id] = true
-                        PlaySoundFrontend(-1, "CHECKPOINT_NORMAL", "HUD_MINI_GAME_SOUNDSET", 0)
-
-                        local inspectedCount = 0
-                        for _ in pairs(InspectedParts) do inspectedCount = inspectedCount + 1 end
-
-                        lib.notify({
-                            title = 'Inspeção de Segurança',
-                            description = ('Item verificado (%d/%d)!'):format(inspectedCount, totalRequired),
-                            type = 'inform'
-                        })
-
-                        if inspectedCount >= totalRequired then
-                            -- Valida com o servidor e emite as chaves
-                            TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
-                        end
-                    end
-                end
-            }
-        })
-    end
-
-    lib.notify({
-        title = 'Inspeção Obrigatória',
-        description = 'Realize a checagem nos pneus e motor do caminhão antes de ligar o veículo!',
-        type = 'warning',
-        duration = 8000
-    })
+    Zones.SetupInspection(truck, jobId, function()
+        TriggerServerEvent('aurp_trucker:server:inspectionCompleted', jobId)
+    end)
 end
 
 -- =======================================================================
@@ -264,39 +207,9 @@ end
 local function SetupStrappingAndManifest(trailer, jobId)
     CurrentStage = 'STATUS_STRAPPING'
 
-    exports.ox_target:addLocalEntity(trailer, {
-        {
-            name = 'strap_cargo_and_sign_manifest',
-            icon = 'fa-solid fa-clipboard-check',
-            label = Config.Polarix.Strapping.Label or 'Fixar Cintas de Carga e Assinar Romaneio',
-            distance = 3.5,
-            canInteract = function()
-                return CurrentStage == 'STATUS_STRAPPING'
-            end,
-            onSelect = function()
-                local anim = Config.Polarix.Strapping.Animation
-                local success = lib.progressBar({
-                    duration = Config.Polarix.Strapping.Duration or 4500,
-                    label = 'Fixando cintas de catraca e validando romaneio...',
-                    useWhileDead = false,
-                    canCancel = true,
-                    disable = { move = true, car = true, combat = true },
-                    anim = { dict = anim.dict, clip = anim.clip }
-                })
-
-                if success then
-                    TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
-                end
-            end
-        }
-    })
-
-    lib.notify({
-        title = 'Carregamento Completo!',
-        description = 'Vá até a traseira do reboque para travar as cintas e assinar o romaneio de carga.',
-        type = 'success',
-        duration = 9000
-    })
+    Zones.SetupStrappingAndManifest(trailer, jobId, function()
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', jobId)
+    end)
 end
 
 -- =======================================================================
@@ -318,44 +231,12 @@ local function SetupDeliveryDestination(deliveryCoords, jobId, trailer)
     EndTextCommandSetBlipName(ActiveBlips.delivery)
     SetNewWaypoint(deliveryCoords.x, deliveryCoords.y)
 
-    -- ox_lib point no destino para detectar aproximação sem Wait(0)
-    ActiveDeliveryPoint = lib.points.new({
-        coords = vector3(deliveryCoords.x, deliveryCoords.y, deliveryCoords.z),
-        distance = 15.0,
-        onEnter = function()
-            lib.showTextUI('[E] Descarregar Mercadoria e Concluir Frete')
-        end,
-        onExit = function()
-            lib.hideTextUI()
-        end,
-        nearby = function()
-            if IsControlJustPressed(0, 38) then -- Tecla E
-                local ped = PlayerPedId()
-                local veh = GetVehiclePedIsIn(ped, false)
-                if veh ~= 0 then
-                    lib.notify({ title = 'Entrega', description = 'Estacione o veículo e desembarque para descarregar!', type = 'error' })
-                    return
-                end
-
-                lib.hideTextUI()
-                local ok = lib.progressCircle({
-                    duration = 6000,
-                    position = 'bottom',
-                    label = 'Descarregando paletes e registrando entrega...',
-                    canCancel = true,
-                    disable = { move = true, car = true, combat = true },
-                    anim = { dict = 'anim@heists@box_carry@', clip = 'idle' }
-                })
-
-                if ok then
-                    TriggerServerEvent('aurp_trucker:server:completePolarixDelivery', jobId)
-                end
-            end
-        end
-    })
+    Zones.SetupDeliveryPoint(deliveryCoords, jobId, function()
+        TriggerServerEvent('aurp_trucker:server:completePolarixDelivery', jobId)
+    end)
 
     lib.notify({
-        title = 'Manifesto Emitido',
+        title = 'Manifesto Emitido (Estado 4)',
         description = 'Carga assegurada e rota traçada no GPS! Dirija até o destino com segurança.',
         type = 'success',
         duration = 9000
@@ -417,8 +298,18 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
+        local forklift = nil
+        if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
+            local start = GetGameTimer()
+            while not NetworkDoesNetworkIdExist(payload.forkliftNetId) and GetGameTimer() - start < 6000 do Wait(100) end
+            if NetworkDoesNetworkIdExist(payload.forkliftNetId) then
+                forklift = NetToVeh(payload.forkliftNetId)
+            end
+        end
+
         JobEntities.truck = truck
         JobEntities.trailer = trailer
+        JobEntities.forklift = forklift
 
         if truck and DoesEntityExist(truck) then
             SetVehicleOnGroundProperly(truck)
@@ -437,25 +328,17 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
             end
 
-            -- CLIENT-SIDE FALLBACK / SYNC (QBOX STANDARD):
-            -- Explicitamente destranca as portas e garante chaves para o jogador
-            SetVehicleDoorsLocked(truck, 1)
+            -- ESTADO 2: Caminhão inicia trancado aguardando inspeção obrigatória
+            SetVehicleDoorsLocked(truck, 2)
             SetVehicleNeedsToBeHotwired(truck, false)
             SetVehicleHasBeenOwnedByPlayer(truck, true)
-
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
-            end
-            if exports.ox_fuel then
-                pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
-            end
 
             SetupVehicleInspection(truck, trailer, payload.jobId)
         end
     end)
 end)
 
-RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truckPlate, truckNetId)
+RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truckPlate, truckNetId, forkliftPlate)
     if not ActiveJob or ActiveJob.jobId ~= jobId then return end
     CurrentStage = 'STATUS_LOADING'
 
@@ -471,6 +354,15 @@ RegisterNetEvent('aurp_trucker:client:inspectionUnlocked', function(jobId, truck
         end
         if exports.ox_fuel then
             pcall(function() exports.ox_fuel:SetFuel(JobEntities.truck, 100.0) end)
+        end
+    end
+
+    -- BUG 3 RESOLUTION: Destrancar e sincronizar chaves da empilhadeira no cliente
+    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+        SetVehicleDoorsLocked(JobEntities.forklift, 1)
+        SetVehicleNeedsToBeHotwired(JobEntities.forklift, false)
+        if exports.qbx_vehiclekeys then
+            pcall(function() exports.qbx_vehiclekeys:GiveKeys(JobEntities.forklift) end)
         end
     end
 

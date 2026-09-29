@@ -1566,7 +1566,14 @@ RegisterNetEvent('aurp_trucker:server:startLCContract', function(contractId, con
     print(("^2[AUST_Trucker Server] aurp_trucker:server:startLCContract received from src %s (contractId: %s, type: %s, isParty: %s)^7"):format(
         tostring(src), tostring(contractId), tostring(contractType), tostring(isParty)
     ))
-    if isParty then
+    if GlobalStartTruckDelivery then
+        GlobalStartTruckDelivery(src, {
+            id = contractId,
+            contractId = contractId,
+            contractType = contractType,
+            isParty = isParty
+        })
+    elseif isParty then
         StartPartyLCContract(src, contractId, contractType)
     else
         StartLCContractForPlayer(src, contractId, contractType)
