@@ -450,7 +450,6 @@ local function StartTruckDelivery(src, contractData)
     SetEntityRoutingBucket(trailer, bucketId)
     SetEntityDistanceCullingRadius(trailer, 400.0)
     SetVehicleDoorsLocked(trailer, 1)
-    SetVehicleDoorsLockedForAllPlayers(trailer, false)
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
     local forklift = nil
@@ -487,7 +486,6 @@ local function StartTruckDelivery(src, contractData)
         forkliftPlate = ("FORK%04d"):format(math.random(1000, 9999))
         SetVehicleNumberPlateText(forklift, forkliftPlate)
         SetVehicleDoorsLocked(forklift, 1)
-        SetVehicleDoorsLockedForAllPlayers(forklift, false)
 
         if exports.ox_inventory then
             local forkKeyMeta = {
