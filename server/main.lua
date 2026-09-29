@@ -286,30 +286,47 @@ local function StartTruckDelivery(src, contractData)
     local truckModel = joaat(selectedTruckModel)
     local trailerModel = joaat(contractData.trailerModel or 'trailers2')
 
-    -- ETAPA 2: Spawns Autoritativos no Servidor (OneSync)
+    -- STEP A: SPAWN AND PLATE ENFORCEMENT
+    local plate = selectedPlate
+    if not plate or plate == '' then
+        plate = ("TRK%04d"):format(math.random(1000, 9999))
+    end
+
     local truck = CreateVehicle(truckModel, wh.TruckSpawnCoords.x, wh.TruckSpawnCoords.y, wh.TruckSpawnCoords.z, wh.TruckSpawnCoords.w, true, true)
-    while not DoesEntityExist(truck) do Wait(50) end
+    while not DoesEntityExist(truck) do Wait(10) end
 
     SetEntityRoutingBucket(truck, bucketId)
     SetEntityDistanceCullingRadius(truck, 400.0)
-    SetVehicleNumberPlateText(truck, selectedPlate)
+    SetVehicleNumberPlateText(truck, plate)
 
-    local spawnedPlate = GetVehicleNumberPlateText(truck) or selectedPlate
-
-    -- Destranca as portas imediatamente (doors = 1) para permitir livre acesso ao veículo
+    -- Explicitly unlock the doors (state 1)
     SetVehicleDoorsLocked(truck, 1)
 
-    -- STEP 1: GIVING THE KEY (Job Start via ox_inventory)
+    print(("[AUST_Trucker] Vehicle spawned with plate: %s for player %s"):format(plate, tostring(src)))
+
+    -- STEP B: DUAL-LAYER KEY ASSIGNMENT (JOB START)
+    -- 1st Layer (Physical Item via ox_inventory)
     if exports.ox_inventory then
         local keyMetadata = {
-            plate = spawnedPlate,
-            description = "Truck - " .. spawnedPlate
+            plate = plate,
+            description = "Truck Key - " .. plate
         }
         local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
         if not added then
             exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
         end
     end
+
+    -- 2nd Layer (Framework Permission via qbx_vehiclekeys)
+    if exports['qbx_vehiclekeys'] then
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
+        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, plate) end)
+    end
+    if exports['qb-vehiclekeys'] then
+        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
+    end
+    TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
+    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
 
     local trailer = CreateVehicle(trailerModel, wh.TrailerSpawnCoords.x, wh.TrailerSpawnCoords.y, wh.TrailerSpawnCoords.z, wh.TrailerSpawnCoords.w, true, true)
     while not DoesEntityExist(trailer) do Wait(50) end
@@ -485,29 +502,42 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
     end
 
-    -- STEP 2: REMOÇÃO DA CHAVE FÍSICA DO INVENTÁRIO (OX_INVENTORY)
+    -- STEP C: DUAL-LAYER KEY REMOVAL (JOB FINISH)
     local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
-    if truckPlate and exports.ox_inventory then
-        -- 1. Remoção direta do item com metadata da placa
-        pcall(function()
-            exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
-        end)
-        pcall(function()
-            exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
-        end)
+    if truckPlate then
+        print(("[AUST_Trucker] Delivery completed. Removing keys for plate: %s (Player: %s)"):format(truckPlate, tostring(src)))
 
-        -- 2. Varredura por slots para assegurar limpeza completa de itens com a placa
-        local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
-        for _, slotData in ipairs(slots) do
-            if slotData.metadata and slotData.metadata.plate == truckPlate then
-                exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
+        -- 1st Layer: Physical item removal
+        if exports.ox_inventory then
+            local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+            if not removed then
+                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+            end
+
+            -- Varredura por slots para assegurar limpeza completa de itens com a placa
+            local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
+            for _, slotData in ipairs(slots) do
+                if slotData.metadata and slotData.metadata.plate == truckPlate then
+                    exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
+                end
+            end
+            local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
+            for _, slotData in ipairs(vehKeySlots) do
+                if slotData.metadata and slotData.metadata.plate == truckPlate then
+                    exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
+                end
             end
         end
-        local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
-        for _, slotData in ipairs(vehKeySlots) do
-            if slotData.metadata and slotData.metadata.plate == truckPlate then
-                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
+
+        -- 2nd Layer: Framework permission removal
+        if exports['qbx_vehiclekeys'] then
+            if lobby.truck and DoesEntityExist(lobby.truck) then
+                pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, lobby.truck) end)
             end
+            pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, truckPlate) end)
+        end
+        if exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, truckPlate) end)
         end
     end
 
