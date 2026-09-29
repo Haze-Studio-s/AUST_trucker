@@ -4,7 +4,7 @@
 -- Padrão QBOX / OX: Zero Loops Wait(0), Interações Autorizadas
 -- =======================================================================
 
-Zones = {}
+local Zones = {}
 _G.Zones = Zones
 
 local ActivePoints = {}
@@ -17,7 +17,7 @@ local ActiveObjectiveBlip = nil
 -- GUIA VISUAL EXCLUSIVO: BLIPS E SETA FLUTUANTE (OX_LIB.POINTS)
 -- =======================================================================
 
-function Zones.ClearObjective()
+local function ClearObjective()
     if ActiveObjectivePoint then
         pcall(function() ActiveObjectivePoint:remove() end)
         ActiveObjectivePoint = nil
@@ -27,9 +27,10 @@ function Zones.ClearObjective()
         ActiveObjectiveBlip = nil
     end
 end
+Zones.ClearObjective = ClearObjective
 
-function Zones.SetObjective(coords, label, sprite, color, markerOffsetZ)
-    Zones.ClearObjective()
+local function SetObjective(coords, label, sprite, color, markerOffsetZ)
+    ClearObjective()
     if not coords then return end
 
     local targetCoords = vector3(coords.x, coords.y, coords.z)
@@ -65,12 +66,13 @@ function Zones.SetObjective(coords, label, sprite, color, markerOffsetZ)
         end
     })
 end
+Zones.SetObjective = SetObjective
 
 -- =======================================================================
 -- LIMPEZA GERAL DE ZONAS E TARGETS
 -- =======================================================================
 function Zones.Cleanup()
-    Zones.ClearObjective()
+    ClearObjective()
 
     for _, pt in pairs(ActivePoints) do
         if pt then pcall(function() pt:remove() end) end

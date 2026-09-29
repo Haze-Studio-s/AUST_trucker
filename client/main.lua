@@ -5,12 +5,12 @@
 -- =======================================================================
 
 local ForkliftModule = require('client.modules.forklift')
-local Zones = nil
-local ok, mod = pcall(require, 'client.zones')
-if ok and mod then
-    Zones = mod
-else
-    Zones = rawget(_G, 'Zones') or _G.Zones
+local Zones = rawget(_G, 'Zones') or _G.Zones
+if not Zones then
+    local ok, mod = pcall(require, 'client.zones')
+    if ok and mod then
+        Zones = mod
+    end
 end
 
 local ActiveJob = nil
@@ -44,9 +44,9 @@ end
 
 local function CleanupCurrentJob()
     ClearBlips()
-    if Zones and Zones.Cleanup then Zones.Cleanup() end
-    if CargoDry and CargoDry.Cleanup then CargoDry.Cleanup() end
-    if CargoLiquid and CargoLiquid.Cleanup then CargoLiquid.Cleanup() end
+    if Zones and Zones.Cleanup then pcall(function() Zones.Cleanup() end) end
+    if CargoDry and CargoDry.Cleanup then pcall(function() CargoDry.Cleanup() end) end
+    if CargoLiquid and CargoLiquid.Cleanup then pcall(function() CargoLiquid.Cleanup() end) end
     if ActiveDeliveryPoint then
         pcall(function() ActiveDeliveryPoint:remove() end)
         ActiveDeliveryPoint = nil
