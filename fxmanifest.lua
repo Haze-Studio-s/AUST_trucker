@@ -60,6 +60,7 @@ server_scripts {
 
 client_scripts {
     'client/carry_system.lua',             -- v19: CarrySystem (antes de todos)
+    'client/zones.lua',                    -- Logística 2.0: Pontos ox_lib & ox_target
     'client/client.lua',
     'client/hud.client.lua',
     'client/adr.client.lua',

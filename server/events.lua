@@ -1291,6 +1291,9 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
         requiredCount = 3,
     }
 
+    if LogisticsServer and LogisticsServer.SpawnJobEntities then
+        LogisticsServer.SpawnJobEntities(src, citizenId, jobId, payload)
+    end
     TriggerClientEvent('aurp_trucker:client:startLCContract', src, payload)
 end
 
@@ -1510,6 +1513,9 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
             requiredCount = 3,
         }
 
+        if LogisticsServer and LogisticsServer.SpawnJobEntities then
+            LogisticsServer.SpawnJobEntities(member.src, member.citizenId, jobId, memberPayload)
+        end
         TriggerClientEvent('aurp_trucker:client:startLCContract', member.src, memberPayload)
     end
 
@@ -1671,6 +1677,10 @@ local function FinishQuickJobContract(src, jobId, damages)
         levelsGained = xpResult and xpResult.levelsGained or 0,
     })
 
+    if LogisticsServer and LogisticsServer.CleanupJobEntities then
+        LogisticsServer.CleanupJobEntities(citizenId)
+    end
+
     SetTimeout(3000, function()
         CompletingContractsLock[citizenId] = nil
     end)
@@ -1751,6 +1761,10 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
         newLevel = xpResult and xpResult.newLevel or 1,
         levelsGained = xpResult and xpResult.levelsGained or 0,
     })
+
+    if LogisticsServer and LogisticsServer.CleanupJobEntities then
+        LogisticsServer.CleanupJobEntities(citizenId)
+    end
 
     SetTimeout(3000, function()
         CompletingContractsLock[citizenId] = nil

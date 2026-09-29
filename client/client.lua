@@ -112,6 +112,9 @@ end
 local function CleanupLCContract()
     isStartingJob = false
     CleanupDockCargo()
+    if LogisticsZones and LogisticsZones.Cleanup then
+        LogisticsZones.Cleanup()
+    end
     if lcDockPed and DoesEntityExist(lcDockPed) then
         pcall(function() exports.ox_target:removeLocalEntity(lcDockPed) end)
         DeleteEntity(lcDockPed)
@@ -3661,12 +3664,91 @@ RegisterNetEvent('aurp_trucker:client:setJobState', function(jobId, newState)
         CleanupDockCargo()
         PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
         lib.notify({
-            title = 'Carregamento Concluído!',
-            description = 'Todos os volumes foram acomodados e travados. Manifesto liberado! Siga a rota indicada no GPS.',
+            title = 'Manifesto Liberado!',
+            description = 'Cargas travadas e romaneio validado! Siga a rota indicada no GPS até o destino.',
             type = 'success',
             duration = 9000
         })
+        if lcActiveJob.deliveryCoords and LogisticsZones then
+            LogisticsZones.SetupDeliveryDestination(lcActiveJob.deliveryCoords, jobId, lcActiveJob.trailer)
+        end
         StartDeliveryRoute()
+    end
+end)
+
+RegisterNetEvent('aurp_trucker:client:receiveJobEntities', function(payload)
+    if not lcActiveJob or lcActiveJob.jobId ~= payload.jobId then return end
+
+    lcActiveJob.machineNetId = payload.machineNetId
+    lcActiveJob.containerNetId = payload.containerNetId
+    lcActiveJob.palletNetIds = payload.palletNetIds
+    lcActiveJob.isContainer = payload.isContainer
+    lcActiveJob.isForklift = payload.isForklift
+
+    CreateThread(function()
+        local truck = nil
+        local trailer = nil
+
+        if payload.truckNetId and payload.truckNetId ~= 0 then
+            truck = LogisticsZones.WaitForNetEntity(payload.truckNetId, 6000)
+            if truck ~= 0 and DoesEntityExist(truck) then
+                SetEntityCollision(truck, true, true)
+                SetVehicleOnGroundProperly(truck)
+                lcActiveJob.truck = truck
+                -- ESTADO 2: Inicia vistoria obrigatória de pátio nos pneus/cabine
+                LogisticsZones.SetupVehicleInspection(truck, payload.jobId)
+            end
+        end
+
+        if payload.trailerNetId and payload.trailerNetId ~= 0 then
+            trailer = LogisticsZones.WaitForNetEntity(payload.trailerNetId, 6000)
+            if trailer ~= 0 and DoesEntityExist(trailer) then
+                SetEntityCollision(trailer, true, true)
+                SetVehicleOnGroundProperly(trailer)
+                lcActiveJob.trailer = trailer
+            end
+        end
+
+        createVehicleMarkersThread(truck, trailer)
+
+        lib.notify({
+            title = 'Veículos no Pátio (OneSync)',
+            description = 'Veículo liberado pelo servidor! Realize a inspeção física nos pneus e cabine para destravar.',
+            type = 'inform',
+            duration = 9000
+        })
+    end)
+end)
+
+RegisterNetEvent('aurp_trucker:client:inspectionApproved', function(jobId)
+    if not lcActiveJob or lcActiveJob.jobId ~= jobId then return end
+    lcActiveJob.stage = 'STATUS_INSPECTED'
+
+    -- ESTADO 3: Transição para o Carregamento Físico Dinâmico
+    local contract = lcActiveJob
+    if LogisticsZones and LogisticsZones.SetupPhysicalLoading then
+        LogisticsZones.SetupPhysicalLoading({
+            jobId = jobId,
+            truckNetId = contract.truck and SafeGetNetworkId(contract.truck) or nil,
+            trailerNetId = contract.trailer and SafeGetNetworkId(contract.trailer) or nil,
+            machineNetId = contract.machineNetId,
+            containerNetId = contract.containerNetId,
+            palletNetIds = contract.palletNetIds,
+            isContainer = contract.isContainer,
+            isForklift = contract.isForklift,
+            requiredCount = contract.totalCargo or 3
+        })
+    end
+end)
+
+RegisterNetEvent('aurp_trucker:client:cargoLoadingCompleted', function(jobId)
+    if not lcActiveJob or lcActiveJob.jobId ~= jobId then return end
+    lcActiveJob.stage = 'STATUS_LOADED'
+
+    -- ESTADO 4: Habilita fixação de cintas e romaneio na traseira
+    local tr = (lcActiveJob and lcActiveJob.trailer) or (lcActiveJob and lcActiveJob.truck)
+    if tr and DoesEntityExist(tr) and LogisticsZones then
+        LogisticsZones.SetupStrapAndManifest(tr, jobId)
     end
 end)
 
@@ -3681,62 +3763,13 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     local isQuickJob = (contract.isQuickJob ~= false) and (contract.contractType ~= 1)
     lcActiveJob.isQuickJob = isQuickJob
 
-    local truck = nil
-    if isQuickJob then
-        -- 1. Spawn do caminhão da firma (Trabalho Rápido) com validação de vaga segura
-        local truckModel = contract.truckModel or 'hauler'
-        local truckHash = joaat(truckModel)
-        if not IsModelInCdimage(truckHash) or not IsModelValid(truckHash) then
-            truckModel = 'hauler'
-            truckHash = joaat('hauler')
-        end
-        lib.requestModel(truckHash)
-        local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
-        local safeTruckSpawn = GetSafeVehicleSpawnCoords(tspawn, 4.2)
-        truck = CreateVehicle(truckHash, safeTruckSpawn.x, safeTruckSpawn.y, safeTruckSpawn.z, safeTruckSpawn.w, true, false)
-        SetEntityHeading(truck, safeTruckSpawn.w)
-        SetVehicleOnGroundProperly(truck)
-        SetEntityCollision(truck, true, true)
-        SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
-        SetEntityAsMissionEntity(truck, true, true)
-        SetVehicleHasBeenOwnedByPlayer(truck, true)
-        if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end) end
-        if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end) end
-    else
-        -- Caminhão Próprio (Frete): utiliza o caminhão atual do jogador se presente
-        local ped = PlayerPedId()
-        local currentVeh = GetVehiclePedIsIn(ped, false)
-        if currentVeh ~= 0 then
-            truck = currentVeh
-        end
-    end
-
-    -- 2. Spawn do reboque designado com validação de vaga segura
-    local trailerModel = contract.trailerModel or 'docktrailer'
-    local trailerHash = joaat(trailerModel)
-    if not IsModelInCdimage(trailerHash) or not IsModelValid(trailerHash) then
-        trailerModel = 'docktrailer'
-        trailerHash = joaat('docktrailer')
-    end
-    lib.requestModel(trailerHash)
-    local trspawn = contract.trailerSpawn or vector4(1274.21, -3186.43, 5.91, 90.00)
-    local safeTrailerSpawn = GetSafeVehicleSpawnCoords(trspawn, 4.5)
-    local trailer = CreateVehicle(trailerHash, safeTrailerSpawn.x, safeTrailerSpawn.y, safeTrailerSpawn.z, safeTrailerSpawn.w, true, false)
-    SetEntityHeading(trailer, safeTrailerSpawn.w)
-    SetVehicleOnGroundProperly(trailer)
-    SetEntityCollision(trailer, true, true)
-    SetEntityAsMissionEntity(trailer, true, true)
-
-    lcActiveJob.truck = truck
-    lcActiveJob.trailer = trailer
-    createVehicleMarkersThread(truck, trailer)
-
-    -- Registro de Entidades e Chaves no Servidor
+    -- Pré-carregamento assíncrono via ox_lib (sem loops de HasModelLoaded)
     CreateThread(function()
-        local truckNetId = truck and SafeGetNetworkId(truck) or nil
-        local trailerNetId = trailer and SafeGetNetworkId(trailer) or nil
-        if truckNetId or trailerNetId then
-            TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNetId, trailerNetId)
+        if contract.truckModel then
+            lib.requestModel(joaat(contract.truckModel), 5000)
+        end
+        if contract.trailerModel then
+            lib.requestModel(joaat(contract.trailerModel), 5000)
         end
     end)
 
@@ -3744,17 +3777,17 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
         local modeTitle = contract.isParty and ('Comboio Iniciado (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Trabalho Rápido Iniciado!'
         lib.notify({
             title = modeTitle,
-            description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca com segurança!'):format(contract.cargoName, contract.payment),
+            description = ('Carga: %s | Recompensa: $%d\nAguardando despacho de veículos pelo servidor...'):format(contract.cargoName, contract.payment),
             type = 'success',
-            duration = 8000
+            duration = 7000
         })
     else
         local modeTitle = contract.isParty and ('Comboio Próprio (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Frete Próprio Iniciado!'
         lib.notify({
             title = modeTitle,
-            description = ('Carga: %s | Recompensa Integral: $%d\nReboque liberado na doca! Engate seu caminhão.'):format(contract.cargoName, contract.payment),
+            description = ('Carga: %s | Recompensa Integral: $%d\nReboque em despacho no pátio!'):format(contract.cargoName, contract.payment),
             type = 'success',
-            duration = 8000
+            duration = 7000
         })
     end
 
