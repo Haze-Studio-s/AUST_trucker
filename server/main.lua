@@ -299,6 +299,22 @@ local function StartTruckDelivery(src, contractData)
     -- Destranca as portas imediatamente (doors = 1) para permitir livre acesso ao veículo
     SetVehicleDoorsLocked(truck, 1)
 
+    -- STEP 1: ENTREGA DE CHAVE FÍSICA NO INVENTÁRIO (OX_INVENTORY)
+    if exports.ox_inventory then
+        local keyMetadata = {
+            plate = spawnedPlate,
+            description = "Truck - " .. spawnedPlate
+        }
+        local added = pcall(function()
+            return exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
+        end)
+        if not added then
+            pcall(function()
+                exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+            end)
+        end
+    end
+
     -- ATRIBUIÇÃO EXPLÍCITA E IMEDIATA DE CHAVES NO SERVIDOR (QBOX STANDARD)
     if exports['qbx_vehiclekeys'] then
         pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
@@ -482,6 +498,32 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         exports.qbx_core:AddMoney(src, 'bank', payment, 'polarix-trucker-job')
     else
         Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
+    end
+
+    -- STEP 2: REMOÇÃO DA CHAVE FÍSICA DO INVENTÁRIO (OX_INVENTORY)
+    local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
+    if truckPlate and exports.ox_inventory then
+        -- 1. Remoção direta do item com metadata da placa
+        pcall(function()
+            exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = truckPlate })
+        end)
+        pcall(function()
+            exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = truckPlate })
+        end)
+
+        -- 2. Varredura por slots para assegurar limpeza completa de itens com a placa
+        local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
+        for _, slotData in ipairs(slots) do
+            if slotData.metadata and slotData.metadata.plate == truckPlate then
+                exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
+            end
+        end
+        local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
+        for _, slotData in ipairs(vehKeySlots) do
+            if slotData.metadata and slotData.metadata.plate == truckPlate then
+                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
+            end
+        end
     end
 
     -- Atualização autoritativa da tabela 0r_trucker
