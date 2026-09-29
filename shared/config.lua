@@ -151,6 +151,20 @@ Config.Polarix = {
                 { x =  0.55, y = -3.6, z = -0.85, rx = 0.0, ry = 0.0, rz = 0.0 },
             }
         },
+        ['freighttrailer'] = {
+            maxPallets = 6,
+            length = 10.0,
+            width = 2.5,
+            renderLoadedPallets = true,
+            attachOffsets = {
+                { x = -0.55, y =  2.8, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+                { x =  0.55, y =  2.8, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+                { x = -0.55, y =  0.0, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+                { x =  0.55, y =  0.0, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+                { x = -0.55, y = -2.8, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+                { x =  0.55, y = -2.8, z = 0.28, rx = 0.0, ry = 0.0, rz = 0.0 },
+            }
+        },
         ['trflat'] = {
             maxPallets = 6,
             length = 10.0,
@@ -256,16 +270,8 @@ Config.CargoTypes = {
     dry = {
         label = 'Carga Seca (Paletes)',
         allowedTrailers = {
-            joaat('trailers2'),
-            joaat('trailers'),
+            joaat('freighttrailer'),
             joaat('trflat'),
-            joaat('docktrailer'),
-            joaat('mule'),
-            joaat('mule2'),
-            joaat('mule3'),
-            joaat('mule4'),
-            joaat('pounder'),
-            joaat('pounder2'),
         },
         allowedTrucks = {
             joaat('hauler'),
@@ -275,7 +281,7 @@ Config.CargoTypes = {
             joaat('phantom3'),
             joaat('biff'),
         },
-        defaultTrailer = 'trailers2',
+        defaultTrailer = 'trflat',
         forkliftModel = 'forklift',
     },
     liquid = {

@@ -11,8 +11,8 @@ local ForkliftModule = require('client.modules.forklift')
 local ActiveJob = nil
 local CurrentStage = 'IDLE' 
 -- Estados: IDLE, STEP_1_START, STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER, 
---          STEP_4_PARK_DOCK, STEP_4_OPEN_DOORS, STEP_5_ENTER_FORKLIFT, 
---          STEP_6_LOAD_PALLETS, STEP_7_CLOSE_AND_STRAP, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
+--          STEP_4_PARK_DOCK, STEP_5_ENTER_FORKLIFT, STEP_6_LOAD_PALLETS, 
+--          STEP_6_GET_ROPES, STEP_7_STRAP_PALLETS, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
 
 local JobEntities = {
     truck = nil,
@@ -23,7 +23,8 @@ local JobEntities = {
 
 local ActiveDeliveryPoint = nil
 local DockWatcherPoint = nil
-local TrailerDoorsOpen = false
+local HasRopes = false
+local LoadedPalletData = {}
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -242,9 +243,18 @@ local function CleanupCurrentJob()
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.forklift) end)
     end
 
+    if LoadedPalletData then
+        for _, pData in ipairs(LoadedPalletData) do
+            if pData.entity and DoesEntityExist(pData.entity) then
+                pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
+            end
+        end
+    end
+
     ActiveJob = nil
     CurrentStage = 'IDLE'
-    TrailerDoorsOpen = false
+    HasRopes = false
+    LoadedPalletData = {}
     JobEntities = { truck = nil, trailer = nil, forklift = nil, pallets = {} }
     SetWaypointOff()
 end
@@ -368,84 +378,15 @@ local function StartCouplingWatcher()
                                     self:remove()
                                     DockWatcherPoint = nil
 
-                                    -- ETAPA 4: ABERTURA DAS PORTAS TRASEIRAS DO TRAILER (VIA OX_TARGET)
-                                    CurrentStage = 'STEP_4_OPEN_DOORS'
+                                    -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA PARA EMPILHADEIRA (SEM ABERTURA DE PORTAS)
+                                    CurrentStage = 'STEP_5_ENTER_FORKLIFT'
                                     ClearObjectiveMarkers(false)
 
-                                    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                                        local rearCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
-                                        UpdateMissionObjective('trailer_doors', rearCoords, 'Portas Traseiras do Reboque')
-
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Desça do veículo e abra as portas traseiras da carreta.', 'info')
-
-                                        local function ToggleTrailerTrunk(trailer)
-                                            if not trailer or not DoesEntityExist(trailer) then return false end
-                                            local isDoorOpen = GetVehicleDoorAngleRatio(trailer, 5) > 0.0
-
-                                            PlaySoundFrontend(-1, "Toggle_On", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-
-                                            if isDoorOpen then
-                                                -- Fecha a porta/rampa traseira
-                                                SetVehicleDoorShut(trailer, 5, false)
-                                                TrailerDoorsOpen = false
-                                                return false
-                                            else
-                                                -- Abre a porta/rampa traseira completamente
-                                                SetVehicleDoorOpen(trailer, 5, false, false)
-                                                SetVehicleDoorControl(trailer, 5, 1, 1.0)
-                                                TrailerDoorsOpen = true
-                                                return true
-                                            end
-                                        end
-
-                                        -- Configuração de ox_target na traseira do trailer (Toggle Trunk / Porta 5)
-                                        exports.ox_target:addLocalEntity(JobEntities.trailer, {
-                                            {
-                                                name = 'aust_open_trunk',
-                                                icon = 'fa-solid fa-door-open',
-                                                label = 'Abrir Rampa/Porta-malas',
-                                                distance = 4.0,
-                                                bones = { 'boot', 'door_dside_r', 'door_pside_r' },
-                                                canInteract = function(entity)
-                                                    if IsPedInAnyVehicle(cache.ped, false) then return false end
-                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' and CurrentStage ~= 'STEP_5_ENTER_FORKLIFT' and CurrentStage ~= 'STEP_6_LOAD_PALLETS' then return false end
-                                                    local isDoorOpen = GetVehicleDoorAngleRatio(entity, 5) > 0.0
-                                                    if isDoorOpen then return false end
-                                                    local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
-                                                    return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
-                                                end,
-                                                onSelect = function()
-                                                    local opened = ToggleTrailerTrunk(JobEntities.trailer)
-                                                    if opened and CurrentStage == 'STEP_4_OPEN_DOORS' then
-                                                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                                                        SendMissionNotify('Central Logística', 'Rampa/porta aberta. Assuma a empilhadeira para iniciar o carregamento.', 'info')
-                                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                                                    end
-                                                end
-                                            },
-                                            {
-                                                name = 'aust_close_trunk',
-                                                icon = 'fa-solid fa-door-closed',
-                                                label = 'Fechar Rampa/Porta-malas',
-                                                distance = 4.0,
-                                                bones = { 'boot', 'door_dside_r', 'door_pside_r' },
-                                                canInteract = function(entity)
-                                                    if IsPedInAnyVehicle(cache.ped, false) then return false end
-                                                    if CurrentStage ~= 'STEP_4_OPEN_DOORS' and CurrentStage ~= 'STEP_5_ENTER_FORKLIFT' and CurrentStage ~= 'STEP_6_LOAD_PALLETS' and CurrentStage ~= 'STEP_7_CLOSE_AND_STRAP' then return false end
-                                                    local isDoorOpen = GetVehicleDoorAngleRatio(entity, 5) > 0.0
-                                                    if not isDoorOpen then return false end
-                                                    local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
-                                                    return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
-                                                end,
-                                                onSelect = function()
-                                                    ToggleTrailerTrunk(JobEntities.trailer)
-                                                    if CurrentStage == 'STEP_7_CLOSE_AND_STRAP' then
-                                                        SendMissionNotify('Central Logística', 'Rampa fechada. Agora amarre a carga na traseira com as cintas.', 'info')
-                                                    end
-                                                end
-                                            }
-                                        })
+                                    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
                                     end
+
+                                    SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
                                 end
                             end
                         end
@@ -458,83 +399,195 @@ local function StartCouplingWatcher()
 end
 
 -- =======================================================================
--- ETAPA 7: FECHAR PORTAS E AMARRAR A CARGA
+-- ETAPA 6 & 7: SISTEMA DE CORDAS E AMARRAÇÃO INDIVIDUAL (PALETE A PALETE)
 -- =======================================================================
 
-local function SetupStrappingStage()
-    CurrentStage = 'STEP_7_CLOSE_AND_STRAP'
+local function StartStrappingPalletsStage()
+    CurrentStage = 'STEP_7_STRAP_PALLETS'
     ClearObjectiveMarkers(false)
 
-    SendMissionNotify('Central Logística', 'Carregamento finalizado! Feche a rampa traseira e amarre a carga na traseira.', 'success')
-
-    if not JobEntities.trailer or not DoesEntityExist(JobEntities.trailer) then return end
-    local rearPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
-
-    -- Seta verde exclusiva na traseira da carreta
-    UpdateMissionObjective('trailer_strap', rearPos, 'Fechar Rampa e Amarrar Carga')
-
-    local function PerformCloseAndStrap()
-        local isDoorOpen = GetVehicleDoorAngleRatio(JobEntities.trailer, 5) > 0.0
-        if isDoorOpen then
-            SendMissionNotify('Central Logística', 'Feche a rampa/porta traseira antes de amarrar a carga!', 'error')
-            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-            return
+    local function UpdateNextPalletObjective()
+        local targetPalletData = nil
+        for _, pData in ipairs(LoadedPalletData) do
+            if not pData.isSecured and not pData.lost and pData.entity and DoesEntityExist(pData.entity) then
+                targetPalletData = pData
+                break
+            end
         end
 
-        -- Barra de progresso de amarração (5 segundos)
-        local success = lib.progressBar({
-            duration = 5000,
-            label = 'Amarrando carga com cintas de segurança...',
-            useWhileDead = false,
-            canCancel = true,
-            disable = { move = true, car = true, combat = true },
-            anim = {
-                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
-                clip = 'machinic_loop_meano',
-                flag = 49
-            }
-        })
-
-        if success then
+        if targetPalletData then
+            UpdateMissionObjective('pallet', targetPalletData.entity, 'Amarrar Palete')
+        else
+            -- Todos os paletes foram amarrados! Avança para o destino final
             ClearObjectiveMarkers(false)
-            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                pcall(function() exports.ox_target:removeLocalEntity(JobEntities.trailer) end)
-            end
+            SendMissionNotify('Central Logística', 'Todos os paletes amarrados com sucesso! Carga pronta para transporte.', 'success')
             TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
         end
     end
 
-    exports.ox_target:addLocalEntity(JobEntities.trailer, {
+    UpdateNextPalletObjective()
+
+    for idx, pData in ipairs(LoadedPalletData) do
+        local pEnt = pData.entity
+        if pEnt and DoesEntityExist(pEnt) then
+            exports.ox_target:addLocalEntity(pEnt, {
+                {
+                    name = 'aust_strap_pallet_' .. idx,
+                    icon = 'fa-solid fa-boxes-packing',
+                    label = 'Amarrar Palete',
+                    distance = 2.8,
+                    canInteract = function()
+                        return CurrentStage == 'STEP_7_STRAP_PALLETS' and HasRopes and not pData.isSecured and not IsPedInAnyVehicle(cache.ped, false)
+                    end,
+                    onSelect = function()
+                        -- Minigame de perícia lib.skillCheck
+                        local passed = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
+
+                        lib.progressBar({
+                            duration = 2500,
+                            label = 'Ajustando cinta de carga...',
+                            useWhileDead = false,
+                            canCancel = false,
+                            disable = { move = true, car = true, combat = true },
+                            anim = {
+                                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                                clip = 'machinic_loop_meano',
+                                flag = 49
+                            }
+                        })
+
+                        pData.isSecured = true
+                        pcall(function() exports.ox_target:removeLocalEntity(pEnt, 'aust_strap_pallet_' .. idx) end)
+
+                        if passed then
+                            pData.riskLevel = 0
+                            PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+                            SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
+                        else
+                            pData.riskLevel = 'high'
+                            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+                            SendMissionNotify('Central Logística', 'A amarração ficou frouxa! Cuidado nas curvas para a corda não arrebentar.', 'warning')
+                        end
+
+                        UpdateNextPalletObjective()
+                    end
+                }
+            })
+        end
+    end
+end
+
+local function SetupRopesStage()
+    CurrentStage = 'STEP_6_GET_ROPES'
+    ClearObjectiveMarkers(false)
+    HasRopes = false
+
+    SendMissionNotify('Central Logística', 'Carregamento finalizado! Vá até a lateral do caminhão e pegue as cintas de amarração.', 'info')
+
+    if not JobEntities.truck or not DoesEntityExist(JobEntities.truck) then return end
+    local boxCoords = GetOffsetFromEntityInWorldCoords(JobEntities.truck, -1.2, 0.5, 0.0)
+
+    -- Seta verde exclusiva na caixa de ferramentas lateral do caminhão
+    UpdateMissionObjective('dock', boxCoords, 'Caixa de Ferramentas (Pegar Cordas)')
+
+    exports.ox_target:addLocalEntity(JobEntities.truck, {
         {
-            name = 'aust_strap_cargo',
-            icon = 'fa-solid fa-boxes-packing',
-            label = 'Amarrar Pallets',
-            distance = 4.0,
-            bones = { 'boot', 'door_dside_r', 'door_pside_r' },
-            canInteract = function(entity)
-                if CurrentStage ~= 'STEP_7_CLOSE_AND_STRAP' or IsPedInAnyVehicle(cache.ped, false) then return false end
-                local rearPos = GetOffsetFromEntityInWorldCoords(entity, 0.0, -5.0, 0.0)
-                return #(GetEntityCoords(cache.ped) - rearPos) < 4.0
+            name = 'aust_get_ropes',
+            icon = 'fa-solid fa-toolbox',
+            label = 'Pegar Cintas/Cordas de Amarração',
+            distance = 2.8,
+            canInteract = function()
+                return CurrentStage == 'STEP_6_GET_ROPES' and not HasRopes and not IsPedInAnyVehicle(cache.ped, false)
             end,
             onSelect = function()
-                PerformCloseAndStrap()
+                local ok = lib.progressBar({
+                    duration = 2500,
+                    label = 'Pegando cintas de amarração...',
+                    useWhileDead = false,
+                    canCancel = true,
+                    disable = { move = true, car = true, combat = true },
+                    anim = {
+                        dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                        clip = 'machinic_loop_meano',
+                        flag = 49
+                    }
+                })
+
+                if ok then
+                    HasRopes = true
+                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+                    SendMissionNotify('Central Logística', 'Cintas recolhidas! Amarre cada palete individualmente no reboque.', 'info')
+                    pcall(function() exports.ox_target:removeLocalEntity(JobEntities.truck, 'aust_get_ropes') end)
+                    StartStrappingPalletsStage()
+                end
             end
         }
     })
 end
 
 -- =======================================================================
--- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA
+-- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA COM FÍSICA DE ROMPIMENTO
 -- =======================================================================
 
 local function SetupDeliveryDestination(deliveryCoords, jobId)
     CurrentStage = 'STEP_8_IN_TRANSIT'
     ClearObjectiveMarkers(false)
 
+    -- Remove eventuais alvos remanescentes nos paletes
+    for _, pData in ipairs(LoadedPalletData) do
+        if pData.entity and DoesEntityExist(pData.entity) then
+            pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
+        end
+    end
+
     -- Seta verde flutuante e rota GPS para o destino final
     UpdateMissionObjective('delivery', deliveryCoords, 'Destino da Entrega')
 
     SendMissionNotify('Central Logística', 'Carga amarrada e pronta! Siga a rota indicada até o destino final.', 'success')
+
+    -- Thread leve de monitoramento de curvas bruscas e rompimento de cordas frouxas
+    CreateThread(function()
+        while CurrentStage == 'STEP_8_IN_TRANSIT' do
+            Wait(250)
+            local truck = JobEntities.truck
+            if truck and DoesEntityExist(truck) then
+                local speedKmh = GetEntitySpeed(truck) * 3.6
+                local steerAngle = GetVehicleSteeringAngle(truck)
+
+                if speedKmh > 50.0 and math.abs(steerAngle) > 12.0 then
+                    for _, pData in ipairs(LoadedPalletData) do
+                        if pData.isSecured and pData.riskLevel == 'high' and not pData.lost then
+                            -- 25% de chance de rompimento
+                            if math.random(1, 100) <= 25 then
+                                pData.lost = true
+                                local palletEnt = pData.entity
+                                if palletEnt and DoesEntityExist(palletEnt) then
+                                    DetachEntity(palletEnt, true, true)
+                                    FreezeEntityPosition(palletEnt, false)
+                                    SetEntityDynamic(palletEnt, true)
+                                    SetEntityCollision(palletEnt, true, true)
+                                    ActivatePhysics(palletEnt)
+
+                                    local rightVector = GetEntityRightVector(truck)
+                                    local sign = (steerAngle > 0) and -1.0 or 1.0
+                                    local impulse = rightVector * (sign * 8.0)
+                                    ApplyForceToEntityCenterOfMass(palletEnt, 1, impulse.x, impulse.y, 2.5, false, false, true, false)
+
+                                    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                    SendMissionNotify('Alerta de Carga!', 'Uma cinta se rompeu e um palete caiu na pista!', 'error')
+
+                                    local netId = NetworkGetNetworkIdFromEntity(palletEnt)
+                                    TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
+                                end
+                                Wait(3000) -- Cooldown para não ejetar múltiplos simultâneos
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
 
     if ActiveDeliveryPoint then
         pcall(function() ActiveDeliveryPoint:remove() end)
@@ -605,11 +658,6 @@ lib.onCache('vehicle', function(veh)
     -- ETAPA 5 & 6: OPERAÇÃO COM EMPILHADEIRA E TECLA 'G'
     if CurrentStage == 'STEP_5_ENTER_FORKLIFT' then
         if JobEntities.forklift and veh == JobEntities.forklift then
-            if not TrailerDoorsOpen then
-                SendMissionNotify('Central Logística', 'As portas traseiras da carreta precisam ser abertas antes de operar a empilhadeira!', 'error')
-                return
-            end
-
             CurrentStage = 'STEP_6_LOAD_PALLETS'
 
             -- Ao entrar na empilhadeira, a seta passa para os pallets no pátio
@@ -626,9 +674,17 @@ lib.onCache('vehicle', function(veh)
                     -- Com o pallet carregado, a seta aponta para o interior/traseira da carreta
                     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
                         local rearCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
-                        UpdateMissionObjective('trailer_rear', rearCoords, 'Aperte [G] na traseira para posicionar o pallet')
+                        UpdateMissionObjective('trailer_rear', rearCoords, 'Aperte [G] na caçamba para posicionar o pallet')
                     end
                 elseif action == 'dropped' then
+                    -- Registra o palete carregado para a futura amarração individual
+                    table.insert(LoadedPalletData, {
+                        entity = palletEnt,
+                        isSecured = false,
+                        riskLevel = 0,
+                        lost = false
+                    })
+
                     -- Pallet acomodado: seta volta a apontar para o próximo pallet
                     local nextP = GetNextAvailablePallet()
                     if nextP then
@@ -636,8 +692,8 @@ lib.onCache('vehicle', function(veh)
                     end
                 end
             end, function()
-                -- Todos os pallets carregados! Avança para Etapa 7
-                SetupStrappingStage()
+                -- Todos os pallets carregados! Avança para a Etapa das Cordas / Amarração
+                SetupRopesStage()
             end)
         end
     end
@@ -785,8 +841,16 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
     CleanupCurrentJob()
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-    SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
-        summary.payment or 0,
-        summary.xp or 0
-    ), 'success')
+    if summary.lostPallets and summary.lostPallets > 0 then
+        SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
+            summary.lostPallets,
+            summary.payment or 0,
+            summary.xp or 0
+        ), 'warning')
+    else
+        SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
+            summary.payment or 0,
+            summary.xp or 0
+        ), 'success')
+    end
 end)

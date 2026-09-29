@@ -368,7 +368,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not isAllowedTrailer then
-        trailerModel = joaat(typeConfig.defaultTrailer or (cargoType == 'liquid' and 'tanker' or 'trailers2'))
+        trailerModel = joaat(typeConfig.defaultTrailer or (cargoType == 'liquid' and 'tanker' or 'trflat'))
     end
 
     -- STEP A: SPAWN AND PLATE ENFORCEMENT
@@ -911,6 +911,18 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
 
+-- ETAPA: Notificação de Palete Perdido durante a Viagem (Corda Rompida)
+RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+
+    lobby.lostPallets = (lobby.lostPallets or 0) + 1
+    print(("[AUST_Trucker] Palete perdido em rota para o frete %s (Player: %s)! Total de perdas: %d"):format(
+        tostring(jobId), tostring(src), lobby.lostPallets
+    ))
+end)
+
 -- ETAPA 5: Entrega Final, Pagamentos QBOX e Persistência oxmysql
 RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local src = source
@@ -922,9 +934,16 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     if not lobby or lobby.citizenId ~= citizenId then return end
     if lobby.stage ~= 'STATUS_IN_TRANSIT' then return end
 
-    -- Pagamento via QBOX Nativo (ou fallback Framework)
-    local payment = lobby.payment or 5000
-    local xp = lobby.xp or 200
+    -- Pagamento com cálculo de penalidade proporcional por paletes perdidos
+    local basePayment = lobby.payment or 5000
+    local baseXP = lobby.xp or 200
+    local totalReq = lobby.requiredCount or 4
+    local lostCount = lobby.lostPallets or 0
+    local deliveredCount = math.max(0, totalReq - lostCount)
+    local ratio = (lobby.cargoType == 'dry' and totalReq > 0) and math.max(0.2, deliveredCount / totalReq) or 1.0
+
+    local payment = math.floor(basePayment * ratio)
+    local xp = math.floor(baseXP * ratio)
 
     if exports.qbx_core then
         exports.qbx_core:AddMoney(src, 'bank', payment, 'polarix-trucker-job')
@@ -1015,6 +1034,8 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
         payment = payment,
         xp = xp,
+        lostPallets = lostCount,
+        deliveredPallets = deliveredCount,
         distance = 3.5
     })
 end)
