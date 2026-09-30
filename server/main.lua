@@ -445,12 +445,25 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
-    local typeConfig = Config.CargoTypes and Config.CargoTypes[cargoType]
-    if not typeConfig then typeConfig = Config.CargoTypes.dry end
-
     -- Módulo 2: Trava/Desbloqueio por XP e Nível de Carreira (Tycoon Progression)
     local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
     local playerLevel = (truckerRow and truckerRow.level) or 1
+
+    -- Para fretes gerais de carga seca (ex: Trabalhos Rápidos), adapta automaticamente ao nível do jogador:
+    -- Níveis 1 e 2: Tier 1 (Caixas Manuais / Fracionadas)
+    -- Níveis 3 e 4: Tier 2 (Paleteira Manual / Lotes Médios)
+    -- Níveis 5+:    Tier 3 (Empilhadeira e Amarração Física)
+    if cargoType == 'dry' and playerLevel < 5 then
+        if playerLevel < 3 then
+            cargoType = 'manual_boxes'
+        else
+            cargoType = 'pallet_jack'
+        end
+    end
+
+    local typeConfig = Config.CargoTypes and Config.CargoTypes[cargoType]
+    if not typeConfig then typeConfig = Config.CargoTypes.dry end
+
     local minLevel = (typeConfig and typeConfig.minLevel) or 1
     if playerLevel < minLevel then
         TriggerClientEvent('aurp_trucker:notify', src, 'Nível Insuficiente', ('Você precisa de Nível %d de Caminhoneiro para aceitar este frete! (Seu nível atual: %d)'):format(minLevel, playerLevel), 'error')

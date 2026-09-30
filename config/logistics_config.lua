@@ -80,6 +80,12 @@ Config.LC_Jobs = {
 
     available_loads = {
         -- def = { ADR (0-6), Fragile (0-1), Valuable (0-1), Illegal (0-1) }
+        -- Tiers Iniciais (Fase 2: Early Game — Níveis 1 a 4)
+        { trailer = "trflat", name = "Caixas Fracionadas — Encomendas Urbanas", def = {0,0,0,0} },
+        { trailer = "freighttrailer", name = "Caixas Manuais — Suprimentos de Varejo", def = {0,0,0,0} },
+        { trailer = "trflat", name = "Lotes na Paleteira — Fardos de Bebidas", def = {0,0,0,0} },
+        { trailer = "freighttrailer", name = "Lotes na Paleteira — Distribuição de Alimentos", def = {0,0,0,0} },
+
         { trailer = "armytanker", name = "Tanque Combustível Militar", def = {3,0,0,0} },
         { trailer = "armytanker", name = "Suprimento de Água Militar", def = {0,0,0,0} },
         { trailer = "armytanker", name = "Tanque de Materiais Corrosivos", def = {6,0,1,0} },
