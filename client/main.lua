@@ -37,6 +37,9 @@ local DispatcherPed = nil
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
 Config.LoadedPallets = LoadedPallets
+local ForkliftLoadedOnTrailer = false
+local ForkliftSecured = false
+local ForkliftRiskLevel = 0
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -531,6 +534,88 @@ local function ExecutePalletTie(index)
     SetupNextPalletTarget()
 end
 
+-- Helper de amarração da empilhadeira embarcada
+local function ExecuteForkliftTie()
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
+
+    local success = lib.skillCheck({'medium', 'hard'}, {'w', 'a', 's', 'd'})
+
+    lib.progressBar({
+        duration = 3500,
+        label = 'Travando correntes de fixação da empilhadeira...',
+        useWhileDead = false,
+        canCancel = false,
+        disable = { move = true, car = true, combat = true },
+        anim = {
+            dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+            clip = 'machinic_loop_meano',
+            flag = 49
+        }
+    })
+
+    if success then
+        ForkliftSecured = true
+        ForkliftRiskLevel = 0
+        PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+        SendMissionNotify('Central Logística', 'Empilhadeira travada com correntes de alta resistência.', 'success')
+    else
+        ForkliftSecured = true
+        ForkliftRiskLevel = 'high'
+        PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+        SendMissionNotify('Atenção', 'A amarração da empilhadeira ficou frouxa! Cuidado redobrado nas curvas.', 'error')
+    end
+
+    hasRopes = false
+    HasRopes = false
+    ClearObjectiveMarkers(false)
+    SendMissionNotify('Central Logística', 'Carga e equipamentos 100% amarrados! Assuma a boleia do caminhão.', 'success')
+    TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+end
+
+local function SetupForkliftTieTarget()
+    if ActiveStrappingZoneId then
+        pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+        ActiveStrappingZoneId = nil
+    end
+
+    local fork = JobEntities.forklift
+    if not fork or not DoesEntityExist(fork) then
+        hasRopes = false
+        HasRopes = false
+        ClearObjectiveMarkers(false)
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        return
+    end
+
+    local fCoords = GetEntityCoords(fork)
+    UpdateMissionObjective('forklift', fCoords, 'Travar Empilhadeira na Carreta')
+
+    ActiveStrappingZoneId = exports.ox_target:addSphereZone({
+        coords = fCoords,
+        radius = 2.5,
+        debug = false,
+        options = {
+            {
+                name = 'aust_tie_forklift',
+                icon = 'fas fa-link',
+                label = 'Travar Empilhadeira com Correntes',
+                distance = 3.5,
+                canInteract = function()
+                    return (hasRopes or HasRopes) and not ForkliftSecured and not IsPedInAnyVehicle(cache.ped, false)
+                end,
+                onSelect = function()
+                    ExecuteForkliftTie()
+                end
+            }
+        }
+    })
+
+    SendMissionNotify('Central Logística', 'Agora amarre a empilhadeira embarcada na traseira da carreta.', 'info')
+end
+
 function SetupNextPalletTarget()
     -- Garante que qualquer zona ativa anterior seja destruída
     if ActiveStrappingZoneId then
@@ -540,6 +625,11 @@ function SetupNextPalletTarget()
 
     -- 1. Se completou todos os paletes
     if currentTieIndex > #LoadedPallets then
+        if ActiveJob and ActiveJob.withForklift and ForkliftLoadedOnTrailer and not ForkliftSecured then
+            SetupForkliftTieTarget()
+            return
+        end
+
         hasRopes = false
         HasRopes = false
         ClearObjectiveMarkers(false)
@@ -595,13 +685,88 @@ local function StartStrappingPalletsStage()
     ClearObjectiveMarkers(false)
     currentTieIndex = 1
 
-    if #LoadedPallets == 0 then
-        SendMissionNotify('Central Logística', 'Nenhum palete para amarrar! Siga para a entrega.', 'info')
+    if #LoadedPallets == 0 and (not ActiveJob or not ActiveJob.withForklift or not ForkliftLoadedOnTrailer) then
+        SendMissionNotify('Central Logística', 'Nenhum item para amarrar! Siga para a entrega.', 'info')
         TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
         return
     end
 
     SetupNextPalletTarget()
+end
+
+local function SetupEmbarkForkliftStage()
+    CurrentStage = 'STEP_6_EMBARK_FORKLIFT'
+    ClearObjectiveMarkers(false)
+
+    local fork = JobEntities.forklift
+    local trailer = JobEntities.trailer
+
+    if not fork or not DoesEntityExist(fork) or not trailer or not DoesEntityExist(trailer) then
+        SetupRopesStage()
+        return
+    end
+
+    local trailerRear = GetOffsetFromEntityInWorldCoords(trailer, 0.0, -6.0, 0.5)
+    UpdateMissionObjective('trailer_rear', trailerRear, 'Embarcar Empilhadeira na Carreta')
+    SendMissionNotify('Central Logística', 'Paletes estivados! Agora posicione a empilhadeira na traseira da carreta para embarque.', 'info')
+
+    CreateThread(function()
+        while CurrentStage == 'STEP_6_EMBARK_FORKLIFT' do
+            local sleep = 250
+            local ped = cache.ped or PlayerPedId()
+            local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
+
+            if veh == fork then
+                local tCoords = GetOffsetFromEntityInWorldCoords(trailer, 0.0, -5.5, 0.0)
+                local dist = #(GetEntityCoords(fork) - tCoords)
+
+                if dist < 6.0 then
+                    sleep = 0
+                    lib.showTextUI('[E] Embarcar Empilhadeira na Carreta', { position = 'left-center', icon = 'truck-ramp-box' })
+
+                    if IsControlJustPressed(0, 38) then -- Tecla E
+                        lib.hideTextUI()
+                        TaskLeaveVehicle(ped, fork, 0)
+                        Wait(1200)
+
+                        -- Garante controle de rede
+                        NetworkRequestControlOfEntity(fork)
+                        local timeout = 1000
+                        while not NetworkHasControlOfEntity(fork) and timeout > 0 do
+                            Wait(50)
+                            timeout = timeout - 50
+                        end
+
+                        -- Anexa a empilhadeira com segurança na traseira da carreta
+                        local tRot = GetEntityRotation(trailer, 2)
+                        AttachEntityToEntity(
+                            fork, trailer, 0,
+                            0.0, -5.2, 0.35,
+                            0.0, 0.0, 0.0,
+                            false, false, true, false, 2, true
+                        )
+                        SetEntityCollision(fork, true, true)
+                        SetEntityNoCollisionEntity(fork, trailer, true)
+                        SetEntityNoCollisionEntity(trailer, fork, true)
+                        FreezeEntityPosition(fork, true)
+
+                        ForkliftLoadedOnTrailer = true
+                        PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                        SendMissionNotify('Central Logística', 'Empilhadeira embarcada na carreta! Agora pegue as cintas para travar.', 'success')
+
+                        SetupRopesStage()
+                        break
+                    end
+                else
+                    lib.hideTextUI()
+                end
+            else
+                lib.hideTextUI()
+            end
+
+            Wait(sleep)
+        end
+    end)
 end
 
 local function SetupRopesStage()
@@ -688,11 +853,14 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
         end)
     end
 
-    -- Thread leve de monitoramento de curvas bruscas e rompimento de cordas frouxas
+    -- Monitoramento otimizado de Força G lateral, física híbrida e queda dinâmica de paletes frouxos
     CreateThread(function()
+        local lastDropTime = 0
+
         while CurrentStage == 'STEP_8_IN_TRANSIT' do
-            Wait(250)
             local truck = JobEntities.truck
+            local ped = cache.ped or PlayerPedId()
+
             if not truck or not DoesEntityExist(truck) or IsEntityDead(truck) or IsEntityInWater(truck) then
                 SendMissionNotify('Missão Fracassada', 'O caminhão foi destruído ou submergiu! A entrega foi cancelada.', 'error')
                 if ActiveJob and ActiveJob.jobId then
@@ -702,37 +870,169 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
                 break
             end
 
-            if truck and DoesEntityExist(truck) then
-                local speedKmh = GetEntitySpeed(truck) * 3.6
-                local steerAngle = GetVehicleSteeringAngle(truck)
+            -- Otimização Resmon: Dorme 1000ms caso o motorista esteja fora do caminhão da missão
+            local currentVeh = cache.vehicle or GetVehiclePedIsIn(ped, false)
+            if currentVeh ~= truck or GetPedInVehicleSeat(truck, -1) ~= ped then
+                Wait(1000)
+            else
+                Wait(150)
 
-                if speedKmh > 50.0 and math.abs(steerAngle) > 12.0 then
-                    for _, pData in ipairs(LoadedPalletData) do
-                        if pData.isSecured and pData.riskLevel == 'high' and not pData.lost then
-                            -- 25% de chance de rompimento
-                            if math.random(1, 100) <= 25 then
+                local speed = GetEntitySpeed(truck) -- m/s
+                local steering = GetVehicleSteeringAngle(truck) -- graus
+                local now = GetGameTimer()
+
+                -- Curva brusca em velocidade: > 15 m/s (~54 km/h) e volante virado > 25 graus com debounce de 4 segundos
+                if speed > 15.0 and math.abs(steering) > 25.0 and (now - lastDropTime >= 4000) then
+                    local targetList = LoadedPallets or LoadedPalletData or {}
+
+                    for _, pData in ipairs(targetList) do
+                        if pData.isSecured and (pData.riskLevel == 'high' or pData.riskLevel == 'medium') and not pData.lost and not pData.isFallen then
+                            -- Probabilidade de 50% por solavanco severo
+                            if math.random(1, 100) <= 50 then
+                                lastDropTime = now
                                 pData.lost = true
+                                pData.isFallen = true
+
                                 local palletEnt = pData.entity
                                 if palletEnt and DoesEntityExist(palletEnt) then
+                                    -- Garante autoridade de rede sobre a entidade antes de alterar física
+                                    if NetworkGetEntityIsNetworked(palletEnt) then
+                                        NetworkRequestControlOfEntity(palletEnt)
+                                    end
+
+                                    -- Transição de Física Híbrida: Desacopla mantendo inércia do conjunto
                                     DetachEntity(palletEnt, true, true)
+                                    SetEntityCollision(palletEnt, true, true)
                                     FreezeEntityPosition(palletEnt, false)
                                     SetEntityDynamic(palletEnt, true)
-                                    SetEntityCollision(palletEnt, true, true)
                                     ActivatePhysics(palletEnt)
+                                    SetEntityMass(palletEnt, 250.0)
 
-                                    local rightVector = GetEntityRightVector(truck)
-                                    local sign = (steerAngle > 0) and -1.0 or 1.0
-                                    local impulse = rightVector * (sign * 8.0)
-                                    ApplyForceToEntityCenterOfMass(palletEnt, 1, impulse.x, impulse.y, 2.5, false, false, true, false)
+                                    -- Cálculo de Velocidade e Dano Estrutural no Impacto
+                                    local isShattered = false
+                                    if speed > 16.6 then -- > 60 km/h: Destruição total por alta energia cinética
+                                        isShattered = true
+                                        pData.isBroken = true
+                                        PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                        SendMissionNotify('CARGA DESTRUÍDA!', 'A amarração cedeu em alta velocidade (>60 km/h). O palete se despedaçou!', 'error')
+                                    else -- <= 60 km/h: 60% chance de sobreviver intacto
+                                        local roll = math.random(1, 100)
+                                        if roll <= 60 then
+                                            pData.isBroken = false
+                                            pData.canRescue = true
+                                            PlaySoundFrontend(-1, "COLLISION_DEFAULT", "CAR_STEAL_2_SOUNDSET", true)
+                                            SendMissionNotify('PALETE CAÍDO!', 'Um palete caiu na pista, mas a carga resistiu intacta! Pode ser resgatado com a empilhadeira.', 'warning')
+                                        else
+                                            isShattered = true
+                                            pData.isBroken = true
+                                            PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                            SendMissionNotify('CARGA DESTRUÍDA!', 'O palete caiu da carreta e a mercadoria foi destruída no impacto.', 'error')
+                                        end
+                                    end
 
-                                    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                    SendMissionNotify('Alerta de Carga!', 'Uma cinta se rompeu e um palete caiu na pista!', 'error')
+                                    -- Atualiza integridade de carga no cliente (-20% por perda)
+                                    if ActiveJob then
+                                        ActiveJob.cargoHealth = math.max(0, (ActiveJob.cargoHealth or 100) - 20)
+                                    end
 
+                                    -- Sincroniza perda autoritativa com o servidor
                                     local netId = NetworkGetNetworkIdFromEntity(palletEnt)
                                     TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
+
+                                    -- Thread de estabilização do palete
+                                    CreateThread(function()
+                                        local settleTimeout = GetGameTimer() + 8000
+                                        while DoesEntityExist(palletEnt) and GetGameTimer() < settleTimeout do
+                                            Wait(500)
+                                            if GetEntitySpeed(palletEnt) < 0.2 then
+                                                break
+                                            end
+                                        end
+                                        if DoesEntityExist(palletEnt) then
+                                            FreezeEntityPosition(palletEnt, true)
+                                            if isShattered then
+                                                SetEntityAsNoLongerNeeded(palletEnt)
+                                            else
+                                                -- Se sobreviveu e tem empilhadeira na missão, adiciona na lista para recolhimento
+                                                if ActiveJob and ActiveJob.withForklift then
+                                                    ForkliftModule.SetMissionPallets({ palletEnt })
+                                                else
+                                                    SetEntityAsNoLongerNeeded(palletEnt)
+                                                end
+                                            end
+                                        end
+                                    end)
                                 end
-                                Wait(3000) -- Cooldown para não ejetar múltiplos simultâneos
-                                break
+
+                                break -- Ejeta no máximo UM palete por solavanco
+                            end
+                        end
+                    end
+
+                    -- FÍSICA HÍBRIDA DA EMPILHADEIRA EMBARCADA: Queda em curvas severas se mal amarrada
+                    if ActiveJob and ActiveJob.withForklift and ForkliftLoadedOnTrailer and ForkliftSecured and (ForkliftRiskLevel == 'high') then
+                        local fork = JobEntities.forklift
+                        if fork and DoesEntityExist(fork) and (now - lastDropTime >= 5000) then
+                            if math.random(1, 100) <= 65 then -- 65% de chance de romper correntes frouxas
+                                lastDropTime = now
+                                ForkliftLoadedOnTrailer = false
+                                ForkliftSecured = false
+
+                                if NetworkGetEntityIsNetworked(fork) then
+                                    NetworkRequestControlOfEntity(fork)
+                                end
+
+                                DetachEntity(fork, true, true)
+                                SetEntityCollision(fork, true, true)
+                                FreezeEntityPosition(fork, false)
+                                SetVehicleEngineHealth(fork, 350.0) -- Dano severo no motor
+                                SetVehicleBodyHealth(fork, 400.0)
+
+                                local rightVector = GetEntityRightVector(truck)
+                                local sign = (steering > 0) and -1.0 or 1.0
+                                local forkImpulse = rightVector * (sign * 8.0) + vector3(0.0, 0.0, 1.8)
+                                ApplyForceToEntityCenterOfMass(fork, 1, forkImpulse.x, forkImpulse.y, forkImpulse.z, false, false, true, false)
+
+                                PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                SendMissionNotify('ALERTA MÁXIMO!', 'A corrente cedeu e a empilhadeira capotou na rodovia!', 'error')
+
+                                -- Adiciona interação ox_target para empurrar e desvirar a empilhadeira
+                                exports.ox_target:addLocalEntity(fork, {
+                                    {
+                                        name = 'aust_push_forklift',
+                                        icon = 'fas fa-arrows-rotate',
+                                        label = 'Empurrar / Desvirar Empilhadeira',
+                                        distance = 3.0,
+                                        canInteract = function()
+                                            return not IsPedInAnyVehicle(cache.ped, false) and (GetEntityRoll(fork) > 40.0 or GetEntityRoll(fork) < -40.0 or GetEntityPitch(fork) > 40.0 or GetEntityPitch(fork) < -40.0)
+                                        end,
+                                        onSelect = function()
+                                            local ok = lib.progressBar({
+                                                duration = 4500,
+                                                label = 'Empurrando e alinhando a empilhadeira...',
+                                                useWhileDead = false,
+                                                canCancel = true,
+                                                disable = { move = true, car = true, combat = true },
+                                                anim = {
+                                                    dict = 'misscarstealfinal',
+                                                    clip = 'push_car_loop',
+                                                    flag = 49
+                                                }
+                                            })
+
+                                            if ok then
+                                                local fCoords = GetEntityCoords(fork)
+                                                SetEntityRotation(fork, 0.0, 0.0, GetEntityHeading(fork), 2, true)
+                                                SetVehicleOnGroundProperly(fork)
+                                                SetVehicleFixed(fork)
+                                                SetVehicleEngineHealth(fork, 1000.0)
+                                                PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+                                                SendMissionNotify('Manutenção', 'Empilhadeira desvirada com sucesso!', 'success')
+                                                pcall(function() exports.ox_target:removeLocalEntity(fork, 'aust_push_forklift') end)
+                                            end
+                                        end
+                                    }
+                                })
                             end
                         end
                     end
@@ -897,8 +1197,12 @@ lib.onCache('vehicle', function(veh)
                     end
                 end
             end, function()
-                -- Todos os pallets carregados! Avança para a Etapa das Cordas / Amarração
-                SetupRopesStage()
+                -- Todos os pallets carregados! Se configurado com empilhadeira embarcada, embarca primeiro
+                if ActiveJob and ActiveJob.withForklift and JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                    SetupEmbarkForkliftStage()
+                else
+                    SetupRopesStage()
+                end
             end)
         end
     end

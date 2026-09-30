@@ -538,9 +538,9 @@ window.addEventListener("message", async function (event) {
                 button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
             } else {
                 if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                    partystart_btn = `<button onclick="startContract('${contract.contract_id}', true)" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                    partystart_btn = `<button onclick="openContractConfigModal('${contract.contract_id}', true, ${contract.reward || 0})" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
                 }
-                button = `<button onclick="startContract('${contract.contract_id}', false)" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                button = `<button onclick="openContractConfigModal('${contract.contract_id}', false, ${contract.reward || 0})" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
                 if (contract.progress) {
                     button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                     partystart_btn = "";
@@ -1715,8 +1715,89 @@ function closeUI() {
 
 let isContractStarting = false;
 
-function startContract(contract_id, party) {
-    console.log("[AUST_TRUCKER NUI] startContract acionado! ID:", contract_id, "party:", party);
+function updatePalletConfig(val, baseReward) {
+    let count = parseInt(val) || 4;
+    $("#modal-pallet-count-badge").text(`${count} Paletes`);
+    let weightKg = count * 250;
+    $("#modal-pallet-weight-val").text(`${weightKg.toLocaleString('pt-BR')} kg`);
+
+    let extraPallets = Math.max(0, count - 4);
+    let bonusPct = extraPallets * 15;
+    if (baseReward && baseReward > 0) {
+        let extraMoney = Math.floor(baseReward * (bonusPct / 100));
+        $("#modal-pallet-bonus-val").text(`+${bonusPct}% (+$${extraMoney.toLocaleString('pt-BR')})`);
+    } else {
+        $("#modal-pallet-bonus-val").text(`+${bonusPct}%`);
+    }
+}
+
+function openContractConfigModal(contract_id, party, baseReward) {
+    baseReward = Number(baseReward) || 0;
+    Utils.showCustomModal({
+        title: "Configurar Manifesto de Carga (Estiva)",
+        dialogClass: "modal-dialog modal-dialog-centered",
+        bodyHtml: `
+            <div class="p-2 select-none text-left">
+                <p class="text-muted mb-3" style="font-size: 13px;">Defina a quantidade de paletes a estivar na caçamba e escolha se deseja embarcar a empilhadeira para autonomia de resgate.</p>
+                
+                <div class="card-theme p-3 mb-3" style="border-radius: 8px; border: 1px solid rgba(16,185,129,0.3);">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="mb-0 font-weight-bold text-white"><i class="fas fa-boxes-stacked mr-1 text-emerald"></i> Carga Transportada (4 a 12):</label>
+                        <span id="modal-pallet-count-badge" class="badge badge-success px-2 py-1" style="font-size: 14px; background: #10b981;">4 Paletes</span>
+                    </div>
+                    <input type="range" class="custom-range" id="modal-pallet-slider" min="4" max="12" step="1" value="4" oninput="updatePalletConfig(this.value, ${baseReward})">
+                    <div class="d-flex justify-content-between mt-1 text-muted" style="font-size: 11px;">
+                        <span>4 (Mínimo)</span>
+                        <span>8 (Médio)</span>
+                        <span>12 (Capacidade Máxima)</span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center card-theme p-3 mb-3" style="border-radius: 8px;">
+                    <div>
+                        <div class="font-weight-bold text-white"><i class="fas fa-weight-hanging text-emerald mr-1"></i> Peso Total da Carga:</div>
+                        <div class="text-muted" style="font-size: 12px;">250 kg por palete</div>
+                    </div>
+                    <div id="modal-pallet-weight-val" class="font-weight-bold text-emerald" style="font-size: 16px;">1.000 kg</div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center card-theme p-3 mb-3" style="border-radius: 8px;">
+                    <div>
+                        <div class="font-weight-bold text-white"><i class="fas fa-coins text-warning mr-1"></i> Bônus de Remuneração:</div>
+                        <div class="text-muted" style="font-size: 12px;">+15% por palete adicional</div>
+                    </div>
+                    <div id="modal-pallet-bonus-val" class="font-weight-bold text-warning" style="font-size: 16px;">+0% ($0)</div>
+                </div>
+
+                <div class="card-theme p-3" style="border-radius: 8px;">
+                    <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="modal-forklift-switch" checked>
+                        <label class="custom-control-label font-weight-bold text-white" for="modal-forklift-switch">
+                            Embarcar Empilhadeira (Forklift)
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-1">A empilhadeira viaja na traseira do trailer. Permite descer na rodovia e resgatar paletes que caírem.</small>
+                </div>
+            </div>
+        `,
+        buttons: [
+            { text: "Cancelar", class: "btn btn-outline-secondary", dismiss: true },
+            {
+                text: "Confirmar & Iniciar",
+                class: "btn btn-primary",
+                dismiss: true,
+                action: function() {
+                    let pCount = parseInt($("#modal-pallet-slider").val()) || 4;
+                    let fLift = $("#modal-forklift-switch").is(":checked");
+                    startContract(contract_id, party, pCount, fLift);
+                }
+            }
+        ]
+    });
+}
+
+function startContract(contract_id, party, palletCount, withForklift) {
+    console.log("[AUST_TRUCKER NUI] startContract acionado! ID:", contract_id, "party:", party, "pallets:", palletCount, "forklift:", withForklift);
     if (isContractStarting) {
         console.warn("[AUST_TRUCKER NUI] startContract ignorado - inicialização já em andamento.");
         return;
@@ -1727,7 +1808,13 @@ function startContract(contract_id, party) {
     // Oculta a interface imediatamente
     $(".main").hide();
 
-    let payload = { id: contract_id, contract_id: contract_id, party: party };
+    let payload = {
+        id: contract_id,
+        contract_id: contract_id,
+        party: party,
+        palletCount: palletCount || 4,
+        withForklift: (typeof withForklift !== "undefined") ? withForklift : true
+    };
     Utils.post("startContract", payload);
 }
 

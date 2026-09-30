@@ -585,32 +585,37 @@ local function StartTruckDelivery(src, contractData)
     local containerNetId = nil
     local pallets = {}
     local palletNetIds = {}
-    local reqPallets = contractData.palletCount or 4
+    local reqPallets = math.min(12, math.max(4, tonumber(contractData.palletCount) or 4))
+    local withForklift = (contractData.withForklift ~= false)
 
     if cargoType == 'dry' then
-        local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
+        if withForklift then
+            local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
-        for idx, coord in ipairs(forkliftSpawns) do
-            if IsSpawnPointClear(coord, 3.5, { [truck] = true, [trailer] = true }) then
-                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
-                local waitTimer = GetGameTimer()
-                while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-                if DoesEntityExist(forklift) then
-                    chosenForkliftCoord = coord
-                    print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s"):format(
-                        idx, tostring(NetworkGetNetworkIdFromEntity(forklift))
-                    ))
-                    break
+            for idx, coord in ipairs(forkliftSpawns) do
+                if IsSpawnPointClear(coord, 3.5, { [truck] = true, [trailer] = true }) then
+                    forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
+                    local waitTimer = GetGameTimer()
+                    while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+                    if DoesEntityExist(forklift) then
+                        chosenForkliftCoord = coord
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s"):format(
+                            idx, tostring(NetworkGetNetworkIdFromEntity(forklift))
+                        ))
+                        break
+                    end
                 end
             end
-        end
 
-        if not forklift or not DoesEntityExist(forklift) then
-            local fallbackCoord = forkliftSpawns[1]
-            forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
-            local waitTimer = GetGameTimer()
-            while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-            if DoesEntityExist(forklift) then chosenForkliftCoord = fallbackCoord end
+            if not forklift or not DoesEntityExist(forklift) then
+                local fallbackCoord = forkliftSpawns[1]
+                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+                if DoesEntityExist(forklift) then chosenForkliftCoord = fallbackCoord end
+            end
+        else
+            print(("[AUST_Trucker] Frete configurado sem empilhadeira embarcada por escolha do motorista."))
         end
 
         if forklift and DoesEntityExist(forklift) then
@@ -738,6 +743,15 @@ local function StartTruckDelivery(src, contractData)
     local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
     local destCoords = destCfg.coords
 
+    -- Bônus de remuneração e XP por paletes extras (> 4)
+    local basePayment = destCfg.reward or 5000
+    local baseXP = destCfg.xp or 200
+    if cargoType == 'dry' and reqPallets > 4 then
+        local extraPallets = reqPallets - 4
+        basePayment = math.floor(basePayment * (1 + (extraPallets * 0.15)))
+        baseXP = math.floor(baseXP * (1 + (extraPallets * 0.10)))
+    end
+
     local lobbyData = {
         jobId = jobId,
         src = src,
@@ -751,6 +765,7 @@ local function StartTruckDelivery(src, contractData)
         trailer = trailer,
         forklift = forklift,
         forkliftPlate = forkliftPlate,
+        withForklift = withForklift,
         handler = handler,
         handlerPlate = handlerPlate,
         container = containerObj,
@@ -761,8 +776,8 @@ local function StartTruckDelivery(src, contractData)
         requiredCount = reqPallets,
         cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or (cargoType == 'heavy' and 'Contêiner Marítimo' or (cargoType == 'adr' and 'Compostos Químicos ADR' or 'Paletes Industriais'))),
         cargoIntegrity = 100,
-        payment = destCfg.reward or 5000,
-        xp = destCfg.xp or 200,
+        payment = basePayment,
+        xp = baseXP,
         deliveryCoords = destCoords,
         stage = 'STEP_GET_TRUCK',
         current_object = nil,
@@ -793,6 +808,7 @@ local function StartTruckDelivery(src, contractData)
         handlerPlate = handlerPlate,
         containerNetId = containerNetId,
         palletNetIds = palletNetIds,
+        withForklift = withForklift,
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
         loadedCount = 0,

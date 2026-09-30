@@ -162,21 +162,24 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
                 else
-                    -- Caso 2: Acomodar palete na carreta (Sem verificação de portas - direto na caçamba/reboque)
+                    -- Caso 2: Acomodar palete na carreta (Estiva Manual / Posicionamento Livre na Caçamba)
                     if trailer and DoesEntityExist(trailer) then
-                        local trailerRear = GetOffsetFromEntityInWorldCoords(trailer, 0.0, -5.5, 0.0)
-                        local distToRear = #(GetEntityCoords(forklift) - trailerRear)
+                        local palletEntity = CurrentForkliftPallet
+                        local pCoords = palletEntity and DoesEntityExist(palletEntity) and GetEntityCoords(palletEntity) or GetEntityCoords(forklift)
+                        local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-                        if distToRear < 5.2 then
+                        -- Validação da zona da caçamba do reboque:
+                        -- Largura X [-1.45, 1.45], Comprimento Y [-6.2, 5.0], Altura Z [-0.5, 1.8]
+                        local isOverTrailerBed = (math.abs(relPos.x) <= 1.55) and (relPos.y >= -6.5 and relPos.y <= 5.2) and (relPos.z >= -0.8 and relPos.z <= 2.2)
+
+                        if isOverTrailerBed then
                             sleep = 0
                             if TextUIShowing ~= 'drop' then
-                                lib.showTextUI('[G] Posicionar no Caminhão', { position = 'left-center', icon = 'truck-ramp-box' })
+                                lib.showTextUI('[G] Soltar / Estivar Palete na Carreta', { position = 'left-center', icon = 'truck-ramp-box' })
                                 TextUIShowing = 'drop'
                             end
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                local palletEntity = CurrentForkliftPallet
-
                                 -- Garante controle de rede antes de desanexar/anexar
                                 local timeout = 2000
                                 while not NetworkHasControlOfEntity(palletEntity) and timeout > 0 do
@@ -187,12 +190,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                 DetachEntity(palletEntity, true, true)
 
-                                -- Fixação calculada do palete na caçamba do reboque
-                                local ox, oy, oz = GetTrailerAttachOffset(trailer, loadedCount)
+                                -- Rotação e orientação relativas ao reboque para respeitar o ângulo solto pelo jogador
+                                local tRot = GetEntityRotation(trailer, 2)
+                                local pRot = GetEntityRotation(palletEntity, 2)
+                                local relHeading = pRot.z - tRot.z
+
+                                -- Estiva manual: Fixação exata na posição onde o jogador soltou sobre o assoalho
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
-                                    ox, oy, oz,
-                                    0.0, 0.0, 0.0,
+                                    relPos.x, relPos.y, relPos.z,
+                                    0.0, 0.0, relHeading,
                                     false, false, true, false, 2, true
                                 )
                                 SetEntityCollision(palletEntity, true, true)
