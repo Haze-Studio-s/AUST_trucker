@@ -666,7 +666,8 @@ Utils.convertFileToBase64 = function (file, callback) {
 };
 
 $(function () {
-    Utils.setResourceName("lc_utils");
+    let currentRes = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+    Utils.setResourceName(currentRes);
     window.addEventListener("message", function (event) {
         let item = event.data;
         if (item.notification) {

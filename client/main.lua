@@ -385,6 +385,7 @@ end)
 
 local function HandleStartDeliveryNUI(data, cb)
     SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close', hidemenu = true })
     SendNUIMessage({ action = 'closeUI' })
     SendNUIMessage({ action = 'hide' })
 
@@ -392,13 +393,16 @@ local function HandleStartDeliveryNUI(data, cb)
     SetEntityVisible(ped, true)
     ResetEntityAlpha(ped)
 
+    local payload = data or {}
+    local contractId = payload.id or payload.contract_id or payload.contractId or payload.jobId
+    print(("^2[AUST_Trucker DEBUG - ETAPA 1] HandleStartDeliveryNUI disparado! ID=%s^7"):format(tostring(contractId)))
+
     if ActiveJob then
         SendMissionNotify('Central Logística', 'Você já possui uma rota ou entrega em andamento!', 'error')
         if cb then cb({ ok = false, message = 'Já em serviço' }) end
         return
     end
 
-    local payload = data or {}
     TriggerServerEvent('aurp_trucker:server:startDelivery', payload)
 
     if cb then cb('ok') end
@@ -407,6 +411,7 @@ end
 RegisterNUICallback('startDelivery', HandleStartDeliveryNUI)
 RegisterNUICallback('acceptJob', HandleStartDeliveryNUI)
 RegisterNUICallback('startJob', HandleStartDeliveryNUI)
+RegisterNUICallback('startContract', HandleStartDeliveryNUI)
 
 -- =======================================================================
 -- ETAPA 3 & 4: ACOPLAMENTO DA CARRETA E POSICIONAMENTO NA BAÍA

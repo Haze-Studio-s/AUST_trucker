@@ -538,9 +538,9 @@ window.addEventListener("message", async function (event) {
                 button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
             } else {
                 if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                    partystart_btn = `<button onclick="startContract('${contract.contract_id}', true)" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
                 }
-                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                button = `<button onclick="startContract('${contract.contract_id}', false)" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
                 if (contract.progress) {
                     button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                     partystart_btn = "";
@@ -1716,12 +1716,33 @@ function closeUI() {
 let isContractStarting = false;
 
 function startContract(contract_id, party) {
-    if (isContractStarting) return;
+    console.log("[AUST_TRUCKER NUI] startContract acionado! ID:", contract_id, "party:", party);
+    if (isContractStarting) {
+        console.warn("[AUST_TRUCKER NUI] startContract ignorado - inicialização já em andamento.");
+        return;
+    }
     isContractStarting = true;
-    setTimeout(() => { isContractStarting = false; }, 2500);
+    setTimeout(() => { isContractStarting = false; }, 2000);
 
-    closeUI();
-    Utils.post("startContract", { id: contract_id, party: party });
+    // Oculta a interface imediatamente para não travar na tela
+    $(".main").hide();
+
+    let resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
+    let payload = { id: contract_id, contract_id: contract_id, party: party };
+
+    // Envio direto síncrono para o NUI Callback do FiveM (evita debounce ou timeout de Chromium em background)
+    try {
+        fetch(`https://${resName}/startContract`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).catch(() => {});
+    } catch(e) {}
+
+    // Envio padrão complementar via protocolo LC Utils
+    try {
+        Utils.post("startContract", payload);
+    } catch(e) {}
 }
 
 function cancelContract(contract_id) {

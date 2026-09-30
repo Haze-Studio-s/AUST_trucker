@@ -544,17 +544,22 @@ RegisterNUICallback('post', function(body, cb)
         return
     end
 
-    if event == "startContract" then
+    if event == "startContract" or event == "startJob" or event == "acceptJob" then
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
         local isParty = data and (data.party == true or data.isParty == true)
-        print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI startContract acionado! ID=%s, type=%s, party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
+        print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI %s acionado! ID=%s, type=%s, party=%s^7"):format(tostring(event), tostring(contractId), tostring(contractType), tostring(isParty)))
         CloseJobBoard()
         SetNuiFocus(false, false)
         if lcActiveJob then
-            print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7")
-            lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
-            return cb(200)
+            local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
+            if not isAlive then
+                lcActiveJob = nil
+            else
+                print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7")
+                lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+                return cb(200)
+            end
         end
         if isStartingJob then
             print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7")
@@ -739,24 +744,36 @@ RegisterNUICallback('post', function(body, cb)
     cb(200)
 end)
 
-RegisterNUICallback('startJob', function(data, cb)
+local function HandleDirectStartContract(data, cb)
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
-    print(("^2[AUST_Trucker Client] NUI startJob received: ID=%s^7"):format(tostring(contractId)))
+    local contractType = data and (data.contract_type or data.contractType or data.type)
+    local isParty = data and (data.party == true or data.isParty == true)
+    print(("^2[AUST_Trucker Client] NUI Direct Start received: ID=%s, Type=%s, Party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
     CloseJobBoard()
     SetNuiFocus(false, false)
     if lcActiveJob then
-        lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
-        return cb('ok')
+        local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
+        if not isAlive then
+            lcActiveJob = nil
+        else
+            lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+            return cb('ok')
+        end
     end
     if isStartingJob then return cb('ok') end
     isStartingJob = true
     SetTimeout(3000, function() isStartingJob = false end)
     TriggerServerEvent('aurp_trucker:server:startDelivery', {
         id = contractId,
-        contractId = contractId
+        contractId = contractId,
+        contractType = contractType,
+        isParty = isParty
     })
     cb('ok')
-end)
+end
+
+RegisterNUICallback('startJob', HandleDirectStartContract)
+RegisterNUICallback('startContract', HandleDirectStartContract)
 
 RegisterNUICallback('close', function(data, cb)
     CloseJobBoard()
