@@ -663,11 +663,11 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
 
-    -- Validação de proximidade autoritativa do servidor
+    -- Validação de proximidade autoritativa do servidor (6.0m máximo)
     local ped = GetPlayerPed(src)
     local pedCoords = GetEntityCoords(ped)
     local truckCoords = GetEntityCoords(lobby.truck)
-    if #(pedCoords - truckCoords) > 25.0 then
+    if #(pedCoords - truckCoords) > 6.0 then
         TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está muito afastado do caminhão para validar a inspeção!', 'error')
         return
     end
@@ -899,6 +899,7 @@ RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
 
     lobby.stage = 'STATUS_IN_TRANSIT'
     lobby.loadedCount = 100
+    lobby.startedTransitAt = os.time()
 
     TriggerClientEvent('aurp_trucker:client:liquidLoadingCompleted', src, jobId, lobby.deliveryCoords)
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
@@ -911,7 +912,18 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     if not lobby or lobby.src ~= src then return end
     if lobby.loadedCount < lobby.requiredCount then return end
 
+    local ped = GetPlayerPed(src)
+    local pedCoords = GetEntityCoords(ped)
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        local trailerCoords = GetEntityCoords(lobby.trailer)
+        if #(pedCoords - trailerCoords) > 15.0 then
+            TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está muito afastado da carreta para validar o travamento das cintas!', 'error')
+            return
+        end
+    end
+
     lobby.stage = 'STATUS_IN_TRANSIT'
+    lobby.startedTransitAt = os.time()
 
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -921,12 +933,55 @@ RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+    if lobby.stage ~= 'STATUS_IN_TRANSIT' then return end
 
     lobby.lostPallets = (lobby.lostPallets or 0) + 1
     print(("[AUST_Trucker] Palete perdido em rota para o frete %s (Player: %s)! Total de perdas: %d"):format(
         tostring(jobId), tostring(src), lobby.lostPallets
     ))
 end)
+
+-- Helper de remoção de chaves autoritativas (Caminhão alugado e Empilhadeira)
+local function RemoveJobKeys(src, lobby)
+    if not src or not lobby then return end
+    local platesToRemove = {}
+    local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
+    if truckPlate and not lobby.isOwned then
+        table.insert(platesToRemove, { plate = truckPlate, entity = lobby.truck })
+    end
+    if lobby.forkliftPlate then
+        table.insert(platesToRemove, { plate = lobby.forkliftPlate, entity = lobby.forklift })
+    end
+
+    for _, pData in ipairs(platesToRemove) do
+        local targetPlate = pData.plate
+        if exports.ox_inventory then
+            pcall(function()
+                exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = targetPlate })
+                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = targetPlate })
+                local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
+                for _, slotData in ipairs(slots) do
+                    if slotData.metadata and slotData.metadata.plate == targetPlate then
+                        exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
+                    end
+                end
+                local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
+                for _, slotData in ipairs(vehKeySlots) do
+                    if slotData.metadata and slotData.metadata.plate == targetPlate then
+                        exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
+                    end
+                end
+            end)
+        end
+
+        if exports['qbx_vehiclekeys'] and pData.entity and DoesEntityExist(pData.entity) then
+            pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, pData.entity) end)
+        end
+        if exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, targetPlate) end)
+        end
+    end
+end
 
 -- ETAPA 5: Entrega Final, Pagamentos QBOX e Persistência oxmysql
 RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
@@ -938,6 +993,37 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.citizenId ~= citizenId then return end
     if lobby.stage ~= 'STATUS_IN_TRANSIT' then return end
+
+    -- BLINDAGEM 1: Validação autoritativa de distância até o destino
+    local ped = GetPlayerPed(src)
+    local pedCoords = GetEntityCoords(ped)
+    local dest = lobby.deliveryCoords
+    if not dest then return end
+    local destVec = vector3(dest.x, dest.y, dest.z)
+    local dist = #(pedCoords - destVec)
+    if dist > 35.0 then
+        print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s tentou concluir entrega fora do raio (%.1fm de distância)!"):format(tostring(src), dist))
+        TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está fora do ponto de entrega para concluir o serviço!', 'error')
+        return
+    end
+
+    -- BLINDAGEM 2: Validação de integridade do caminhão
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        if GetEntityHealth(lobby.truck) <= 0 then
+            TriggerClientEvent('aurp_trucker:notify', src, 'Carga Perdida', 'O caminhão foi destruído e a carga foi perdida!', 'error')
+            return
+        end
+    end
+
+    -- BLINDAGEM 3: Validação de tempo mínimo de viagem (anti-teleport)
+    if lobby.startedTransitAt then
+        local elapsed = os.time() - lobby.startedTransitAt
+        if elapsed < 10 then
+            print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s concluiu trajeto em tempo impossível (%ds)!"):format(tostring(src), elapsed))
+            TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Tempo de rota inconsistente!', 'error')
+            return
+        end
+    end
 
     -- Pagamento com cálculo de penalidade proporcional por paletes perdidos
     local basePayment = lobby.payment or 5000
@@ -956,46 +1042,8 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
     end
 
-    -- STEP C: DUAL-LAYER KEY REMOVAL (TRUCK & FORKLIFT)
-    local platesToRemove = {}
-    local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
-    if truckPlate then table.insert(platesToRemove, { plate = truckPlate, entity = lobby.truck }) end
-    if lobby.forkliftPlate then table.insert(platesToRemove, { plate = lobby.forkliftPlate, entity = lobby.forklift }) end
-
-    for _, pData in ipairs(platesToRemove) do
-        local targetPlate = pData.plate
-        print(("[AUST_Trucker] Removing key for plate: %s (Player: %s)"):format(targetPlate, tostring(src)))
-
-        -- 1st Layer: Physical item removal via ox_inventory
-        if exports.ox_inventory then
-            local removed = exports.ox_inventory:RemoveItem(src, 'keys', 1, { plate = targetPlate })
-            if not removed then
-                exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, { plate = targetPlate })
-            end
-
-            -- Varredura por slots para assegurar limpeza completa de itens com a placa
-            local slots = exports.ox_inventory:GetSlotsWithItem(src, 'keys') or {}
-            for _, slotData in ipairs(slots) do
-                if slotData.metadata and slotData.metadata.plate == targetPlate then
-                    exports.ox_inventory:RemoveItem(src, 'keys', 1, nil, slotData.slot)
-                end
-            end
-            local vehKeySlots = exports.ox_inventory:GetSlotsWithItem(src, 'vehiclekey') or {}
-            for _, slotData in ipairs(vehKeySlots) do
-                if slotData.metadata and slotData.metadata.plate == targetPlate then
-                    exports.ox_inventory:RemoveItem(src, 'vehiclekey', 1, nil, slotData.slot)
-                end
-            end
-        end
-
-        -- 2nd Layer: Framework permission removal (qbx_vehiclekeys & qb-vehiclekeys)
-        if exports['qbx_vehiclekeys'] and pData.entity and DoesEntityExist(pData.entity) then
-            pcall(function() exports['qbx_vehiclekeys']:RemoveKeys(src, pData.entity) end)
-        end
-        if exports['qb-vehiclekeys'] then
-            pcall(function() exports['qb-vehiclekeys']:RemoveKeys(src, targetPlate) end)
-        end
-    end
+    -- Remoção autoritativa de chaves
+    RemoveJobKeys(src, lobby)
 
     -- Atualização autoritativa da tabela 0r_trucker
     pcall(function()
@@ -1013,24 +1061,8 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     -- Atualiza aust_trucker_stats para manter paridade estatística do painel
     pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
-    -- Carreta é entregue e excluída
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        DeleteEntity(lobby.trailer)
-    end
-
-    -- Caminhão: se for alugado é removido; se for próprio do jogador, permanece no mundo com ele
-    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
-        DeleteEntity(lobby.truck)
-    end
-
-    -- Empilhadeira e paletes da baia são limpos
-    if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
-    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then DeleteEntity(lobby.hoseProp) end
-    if lobby.pallets then
-        for _, p in ipairs(lobby.pallets) do
-            if p and DoesEntityExist(p) then DeleteEntity(p) end
-        end
-    end
+    -- Limpeza OneSync autoritativa de entidades geradas
+    CleanupLobbyEntities(lobby)
 
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil
@@ -1043,6 +1075,26 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         deliveredPallets = deliveredCount,
         distance = 3.5
     })
+end)
+
+-- Cancelamento / Aborto Autoritativo da Entrega
+RegisterNetEvent('aurp_trucker:server:cancelDelivery', function(jobId, reason)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.citizenId ~= citizenId then return end
+
+    RemoveJobKeys(src, lobby)
+    CleanupLobbyEntities(lobby)
+
+    PolarixLobbies[jobId] = nil
+    PlayerPolarixLobbies[citizenId] = nil
+
+    TriggerClientEvent('aust_trucker:client:ClearObjective', src)
+    TriggerClientEvent('aurp_trucker:notify', src, 'Entrega Cancelada', reason or 'O contrato foi cancelado.', 'warning')
 end)
 
 -- Reposição de Emergência / Fallback

@@ -92,6 +92,11 @@ local function AttachPalletToForklift(forklift, pallet)
         timeout = timeout - 50
     end
 
+    if not NetworkHasControlOfEntity(pallet) then
+        print(("[AUST_Trucker] Falha ao obter controle de rede do palete %s"):format(tostring(pallet)))
+        return false
+    end
+
     -- 2. Descongela a posição no mundo
     FreezeEntityPosition(pallet, false)
 
@@ -111,6 +116,7 @@ local function AttachPalletToForklift(forklift, pallet)
         0.0, 0.0, 0.0, 
         false, false, false, false, 2, true
     )
+    return true
 end
 
 function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb)
@@ -134,18 +140,19 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
 
                         if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                            AttachPalletToForklift(forklift, targetPallet)
+                            local ok = AttachPalletToForklift(forklift, targetPallet)
+                            if ok then
+                                CurrentForkliftPallet = targetPallet
+                                PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
 
-                            CurrentForkliftPallet = targetPallet
-                            PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                                if TextUIShowing then
+                                    lib.hideTextUI()
+                                    TextUIShowing = nil
+                                end
 
-                            if TextUIShowing then
-                                lib.hideTextUI()
-                                TextUIShowing = nil
-                            end
-
-                            if onLoadedCb then
-                                onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
+                                if onLoadedCb then
+                                    onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
+                                end
                             end
                         end
                     else

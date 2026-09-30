@@ -641,6 +641,15 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
         while CurrentStage == 'STEP_8_IN_TRANSIT' do
             Wait(250)
             local truck = JobEntities.truck
+            if not truck or not DoesEntityExist(truck) or IsEntityDead(truck) or IsEntityInWater(truck) then
+                SendMissionNotify('Missão Fracassada', 'O caminhão foi destruído ou submergiu! A entrega foi cancelada.', 'error')
+                if ActiveJob and ActiveJob.jobId then
+                    TriggerServerEvent('aurp_trucker:server:cancelDelivery', ActiveJob.jobId, 'Caminhão destruído ou afundado')
+                end
+                CleanupCurrentJob()
+                break
+            end
+
             if truck and DoesEntityExist(truck) then
                 local speedKmh = GetEntitySpeed(truck) * 3.6
                 local steerAngle = GetVehicleSteeringAngle(truck)
@@ -745,37 +754,6 @@ local function OnPlayerEnteredTruck(truck)
     StartCouplingWatcher()
 end
 
-local function StartTruckSeatWatcher(truck)
-    CreateThread(function()
-        while CurrentStage == 'STEP_2_ENTER_TRUCK' and ActiveJob do
-            local ped = cache.ped or PlayerPedId()
-            local currentVeh = GetVehiclePedIsIn(ped, false)
-            if currentVeh ~= 0 then
-                local isTargetTruck = false
-                if truck and DoesEntityExist(truck) and currentVeh == truck then
-                    isTargetTruck = true
-                elseif JobEntities.truck and DoesEntityExist(JobEntities.truck) and currentVeh == JobEntities.truck then
-                    isTargetTruck = true
-                elseif ActiveJob and ActiveJob.truckNetId and NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
-                    local netVeh = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
-                    if netVeh ~= 0 and currentVeh == netVeh then
-                        isTargetTruck = true
-                    end
-                end
-
-                if isTargetTruck then
-                    local seatPed = GetPedInVehicleSeat(currentVeh, -1)
-                    if seatPed == ped then
-                        OnPlayerEnteredTruck(currentVeh)
-                        break
-                    end
-                end
-            end
-            Wait(250)
-        end
-    end)
-end
-
 local function StartMissionStep1(truck, trailer, forklift)
     CurrentStage = 'STEP_2_ENTER_TRUCK'
 
@@ -793,8 +771,14 @@ local function StartMissionStep1(truck, trailer, forklift)
     -- 3. Disparo da notificação sonora de 10 segundos
     SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
 
-    -- 4. Monitoramento ativo do assento do motorista
-    StartTruckSeatWatcher(truck)
+    -- 4. Verificação imediata caso o jogador já esteja dentro do veículo
+    local ped = cache.ped or PlayerPedId()
+    local currentVeh = GetVehiclePedIsIn(ped, false)
+    if currentVeh ~= 0 and truck and currentVeh == truck then
+        if GetPedInVehicleSeat(currentVeh, -1) == ped then
+            OnPlayerEnteredTruck(currentVeh)
+        end
+    end
 end
 
 -- =======================================================================
@@ -898,6 +882,13 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         local forklift = nil
         if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
             forklift = WaitForNetworkEntity(payload.forkliftNetId, 10000)
+        end
+
+        if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
+            SendMissionNotify('Falha de Streaming', 'Não foi possível sincronizar os veículos da missão no cliente.', 'error')
+            TriggerServerEvent('aurp_trucker:server:cancelDelivery', payload.jobId, 'Falha de streaming de veículos no cliente')
+            CleanupCurrentJob()
+            return
         end
 
         local playerPed = cache.ped or PlayerPedId()
