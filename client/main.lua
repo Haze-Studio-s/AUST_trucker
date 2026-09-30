@@ -305,18 +305,34 @@ end
 local function WaitForNetworkEntity(netId, maxTimeoutMs)
     if not netId or netId == 0 then return nil end
     local timeout = GetGameTimer() + (maxTimeoutMs or 10000)
+    local lastLog = GetGameTimer()
+
+    print(("[AUST_Trucker DEBUG - ETAPA 5] Aguardando resolução de rede para NetID: %s..."):format(tostring(netId)))
 
     while GetGameTimer() < timeout do
+        local ok, ent = pcall(NetworkGetEntityFromNetworkId, netId)
+        if ok and ent and ent ~= 0 and DoesEntityExist(ent) then
+            print(("[AUST_Trucker DEBUG - ETAPA 5] Entidade NetID %s sincronizada! Handle: %s"):format(tostring(netId), tostring(ent)))
+            return ent
+        end
+
         if NetworkDoesNetworkIdExist(netId) then
-            local ent = NetworkGetEntityFromNetworkId(netId)
-            if ent and ent ~= 0 and DoesEntityExist(ent) then
-                return ent
+            local netEnt = NetworkGetEntityFromNetworkId(netId)
+            if netEnt and netEnt ~= 0 and DoesEntityExist(netEnt) then
+                print(("[AUST_Trucker DEBUG - ETAPA 5] Entidade NetID %s sincronizada via NetworkDoesNetworkIdExist! Handle: %s"):format(tostring(netId), tostring(netEnt)))
+                return netEnt
             end
         end
+
+        if GetGameTimer() - lastLog >= 2000 then
+            print(("[AUST_Trucker DEBUG - ETAPA 5] Aguardando streaming do NetID: %s (Restante: %d ms)"):format(tostring(netId), timeout - GetGameTimer()))
+            lastLog = GetGameTimer()
+        end
+
         Wait(100)
     end
 
-    print(("^3[AUST_Trucker] Aviso: Timeout aguardando entidade física para NetID %s^7"):format(tostring(netId)))
+    print(("^1[AUST_Trucker DEBUG - ETAPA 5] ERRO CRÍTICO: Timeout (10s) aguardando entidade física para NetID %s!^7"):format(tostring(netId)))
     return nil
 end
 
@@ -917,6 +933,13 @@ end)
 
 -- ETAPA 1: INÍCIO E SPAWN DINÂMICO
 RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
+    print(("^2[AUST_Trucker DEBUG - ETAPA 4] aurp_trucker:client:polarixJobStarted recebido com sucesso no Cliente! JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s^7"):format(
+        tostring(payload and payload.jobId),
+        tostring(payload and payload.truckNetId),
+        tostring(payload and payload.trailerNetId),
+        tostring(payload and payload.cargoType)
+    ))
+
     CleanupCurrentJob()
     ActiveJob = payload
     CurrentStage = 'STEP_1_START'
@@ -956,11 +979,16 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         end
 
         if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
+            print(("^1[AUST_Trucker DEBUG - ETAPA 5] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
+                tostring(truck), tostring(trailer)
+            ))
             SendMissionNotify('Falha de Streaming', 'Não foi possível sincronizar os veículos da missão no cliente.', 'error')
             TriggerServerEvent('aurp_trucker:server:cancelDelivery', payload.jobId, 'Falha de streaming de veículos no cliente')
             CleanupCurrentJob()
             return
         end
+
+        print(("^2[AUST_Trucker DEBUG - ETAPA 5] Veículos sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId)))
 
         local playerPed = cache.ped or PlayerPedId()
         SetEntityVisible(playerPed, true)

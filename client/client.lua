@@ -548,20 +548,21 @@ RegisterNUICallback('post', function(body, cb)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
         local isParty = data and (data.party == true or data.isParty == true)
-        print(("^2[AUST_Trucker Client] startContract NUI Callback: ID=%s, type=%s, party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
+        print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI startContract acionado! ID=%s, type=%s, party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
         CloseJobBoard()
         SetNuiFocus(false, false)
         if lcActiveJob then
-            print("^3[AUST_Trucker Client] startContract ignored: lcActiveJob is already active! Use /clearjob if stuck.^7")
+            print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7")
             lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
             return cb(200)
         end
         if isStartingJob then
-            print("^3[AUST_Trucker Client] startContract ignored: isStartingJob cooldown active.^7")
+            print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7")
             return cb(200)
         end
         isStartingJob = true
-        SetTimeout(3000, function() isStartingJob = false end)
+        SetTimeout(4000, function() isStartingJob = false end)
+        print("^2[AUST_Trucker DEBUG - ETAPA 1] Enviando TriggerServerEvent 'aurp_trucker:server:startDelivery'...^7")
         TriggerServerEvent('aurp_trucker:server:startDelivery', {
             id = contractId,
             contractId = contractId,
