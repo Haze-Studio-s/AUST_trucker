@@ -151,6 +151,14 @@ local function CleanupLobbyEntities(lobby)
         DeleteEntity(lobby.forklift)
     end
 
+    if lobby.handler and DoesEntityExist(lobby.handler) then
+        DeleteEntity(lobby.handler)
+    end
+
+    if lobby.container and DoesEntityExist(lobby.container) then
+        DeleteEntity(lobby.container)
+    end
+
     if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
         DeleteEntity(lobby.hoseProp)
     end
@@ -164,7 +172,7 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
--- Auto-schema idempotente para 0r_trucker
+-- Auto-schema idempotente para 0r_trucker e trucker_licenses
 MySQL.ready(function()
     MySQL.query([[
         CREATE TABLE IF NOT EXISTS `0r_trucker` (
@@ -175,6 +183,15 @@ MySQL.ready(function()
             `total_deliveries` INT DEFAULT 0,
             `total_earned` INT DEFAULT 0,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]])
+
+    MySQL.query([[
+        CREATE TABLE IF NOT EXISTS `trucker_licenses` (
+            `citizenid` VARCHAR(50) NOT NULL PRIMARY KEY,
+            `adr_certified` TINYINT(1) DEFAULT 0,
+            `heavy_certified` TINYINT(1) DEFAULT 0,
             `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]])
@@ -354,15 +371,31 @@ local function StartTruckDelivery(src, contractData)
     local wh = Config.Polarix.Warehouse
     local truckModel = joaat(selectedTruckModel)
 
-    -- RESOLUÇÃO DO TIPO DE CARGA (Seca vs Líquida)
+    -- RESOLUÇÃO DO TIPO DE CARGA (Seca vs Líquida vs Pesada/Contêiner vs ADR)
     local cargoType = contractData.cargoType
-    if not cargoType or (cargoType ~= 'dry' and cargoType ~= 'liquid') then
+    if not cargoType or (cargoType ~= 'dry' and cargoType ~= 'liquid' and cargoType ~= 'heavy' and cargoType ~= 'adr') then
         local tModel = string.lower(contractData.trailerModel or '')
         local cName = string.lower(contractData.name or '')
-        if tModel == 'tanker' or tModel == 'tanker2' or tModel == 'armytanker' or string.find(tModel, 'tanker') or string.find(cName, 'tanque') or string.find(cName, 'combust') or string.find(cName, 'oleo') or string.find(cName, 'óleo') or string.find(cName, 'querosene') or string.find(cName, 'solvente') then
+        if string.find(cName, 'adr') or string.find(cName, 'quimic') or string.find(cName, 'químic') or string.find(cName, 'explos') or string.find(cName, 'nuclear') or string.find(cName, 'corros') then
+            cargoType = 'adr'
+        elseif tModel == 'docktrailer' or string.find(tModel, 'contr') or string.find(cName, 'conteiner') or string.find(cName, 'contêiner') or string.find(cName, 'container') or string.find(cName, 'heavy') or string.find(cName, 'pesad') then
+            cargoType = 'heavy'
+        elseif tModel == 'tanker' or tModel == 'tanker2' or tModel == 'armytanker' or string.find(tModel, 'tanker') or string.find(cName, 'tanque') or string.find(cName, 'combust') or string.find(cName, 'oleo') or string.find(cName, 'óleo') or string.find(cName, 'querosene') or string.find(cName, 'solvente') then
             cargoType = 'liquid'
         else
             cargoType = 'dry'
+        end
+    end
+
+    -- BLINDAGEM DE LICENÇAS TÉCNICAS (ADR & HEAVY LIFT)
+    if cargoType == 'heavy' or cargoType == 'adr' then
+        local licRow = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
+        if cargoType == 'heavy' and (not licRow or licRow.heavy_certified ~= 1) then
+            TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação Heavy Lift Operator para aceitar fretes de contêiner!', 'error')
+            return
+        elseif cargoType == 'adr' and (not licRow or licRow.adr_certified ~= 1) then
+            TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação ADR Specialist para transportar materiais perigosos/químicos!', 'error')
+            return
         end
     end
 
@@ -384,7 +417,13 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not isAllowedTrailer then
-        trailerModel = joaat(typeConfig.defaultTrailer or (cargoType == 'liquid' and 'tanker' or 'trflat'))
+        local fallbackModel = 'trflat'
+        if cargoType == 'liquid' or cargoType == 'adr' then
+            fallbackModel = 'tanker'
+        elseif cargoType == 'heavy' then
+            fallbackModel = 'docktrailer'
+        end
+        trailerModel = joaat(typeConfig.defaultTrailer or fallbackModel)
     end
 
     -- STEP A: SPAWN AND PLATE ENFORCEMENT
@@ -469,10 +508,15 @@ local function StartTruckDelivery(src, contractData)
     SetEntityDistanceCullingRadius(trailer, 400.0)
     SetVehicleDoorsLocked(trailer, 1)
 
-    -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
+    -- ETAPA 3: Spawn Condicional (Empilhadeira vs Reach Stacker)
     local forklift = nil
     local forkliftPlate = nil
     local chosenForkliftCoord = nil
+    local handler = nil
+    local handlerPlate = nil
+    local chosenHandlerCoord = nil
+    local containerObj = nil
+    local containerNetId = nil
     local pallets = {}
     local palletNetIds = {}
     local reqPallets = contractData.palletCount or 4
@@ -582,8 +626,59 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'A área de paletes está obstruída no momento! Desobstrua a zona de carga e tente novamente.', 'error')
             return
         end
+    elseif cargoType == 'heavy' then
+        reqPallets = 1
+        local yardCfg = (Config.CargoTypes and Config.CargoTypes.heavy and Config.CargoTypes.heavy.yard) or {}
+        local handlerSpawns = yardCfg.handlerSpawns or { wh.HandlerBayCoords or vector4(1130.11, -3083.45, 6.01, 269.29) }
+
+        for _, coord in ipairs(handlerSpawns) do
+            if IsSpawnPointClear(coord, 6.0, { [truck] = true, [trailer] = true }) then
+                handler = CreateVehicle(joaat(Config.Polarix.Handler.VehicleModel or 'handler'), coord.x, coord.y, coord.z + 0.5, coord.w or 270.0, true, true)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(handler) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+                if DoesEntityExist(handler) then
+                    chosenHandlerCoord = coord
+                    break
+                end
+            end
+        end
+
+        if not handler or not DoesEntityExist(handler) then
+            if DoesEntityExist(trailer) then DeleteEntity(trailer) end
+            if DoesEntityExist(truck) then DeleteEntity(truck) end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'A vaga do Reach Stacker (Handler) está ocupada!', 'error')
+            return
+        end
+
+        SetEntityDistanceCullingRadius(handler, 400.0)
+        handlerPlate = ("DOCK%04d"):format(math.random(1000, 9999))
+        SetVehicleNumberPlateText(handler, handlerPlate)
+        SetVehicleDoorsLocked(handler, 1)
+
+        if exports.ox_inventory then
+            local hKeyMeta = { plate = handlerPlate, description = "Chave Reach Stacker - " .. handlerPlate }
+            local added = exports.ox_inventory:AddItem(src, 'keys', 1, hKeyMeta)
+            if not added then exports.ox_inventory:AddItem(src, 'vehiclekey', 1, hKeyMeta) end
+        end
+        if exports['qbx_vehiclekeys'] then
+            pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, handler) end)
+        end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, handlerPlate)
+
+        -- Spawn do Contêiner
+        local cSpawns = yardCfg.containerSpawns or { vector4(1178.15, -3115.13, 5.02, 266.0) }
+        local chosenCCoord = cSpawns[math.random(#cSpawns)]
+        local cModel = joaat(Config.Polarix.ContainerModel or 'prop_contr_03b_ld')
+        containerObj = CreateObject(cModel, chosenCCoord.x, chosenCCoord.y, chosenCCoord.z + 0.1, true, true, false)
+        local waitTimer = GetGameTimer()
+        while not DoesEntityExist(containerObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+        if DoesEntityExist(containerObj) then
+            SetEntityDistanceCullingRadius(containerObj, 400.0)
+            FreezeEntityPosition(containerObj, true)
+            containerNetId = NetworkGetNetworkIdFromEntity(containerObj)
+        end
     else
-        reqPallets = 100 -- Carga Líquida: 100% de capacidade do tanque
+        reqPallets = 100 -- Carga Líquida e ADR
     end
 
     local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
@@ -602,11 +697,16 @@ local function StartTruckDelivery(src, contractData)
         trailer = trailer,
         forklift = forklift,
         forkliftPlate = forkliftPlate,
+        handler = handler,
+        handlerPlate = handlerPlate,
+        container = containerObj,
+        containerNetId = containerNetId,
         pallets = pallets,
         palletNetIds = palletNetIds,
         loadedCount = 0,
         requiredCount = reqPallets,
-        cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or 'Paletes Industriais'),
+        cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or (cargoType == 'heavy' and 'Contêiner Marítimo' or (cargoType == 'adr' and 'Compostos Químicos ADR' or 'Paletes Industriais'))),
+        cargoIntegrity = 100,
         payment = destCfg.reward or 5000,
         xp = destCfg.xp or 200,
         deliveryCoords = destCoords,
@@ -634,6 +734,10 @@ local function StartTruckDelivery(src, contractData)
         forkliftNetId = forklift and DoesEntityExist(forklift) and NetworkGetNetworkIdFromEntity(forklift) or 0,
         forkliftCoords = chosenForkliftCoord and vector3(chosenForkliftCoord.x, chosenForkliftCoord.y, chosenForkliftCoord.z),
         forkliftPlate = forkliftPlate,
+        handlerNetId = handler and DoesEntityExist(handler) and NetworkGetNetworkIdFromEntity(handler) or 0,
+        handlerCoords = chosenHandlerCoord and vector3(chosenHandlerCoord.x, chosenHandlerCoord.y, chosenHandlerCoord.z),
+        handlerPlate = handlerPlate,
+        containerNetId = containerNetId,
         palletNetIds = palletNetIds,
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
@@ -941,7 +1045,32 @@ RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
     ))
 end)
 
--- Helper de remoção de chaves autoritativas (Caminhão alugado e Empilhadeira)
+-- ETAPA: Notificação de Contêiner Carregado via Reach Stacker (Carga Pesada)
+RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.cargoType ~= 'heavy' then return end
+
+    lobby.stage = 'STATUS_IN_TRANSIT'
+    lobby.startedTransitAt = os.time()
+    lobby.loadedCount = 1
+
+    TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
+end)
+
+-- ETAPA: Contenção de Emergência de Vazamento ADR
+RegisterNetEvent('aurp_trucker:server:adrLeakContained', function(jobId, newIntegrity)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.cargoType ~= 'adr' then return end
+
+    lobby.cargoIntegrity = newIntegrity or 100
+    print(("[AUST_Trucker] Jogador %s conteve vazamento ADR. Integridade salva em %d%%"):format(tostring(src), lobby.cargoIntegrity))
+end)
+
+-- Helper de remoção de chaves autoritativas (Caminhão alugado, Empilhadeira e Reach Stacker)
 local function RemoveJobKeys(src, lobby)
     if not src or not lobby then return end
     local platesToRemove = {}
@@ -951,6 +1080,9 @@ local function RemoveJobKeys(src, lobby)
     end
     if lobby.forkliftPlate then
         table.insert(platesToRemove, { plate = lobby.forkliftPlate, entity = lobby.forklift })
+    end
+    if lobby.handlerPlate then
+        table.insert(platesToRemove, { plate = lobby.handlerPlate, entity = lobby.handler })
     end
 
     for _, pData in ipairs(platesToRemove) do
@@ -1025,13 +1157,16 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         end
     end
 
-    -- Pagamento com cálculo de penalidade proporcional por paletes perdidos
+    -- Pagamento com cálculo de penalidade proporcional por paletes perdidos ou integridade ADR
     local basePayment = lobby.payment or 5000
     local baseXP = lobby.xp or 200
     local totalReq = lobby.requiredCount or 4
     local lostCount = lobby.lostPallets or 0
     local deliveredCount = math.max(0, totalReq - lostCount)
     local ratio = (lobby.cargoType == 'dry' and totalReq > 0) and math.max(0.2, deliveredCount / totalReq) or 1.0
+    if lobby.cargoType == 'adr' then
+        ratio = math.max(0.2, (lobby.cargoIntegrity or 100) / 100)
+    end
 
     local payment = math.floor(basePayment * ratio)
     local xp = math.floor(baseXP * ratio)

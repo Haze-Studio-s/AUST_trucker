@@ -385,6 +385,22 @@ RegisterNetEvent('aurp_trucker:notify', function(arg1, arg2, arg3)
         end
     end
     lib.notify({ title = title, description = message, type = notifType })
+
+    if title == 'Licença Obrigatória' or string.find(message, 'Certificação') then
+        CreateThread(function()
+            Wait(1000)
+            local alert = lib.alertDialog({
+                header = 'Certificação Exigida',
+                content = message .. '\n\nDeseja abrir o Centro de Certificações para prestar o exame técnico agora?',
+                centered = true,
+                cancel = true,
+                labels = { confirm = 'Abrir Exames', cancel = 'Agora Não' }
+            })
+            if alert == 'confirm' then
+                OpenLicensesMenu()
+            end
+        end)
+    end
 end)
 
 -- Atualização de empresa: companyInfo = tabela → entrou/atualizou; nil → saiu
@@ -1785,6 +1801,130 @@ local function ReturnRentedTruck()
 end
 
 -- =======================================
+-- CENTRO DE CERTIFICAÇÕES & LICENÇAS TÉCNICAS (ADR & HEAVY LIFT)
+-- =======================================
+
+local function StartLicenseExam(licenseType, cfg)
+    local alert = lib.alertDialog({
+        header = cfg.name,
+        content = ('**Requisitos:** Nível %d\n**Taxa do Exame:** $%d (débito em conta ou dinheiro)\n\n%s\n\nVocê responderá a perguntas técnicas obrigatórias. Deseja prosseguir com o exame?'):format(
+            cfg.minLevel or 1,
+            cfg.examFee or 1000,
+            cfg.description or ''
+        ),
+        centered = true,
+        cancel = true,
+        labels = {
+            confirm = 'Iniciar Exame',
+            cancel = 'Cancelar'
+        }
+    })
+
+    if alert ~= 'confirm' then return end
+
+    local questions = cfg.questions or {}
+    for i, qData in ipairs(questions) do
+        local options = {}
+        for optIdx, optText in ipairs(qData.options) do
+            table.insert(options, { value = tostring(optIdx), label = optText })
+        end
+
+        local input = lib.inputDialog(('Questão %d/%d - %s'):format(i, #questions, cfg.name), {
+            {
+                type = 'select',
+                label = qData.q,
+                options = options,
+                required = true
+            }
+        })
+
+        if not input or not input[1] then
+            lib.notify({ title = 'Exame Cancelado', description = 'Você cancelou o exame técnico.', type = 'warning' })
+            return
+        end
+
+        if tonumber(input[1]) ~= qData.correct then
+            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+            lib.notify({
+                title = 'Reprovado no Exame',
+                description = 'Você selecionou uma resposta incorreta. Revise os procedimentos e tente novamente.',
+                type = 'error'
+            })
+            return
+        end
+    end
+
+    local res = lib.callback.await('aurp_trucker:takeLicenseExam', false, licenseType)
+    if res and res.success then
+        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+        lib.notify({
+            title = 'Certificação Concedida!',
+            description = res.message or 'Parabéns! Você foi aprovado e certificado.',
+            type = 'success',
+            duration = 8000
+        })
+        OpenLicensesMenu()
+    else
+        PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+        lib.notify({
+            title = 'Falha na Emissão',
+            description = (res and res.reason) or 'Não foi possível emitir a certificação.',
+            type = 'error'
+        })
+    end
+end
+
+function OpenLicensesMenu()
+    local licenses = lib.callback.await('aurp_trucker:getLicenses', false) or { adr = false, heavy = false }
+    local options = {}
+
+    local cfgLicenses = Config.Licenses or {}
+    for licKey, cfg in pairs(cfgLicenses) do
+        local isCertified = licenses[licKey] == true
+        local statusLabel = isCertified and '✅ Certificado Ativo' or '❌ Não Habilitado'
+        local icon = isCertified and 'fas fa-certificate' or 'fas fa-file-signature'
+        local iconColor = isCertified and '#22c55e' or '#f59e0b'
+
+        table.insert(options, {
+            title = cfg.name,
+            description = ('Status: %s | Nível Mínimo: %d | Taxa: $%d'):format(statusLabel, cfg.minLevel or 1, cfg.examFee or 1000),
+            icon = icon,
+            iconColor = iconColor,
+            disabled = isCertified,
+            metadata = {
+                { label = 'Status', value = statusLabel },
+                { label = 'Exigência', value = ('Nível %d'):format(cfg.minLevel or 1) },
+                { label = 'Taxa de Inscrição', value = ('$%d'):format(cfg.examFee or 1000) },
+                { label = 'Escopo', value = cfg.description or 'Sem descrição' }
+            },
+            onSelect = function()
+                if not isCertified then
+                    StartLicenseExam(licKey, cfg)
+                end
+            end
+        })
+    end
+
+    lib.registerContext({
+        id = 'trucker_licenses_menu',
+        title = 'Centro de Certificações & Licenças Técnicas',
+        options = options
+    })
+
+    lib.showContext('trucker_licenses_menu')
+end
+
+RegisterCommand('truckerlicenses', function()
+    OpenLicensesMenu()
+end, false)
+
+RegisterCommand('licencas', function()
+    OpenLicensesMenu()
+end, false)
+
+exports('OpenLicensesMenu', OpenLicensesMenu)
+
+-- =======================================
 -- INICIALIZAÇÃO: MARCADORES VISUAIS & INTERAÇÃO [E]
 -- =======================================
 
@@ -1903,6 +2043,13 @@ CreateThread(function()
                         label    = 'Devolver Caminhão Alugado',
                         distance = 3.0,
                         onSelect = function() ReturnRentedTruck() end,
+                    },
+                    {
+                        name     = 'licenses_lc',
+                        icon     = 'fas fa-graduation-cap',
+                        label    = 'Centro de Exames & Licenças (ADR / Heavy)',
+                        distance = 3.0,
+                        onSelect = function() OpenLicensesMenu() end,
                     },
                 })
 

@@ -1464,3 +1464,63 @@ lib.callback.register('aurp_trucker:upgradeSkill', function(source, skillType)
     local citizenId = Framework.GetCitizenId(Player)
     return ProgressionService.PurchaseSkill(source, citizenId, tostring(skillType))
 end)
+
+-- ============================================================
+-- SISTEMA DE LICENÇAS E EXAMES TÉCNICOS (ADR E HEAVY LIFT)
+-- ============================================================
+
+lib.callback.register('aurp_trucker:getLicenses', function(source)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { adr = false, heavy = false } end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local row = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
+    return {
+        adr = row and row.adr_certified == 1 or false,
+        heavy = row and row.heavy_certified == 1 or false
+    }
+end)
+
+lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseType)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local cfg = Config.Licenses and Config.Licenses[licenseType]
+    if not cfg then
+        return { success = false, reason = 'Licença inexistente' }
+    end
+
+    local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
+    local pLevel = truckerRow and truckerRow.level or 1
+    if pLevel < (cfg.minLevel or 1) then
+        return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel) }
+    end
+
+    local fee = cfg.examFee or 1000
+    local hasMoney = false
+    if exports.qbx_core then
+        hasMoney = exports.qbx_core:RemoveMoney(source, 'bank', fee, 'trucker-license-fee')
+        if not hasMoney then
+            hasMoney = exports.qbx_core:RemoveMoney(source, 'cash', fee, 'trucker-license-fee')
+        end
+    else
+        hasMoney = Framework.RemoveMoney(Player, 'bank', fee, 'trucker-license-fee')
+    end
+
+    if not hasMoney then
+        return { success = false, reason = ('Saldo insuficiente para a taxa de exame ($%d)'):format(fee) }
+    end
+
+    local colName = (licenseType == 'adr') and 'adr_certified' or 'heavy_certified'
+    MySQL.query.await(([[
+        INSERT INTO trucker_licenses (citizenid, %s)
+        VALUES (?, 1)
+        ON DUPLICATE KEY UPDATE %s = 1
+    ]]):format(colName, colName), { citizenId })
+
+    return {
+        success = true,
+        message = ('Aprovado no exame! Certificado %s emitido com sucesso.'):format(cfg.name)
+    }
+end)

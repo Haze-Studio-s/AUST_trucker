@@ -7,17 +7,22 @@
 -- =======================================================================
 
 local ForkliftModule = require('client.modules.forklift')
+local ReachStackerModule = require('client.modules.reach_stacker')
+local AdrHazardModule = require('client.modules.adr_hazard')
 
 local ActiveJob = nil
 local CurrentStage = 'IDLE' 
 -- Estados: IDLE, STEP_1_START, STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER, 
---          STEP_4_PARK_DOCK, STEP_5_ENTER_FORKLIFT, STEP_6_LOAD_PALLETS, 
---          STEP_6_GET_ROPES, STEP_7_STRAP_PALLETS, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
+--          STEP_4_PARK_DOCK, STEP_5_ENTER_FORKLIFT, STEP_5_ENTER_HANDLER,
+--          STEP_6_LOAD_PALLETS, STEP_6_LOAD_CONTAINER, STEP_6_GET_ROPES,
+--          STEP_7_STRAP_PALLETS, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
 
 local JobEntities = {
     truck = nil,
     trailer = nil,
     forklift = nil,
+    handler = nil,
+    container = nil,
     pallets = {}
 }
 
@@ -232,6 +237,12 @@ local function CleanupCurrentJob()
     if ForkliftModule and ForkliftModule.StopOperation then
         ForkliftModule.StopOperation()
     end
+    if ReachStackerModule and ReachStackerModule.StopOperation then
+        ReachStackerModule.StopOperation()
+    end
+    if AdrHazardModule and AdrHazardModule.StopMonitoring then
+        AdrHazardModule.StopMonitoring()
+    end
     if ActiveDeliveryPoint then
         pcall(function() ActiveDeliveryPoint:remove() end)
         ActiveDeliveryPoint = nil
@@ -248,6 +259,9 @@ local function CleanupCurrentJob()
     end
     if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.forklift) end)
+    end
+    if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
+        pcall(function() exports.ox_target:removeLocalEntity(JobEntities.handler) end)
     end
 
     if ActiveStrappingZoneId then
@@ -274,7 +288,7 @@ local function CleanupCurrentJob()
     LoadedPallets = {}
     LoadedPalletData = LoadedPallets
     Config.LoadedPallets = LoadedPallets
-    JobEntities = { truck = nil, trailer = nil, forklift = nil, pallets = {} }
+    JobEntities = { truck = nil, trailer = nil, forklift = nil, handler = nil, container = nil, pallets = {} }
     SetWaypointOff()
 end
 
@@ -419,15 +433,25 @@ local function StartCouplingWatcher()
                                     self:remove()
                                     DockWatcherPoint = nil
 
-                                    -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA PARA EMPILHADEIRA (SEM ABERTURA DE PORTAS)
-                                    CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                    -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA COM BASE NO TIPO DE CARGA
                                     ClearObjectiveMarkers(false)
 
-                                    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                    if ActiveJob and ActiveJob.cargoType == 'heavy' then
+                                        CurrentStage = 'STEP_5_ENTER_HANDLER'
+                                        if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
+                                            UpdateMissionObjective('forklift', JobEntities.handler, 'Reach Stacker (Handler)')
+                                        end
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado! Assuma o Reach Stacker para içar o contêiner.', 'info')
+                                    elseif ActiveJob and (ActiveJob.cargoType == 'liquid' or ActiveJob.cargoType == 'adr') then
+                                        CurrentStage = 'STEP_5_FUEL_LOADING'
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira para o carregamento.', 'info')
+                                    else
+                                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                        if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                            UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                        end
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
                                     end
-
-                                    SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
                                 end
                             end
                         end
@@ -634,7 +658,14 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
     -- Seta verde flutuante e rota GPS para o destino final
     UpdateMissionObjective('delivery', deliveryCoords, 'Destino da Entrega')
 
-    SendMissionNotify('Central Logística', 'Carga amarrada e pronta! Siga a rota indicada até o destino final.', 'success')
+    SendMissionNotify('Central Logística', 'Carga pronta para transporte! Siga a rota indicada até o destino final.', 'success')
+
+    -- Ativa monitoramento de risco químico para cargas perigosas ADR
+    if ActiveJob and ActiveJob.cargoType == 'adr' then
+        AdrHazardModule.StartMonitoring(jobId, JobEntities.truck, JobEntities.trailer, function(currentIntegrity)
+            SendMissionNotify('Status de Carga ADR', ('Integridade química: %d%%. Contenha o vazamento na válvula!'):format(currentIntegrity), 'warning')
+        end)
+    end
 
     -- Thread leve de monitoramento de curvas bruscas e rompimento de cordas frouxas
     CreateThread(function()
@@ -850,6 +881,34 @@ lib.onCache('vehicle', function(veh)
             end)
         end
     end
+
+    -- ETAPA 5 & 6: OPERAÇÃO COM REACH STACKER (CARGA PESADA / CONTÊINER)
+    if CurrentStage == 'STEP_5_ENTER_HANDLER' then
+        if JobEntities.handler and veh == JobEntities.handler then
+            CurrentStage = 'STEP_6_LOAD_CONTAINER'
+
+            if JobEntities.container and DoesEntityExist(JobEntities.container) then
+                UpdateMissionObjective('pallet', JobEntities.container, 'Contêiner Marítimo')
+            end
+
+            SendMissionNotify('Central Logística', 'Opere o Reach Stacker! Aproxime o spreader do contêiner e aperte [G] para travar.', 'info')
+
+            ReachStackerModule.SetMissionContainer(JobEntities.container)
+            ReachStackerModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, function(action, cEnt)
+                if action == 'picked' then
+                    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                        local trailerPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 0.0, 1.0)
+                        UpdateMissionObjective('trailer_rear', trailerPos, 'Posicione sobre a prancha e aperte [G]')
+                    end
+                elseif action == 'dropped' then
+                    SendMissionNotify('Central Logística', 'Contêiner fixado com sucesso na prancha! Entre no caminhão para iniciar a rota.', 'success')
+                end
+            end, function()
+                ClearObjectiveMarkers(false)
+                TriggerServerEvent('aurp_trucker:server:heavyContainerLoaded', ActiveJob.jobId)
+            end)
+        end
+    end
 end)
 
 -- =======================================================================
@@ -863,7 +922,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     CurrentStage = 'STEP_1_START'
 
     CreateThread(function()
-        -- Pré-carregamento assíncrono e protegido dos modelos de palete (sem travar a inicialização)
+        -- Pré-carregamento assíncrono e protegido dos modelos de palete e contêiner
         CreateThread(function()
             local palletProps = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {}
             for _, modelName in ipairs(palletProps) do
@@ -874,6 +933,10 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                     end
                 end)
             end
+            pcall(function()
+                local cHash = joaat(Config.Polarix.ContainerModel or 'prop_contr_03b_ld')
+                if IsModelInCdimage(cHash) or IsModelValid(cHash) then RequestModel(cHash) end
+            end)
         end)
 
         -- 1. Espera ativa e segura pela existência física das entidades no cliente (Timeout 10s)
@@ -882,6 +945,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         local forklift = nil
         if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
             forklift = WaitForNetworkEntity(payload.forkliftNetId, 10000)
+        end
+        local handler = nil
+        if payload.handlerNetId and payload.handlerNetId ~= 0 then
+            handler = WaitForNetworkEntity(payload.handlerNetId, 10000)
+        end
+        local container = nil
+        if payload.containerNetId and payload.containerNetId ~= 0 then
+            container = WaitForNetworkEntity(payload.containerNetId, 10000)
         end
 
         if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
@@ -898,6 +969,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         JobEntities.truck = truck
         JobEntities.trailer = trailer
         JobEntities.forklift = forklift
+        JobEntities.handler = handler
+        JobEntities.container = container
 
         if truck and DoesEntityExist(truck) then
             SetEntityVisible(truck, true)
@@ -948,6 +1021,27 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             if exports.qbx_vehiclekeys then
                 pcall(function() exports.qbx_vehiclekeys:GiveKeys(forklift) end)
             end
+        end
+
+        if handler and DoesEntityExist(handler) then
+            SetEntityVisible(handler, true)
+            ResetEntityAlpha(handler)
+            SetVehicleOnGroundProperly(handler)
+            SetEntityCollision(handler, true, true)
+            SetVehicleDoorsLocked(handler, 1)
+            SetVehicleDoorsLockedForAllPlayers(handler, false)
+            SetVehicleNeedsToBeHotwired(handler, false)
+            if exports.qbx_vehiclekeys then
+                pcall(function() exports.qbx_vehiclekeys:GiveKeys(handler) end)
+            end
+        end
+
+        if container and DoesEntityExist(container) then
+            SetEntityVisible(container, true)
+            ResetEntityAlpha(container)
+            PlaceObjectOnGroundProperly(container)
+            SetEntityCollision(container, true, true)
+            FreezeEntityPosition(container, true)
         end
 
         -- 2. Inicialização sequencial e determinística da Etapa 1

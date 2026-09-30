@@ -332,6 +332,114 @@ Config.CargoTypes = {
         fillDuration = 12000, -- 12 segundos para encher 100%
         maxDistance = 9.0, -- Distância máxima entre o jogador e o caminhão-tanque durante o enchimento
         leakPenalty = 1500, -- Penalidade financeira se o jogador abandonar/romper a mangueira
+    },
+    heavy = {
+        label = 'Carga Pesada (Contêiner / Reach Stacker)',
+        allowedTrailers = {
+            joaat('docktrailer'),
+            joaat('trailers2'),
+            joaat('trflat'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+        },
+        defaultTrailer = 'docktrailer',
+        handlerModel = 'handler',
+        containerModel = 'prop_contr_03b_ld',
+        yard = {
+            dispatcher = vector4(1181.23, -3113.83, 6.03, 90.0),
+            truckSpawns = {
+                vector4(1245.79, -3155.76, 4.6, 90.0),
+                vector4(1245.09, -3142.37, 4.55, 90.0),
+            },
+            trailerSpawns = {
+                vector4(1272.21, -3159.80, 4.90, 90.0),
+                vector4(1274.77, -3169.75, 4.90, 90.0),
+            },
+            handlerSpawns = {
+                vector4(1130.11, -3083.45, 6.01, 269.29),
+                vector4(1135.20, -3090.10, 6.01, 269.29),
+            },
+            containerSpawns = {
+                vector4(1178.15, -3115.13, 5.02, 266.0),
+                vector4(1247.42, -3118.35, 7.71, 91.2),
+                vector4(1275.52, -3241.56, 4.90, 181.9),
+                vector4(1055.81, -3048.53, 4.90, 176.5),
+            }
+        }
+    },
+    adr = {
+        label = 'Carga Perigosa (ADR / Químicos & Inflamáveis)',
+        allowedTrailers = {
+            joaat('tanker'),
+            joaat('tanker2'),
+            joaat('armytanker'),
+            joaat('freighttrailer'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+        },
+        defaultTrailer = 'tanker',
+        leakThresholdSpeed = 58.0,
+        leakThresholdSteer = 16.0,
+        leakDecayRate = 2,
+    }
+}
+
+-- =======================================================================
+-- SISTEMA DE LICENÇAS TÉCNICAS E EXAMES
+-- =======================================================================
+Config.Licenses = {
+    adr = {
+        name = 'Certificação ADR Specialist',
+        minLevel = 3,
+        examFee = 1500,
+        description = 'Habilita o transporte de substâncias inflamáveis, gases pressurizados e materiais químicos perigosos.',
+        questions = {
+            {
+                q = 'Qual o procedimento padrão ao notar vazamento em válvula de alívio de carga inflamável?',
+                options = {
+                    'Parar imediatamente o comboio em local seguro e acionar a válvula de contenção manual',
+                    'Acelerar para terminar o frete antes que o tanque esvazie completamente',
+                    'Despejar água comum sobre a fiação do motor sem desligar o veículo'
+                },
+                correct = 1
+            },
+            {
+                q = 'Qual a velocidade máxima recomendada para curvas fechadas transportando tanques de combustível?',
+                options = {
+                    'Acima de 80 km/h para manter estabilidade centrífuga',
+                    'Abaixo de 50 km/h com redução gradual prévia para evitar tombamento',
+                    'A velocidade não interfere no centro de gravidade de carretas tanque'
+                },
+                correct = 2
+            }
+        }
+    },
+    heavy = {
+        name = 'Certificação Heavy Lift Operator',
+        minLevel = 2,
+        examFee = 1000,
+        description = 'Habilita o manuseio de Reach Stackers e transporte rodoviário de contêineres marítimos pesados.',
+        questions = {
+            {
+                q = 'O que deve ser verificado antes de erguer um contêiner com o spreader do Reach Stacker?',
+                options = {
+                    'Alinhamento dos 4 cantos de travamento eletromagnético (twistlocks)',
+                    'Buzinar três vezes e puxar o freio de mão em movimento',
+                    'Içar com a torre inclinada para frente para acelerar a carga'
+                },
+                correct = 1
+            }
+        }
     }
 }
 
