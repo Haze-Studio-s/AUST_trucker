@@ -415,6 +415,19 @@ RegisterNUICallback('startDelivery', HandleStartDeliveryNUI)
 RegisterNUICallback('acceptJob', HandleStartDeliveryNUI)
 RegisterNUICallback('startJob', HandleStartDeliveryNUI)
 RegisterNUICallback('startContract', HandleStartDeliveryNUI)
+RegisterNUICallback('confirmJob', HandleStartDeliveryNUI)
+
+local function HandleCloseMenuNUI(data, cb)
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close', hidemenu = true })
+    SendNUIMessage({ action = 'closeUI' })
+    SendNUIMessage({ action = 'hide' })
+    if cb then cb('ok') end
+end
+
+RegisterNUICallback('closeMenu', HandleCloseMenuNUI)
+RegisterNUICallback('closeModal', HandleCloseMenuNUI)
+RegisterNUICallback('cancelJob', HandleCloseMenuNUI)
 
 -- =======================================================================
 -- ETAPA 3 & 4: ACOPLAMENTO DA CARRETA E POSICIONAMENTO NA BAÍA

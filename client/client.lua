@@ -419,6 +419,8 @@ local function CloseJobBoard()
     isNUIOpen = false
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close', hidemenu = true })
+    SendNUIMessage({ action = 'closeUI' })
+    SendNUIMessage({ action = 'hide' })
 end
 
 local function OpenJobBoard()
@@ -433,6 +435,7 @@ local function OpenJobBoard()
 
     isNUIOpen = true
     SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
 
     local lcDados = data.lc_dados or data
     if type(lcDados) ~= 'table' then lcDados = {} end
@@ -472,6 +475,8 @@ local function OpenJobBoard()
     local activeFormat = (lcDados and lcDados.config and lcDados.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
 
     -- Enviar para a interface oficial LC Truck Logistics
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
     SendNUIMessage({
         showmenu     = true,
         update       = false,
@@ -493,7 +498,38 @@ local function OpenJobBoard()
         playerName   = data.playerName,
         playerMoney  = data.playerMoney,
     })
+    SetNuiFocus(true, true)
 end
+
+RegisterNetEvent('truck_logistics:openJobBoard', function()
+    OpenJobBoard()
+end)
+AddEventHandler('truck_logistics:openJobBoard', function()
+    OpenJobBoard()
+end)
+
+RegisterNetEvent('truck_logistics:openCargoManifest', function(contractId, party, baseReward)
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'openCargoManifest',
+        contractId = contractId,
+        party = party,
+        baseReward = baseReward
+    })
+    SetNuiFocus(true, true)
+end)
+AddEventHandler('truck_logistics:openCargoManifest', function(contractId, party, baseReward)
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'openCargoManifest',
+        contractId = contractId,
+        party = party,
+        baseReward = baseReward
+    })
+    SetNuiFocus(true, true)
+end)
 
 -- Backspace fecha a UI (ESC é reservado pelo FiveM para pause menu)
 RegisterCommand('+trucker_close_ui', function()
@@ -537,20 +573,20 @@ RegisterNUICallback('post', function(body, cb)
     local event = body and body.event
     local data  = body and body.data
 
-    if event == "close" then
-        CloseJobBoard()
+    if event == "close" or event == "closeMenu" or event == "closeUI" or event == "closeModal" then
         SetNuiFocus(false, false)
+        CloseJobBoard()
         cb(200)
         return
     end
 
-    if event == "startContract" or event == "startJob" or event == "acceptJob" then
+    if event == "startContract" or event == "startJob" or event == "acceptJob" or event == "confirmJob" then
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
         local isParty = data and (data.party == true or data.isParty == true)
         print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI %s acionado! ID=%s, type=%s, party=%s^7"):format(tostring(event), tostring(contractId), tostring(contractType), tostring(isParty)))
-        CloseJobBoard()
         SetNuiFocus(false, false)
+        CloseJobBoard()
         if lcActiveJob then
             local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
             if not isAlive then
@@ -572,14 +608,18 @@ RegisterNUICallback('post', function(body, cb)
             id = contractId,
             contractId = contractId,
             contractType = contractType,
-            isParty = isParty
+            isParty = isParty,
+            palletCount = data and data.palletCount,
+            withForklift = data and data.withForklift
         })
         cb(200)
         return
     end
 
-    if event == "cancelContract" then
-        print("^3[AUST_Trucker Client] cancelContract NUI Callback invoked^7")
+    if event == "cancelContract" or event == "cancelJob" then
+        SetNuiFocus(false, false)
+        CloseJobBoard()
+        print("^3[AUST_Trucker Client] cancelContract/cancelJob NUI Callback invoked^7")
         ExecuteCommand('canceljob')
         TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
         cb(200)
@@ -745,12 +785,12 @@ RegisterNUICallback('post', function(body, cb)
 end)
 
 local function HandleDirectStartContract(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     local contractType = data and (data.contract_type or data.contractType or data.type)
     local isParty = data and (data.party == true or data.isParty == true)
     print(("^2[AUST_Trucker Client] NUI Direct Start received: ID=%s, Type=%s, Party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
-    CloseJobBoard()
-    SetNuiFocus(false, false)
     if lcActiveJob then
         local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
         if not isAlive then
@@ -767,22 +807,47 @@ local function HandleDirectStartContract(data, cb)
         id = contractId,
         contractId = contractId,
         contractType = contractType,
-        isParty = isParty
+        isParty = isParty,
+        palletCount = data and data.palletCount,
+        withForklift = data and data.withForklift
     })
     cb('ok')
 end
 
 RegisterNUICallback('startJob', HandleDirectStartContract)
 RegisterNUICallback('startContract', HandleDirectStartContract)
+RegisterNUICallback('confirmJob', HandleDirectStartContract)
 
 RegisterNUICallback('close', function(data, cb)
+    SetNuiFocus(false, false)
     CloseJobBoard()
-    cb('ok')
+    if cb then cb('ok') end
 end)
 
 RegisterNUICallback('closeUI', function(data, cb)
+    SetNuiFocus(false, false)
     CloseJobBoard()
-    cb('ok')
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('closeMenu', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('closeModal', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('cancelJob', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    ExecuteCommand('canceljob')
+    TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+    if cb then cb('ok') end
 end)
 
 RegisterNUICallback('rentTruck', function(data, cb)

@@ -703,6 +703,10 @@ $(function () {
                 $("#confirmation-modal").modal("hide");
             } else if ($(".main").is(":visible")){
                 $(".modal").modal("hide");
+                let res = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+                try {
+                    fetch(`https://${res}/closeMenu`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => {});
+                } catch(e) {}
                 Utils.post("close","");
             }
         }

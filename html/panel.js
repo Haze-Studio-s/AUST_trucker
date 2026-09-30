@@ -38,6 +38,11 @@ window.addEventListener("message", async function (event) {
         return;
     }
 
+    if (item.action === "openCargoManifest") {
+        openContractConfigModal(item.contractId, item.party, item.baseReward);
+        return;
+    }
+
     if (item.showmenu || item.action === "open" || item.update) {
         let dados = item.dados || item;
         config = dados.config || {};
@@ -1731,6 +1736,21 @@ function updatePalletConfig(val, baseReward) {
     }
 }
 
+function sendNuiAction(actionName, payload) {
+    let res = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+    let routeUrl = (typeof Utils !== "undefined" && Utils.getRoute) ? Utils.getRoute(actionName) : `https://${res}/${actionName}`;
+    try {
+        fetch(routeUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify(payload || {})
+        }).catch(() => {});
+    } catch(e) {}
+    if (typeof Utils !== "undefined" && Utils.post) {
+        Utils.post(actionName, payload || {}, actionName);
+    }
+}
+
 function openContractConfigModal(contract_id, party, baseReward) {
     baseReward = Number(baseReward) || 0;
     Utils.showCustomModal({
@@ -1780,8 +1800,19 @@ function openContractConfigModal(contract_id, party, baseReward) {
                 </div>
             </div>
         `,
+        onClose: function() {
+            sendNuiAction("closeMenu", { id: contract_id });
+        },
         buttons: [
-            { text: "Cancelar", class: "btn btn-outline-secondary", dismiss: true },
+            {
+                text: "Cancelar",
+                class: "btn btn-outline-secondary",
+                dismiss: true,
+                action: function() {
+                    sendNuiAction("closeMenu", { id: contract_id });
+                    sendNuiAction("cancelJob", { id: contract_id });
+                }
+            },
             {
                 text: "Confirmar & Iniciar",
                 class: "btn btn-primary",
@@ -1807,6 +1838,9 @@ function startContract(contract_id, party, palletCount, withForklift) {
 
     // Oculta a interface imediatamente
     $(".main").hide();
+    if ($("#confirmation-modal").length) {
+        $("#confirmation-modal").modal("hide");
+    }
 
     let payload = {
         id: contract_id,
@@ -1815,7 +1849,9 @@ function startContract(contract_id, party, palletCount, withForklift) {
         palletCount: palletCount || 4,
         withForklift: (typeof withForklift !== "undefined") ? withForklift : true
     };
-    Utils.post("startContract", payload);
+    sendNuiAction("confirmJob", payload);
+    sendNuiAction("startContract", payload);
+    sendNuiAction("startJob", payload);
 }
 
 function cancelContract(contract_id) {
