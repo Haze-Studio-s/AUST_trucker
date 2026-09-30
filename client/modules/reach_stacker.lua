@@ -231,4 +231,5 @@ AddEventHandler('onResourceStop', function(res)
     end
 end)
 
+_G.ReachStackerModule = ReachStackerModule
 return ReachStackerModule

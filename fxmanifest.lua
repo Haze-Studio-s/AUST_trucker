@@ -88,6 +88,7 @@ client_scripts {
 ui_page 'html/index.html'
 
 files {
+    'client/modules/*.lua',
     'html/index.html',
     'html/style.css',
     'html/panel.js',

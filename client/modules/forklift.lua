@@ -267,4 +267,5 @@ AddEventHandler('onResourceStop', function(res)
     end
 end)
 
+_G.ForkliftModule = ForkliftModule
 return ForkliftModule

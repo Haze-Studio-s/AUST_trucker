@@ -171,4 +171,5 @@ AddEventHandler('onResourceStop', function(res)
     end
 end)
 
+_G.AdrHazardModule = AdrHazardModule
 return AdrHazardModule

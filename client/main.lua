@@ -6,9 +6,9 @@
 -- Stack QBOX / OX: ox_lib, ox_target, ox_inventory, OneSync Server-Side Truth
 -- =======================================================================
 
-local ForkliftModule = require('client.modules.forklift')
-local ReachStackerModule = require('client.modules.reach_stacker')
-local AdrHazardModule = require('client.modules.adr_hazard')
+local ForkliftModule = _G.ForkliftModule or require('client.modules.forklift')
+local ReachStackerModule = _G.ReachStackerModule or require('client.modules.reach_stacker')
+local AdrHazardModule = _G.AdrHazardModule or require('client.modules.adr_hazard')
 
 local ActiveJob = nil
 local CurrentStage = 'IDLE' 
