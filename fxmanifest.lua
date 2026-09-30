@@ -61,6 +61,9 @@ server_scripts {
 
 client_scripts {
     'client/modules/forklift.lua',
+    'client/modules/crew.lua',
+    'client/modules/tycoon.lua',
+    'client/modules/early_game.lua',
     'client/zones.lua',
     'client/cargo_dry.lua',
     'client/cargo_liquid.lua',

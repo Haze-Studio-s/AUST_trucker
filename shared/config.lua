@@ -264,11 +264,59 @@ Config.Polarix = {
 }
 
 -- =======================================================================
--- SISTEMA MULTI-CARGAS: DEFINIÇÕES DE CARGA SECA E LÍQUIDA
+-- SISTEMA MULTI-CARGAS: DEFINIÇÕES DE CARGA COM PROGRESSÃO POR TIERS
 -- =======================================================================
 Config.CargoTypes = {
+    manual_boxes = {
+        label = 'Tier 1: Carga Manual (Caixas Fracionadas)',
+        minLevel = 1,
+        allowedTrailers = {
+            joaat('boxville'),
+            joaat('boxville2'),
+            joaat('mule'),
+            joaat('mule2'),
+            joaat('benson'),
+            joaat('trflat'),
+            joaat('freighttrailer'),
+        },
+        allowedTrucks = {
+            joaat('benson'),
+            joaat('mule'),
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+        },
+        defaultTrailer = 'trflat',
+        defaultTruck = 'benson',
+        boxCount = 6,
+        boxModel = 'prop_cardbordbox_02a',
+    },
+    pallet_jack = {
+        label = 'Tier 2: Carga com Paleteira Manual (Lotes Médios)',
+        minLevel = 3,
+        allowedTrailers = {
+            joaat('freighttrailer'),
+            joaat('trflat'),
+            joaat('mule'),
+            joaat('benson'),
+        },
+        allowedTrucks = {
+            joaat('benson'),
+            joaat('mule'),
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+        },
+        defaultTrailer = 'trflat',
+        defaultTruck = 'hauler',
+        batchCount = 4,
+        jackModel = 'prop_pallet_jack_01',
+    },
     dry = {
-        label = 'Carga Seca (Paletes)',
+        label = 'Tier 3: Carga Seca Industrial (Paletes & Empilhadeira)',
+        minLevel = 5,
         allowedTrailers = {
             joaat('freighttrailer'),
             joaat('trflat'),
@@ -286,6 +334,7 @@ Config.CargoTypes = {
     },
     liquid = {
         label = 'Carga Líquida (Tanque / Combustível)',
+        minLevel = 7,
         allowedTrailers = {
             joaat('tanker'),
             joaat('tanker2'),
@@ -328,13 +377,14 @@ Config.CargoTypes = {
                 radius = 2.5
             }
         },
-        tankerAttachOffset = vector3(-1.45, -2.5, 0.5), -- Engate lateral da mangueira
-        fillDuration = 12000, -- 12 segundos para encher 100%
-        maxDistance = 9.0, -- Distância máxima entre o jogador e o caminhão-tanque durante o enchimento
-        leakPenalty = 1500, -- Penalidade financeira se o jogador abandonar/romper a mangueira
+        tankerAttachOffset = vector3(-1.45, -2.5, 0.5),
+        fillDuration = 12000,
+        maxDistance = 9.0,
+        leakPenalty = 1500,
     },
     container = {
-        label = 'Carga Pesada (Contêiner Industrial)',
+        label = 'Tier 4: Carga Pesada (Contêiner Heavy Lift & Reach Stacker)',
+        minLevel = 10,
         allowedTrailers = {
             joaat('trflat'),
         },
@@ -358,7 +408,8 @@ Config.CargoTypes = {
         }
     },
     illegal = {
-        label = 'Mercado Ilegal (Carga Clandestina)',
+        label = 'Tier 5: Mercado Ilegal (Carga Clandestina & Perseguição Policial)',
+        minLevel = 15,
         allowedTrailers = {
             joaat('freighttrailer'),
             joaat('trailers2'),
@@ -377,22 +428,111 @@ Config.CargoTypes = {
         rewardMultiplier = 2.5,
         heatReward = 15,
         heatThresholdPursuit = 50,
-        washCleanCostPerHeat = 250, -- Custo por ponto de heat em dinheiro sujo
+        washCleanCostPerHeat = 250,
     }
 }
 
-Config.ForkliftAttachOffset = vector3(0.0, 1.2, -0.42) -- Eixo Z rebaixado para assentar perfeitamente sobre as lâminas
+Config.ForkliftAttachOffset = vector3(0.0, 1.2, -0.42)
 
 -- =======================================================================
 -- MÓDULO 1: SISTEMA DE INTEGRIDADE DA CARGA E DESGASTE MECÂNICO
 -- =======================================================================
 Config.CargoHealth = {
     InitialHealth = 100,
-    TireBurstChanceOnCriticalImpact = 0.30, -- 30% de chance de estourar pneu
-    CriticalImpactHealthDelta = 35.0,      -- Queda brusca de integridade corporal para impacto crítico
-    DamageMultiplier = 0.45,               -- Fator de conversão de dano do caminhão para a carga
+    TireBurstChanceOnCriticalImpact = 0.30,
+    CriticalImpactHealthDelta = 35.0,
+    DamageMultiplier = 0.45,
     RepairSkillCheck = { 'easy', 'medium', 'easy' },
 }
 
--- Posição padrão de contêiner aguardando içamento no pátio
 Config.ContainerSpawnCoord = vector4(1230.50, -3183.20, 5.00, 90.0)
+
+-- =======================================================================
+-- FASE 2: MÓDULO 1 - SISTEMA MULTIPLAYER CO-OP (CREW / LOGÍSTICA EM EQUIPE)
+-- =======================================================================
+Config.Crew = {
+    MaxMembers = 4,
+    InviteDistance = 20.0,
+    SharedPayoutBonusPercent = 0.15, -- 15% de bônus cooperativo total distribuído
+}
+
+-- =======================================================================
+-- FASE 2: MÓDULO 2 - SISTEMA TYCOON (BASES / GARAGENS PERSISTENTES)
+-- =======================================================================
+Config.TycoonBases = {
+    ['base_sandy'] = {
+        id = 'base_sandy',
+        label = 'Base Logística Grand Senora',
+        price = 120000,
+        coords = vector3(1705.20, 3286.40, 41.10),
+        workshopCoords = vector3(1712.10, 3290.50, 41.10),
+        fuelDiscount = 0.25,   -- 25% de desconto em combustível
+        repairDiscount = 0.40, -- 40% de desconto em oficina
+        blip = { sprite = 357, color = 5, scale = 0.85 }
+    },
+    ['base_paleto'] = {
+        id = 'base_paleto',
+        label = 'Terminal de Cargas Paleto Bay',
+        price = 180000,
+        coords = vector3(154.50, 6386.20, 31.30),
+        workshopCoords = vector3(160.20, 6395.10, 31.30),
+        fuelDiscount = 0.30,
+        repairDiscount = 0.45,
+        blip = { sprite = 357, color = 5, scale = 0.85 }
+    },
+    ['base_elysian'] = {
+        id = 'base_elysian',
+        label = 'Depósito Industrial Elysian Island',
+        price = 250000,
+        coords = vector3(290.10, -3015.40, 5.80),
+        workshopCoords = vector3(282.40, -3005.10, 5.80),
+        fuelDiscount = 0.35,
+        repairDiscount = 0.50,
+        blip = { sprite = 357, color = 5, scale = 0.85 }
+    }
+}
+
+-- =======================================================================
+-- FASE 2: MÓDULO 2 - OFICINA PRIVADA (WORKSHOP UPGRADES DE FROTA)
+-- =======================================================================
+Config.WorkshopUpgrades = {
+    RepairBaseCost = 1500, -- Custo base de reparo completo (reduzido pela posse da base)
+    Engine = {
+        [1] = { level = 1, mod = 11, label = 'Motor Preparado Nível 1', price = 8000 },
+        [2] = { level = 2, mod = 11, label = 'Motor Preparado Nível 2', price = 16000 },
+        [3] = { level = 3, mod = 11, label = 'Motor de Alta Performance Nível 3', price = 28000 },
+    },
+    Brakes = {
+        [1] = { level = 1, mod = 12, label = 'Freios Hidráulicos Nível 1', price = 5000 },
+        [2] = { level = 2, mod = 12, label = 'Freios Reforçados Nível 2', price = 11000 },
+    },
+    Transmission = {
+        [1] = { level = 1, mod = 13, label = 'Câmbio Escalonado Nível 1', price = 7000 },
+        [2] = { level = 2, mod = 13, label = 'Transmissão Esportiva Pesada Nível 2', price = 15000 },
+    },
+    Armor = {
+        [1] = { level = 1, mod = 16, label = 'Blindagem e Reforço de Chassi 50%', price = 12000 },
+        [2] = { level = 2, mod = 16, label = 'Blindagem e Reforço Estrutural 100%', price = 24000 },
+    }
+}
+
+-- =======================================================================
+-- FASE 2: MÓDULO 3 - TIERS INICIAIS (EARLY GAME: CAIXAS & PALETEIRA MANUAL)
+-- =======================================================================
+Config.EarlyGame = {
+    Boxes = {
+        PropModel = 'prop_cardbordbox_02a',
+        Anim = { dict = 'anim@heists@box_carry@', clip = 'idle' },
+        AttachBone = 60309, -- SKEL_R_Hand
+        AttachOffset = vector3(0.08, 0.08, 0.0),
+        AttachRot = vector3(-90.0, 0.0, 0.0),
+        LoadingStaging = vector3(1243.50, -3168.20, 5.50), -- Pilha de caixas no pátio
+    },
+    PalletJack = {
+        PropModel = 'prop_pallet_jack_01',
+        AttachOffset = vector3(0.0, 1.25, -0.65),
+        AttachRot = vector3(0.0, 0.0, 180.0),
+        SpeedBonus = 1.35, -- Caminhada mais ágil comparada ao carregamento manual
+    }
+}
+

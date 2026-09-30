@@ -286,6 +286,13 @@ local function CleanupCurrentJob()
 
     pcall(function() lib.hideTextUI() end)
 
+    if EarlyGameModule and EarlyGameModule.Cleanup then
+        EarlyGameModule.Cleanup()
+    end
+    if CargoLiquid and CargoLiquid.Cleanup then
+        CargoLiquid.Cleanup()
+    end
+
     if LoadedPallets then
         for idx, pData in ipairs(LoadedPallets) do
             if pData.entity and DoesEntityExist(pData.entity) then
@@ -472,6 +479,21 @@ local function StartCouplingWatcher()
 
                                         SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma o manipulador pesado (Handler) para içar o contêiner.', 'info')
                                         StartHandlerOperation()
+                                    elseif ActiveJob and ActiveJob.cargoType == 'manual_boxes' then
+                                        CurrentStage = 'STEP_LOAD_MANUAL_BOXES'
+                                        ClearObjectiveMarkers(false)
+                                        EarlyGameModule.StartBoxesLoading(ActiveJob.jobId, JobEntities.trailer or JobEntities.truck, ActiveJob.requiredCount or 6, JobEntities.pallets)
+                                    elseif ActiveJob and ActiveJob.cargoType == 'pallet_jack' then
+                                        CurrentStage = 'STEP_LOAD_PALLET_JACK'
+                                        ClearObjectiveMarkers(false)
+                                        EarlyGameModule.StartPalletJackLoading(ActiveJob.jobId, JobEntities.trailer or JobEntities.truck, ActiveJob.requiredCount or 4, JobEntities.pallets)
+                                    elseif ActiveJob and ActiveJob.cargoType == 'liquid' then
+                                        CurrentStage = 'STEP_LIQUID_CONNECT_HOSE'
+                                        ClearObjectiveMarkers(false)
+                                        if CargoLiquid and CargoLiquid.Setup then
+                                            CargoLiquid.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
+                                        end
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira na bomba e no tanque da carreta.', 'info')
                                     else
                                         -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA PARA EMPILHADEIRA (SEM ABERTURA DE PORTAS)
                                         CurrentStage = 'STEP_5_ENTER_FORKLIFT'
