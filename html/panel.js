@@ -1722,27 +1722,13 @@ function startContract(contract_id, party) {
         return;
     }
     isContractStarting = true;
-    setTimeout(() => { isContractStarting = false; }, 2000);
+    setTimeout(() => { isContractStarting = false; }, 3000);
 
-    // Oculta a interface imediatamente para não travar na tela
+    // Oculta a interface imediatamente
     $(".main").hide();
 
-    let resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
     let payload = { id: contract_id, contract_id: contract_id, party: party };
-
-    // Envio direto síncrono para o NUI Callback do FiveM (evita debounce ou timeout de Chromium em background)
-    try {
-        fetch(`https://${resName}/startContract`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        }).catch(() => {});
-    } catch(e) {}
-
-    // Envio padrão complementar via protocolo LC Utils
-    try {
-        Utils.post("startContract", payload);
-    } catch(e) {}
+    Utils.post("startContract", payload);
 }
 
 function cancelContract(contract_id) {

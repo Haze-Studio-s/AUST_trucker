@@ -250,12 +250,26 @@ function IsSpawnPointClear(coords, radius, ignoreEntities)
     return true
 end
 
+local ActiveSpawningPlayers = {}
+
 -- ETAPA 1: Iniciar Entrega / Contrato Autoritativo (QBOX OneSync)
 local function StartTruckDelivery(src, contractData)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
     contractData = contractData or {}
+
+    if ActiveSpawningPlayers[citizenId] then
+        print(("[AUST_Trucker] Spawn concorrente bloqueado para CitizenId: %s (Lock ativo)"):format(tostring(citizenId)))
+        return
+    end
+    ActiveSpawningPlayers[citizenId] = true
+
+    SetTimeout(15000, function()
+        if ActiveSpawningPlayers[citizenId] then
+            ActiveSpawningPlayers[citizenId] = nil
+        end
+    end)
 
     print(("[AUST_Trucker DEBUG - ETAPA 2] Recebida solicitação de início no Servidor! Src: %s, CitizenId: %s, ContractData: %s"):format(
         tostring(src), tostring(citizenId), json.encode(contractData)
@@ -274,6 +288,7 @@ local function StartTruckDelivery(src, contractData)
             CleanupLobbyEntities(oldJobId)
             PlayerPolarixLobbies[citizenId] = nil
         else
+            ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Contrato em Andamento', 'Você já possui uma rota ou contrato em andamento!', 'error')
             return
         end
@@ -297,6 +312,7 @@ local function StartTruckDelivery(src, contractData)
     local requiredLevel = contractData.level_required or 1
 
     if playerLevel < requiredLevel then
+        ActiveSpawningPlayers[citizenId] = nil
         TriggerClientEvent('aurp_trucker:notify', src, 'Nível Insuficiente', ('Você precisa de Nível %d para aceitar este contrato!'):format(requiredLevel), 'error')
         return
     end
@@ -408,9 +424,11 @@ local function StartTruckDelivery(src, contractData)
     if cargoType == 'heavy' or cargoType == 'adr' then
         local licRow = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
         if cargoType == 'heavy' and (not licRow or licRow.heavy_certified ~= 1) then
+            ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação Heavy Lift Operator para aceitar fretes de contêiner!', 'error')
             return
         elseif cargoType == 'adr' and (not licRow or licRow.adr_certified ~= 1) then
+            ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação ADR Specialist para transportar materiais perigosos/químicos!', 'error')
             return
         end
@@ -484,6 +502,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not truck or not DoesEntityExist(truck) then
+        ActiveSpawningPlayers[citizenId] = nil
         TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Falha ao instanciar caminhão no servidor.', 'error')
         return
     end
@@ -547,6 +566,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not trailer or not DoesEntityExist(trailer) then
+        ActiveSpawningPlayers[citizenId] = nil
         if DoesEntityExist(truck) then DeleteEntity(truck) end
         TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Falha ao instanciar carreta/reboque no servidor.', 'error')
         return
@@ -782,6 +802,8 @@ local function StartTruckDelivery(src, contractData)
     print(("[AUST_Trucker DEBUG - ETAPA 4] Enviando aurp_trucker:client:polarixJobStarted para jogador %s (JobID: %s, TruckNetId: %s, TrailerNetId: %s)"):format(
         tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId)
     ))
+
+    ActiveSpawningPlayers[citizenId] = nil
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds)
