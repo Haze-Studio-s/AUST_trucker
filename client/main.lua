@@ -12,18 +12,13 @@ local ActiveJob = nil
 local CurrentStage = 'IDLE' 
 -- Estados: IDLE, STEP_1_START, STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER, 
 --          STEP_4_PARK_DOCK, STEP_5_ENTER_FORKLIFT, STEP_6_LOAD_PALLETS, 
---          STEP_6_GET_ROPES, STEP_7_STRAP_PALLETS, STEP_8_IN_TRANSIT, STEP_9_DELIVERY,
---          STEP_ENTER_HANDLER, STEP_LIFT_CONTAINER, STEP_LOAD_CONTAINER_TRAILER, STEP_CONTAINER_TWISTLOCKS
+--          STEP_6_GET_ROPES, STEP_7_STRAP_PALLETS, STEP_8_IN_TRANSIT, STEP_9_DELIVERY
 
 local JobEntities = {
     truck = nil,
     trailer = nil,
     forklift = nil,
-    handler = nil,
-    container = nil,
-    pallets = {},
-    policeVehicles = {},
-    policePeds = {}
+    pallets = {}
 }
 
 local ActiveDeliveryPoint = nil
@@ -37,13 +32,6 @@ local DispatcherPed = nil
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
 Config.LoadedPallets = LoadedPallets
-
-local CargoHealth = 100
-local LastTruckBodyHealth = 1000.0
-local LastTruckEngineHealth = 1000.0
-local ActiveTwistlockZones = {}
-local ActiveTyreRepairTargets = {}
-
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -261,36 +249,10 @@ local function CleanupCurrentJob()
     if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.forklift) end)
     end
-    if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
-        pcall(function() exports.ox_target:removeLocalEntity(JobEntities.handler) end)
-    end
 
     if ActiveStrappingZoneId then
         pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
         ActiveStrappingZoneId = nil
-    end
-
-    if ActiveTwistlockZones then
-        for _, zId in ipairs(ActiveTwistlockZones) do
-            pcall(function() exports.ox_target:removeZone(zId) end)
-        end
-        ActiveTwistlockZones = {}
-    end
-
-    if ActiveTyreRepairTargets and JobEntities.truck and DoesEntityExist(JobEntities.truck) then
-        for _, targetName in ipairs(ActiveTyreRepairTargets) do
-            pcall(function() exports.ox_target:removeLocalEntity(JobEntities.truck, targetName) end)
-        end
-        ActiveTyreRepairTargets = {}
-    end
-
-    pcall(function() lib.hideTextUI() end)
-
-    if EarlyGameModule and EarlyGameModule.Cleanup then
-        EarlyGameModule.Cleanup()
-    end
-    if CargoLiquid and CargoLiquid.Cleanup then
-        CargoLiquid.Cleanup()
     end
 
     if LoadedPallets then
@@ -309,13 +271,10 @@ local function CleanupCurrentJob()
     HasRopes = false
     currentTieIndex = 1
     currentStrappingIndex = 1
-    CargoHealth = 100
-    LastTruckBodyHealth = 1000.0
-    LastTruckEngineHealth = 1000.0
     LoadedPallets = {}
     LoadedPalletData = LoadedPallets
     Config.LoadedPallets = LoadedPallets
-    JobEntities = { truck = nil, trailer = nil, forklift = nil, handler = nil, container = nil, pallets = {}, policeVehicles = {}, policePeds = {} }
+    JobEntities = { truck = nil, trailer = nil, forklift = nil, pallets = {} }
     SetWaypointOff()
 end
 
@@ -385,15 +344,6 @@ CreateThread(function()
                 if ActiveJob then
                     TriggerServerEvent('aurp_trucker:server:emergencyRespawnEquipment', ActiveJob.jobId)
                 end
-            end
-        },
-        {
-            name = 'aust_wash_heat',
-            icon = 'fa-solid fa-soap',
-            label = 'Lavar a Ficha (Limpar Heat Policial)',
-            distance = 2.5,
-            onSelect = function()
-                TriggerServerEvent('aurp_trucker:server:washHeat')
             end
         }
     })
@@ -469,247 +419,20 @@ local function StartCouplingWatcher()
                                     self:remove()
                                     DockWatcherPoint = nil
 
-                                    if ActiveJob and ActiveJob.cargoType == 'container' then
-                                        CurrentStage = 'STEP_ENTER_HANDLER'
-                                        ClearObjectiveMarkers(false)
+                                    -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA PARA EMPILHADEIRA (SEM ABERTURA DE PORTAS)
+                                    CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                    ClearObjectiveMarkers(false)
 
-                                        if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
-                                            UpdateMissionObjective('forklift', JobEntities.handler, 'Manipulador Reach Stacker (Handler)')
-                                        end
-
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma o manipulador pesado (Handler) para içar o contêiner.', 'info')
-                                        StartHandlerOperation()
-                                    elseif ActiveJob and ActiveJob.cargoType == 'manual_boxes' then
-                                        CurrentStage = 'STEP_LOAD_MANUAL_BOXES'
-                                        ClearObjectiveMarkers(false)
-                                        EarlyGameModule.StartBoxesLoading(ActiveJob.jobId, JobEntities.trailer or JobEntities.truck, ActiveJob.requiredCount or 6, JobEntities.pallets)
-                                    elseif ActiveJob and ActiveJob.cargoType == 'pallet_jack' then
-                                        CurrentStage = 'STEP_LOAD_PALLET_JACK'
-                                        ClearObjectiveMarkers(false)
-                                        EarlyGameModule.StartPalletJackLoading(ActiveJob.jobId, JobEntities.trailer or JobEntities.truck, ActiveJob.requiredCount or 4, JobEntities.pallets)
-                                    elseif ActiveJob and ActiveJob.cargoType == 'liquid' then
-                                        CurrentStage = 'STEP_LIQUID_CONNECT_HOSE'
-                                        ClearObjectiveMarkers(false)
-                                        if CargoLiquid and CargoLiquid.Setup then
-                                            CargoLiquid.Setup(ActiveJob, JobEntities.trailer, JobEntities.truck)
-                                        end
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira na bomba e no tanque da carreta.', 'info')
-                                    else
-                                        -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA PARA EMPILHADEIRA (SEM ABERTURA DE PORTAS)
-                                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                                        ClearObjectiveMarkers(false)
-
-                                        if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                            UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                                        end
-
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
+                                    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
                                     end
+
+                                    SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
                                 end
                             end
                         end
                     })
                     break
-                end
-            end
-        end
-    end)
-end
-
--- =======================================================================
--- MÓDULO 2: LOGÍSTICA PESADA (CONTÊINER REACH STACKER & TWISTLOCKS)
--- =======================================================================
-
-local function StartContainerTwistlocksStage()
-    CurrentStage = 'STEP_CONTAINER_TWISTLOCKS'
-    ClearObjectiveMarkers(false)
-
-    local trailer = JobEntities.trailer
-    if not trailer or not DoesEntityExist(trailer) then return end
-
-    local twistlockConfigs = (Config.CargoTypes and Config.CargoTypes.container and Config.CargoTypes.container.twistlocks) or {
-        { id = 1, label = 'Trava Dianteira Esquerda', offset = vector3(-1.1, 3.2, 0.45) },
-        { id = 2, label = 'Trava Dianteira Direita',  offset = vector3(1.1, 3.2, 0.45) },
-        { id = 3, label = 'Trava Traseira Esquerda',   offset = vector3(-1.1, -4.5, 0.45) },
-        { id = 4, label = 'Trava Traseira Direita',    offset = vector3(1.1, -4.5, 0.45) },
-    }
-
-    local lockedPins = {}
-    local totalPins = #twistlockConfigs
-
-    local function CheckAllPinsLocked()
-        local count = 0
-        for _ in pairs(lockedPins) do count = count + 1 end
-        if count >= totalPins then
-            for _, zId in ipairs(ActiveTwistlockZones) do
-                pcall(function() exports.ox_target:removeZone(zId) end)
-            end
-            ActiveTwistlockZones = {}
-            ClearObjectiveMarkers(false)
-            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-            SendMissionNotify('Central Logística', 'Todos os 4 Twistlocks travados com segurança! Entre no caminhão e siga a rota até o destino.', 'success')
-            TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
-        end
-    end
-
-    ActiveTwistlockZones = {}
-    for _, pin in ipairs(twistlockConfigs) do
-        local worldPos = GetOffsetFromEntityInWorldCoords(trailer, pin.offset.x, pin.offset.y, pin.offset.z)
-        local zId = exports.ox_target:addSphereZone({
-            coords = worldPos,
-            radius = 1.6,
-            debug = false,
-            options = {
-                {
-                    name = 'aust_twistlock_' .. pin.id,
-                    icon = 'fas fa-lock',
-                    label = pin.label,
-                    distance = 2.5,
-                    canInteract = function()
-                        return CurrentStage == 'STEP_CONTAINER_TWISTLOCKS' and not lockedPins[pin.id] and not IsPedInAnyVehicle(cache.ped, false)
-                    end,
-                    onSelect = function()
-                        local ok = lib.progressBar({
-                            duration = 2500,
-                            label = ('Travando %s...'):format(pin.label),
-                            useWhileDead = false,
-                            canCancel = false,
-                            disable = { move = true, car = true, combat = true },
-                            anim = {
-                                dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
-                                clip = 'machinic_loop_meano',
-                                flag = 49
-                            }
-                        })
-                        if ok then
-                            lockedPins[pin.id] = true
-                            PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                            SendMissionNotify('Central Logística', ('%s travada com segurança!'):format(pin.label), 'success')
-                            CheckAllPinsLocked()
-                        end
-                    end
-                }
-            }
-        })
-        table.insert(ActiveTwistlockZones, zId)
-    end
-
-    UpdateMissionObjective('trailer_strap', GetOffsetFromEntityInWorldCoords(trailer, 0.0, 0.0, 1.0), 'Travar 4 Twistlocks no Reboque')
-end
-
-function StartHandlerOperation()
-    CreateThread(function()
-        local handler = JobEntities.handler
-        local container = JobEntities.container
-        local trailer = JobEntities.trailer
-
-        -- 1. Espera jogador entrar no assento do motorista do Handler
-        while CurrentStage == 'STEP_ENTER_HANDLER' and ActiveJob do
-            Wait(250)
-            local ped = cache.ped or PlayerPedId()
-            local curVeh = GetVehiclePedIsIn(ped, false)
-            if curVeh ~= 0 and curVeh == handler and GetPedInVehicleSeat(curVeh, -1) == ped then
-                CurrentStage = 'STEP_LIFT_CONTAINER'
-                ClearObjectiveMarkers(false)
-                UpdateMissionObjective('pallet', container, 'Aproxime e aperte [G] para içar')
-                SendMissionNotify('Central Logística', 'Aproxime o manipulador do contêiner no pátio e aperte [G] para içar.', 'info')
-                break
-            end
-        end
-
-        -- 2. Condução do Handler até o contêiner e içamento com [G]
-        local isCarrying = false
-        local promptActive = false
-
-        while CurrentStage == 'STEP_LIFT_CONTAINER' and ActiveJob do
-            Wait(100)
-            if not DoesEntityExist(handler) or not DoesEntityExist(container) then break end
-
-            local hCoords = GetEntityCoords(handler)
-            local cCoords = GetEntityCoords(container)
-            local dist = #(hCoords - cCoords)
-
-            if dist < 8.0 and not isCarrying then
-                if not promptActive then
-                    lib.showTextUI('[G] Içar Contêiner Industrial', { position = 'top-center' })
-                    promptActive = true
-                end
-
-                if IsControlJustPressed(0, 47) then -- G
-                    lib.hideTextUI()
-                    promptActive = false
-
-                    FreezeEntityPosition(container, false)
-                    SetEntityDynamic(container, true)
-                    SetEntityNoCollisionEntity(container, handler, false)
-
-                    local craneBone = GetEntityBoneIndexByName(handler, (Config.Polarix and Config.Polarix.Handler and Config.Polarix.Handler.CraneBone) or 'frame_2')
-                    local off = (Config.Polarix and Config.Polarix.Handler and Config.Polarix.Handler.AttachOffset) or { x = 0.0, y = 1.78, z = -2.5, rx = 0.0, ry = 0.0, rz = 90.0 }
-                    AttachEntityToEntity(
-                        container, handler, craneBone,
-                        off.x, off.y, off.z,
-                        off.rx or 0.0, off.ry or 0.0, off.rz or 90.0,
-                        false, false, false, false, 2, true
-                    )
-
-                    isCarrying = true
-                    CurrentStage = 'STEP_LOAD_CONTAINER_TRAILER'
-                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                    SendMissionNotify('Central Logística', 'Contêiner içado com sucesso! Conduza até a prancha na baía e aperte [G] para descarregar.', 'success')
-
-                    ClearObjectiveMarkers(false)
-                    UpdateMissionObjective('trailer', trailer, 'Posicionar na Prancha com [G]')
-                    break
-                end
-            else
-                if promptActive then
-                    lib.hideTextUI()
-                    promptActive = false
-                end
-            end
-        end
-
-        -- 3. Descarregamento sobre a prancha do reboque (trflat)
-        while CurrentStage == 'STEP_LOAD_CONTAINER_TRAILER' and ActiveJob do
-            Wait(100)
-            if not DoesEntityExist(handler) or not DoesEntityExist(trailer) or not DoesEntityExist(container) then break end
-
-            local hCoords = GetEntityCoords(handler)
-            local tCoords = GetEntityCoords(trailer)
-            local dist = #(hCoords - tCoords)
-
-            if dist < 9.0 then
-                if not promptActive then
-                    lib.showTextUI('[G] Descarregar Contêiner na Prancha', { position = 'top-center' })
-                    promptActive = true
-                end
-
-                if IsControlJustPressed(0, 47) then -- G
-                    lib.hideTextUI()
-                    promptActive = false
-
-                    DetachEntity(container, true, true)
-                    local tOff = (Config.CargoTypes and Config.CargoTypes.container and Config.CargoTypes.container.trailerAttachOffset) or vector3(0.0, -1.8, 1.35)
-                    AttachEntityToEntity(
-                        container, trailer, 0,
-                        tOff.x, tOff.y, tOff.z,
-                        0.0, 0.0, 0.0,
-                        false, false, false, false, 2, true
-                    )
-                    SetEntityCollision(container, true, true)
-                    FreezeEntityPosition(container, true)
-
-                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                    SendMissionNotify('Central Logística', 'Contêiner assentado na prancha! Desça do Handler e trave os 4 Twistlocks nas extremidades do reboque.', 'info')
-
-                    ClearObjectiveMarkers(false)
-                    StartContainerTwistlocksStage()
-                    break
-                end
-            else
-                if promptActive then
-                    lib.hideTextUI()
-                    promptActive = false
                 end
             end
         end
@@ -890,56 +613,6 @@ end
 -- =======================================================================
 -- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA COM FÍSICA DE ROMPIMENTO
 -- =======================================================================
--- MÓDULO 1: REPARO DE PNEU ESTOURADO (SKILLCHECK OX_LIB)
--- =======================================================================
-
-local function SetupTyreRepairTarget(truck, tyreIndex)
-    local targetName = 'aust_repair_wheel_' .. tyreIndex
-    table.insert(ActiveTyreRepairTargets, targetName)
-
-    exports.ox_target:addLocalEntity(truck, {
-        {
-            name = targetName,
-            icon = 'fa-solid fa-wrench',
-            label = 'Substituir Pneu Danificado (Estepe)',
-            distance = 2.8,
-            canInteract = function()
-                return IsVehicleTyreBurst(truck, tyreIndex, false) and not IsPedInAnyVehicle(cache.ped, false)
-            end,
-            onSelect = function()
-                local pass = lib.skillCheck({'easy', 'medium', 'easy'}, {'w', 'a', 's', 'd'})
-                if not pass then
-                    SendMissionNotify('Reparo Falhou', 'Você espanou o parafuso da roda! Tente novamente com calma.', 'error')
-                    return
-                end
-
-                local ok = lib.progressBar({
-                    duration = 5000,
-                    label = 'Trocando pneu danificado pelo estepe...',
-                    useWhileDead = false,
-                    canCancel = true,
-                    disable = { move = true, car = true, combat = true },
-                    anim = {
-                        dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
-                        clip = 'machinic_loop_meano',
-                        flag = 49
-                    }
-                })
-
-                if ok then
-                    SetVehicleTyreFixed(truck, tyreIndex)
-                    pcall(function() exports.ox_target:removeLocalEntity(truck, targetName) end)
-                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                    SendMissionNotify('Reparo Concluído', 'Pneu substituído com sucesso! Retome sua rota com prudência.', 'success')
-                end
-            end
-        }
-    })
-end
-
--- =======================================================================
--- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA COM FÍSICA DE ROMPIMENTO
--- =======================================================================
 
 local function SetupDeliveryDestination(deliveryCoords, jobId)
     CurrentStage = 'STEP_8_IN_TRANSIT'
@@ -963,81 +636,7 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
 
     SendMissionNotify('Central Logística', 'Carga amarrada e pronta! Siga a rota indicada até o destino final.', 'success')
 
-    -- Módulo 1: Monitoramento Dinâmico de Integridade da Carga e Desgaste Mecânico
-    CreateThread(function()
-        local truck = JobEntities.truck
-        if truck and DoesEntityExist(truck) then
-            LastTruckBodyHealth = GetVehicleBodyHealth(truck)
-            LastTruckEngineHealth = GetVehicleEngineHealth(truck)
-        end
-        CargoHealth = 100
-
-        while CurrentStage == 'STEP_8_IN_TRANSIT' and ActiveJob do
-            Wait(250)
-            local curTruck = JobEntities.truck
-            if curTruck and DoesEntityExist(curTruck) then
-                local curBody = GetVehicleBodyHealth(curTruck)
-                local curEngine = GetVehicleEngineHealth(curTruck)
-
-                local deltaBody = LastTruckBodyHealth - curBody
-                local deltaEngine = LastTruckEngineHealth - curEngine
-                local maxDelta = math.max(deltaBody, deltaEngine)
-
-                if maxDelta > 6.0 then
-                    local dmgFactor = (Config.CargoHealth and Config.CargoHealth.DamageMultiplier) or 0.45
-                    local dmg = math.floor(maxDelta * dmgFactor)
-                    if dmg > 0 then
-                        CargoHealth = math.max(0, CargoHealth - dmg)
-                        TriggerServerEvent('aurp_trucker:server:updateCargoHealth', ActiveJob.jobId, CargoHealth)
-                        PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                        SendMissionNotify('Dano na Carga!', ('Impacto brusco! Integridade da mercadoria: %d%%'):format(CargoHealth), 'warning')
-
-                        -- Chance de 30% de estouro de pneu em impacto crítico
-                        local critDelta = (Config.CargoHealth and Config.CargoHealth.CriticalImpactHealthDelta) or 35.0
-                        if maxDelta >= critDelta then
-                            local burstChance = (Config.CargoHealth and Config.CargoHealth.TireBurstChanceOnCriticalImpact) or 0.30
-                            if math.random() <= burstChance then
-                                local wheels = { 0, 1, 4, 5 }
-                                local chosenWheel = wheels[math.random(#wheels)]
-                                if not IsVehicleTyreBurst(curTruck, chosenWheel, false) then
-                                    SetVehicleTyreBurst(curTruck, chosenWheel, true, 1000.0)
-                                    PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-                                    SendMissionNotify('Pneu Estourado!', 'Impacto violento estourou um pneu do caminhão! Pare o veículo e efetue o reparo com o estepe.', 'error')
-                                    SetupTyreRepairTarget(curTruck, chosenWheel)
-                                end
-                            end
-                        end
-
-                        -- Falha crítica se CargoHealth == 0
-                        if CargoHealth <= 0 then
-                            PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                            SendMissionNotify('Carga Destruída', 'A carga foi totalmente arruinada pelos impactos sofridos! Frete cancelado sem remuneração.', 'error')
-                            TriggerServerEvent('aurp_trucker:server:cargoDestroyed', ActiveJob.jobId)
-                            CleanupCurrentJob()
-                            break
-                        end
-                    end
-
-                    LastTruckBodyHealth = curBody
-                    LastTruckEngineHealth = curEngine
-                else
-                    if curBody > LastTruckBodyHealth then LastTruckBodyHealth = curBody end
-                    if curEngine > LastTruckEngineHealth then LastTruckEngineHealth = curEngine end
-                end
-            end
-        end
-    end)
-
-    -- Módulo 3: Se a carga for do Mercado Ilegal e o Heat for > 50, dispara perseguição policial ativa
-    if ActiveJob and ActiveJob.cargoType == 'illegal' and (ActiveJob.playerHeat or 0) > ((Config.CargoTypes and Config.CargoTypes.illegal and Config.CargoTypes.illegal.heatThresholdPursuit) or 50) then
-        SetTimeout(12000, function()
-            if CurrentStage == 'STEP_8_IN_TRANSIT' and ActiveJob and ActiveJob.jobId then
-                TriggerServerEvent('aurp_trucker:server:triggerPolicePursuit', ActiveJob.jobId)
-            end
-        end)
-    end
-
-    -- Thread leve de monitoramento de curvas bruscas e rompimento de cordas frouxas (Carga Seca)
+    -- Thread leve de monitoramento de curvas bruscas e rompimento de cordas frouxas
     CreateThread(function()
         while CurrentStage == 'STEP_8_IN_TRANSIT' do
             Wait(250)
@@ -1301,16 +900,6 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             forklift = WaitForNetworkEntity(payload.forkliftNetId, 10000)
         end
 
-        local handler = nil
-        if payload.handlerNetId and payload.handlerNetId ~= 0 then
-            handler = WaitForNetworkEntity(payload.handlerNetId, 10000)
-        end
-
-        local container = nil
-        if payload.containerNetId and payload.containerNetId ~= 0 then
-            container = WaitForNetworkEntity(payload.containerNetId, 10000)
-        end
-
         local playerPed = cache.ped or PlayerPedId()
         SetEntityVisible(playerPed, true)
         ResetEntityAlpha(playerPed)
@@ -1318,8 +907,6 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         JobEntities.truck = truck
         JobEntities.trailer = trailer
         JobEntities.forklift = forklift
-        JobEntities.handler = handler
-        JobEntities.container = container
 
         if truck and DoesEntityExist(truck) then
             SetEntityVisible(truck, true)
@@ -1372,27 +959,6 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end
         end
 
-        if handler and DoesEntityExist(handler) then
-            SetEntityVisible(handler, true)
-            ResetEntityAlpha(handler)
-            SetVehicleOnGroundProperly(handler)
-            SetEntityCollision(handler, true, true)
-            SetVehicleDoorsLocked(handler, 1)
-            SetVehicleDoorsLockedForAllPlayers(handler, false)
-            SetVehicleNeedsToBeHotwired(handler, false)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(handler) end)
-            end
-        end
-
-        if container and DoesEntityExist(container) then
-            SetEntityVisible(container, true)
-            ResetEntityAlpha(container)
-            PlaceObjectOnGroundProperly(container)
-            SetEntityCollision(container, true, true)
-            FreezeEntityPosition(container, true)
-        end
-
         -- 2. Inicialização sequencial e determinística da Etapa 1
         StartMissionStep1(truck, trailer, forklift)
     end)
@@ -1430,141 +996,17 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
     if summary.lostPallets and summary.lostPallets > 0 then
-        SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).\nIntegridade final da carga: %d%%\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
+        SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.lostPallets,
-            summary.cargoHealth or 100,
             summary.payment or 0,
             summary.xp or 0
         ), 'warning')
     else
-        SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nIntegridade da carga: %d%%\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
-            summary.cargoHealth or 100,
+        SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.payment or 0,
             summary.xp or 0
         ), 'success')
     end
-end)
-
--- =======================================================================
--- MÓDULO 3: PERSEGUIÇÃO POLICIAL NPC ATIVA (MERCADO ILEGAL / HEAT > 50)
--- =======================================================================
-RegisterNetEvent('aurp_trucker:client:startPolicePursuit', function(copDataList)
-    SendMissionNotify('ALERTA POLICIAL', 'A polícia interceptou sua rota! Viaturas estão em perseguição para apreender a carga ilegal!', 'error')
-    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-
-    CreateThread(function()
-        local truck = JobEntities.truck
-        if not truck or not DoesEntityExist(truck) then return end
-
-        for _, data in ipairs(copDataList) do
-            local copVeh = WaitForNetworkEntity(data.vehNetId, 6000)
-            local copPed = WaitForNetworkEntity(data.pedNetId, 6000)
-
-            if copVeh and DoesEntityExist(copVeh) and copPed and DoesEntityExist(copPed) then
-                SetEntityVisible(copVeh, true)
-                SetEntityVisible(copPed, true)
-                SetVehicleSiren(copVeh, true)
-                SetVehicleEngineOn(copVeh, true, true, false)
-
-                SetPedCombatAttributes(copPed, 46, true)
-                SetPedCombatAttributes(copPed, 3, false)
-                SetPedFleeAttributes(copPed, 0, false)
-                SetDriverAbility(copPed, 1.0)
-                SetDriverAggressiveness(copPed, 1.0)
-
-                TaskVehicleChase(copPed, truck)
-                SetTaskVehicleChaseBehaviorFlag(copPed, 1, true)
-                SetTaskVehicleChaseIdealPursuitDistance(copPed, 6.0)
-
-                local copBlip = AddBlipForEntity(copVeh)
-                SetBlipSprite(copBlip, 56)
-                SetBlipColour(copBlip, 1)
-                SetBlipScale(copBlip, 0.85)
-                BeginTextCommandSetBlipName("STRING")
-                AddTextComponentString("Viatura Policial")
-                EndTextCommandSetBlipName(copBlip)
-            end
-        end
-    end)
-end)
-
--- =======================================================================
--- MÓDULO 4: CRIADOR DE ROTAS IN-GAME (ADMIN RAYCAST + DIALOG)
--- =======================================================================
-RegisterNetEvent('aurp_trucker:client:startRouteCreator', function()
-    SendMissionNotify('Criador de Rotas', 'Modo Raycast ativado! Aponte para o solo onde deseja criar o ponto de entrega.', 'info')
-
-    CreateThread(function()
-        local selecting = true
-        lib.showTextUI('[E] Fixar Coordenada de Entrega | [BACKSPACE] Cancelar', { position = 'top-center' })
-
-        local chosenCoords = nil
-
-        while selecting do
-            Wait(0)
-            local hit, entityHit, endCoords = lib.raycast.fromCamera(511, 4, 150.0)
-
-            if hit and endCoords then
-                local camCoords = GetGameplayCamCoord()
-                DrawLine(camCoords.x, camCoords.y, camCoords.z, endCoords.x, endCoords.y, endCoords.z, 0, 255, 100, 200)
-                DrawMarker(28, endCoords.x, endCoords.y, endCoords.z + 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.5, 1.5, 1.5, 0, 255, 100, 180, false, false, 2, false, nil, nil, false)
-
-                if IsControlJustPressed(0, 38) then -- Tecla E
-                    chosenCoords = endCoords
-                    selecting = false
-                    break
-                end
-            end
-
-            if IsControlJustPressed(0, 177) then -- Backspace / ESC
-                selecting = false
-                break
-            end
-        end
-
-        lib.hideTextUI()
-
-        if not chosenCoords then
-            SendMissionNotify('Criador de Rotas', 'Criação de rota cancelada pelo usuário.', 'info')
-            return
-        end
-
-        local input = lib.inputDialog('Nova Rota de Frete (Route Creator)', {
-            { type = 'input', label = 'Nome / Identificação do Destino', placeholder = 'Ex: Depósito Sul - Pier 400', required = true },
-            {
-                type = 'select',
-                label = 'Categoria de Carga',
-                options = {
-                    { value = 'dry', label = 'Carga Seca (Paletes)' },
-                    { value = 'container', label = 'Carga Pesada (Contêiner Industrial)' },
-                    { value = 'liquid', label = 'Carga Líquida (Caminhão-Tanque)' },
-                    { value = 'illegal', label = 'Mercado Ilegal (Carga Clandestina)' },
-                },
-                default = 'dry',
-                required = true
-            },
-            { type = 'number', label = 'Pagamento Base ($)', default = 6500, min = 1000, max = 150000, required = true },
-            { type = 'number', label = 'XP Concedido', default = 250, min = 50, max = 5000, required = true },
-        })
-
-        if not input then
-            SendMissionNotify('Criador de Rotas', 'Formulário cancelado.', 'info')
-            return
-        end
-
-        local ped = cache.ped or PlayerPedId()
-        local heading = GetEntityHeading(ped)
-
-        TriggerServerEvent('aurp_trucker:server:saveNewRoute', {
-            id = 'custom_' .. math.random(1000, 9999),
-            label = input[1],
-            cargoType = input[2],
-            coords = { x = chosenCoords.x, y = chosenCoords.y, z = chosenCoords.z, w = heading },
-            reward = tonumber(input[3]) or 6500,
-            xp = tonumber(input[4]) or 250,
-            distance = 8.0
-        })
-    end)
 end)
 
 -- =======================================================================
@@ -1605,7 +1047,6 @@ AddEventHandler('onResourceStop', function(resourceName)
         [joaat('sm3d_prop_logi_shelf_2')] = true,
         [joaat('sm3d_prop_logi_shelf_3')] = true,
         [joaat('prop_cs_fuel_nozle')] = true,
-        [joaat('prop_contr_03b_ld')] = true,
     }
 
     local objects = GetGamePool('CObject')
