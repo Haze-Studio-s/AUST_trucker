@@ -155,6 +155,26 @@ local function CleanupLobbyEntities(lobby)
         DeleteEntity(lobby.hoseProp)
     end
 
+    if lobby.handler and DoesEntityExist(lobby.handler) then
+        DeleteEntity(lobby.handler)
+    end
+
+    if lobby.container and DoesEntityExist(lobby.container) then
+        DeleteEntity(lobby.container)
+    end
+
+    if lobby.policeVehicles then
+        for _, v in ipairs(lobby.policeVehicles) do
+            if DoesEntityExist(v) then DeleteEntity(v) end
+        end
+    end
+
+    if lobby.policePeds then
+        for _, p in ipairs(lobby.policePeds) do
+            if DoesEntityExist(p) then DeleteEntity(p) end
+        end
+    end
+
     if lobby.pallets then
         for _, p in ipairs(lobby.pallets) do
             if p and DoesEntityExist(p) then
@@ -164,7 +184,33 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
--- Auto-schema idempotente para 0r_trucker
+-- =======================================================================
+-- CARREGAMENTO DINÂMICO DE ROTAS (ROUTE CREATOR PERSISTIDO VIA JSON)
+-- =======================================================================
+local function LoadDynamicRoutes()
+    local raw = LoadResourceFile(GetCurrentResourceName(), 'data/routes.json')
+    if raw and raw ~= '' then
+        local success, routes = pcall(json.decode, raw)
+        if success and type(routes) == 'table' then
+            Config.Polarix = Config.Polarix or {}
+            Config.Polarix.DeliveryDestinations = Config.Polarix.DeliveryDestinations or {}
+            for _, r in ipairs(routes) do
+                table.insert(Config.Polarix.DeliveryDestinations, {
+                    id = r.id or ('custom_' .. math.random(1000, 9999)),
+                    label = r.label or 'Destino Customizado',
+                    cargoType = r.cargoType or 'dry',
+                    coords = vector4(r.coords.x, r.coords.y, r.coords.z, r.coords.w or 0.0),
+                    distance = r.distance or 5.0,
+                    reward = r.reward or 6000,
+                    xp = r.xp or 200
+                })
+            end
+            print(("[AUST_Trucker] %d rotas customizadas carregadas dinamicamente de data/routes.json"):format(#routes))
+        end
+    end
+end
+
+-- Auto-schema idempotente para 0r_trucker e persistência de Heat
 MySQL.ready(function()
     MySQL.query([[
         CREATE TABLE IF NOT EXISTS `0r_trucker` (
@@ -174,10 +220,20 @@ MySQL.ready(function()
             `xp` INT DEFAULT 0,
             `total_deliveries` INT DEFAULT 0,
             `total_earned` INT DEFAULT 0,
+            `heat` INT DEFAULT 0,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]])
+
+    pcall(function()
+        MySQL.query([[ALTER TABLE `0r_trucker` ADD COLUMN IF NOT EXISTS `heat` INT DEFAULT 0;]])
+    end)
+    pcall(function()
+        MySQL.query([[ALTER TABLE `players` ADD COLUMN IF NOT EXISTS `trucker_heat` INT DEFAULT 0;]])
+    end)
+
+    LoadDynamicRoutes()
 end)
 
 
@@ -354,16 +410,35 @@ local function StartTruckDelivery(src, contractData)
     local wh = Config.Polarix.Warehouse
     local truckModel = joaat(selectedTruckModel)
 
-    -- RESOLUÇÃO DO TIPO DE CARGA (Seca vs Líquida)
+    -- RESOLUÇÃO DO TIPO DE CARGA (Seca, Líquida, Contêiner ou Ilegal)
     local cargoType = contractData.cargoType
-    if not cargoType or (cargoType ~= 'dry' and cargoType ~= 'liquid') then
+    if not cargoType or (cargoType ~= 'dry' and cargoType ~= 'liquid' and cargoType ~= 'container' and cargoType ~= 'illegal') then
         local tModel = string.lower(contractData.trailerModel or '')
         local cName = string.lower(contractData.name or '')
         if tModel == 'tanker' or tModel == 'tanker2' or tModel == 'armytanker' or string.find(tModel, 'tanker') or string.find(cName, 'tanque') or string.find(cName, 'combust') or string.find(cName, 'oleo') or string.find(cName, 'óleo') or string.find(cName, 'querosene') or string.find(cName, 'solvente') then
             cargoType = 'liquid'
+        elseif string.find(tModel, 'contr') or string.find(cName, 'conteiner') or string.find(cName, 'contêiner') or string.find(cName, 'container') or string.find(cName, 'heavy') then
+            cargoType = 'container'
+        elseif string.find(cName, 'ilegal') or string.find(cName, 'clandestin') or string.find(cName, 'contrabando') then
+            cargoType = 'illegal'
         else
             cargoType = 'dry'
         end
+    end
+
+    -- Módulo 3: Validação Noturna e Heat para Mercado Ilegal
+    local playerHeat = 0
+    if cargoType == 'illegal' then
+        local hour = GetClockHours()
+        local nightCfg = (Config.CargoTypes.illegal and Config.CargoTypes.illegal.nightHours) or { start = 22, finish = 4 }
+        local isNight = (hour >= nightCfg.start or hour < nightCfg.finish)
+        if not isNight then
+            TriggerClientEvent('aurp_trucker:notify', src, 'Mercado Ilegal Fechado', ('Cargas clandestinas operam exclusivamente entre %02d:00 e %02d:00! Hora atual: %02d:00.'):format(nightCfg.start, nightCfg.finish, hour), 'error')
+            return
+        end
+
+        local heatRow = MySQL.single.await('SELECT heat FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
+        playerHeat = (heatRow and heatRow.heat) or 0
     end
 
     local typeConfig = Config.CargoTypes and Config.CargoTypes[cargoType]
@@ -386,6 +461,7 @@ local function StartTruckDelivery(src, contractData)
     if not isAllowedTrailer then
         trailerModel = joaat(typeConfig.defaultTrailer or (cargoType == 'liquid' and 'tanker' or 'trflat'))
     end
+
 
     -- STEP A: SPAWN AND PLATE ENFORCEMENT
     local plate = selectedPlate
@@ -469,7 +545,7 @@ local function StartTruckDelivery(src, contractData)
     SetEntityDistanceCullingRadius(trailer, 400.0)
     SetVehicleDoorsLocked(trailer, 1)
 
-    -- ETAPA 3: Spawn Condicional (Empilhadeira e Paletes APENAS para Carga Seca)
+    -- ETAPA 3: Spawn Condicional (Empilhadeira/Paletes para Carga Seca/Ilegal, Handler/Container para Contêiner)
     local forklift = nil
     local forkliftPlate = nil
     local chosenForkliftCoord = nil
@@ -477,7 +553,11 @@ local function StartTruckDelivery(src, contractData)
     local palletNetIds = {}
     local reqPallets = contractData.palletCount or 4
 
-    if cargoType == 'dry' then
+    local handler = nil
+    local handlerPlate = nil
+    local containerObj = nil
+
+    if cargoType == 'dry' or cargoType == 'illegal' then
         local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
         for _, coord in ipairs(forkliftSpawns) do
@@ -582,12 +662,66 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'A área de paletes está obstruída no momento! Desobstrua a zona de carga e tente novamente.', 'error')
             return
         end
+    elseif cargoType == 'container' then
+        -- MÓDULO 2: Spawn de Handler Reach Stacker e Contêiner
+        local handlerBay = wh.HandlerBayCoords or vector4(1240.20, -3195.10, 5.88, 270.00)
+        local hModel = joaat(Config.CargoTypes.container.handlerModel or 'handler')
+        handler = CreateVehicle(hModel, handlerBay.x, handlerBay.y, handlerBay.z + 0.5, handlerBay.w or 270.0, true, true)
+        local waitH = GetGameTimer()
+        while not DoesEntityExist(handler) and (GetGameTimer() - waitH < 5000) do Wait(10) end
+
+        if not handler or not DoesEntityExist(handler) then
+            if DoesEntityExist(trailer) then DeleteEntity(trailer) end
+            if DoesEntityExist(truck) then DeleteEntity(truck) end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'A vaga do Handler está ocupada! Desobstrua a área e tente novamente.', 'error')
+            return
+        end
+
+        SetEntityDistanceCullingRadius(handler, 350.0)
+        handlerPlate = ("HNDL%04d"):format(math.random(1000, 9999))
+        SetVehicleNumberPlateText(handler, handlerPlate)
+        SetVehicleDoorsLocked(handler, 1)
+
+        if exports.ox_inventory then
+            local hKeyMeta = { plate = handlerPlate, description = "Chave do Handler - " .. handlerPlate }
+            local added = exports.ox_inventory:AddItem(src, 'keys', 1, hKeyMeta)
+            if not added then exports.ox_inventory:AddItem(src, 'vehiclekey', 1, hKeyMeta) end
+        end
+        if exports['qbx_vehiclekeys'] then pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, handler) end) end
+        if exports['qb-vehiclekeys'] then pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, handlerPlate) end) end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, handlerPlate)
+        TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, handlerPlate)
+
+        -- Spawn do prop de contêiner
+        local contCoord = Config.ContainerSpawnCoord or vector4(1230.50, -3183.20, 5.00, 90.0)
+        local cModel = joaat(Config.CargoTypes.container.containerModel or 'prop_contr_03b_ld')
+        containerObj = CreateObject(cModel, contCoord.x, contCoord.y, contCoord.z + 0.1, true, true, false)
+        local waitC = GetGameTimer()
+        while not DoesEntityExist(containerObj) and (GetGameTimer() - waitC < 5000) do Wait(50) end
+
+        if DoesEntityExist(containerObj) then
+            SetEntityDistanceCullingRadius(containerObj, 350.0)
+            FreezeEntityPosition(containerObj, true)
+        end
     else
         reqPallets = 100 -- Carga Líquida: 100% de capacidade do tanque
     end
 
-    local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
+    -- Seleção inteligente de destino correspondente ao tipo de carga
+    local matchingDests = {}
+    for _, d in ipairs(Config.Polarix.DeliveryDestinations) do
+        if not d.cargoType or d.cargoType == cargoType then
+            table.insert(matchingDests, d)
+        end
+    end
+    local destCfg = (#matchingDests > 0) and matchingDests[math.random(#matchingDests)] or Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
     local destCoords = destCfg.coords
+
+    local basePayment = destCfg.reward or 5000
+    if cargoType == 'illegal' then
+        local mult = (Config.CargoTypes.illegal and Config.CargoTypes.illegal.rewardMultiplier) or 2.5
+        basePayment = math.floor(basePayment * mult)
+    end
 
     local lobbyData = {
         jobId = jobId,
@@ -602,18 +736,26 @@ local function StartTruckDelivery(src, contractData)
         trailer = trailer,
         forklift = forklift,
         forkliftPlate = forkliftPlate,
+        handler = handler,
+        handlerPlate = handlerPlate,
+        container = containerObj,
         pallets = pallets,
         palletNetIds = palletNetIds,
         loadedCount = 0,
         requiredCount = reqPallets,
-        cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or 'Paletes Industriais'),
-        payment = destCfg.reward or 5000,
+        cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or (cargoType == 'container' and 'Contêiner Industrial Heavy Lift' or (cargoType == 'illegal' and 'Carga Clandestina (Mercado Ilegal)' or 'Paletes Industriais'))),
+        payment = basePayment,
         xp = destCfg.xp or 200,
         deliveryCoords = destCoords,
         stage = 'STEP_GET_TRUCK',
+        cargoHealth = 100,
+        playerHeat = playerHeat,
         current_object = nil,
         hoseProp = nil,
-        hoseConnected = false
+        hoseConnected = false,
+        twistlocksLocked = 0,
+        policeVehicles = {},
+        policePeds = {}
     }
 
     PolarixLobbies[jobId] = lobbyData
@@ -634,15 +776,19 @@ local function StartTruckDelivery(src, contractData)
         forkliftNetId = forklift and DoesEntityExist(forklift) and NetworkGetNetworkIdFromEntity(forklift) or 0,
         forkliftCoords = chosenForkliftCoord and vector3(chosenForkliftCoord.x, chosenForkliftCoord.y, chosenForkliftCoord.z),
         forkliftPlate = forkliftPlate,
+        handlerNetId = handler and DoesEntityExist(handler) and NetworkGetNetworkIdFromEntity(handler) or 0,
+        handlerPlate = handlerPlate,
+        containerNetId = containerObj and DoesEntityExist(containerObj) and NetworkGetNetworkIdFromEntity(containerObj) or 0,
         palletNetIds = palletNetIds,
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
         loadedCount = 0,
-        deliveryCoords = destCoords
+        deliveryCoords = destCoords,
+        playerHeat = playerHeat
     }
 
-    print(("[AUST_Trucker] Dispatching polarixJobStarted to player %s for job %s (Truck NetID: %s, Trailer NetID: %s)"):format(
-        tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId)
+    print(("[AUST_Trucker] Dispatching polarixJobStarted to player %s for job %s (Truck NetID: %s, Trailer NetID: %s, Cargo: %s)"):format(
+        tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId), cargoType
     ))
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
@@ -947,7 +1093,9 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local deliveredCount = math.max(0, totalReq - lostCount)
     local ratio = (lobby.cargoType == 'dry' and totalReq > 0) and math.max(0.2, deliveredCount / totalReq) or 1.0
 
-    local payment = math.floor(basePayment * ratio)
+    -- Módulo 1: Payout proporcional à integridade da carga (CargoHealth)
+    local healthRatio = math.max(0.0, (lobby.cargoHealth or 100) / 100.0)
+    local payment = math.floor(basePayment * ratio * healthRatio)
     local xp = math.floor(baseXP * ratio)
 
     if exports.qbx_core then
@@ -956,11 +1104,21 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
     end
 
-    -- STEP C: DUAL-LAYER KEY REMOVAL (TRUCK & FORKLIFT)
+    -- Módulo 3: Ganho de Heat (+15) para frete do Mercado Ilegal bem-sucedido
+    if lobby.cargoType == 'illegal' then
+        local heatReward = (Config.CargoTypes.illegal and Config.CargoTypes.illegal.heatReward) or 15
+        pcall(function()
+            MySQL.query.await('UPDATE `0r_trucker` SET `heat` = `heat` + ? WHERE `citizenid` = ?', { heatReward, citizenId })
+            MySQL.query.await('UPDATE `players` SET `trucker_heat` = `trucker_heat` + ? WHERE `citizenid` = ?', { heatReward, citizenId })
+        end)
+    end
+
+    -- STEP C: DUAL-LAYER KEY REMOVAL (TRUCK, FORKLIFT & HANDLER)
     local platesToRemove = {}
     local truckPlate = lobby.truckPlate or (lobby.truck and DoesEntityExist(lobby.truck) and GetVehicleNumberPlateText(lobby.truck))
     if truckPlate then table.insert(platesToRemove, { plate = truckPlate, entity = lobby.truck }) end
     if lobby.forkliftPlate then table.insert(platesToRemove, { plate = lobby.forkliftPlate, entity = lobby.forklift }) end
+    if lobby.handlerPlate then table.insert(platesToRemove, { plate = lobby.handlerPlate, entity = lobby.handler }) end
 
     for _, pData in ipairs(platesToRemove) do
         local targetPlate = pData.plate
@@ -1013,24 +1171,8 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     -- Atualiza aust_trucker_stats para manter paridade estatística do painel
     pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
-    -- Carreta é entregue e excluída
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        DeleteEntity(lobby.trailer)
-    end
-
-    -- Caminhão: se for alugado é removido; se for próprio do jogador, permanece no mundo com ele
-    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
-        DeleteEntity(lobby.truck)
-    end
-
-    -- Empilhadeira e paletes da baia são limpos
-    if lobby.forklift and DoesEntityExist(lobby.forklift) then DeleteEntity(lobby.forklift) end
-    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then DeleteEntity(lobby.hoseProp) end
-    if lobby.pallets then
-        for _, p in ipairs(lobby.pallets) do
-            if p and DoesEntityExist(p) then DeleteEntity(p) end
-        end
-    end
+    -- Limpeza completa autoritativa de entidades do frete
+    CleanupLobbyEntities(lobby)
 
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil
@@ -1041,9 +1183,191 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         xp = xp,
         lostPallets = lostCount,
         deliveredPallets = deliveredCount,
+        cargoHealth = lobby.cargoHealth or 100,
         distance = 3.5
     })
 end)
+
+-- MÓDULO 1: Atualização e Sincronização de Dano da Carga (CargoHealth)
+RegisterNetEvent('aurp_trucker:server:updateCargoHealth', function(jobId, health)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    lobby.cargoHealth = math.max(0, math.min(100, tonumber(health) or 100))
+end)
+
+-- MÓDULO 1: Carga 100% Destruída (Falha Crítica Fail-Closed)
+RegisterNetEvent('aurp_trucker:server:cargoDestroyed', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+
+    CleanupLobbyEntities(lobby)
+    if lobby.citizenId then PlayerPolarixLobbies[lobby.citizenId] = nil end
+    PolarixLobbies[jobId] = nil
+
+    TriggerClientEvent('aust_trucker:client:ClearObjective', src)
+    TriggerClientEvent('aurp_trucker:notify', src, 'Carga Destruída', 'A carga foi totalmente destruída pelos impactos! O frete foi cancelado sem pagamento.', 'error')
+end)
+
+-- MÓDULO 3: Mecânica "Lavar a Ficha" (Redução de Heat com Dinheiro Sujo)
+RegisterNetEvent('aurp_trucker:server:washHeat', function()
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local row = MySQL.single.await('SELECT heat FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
+    local heat = (row and row.heat) or 0
+
+    if heat <= 0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Ficha Limpa', 'Você não possui Heat acumulado com as autoridades.', 'info')
+        return
+    end
+
+    local costPerHeat = (Config.CargoTypes.illegal and Config.CargoTypes.illegal.washCleanCostPerHeat) or 250
+    local totalCost = heat * costPerHeat
+
+    local hasPaid = false
+    if exports.ox_inventory then
+        local count = exports.ox_inventory:GetItemCount(src, 'black_money') or 0
+        if count >= totalCost then
+            local removed = exports.ox_inventory:RemoveItem(src, 'black_money', totalCost)
+            if removed then hasPaid = true end
+        end
+    end
+
+    if not hasPaid then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Dinheiro Insuficiente', ('Você precisa de $%d em dinheiro sujo (black_money) para lavar sua ficha criminal!'):format(totalCost), 'error')
+        return
+    end
+
+    MySQL.query.await('UPDATE `0r_trucker` SET `heat` = 0 WHERE `citizenid` = ?', { citizenId })
+    MySQL.query.await('UPDATE `players` SET `trucker_heat` = 0 WHERE `citizenid` = ?', { citizenId })
+
+    TriggerClientEvent('aurp_trucker:notify', src, 'Ficha Lavada', ('Ficha criminal limpa! Seu Heat policial foi zerado por $%d em dinheiro sujo.'):format(totalCost), 'success')
+end)
+
+-- MÓDULO 3: Disparo de Perseguição Policial NPC Ativa (Heat > 50)
+RegisterNetEvent('aurp_trucker:server:triggerPolicePursuit', function(jobId)
+    local src = source
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then return end
+    if lobby.pursuitSpawned then return end
+    lobby.pursuitSpawned = true
+
+    local truckCoords = (lobby.truck and DoesEntityExist(lobby.truck)) and GetEntityCoords(lobby.truck) or nil
+    if not truckCoords then return end
+
+    local pModels = { 'police', 'police2', 'police3' }
+    local copVehicles = {}
+    local copPeds = {}
+    local copNetIds = {}
+
+    for i = 1, 2 do
+        local offset = vector3(math.random(-25, 25), math.random(-45, -25), 0.0)
+        local spawnPos = truckCoords + offset
+        local vehHash = joaat(pModels[math.random(#pModels)])
+        local pedHash = joaat('s_m_y_cop_01')
+
+        local pVeh = CreateVehicle(vehHash, spawnPos.x, spawnPos.y, spawnPos.z + 1.0, 0.0, true, true)
+        local timer = GetGameTimer()
+        while not DoesEntityExist(pVeh) and (GetGameTimer() - timer < 3000) do Wait(10) end
+
+        if DoesEntityExist(pVeh) then
+            SetVehicleSiren(pVeh, true)
+            local pPed = CreatePedInsideVehicle(pVeh, 6, pedHash, -1, true, true)
+            local pTimer = GetGameTimer()
+            while not DoesEntityExist(pPed) and (GetGameTimer() - pTimer < 3000) do Wait(10) end
+
+            table.insert(copVehicles, pVeh)
+            table.insert(copPeds, pPed)
+            table.insert(copNetIds, {
+                vehNetId = NetworkGetNetworkIdFromEntity(pVeh),
+                pedNetId = NetworkGetNetworkIdFromEntity(pPed)
+            })
+        end
+    end
+
+    lobby.policeVehicles = copVehicles
+    lobby.policePeds = copPeds
+
+    TriggerClientEvent('aurp_trucker:client:startPolicePursuit', src, copNetIds)
+end)
+
+-- MÓDULO 4: Salvar Nova Rota Criada Dinamicamente em data/routes.json
+RegisterNetEvent('aurp_trucker:server:saveNewRoute', function(routeData)
+    local src = source
+    if not routeData or not routeData.label or not routeData.coords then return end
+
+    local raw = LoadResourceFile(GetCurrentResourceName(), 'data/routes.json')
+    local routes = {}
+    if raw and raw ~= '' then
+        local success, decoded = pcall(json.decode, raw)
+        if success and type(decoded) == 'table' then
+            routes = decoded
+        end
+    end
+
+    local newEntry = {
+        id = routeData.id or ('route_' .. math.random(1000, 9999)),
+        label = routeData.label,
+        cargoType = routeData.cargoType or 'dry',
+        coords = {
+            x = math.floor(routeData.coords.x * 100) / 100,
+            y = math.floor(routeData.coords.y * 100) / 100,
+            z = math.floor(routeData.coords.z * 100) / 100,
+            w = math.floor((routeData.coords.w or 0.0) * 100) / 100
+        },
+        distance = routeData.distance or 8.0,
+        reward = routeData.reward or 7000,
+        xp = routeData.xp or 250
+    }
+
+    table.insert(routes, newEntry)
+    SaveResourceFile(GetCurrentResourceName(), 'data/routes.json', json.encode(routes, { indent = true }), -1)
+
+    -- Inclusão em tempo real na memória do servidor
+    Config.Polarix = Config.Polarix or {}
+    Config.Polarix.DeliveryDestinations = Config.Polarix.DeliveryDestinations or {}
+    table.insert(Config.Polarix.DeliveryDestinations, {
+        id = newEntry.id,
+        label = newEntry.label,
+        cargoType = newEntry.cargoType,
+        coords = vector4(newEntry.coords.x, newEntry.coords.y, newEntry.coords.z, newEntry.coords.w or 0.0),
+        distance = newEntry.distance,
+        reward = newEntry.reward,
+        xp = newEntry.xp
+    })
+
+    TriggerClientEvent('aurp_trucker:notify', src, 'Rota Salva', ('A rota "%s" foi persistida com sucesso em routes.json!'):format(newEntry.label), 'success')
+end)
+
+-- MÓDULO 4: Comando /truckerroute para Administradores
+if lib and lib.addCommand then
+    lib.addCommand('truckerroute', {
+        help = 'Criador de Rotas Logísticas (Admin)',
+        restricted = 'group.admin'
+    }, function(source, args, raw)
+        TriggerClientEvent('aurp_trucker:client:startRouteCreator', source)
+    end)
+else
+    RegisterCommand('truckerroute', function(source, args, raw)
+        if source == 0 then return end
+        local isAllowed = false
+        if exports.qbx_core and exports.qbx_core.HasPermission then
+            isAllowed = exports.qbx_core:HasPermission(source, 'admin') or exports.qbx_core:HasPermission(source, 'god')
+        elseif IsPlayerAceAllowed(source, 'command') then
+            isAllowed = true
+        end
+
+        if isAllowed then
+            TriggerClientEvent('aurp_trucker:client:startRouteCreator', source)
+        else
+            TriggerClientEvent('aurp_trucker:notify', source, 'Permissão Negada', 'Apenas administradores podem utilizar o Criador de Rotas.', 'error')
+        end
+    end, false)
+end
 
 -- Reposição de Emergência / Fallback
 RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId)
@@ -1073,11 +1397,28 @@ RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId
     TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', 'Empilhadeira restabelecida no pátio com segurança.', 'success')
 end)
 
--- Limpeza ao desconectar
+-- MÓDULO 5: Anti-Combat Log no playerDropped (Multa $2000, +20 Heat e Deleção Segura)
 AddEventHandler('playerDropped', function()
     local src = source
     for jobId, lobby in pairs(PolarixLobbies) do
         if lobby.src == src then
+            local citizenId = lobby.citizenId
+
+            -- Multa bancária por abandono de carga
+            pcall(function()
+                if exports.qbx_core then
+                    exports.qbx_core:RemoveMoney(src, 'bank', 2000, 'trucker-abandon-penalty')
+                end
+            end)
+
+            -- Penalidade de +20 Heat se o frete for do mercado ilegal
+            if lobby.cargoType == 'illegal' and citizenId then
+                pcall(function()
+                    MySQL.query.await('UPDATE `0r_trucker` SET `heat` = `heat` + 20 WHERE `citizenid` = ?', { citizenId })
+                    MySQL.query.await('UPDATE `players` SET `trucker_heat` = `trucker_heat` + 20 WHERE `citizenid` = ?', { citizenId })
+                end)
+            end
+
             CleanupLobbyEntities(lobby)
             if lobby.citizenId then PlayerPolarixLobbies[lobby.citizenId] = nil end
             PolarixLobbies[jobId] = nil

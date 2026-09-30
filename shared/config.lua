@@ -332,7 +332,67 @@ Config.CargoTypes = {
         fillDuration = 12000, -- 12 segundos para encher 100%
         maxDistance = 9.0, -- Distância máxima entre o jogador e o caminhão-tanque durante o enchimento
         leakPenalty = 1500, -- Penalidade financeira se o jogador abandonar/romper a mangueira
+    },
+    container = {
+        label = 'Carga Pesada (Contêiner Industrial)',
+        allowedTrailers = {
+            joaat('trflat'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+        },
+        defaultTrailer = 'trflat',
+        handlerModel = 'handler',
+        containerModel = 'prop_contr_03b_ld',
+        handlerAttachOffset = vector3(0.0, 1.78, -2.5),
+        trailerAttachOffset = vector3(0.0, -1.8, 1.35),
+        twistlocks = {
+            { id = 1, label = 'Trava Dianteira Esquerda', offset = vector3(-1.1, 3.2, 0.45) },
+            { id = 2, label = 'Trava Dianteira Direita',  offset = vector3(1.1, 3.2, 0.45) },
+            { id = 3, label = 'Trava Traseira Esquerda',   offset = vector3(-1.1, -4.5, 0.45) },
+            { id = 4, label = 'Trava Traseira Direita',    offset = vector3(1.1, -4.5, 0.45) },
+        }
+    },
+    illegal = {
+        label = 'Mercado Ilegal (Carga Clandestina)',
+        allowedTrailers = {
+            joaat('freighttrailer'),
+            joaat('trailers2'),
+            joaat('trflat'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+            joaat('biff'),
+        },
+        defaultTrailer = 'freighttrailer',
+        nightHours = { start = 22, finish = 4 },
+        rewardMultiplier = 2.5,
+        heatReward = 15,
+        heatThresholdPursuit = 50,
+        washCleanCostPerHeat = 250, -- Custo por ponto de heat em dinheiro sujo
     }
 }
 
 Config.ForkliftAttachOffset = vector3(0.0, 1.2, -0.42) -- Eixo Z rebaixado para assentar perfeitamente sobre as lâminas
+
+-- =======================================================================
+-- MÓDULO 1: SISTEMA DE INTEGRIDADE DA CARGA E DESGASTE MECÂNICO
+-- =======================================================================
+Config.CargoHealth = {
+    InitialHealth = 100,
+    TireBurstChanceOnCriticalImpact = 0.30, -- 30% de chance de estourar pneu
+    CriticalImpactHealthDelta = 35.0,      -- Queda brusca de integridade corporal para impacto crítico
+    DamageMultiplier = 0.45,               -- Fator de conversão de dano do caminhão para a carga
+    RepairSkillCheck = { 'easy', 'medium', 'easy' },
+}
+
+-- Posição padrão de contêiner aguardando içamento no pátio
+Config.ContainerSpawnCoord = vector4(1230.50, -3183.20, 5.00, 90.0)
