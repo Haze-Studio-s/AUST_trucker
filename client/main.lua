@@ -630,11 +630,11 @@ local function ExecutePalletTie(index)
         -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
         -- Desliga reação física (gravidade/massa), tornando-a estática para a engine Havok
         SetEntityDynamic(palletEnt, false)
+        -- Garante que a colisão global do objeto continua ativa (para que os jogadores esbarrem nele)
+        SetEntityCollision(palletEnt, true, true)
         -- Força o motor a ignorar a colisão estritamente entre a carga e o reboque (em ambas as direções)
         SetEntityNoCollisionEntity(palletEnt, trailer, false)
         SetEntityNoCollisionEntity(trailer, palletEnt, false)
-        -- Garante que a colisão global do objeto continua ativa (para jogadores e mundo)
-        SetEntityCollision(palletEnt, true, true)
 
         -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
         AttachEntityToEntity(
@@ -643,6 +643,9 @@ local function ExecutePalletTie(index)
             0.0, 0.0, relHeading,
             false, false, false, false, 2, true
         )
+        -- Reforça a blindagem de colisão mútua Pallet x Trailer sem afetar o Player
+        SetEntityNoCollisionEntity(palletEnt, trailer, false)
+        SetEntityNoCollisionEntity(trailer, palletEnt, false)
         FreezeEntityPosition(palletEnt, false)
     end
 
