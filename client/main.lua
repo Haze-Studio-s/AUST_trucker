@@ -808,7 +808,61 @@ local function StartStrappingPalletsStage()
     SetupNextPalletTarget()
 end
 
-local function SetupEmbarkForkliftStage()
+local SetupRopesStage = nil
+local SetupEmbarkForkliftStage = nil
+
+SetupRopesStage = function()
+    CurrentStage = 'STEP_6_GET_ROPES'
+    ClearObjectiveMarkers(false)
+    hasRopes = false
+    HasRopes = false
+    currentTieIndex = 1
+
+    SendMissionNotify('Central Logística', 'Carregamento finalizado! Vá até a lateral do caminhão e pegue as cintas de amarração.', 'info')
+
+    if not JobEntities.truck or not DoesEntityExist(JobEntities.truck) then return end
+    local boxCoords = GetOffsetFromEntityInWorldCoords(JobEntities.truck, -1.2, 0.5, 0.0)
+
+    -- Seta verde exclusiva na caixa de ferramentas lateral do caminhão
+    UpdateMissionObjective('dock', boxCoords, 'Caixa de Ferramentas (Pegar Cordas)')
+
+    exports.ox_target:addLocalEntity(JobEntities.truck, {
+        {
+            name = 'aust_get_ropes',
+            icon = 'fa-solid fa-toolbox',
+            label = 'Pegar Cintas/Cordas de Amarração',
+            distance = 2.8,
+            canInteract = function()
+                return CurrentStage == 'STEP_6_GET_ROPES' and not hasRopes and not HasRopes and not IsPedInAnyVehicle(cache.ped, false)
+            end,
+            onSelect = function()
+                local ok = lib.progressBar({
+                    duration = 2500,
+                    label = 'Pegando cintas de amarração...',
+                    useWhileDead = false,
+                    canCancel = true,
+                    disable = { move = true, car = true, combat = true },
+                    anim = {
+                        dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                        clip = 'machinic_loop_meano',
+                        flag = 49
+                    }
+                })
+
+                if ok then
+                    hasRopes = true
+                    HasRopes = true
+                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+                    SendMissionNotify('Central Logística', 'Cintas recolhidas! Amarre cada palete individualmente no reboque.', 'info')
+                    pcall(function() exports.ox_target:removeLocalEntity(JobEntities.truck, 'aust_get_ropes') end)
+                    StartStrappingPalletsStage()
+                end
+            end
+        }
+    })
+end
+
+SetupEmbarkForkliftStage = function()
     CurrentStage = 'STEP_6_EMBARK_FORKLIFT'
     ClearObjectiveMarkers(false)
 
@@ -881,57 +935,6 @@ local function SetupEmbarkForkliftStage()
             Wait(sleep)
         end
     end)
-end
-
-local function SetupRopesStage()
-    CurrentStage = 'STEP_6_GET_ROPES'
-    ClearObjectiveMarkers(false)
-    hasRopes = false
-    HasRopes = false
-    currentTieIndex = 1
-
-    SendMissionNotify('Central Logística', 'Carregamento finalizado! Vá até a lateral do caminhão e pegue as cintas de amarração.', 'info')
-
-    if not JobEntities.truck or not DoesEntityExist(JobEntities.truck) then return end
-    local boxCoords = GetOffsetFromEntityInWorldCoords(JobEntities.truck, -1.2, 0.5, 0.0)
-
-    -- Seta verde exclusiva na caixa de ferramentas lateral do caminhão
-    UpdateMissionObjective('dock', boxCoords, 'Caixa de Ferramentas (Pegar Cordas)')
-
-    exports.ox_target:addLocalEntity(JobEntities.truck, {
-        {
-            name = 'aust_get_ropes',
-            icon = 'fa-solid fa-toolbox',
-            label = 'Pegar Cintas/Cordas de Amarração',
-            distance = 2.8,
-            canInteract = function()
-                return CurrentStage == 'STEP_6_GET_ROPES' and not hasRopes and not HasRopes and not IsPedInAnyVehicle(cache.ped, false)
-            end,
-            onSelect = function()
-                local ok = lib.progressBar({
-                    duration = 2500,
-                    label = 'Pegando cintas de amarração...',
-                    useWhileDead = false,
-                    canCancel = true,
-                    disable = { move = true, car = true, combat = true },
-                    anim = {
-                        dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
-                        clip = 'machinic_loop_meano',
-                        flag = 49
-                    }
-                })
-
-                if ok then
-                    hasRopes = true
-                    HasRopes = true
-                    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-                    SendMissionNotify('Central Logística', 'Cintas recolhidas! Amarre cada palete individualmente no reboque.', 'info')
-                    pcall(function() exports.ox_target:removeLocalEntity(JobEntities.truck, 'aust_get_ropes') end)
-                    StartStrappingPalletsStage()
-                end
-            end
-        }
-    })
 end
 
 -- =======================================================================
@@ -1569,6 +1572,9 @@ AddEventHandler('onResourceStop', function(resourceName)
         DeleteEntity(DispatcherPed)
         DispatcherPed = nil
     end
+
+    -- 4.1 Remove opções registradas no ox_target
+    pcall(function() exports.ox_target:removeModel('forklift', 'aust_tie_forklift_model') end)
 
     -- 5. CRÍTICO: Prevenção de corrupção de memória e crash fatal da engine
     -- Desvincula e deleta imediatamente qualquer objeto criado a partir dos arquétipos .ytyp
