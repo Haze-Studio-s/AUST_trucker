@@ -64,23 +64,146 @@ function ForkliftModule.GetNearestGroundPallet(forklift)
     return bestEntity
 end
 
-local function GetTrailerAttachOffset(trailer, loadedIndex)
-    if trailer and DoesEntityExist(trailer) and Config and Config.Polarix and Config.Polarix.CompatibleTrailers then
-        local model = GetEntityModel(trailer)
-        for tName, tData in pairs(Config.Polarix.CompatibleTrailers) do
-            if joaat(tName) == model and tData.attachOffsets then
-                local offset = tData.attachOffsets[loadedIndex + 1]
-                if offset then
-                    return offset.x, offset.y, offset.z
+local CurrentGhostEntity = nil
+local CurrentSlotIndex = 1
+local TargetTrailerEntity = nil
+
+function ForkliftModule.DeleteGhostProp()
+    if CurrentGhostEntity and DoesEntityExist(CurrentGhostEntity) then
+        DetachEntity(CurrentGhostEntity, true, true)
+        DeleteEntity(CurrentGhostEntity)
+    end
+    CurrentGhostEntity = nil
+end
+
+function ForkliftModule.GetCurrentGhost()
+    return CurrentGhostEntity
+end
+
+function ForkliftModule.GetCurrentSlotIndex()
+    return CurrentSlotIndex
+end
+
+function ForkliftModule.GetSlotOffset(trailer, slotIndex)
+    if trailer and DoesEntityExist(trailer) then
+        local tModel = GetEntityModel(trailer)
+        if Config and Config.TrailerSlots then
+            for modelName, slotData in pairs(Config.TrailerSlots) do
+                if joaat(modelName) == tModel and slotData.pallets then
+                    local off = slotData.pallets[slotIndex]
+                    if off then return off end
+                end
+            end
+        end
+        if Config and Config.Polarix and Config.Polarix.CompatibleTrailers then
+            for modelName, tData in pairs(Config.Polarix.CompatibleTrailers) do
+                if joaat(modelName) == tModel and tData.attachOffsets then
+                    local off = tData.attachOffsets[slotIndex]
+                    if off then return vector3(off.x, off.y, off.z) end
                 end
             end
         end
     end
-    -- Fallback dinâmico organizado em fileiras duplas
-    local col = (loadedIndex % 2 == 0) and -0.55 or 0.55
-    local row = math.floor(loadedIndex / 2)
-    local yOffset = 2.8 - (row * 2.8)
-    return col, yOffset, 0.35
+    -- Fallback sequencial em fileiras duplas (frente para trás)
+    local col = ((slotIndex - 1) % 2 == 0) and -0.55 or 0.55
+    local row = math.floor((slotIndex - 1) / 2)
+    local yOffset = 3.6 - (row * 2.4)
+    return vector3(col, yOffset, 0.35)
+end
+
+function ForkliftModule.GetForkliftSlotOffset(trailer)
+    if trailer and DoesEntityExist(trailer) then
+        local tModel = GetEntityModel(trailer)
+        if Config and Config.TrailerSlots then
+            for modelName, slotData in pairs(Config.TrailerSlots) do
+                if joaat(modelName) == tModel and slotData.forklift then
+                    return slotData.forklift
+                end
+            end
+        end
+    end
+    return vector3(0.0, -5.2, 0.35)
+end
+
+function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
+    ForkliftModule.DeleteGhostProp()
+    if not trailer or not DoesEntityExist(trailer) or not offset then return nil end
+
+    local modelHash = type(model) == 'number' and model or joaat(model or 'sm3d_prop_pallet_1')
+    if not HasModelLoaded(modelHash) then
+        RequestModel(modelHash)
+        local t = 1000
+        while not HasModelLoaded(modelHash) and t > 0 do
+            Wait(20)
+            t = t - 20
+        end
+    end
+
+    local tCoords = GetEntityCoords(trailer)
+    local ghost = CreateObject(modelHash, tCoords.x, tCoords.y, tCoords.z, false, false, false)
+    if not ghost or ghost == 0 or not DoesEntityExist(ghost) then return nil end
+
+    -- Holograma Fantasma: semi-transparente, sem colisão, invencível e imune
+    SetEntityAlpha(ghost, 150, false)
+    SetEntityCollision(ghost, false, false)
+    SetEntityInvincible(ghost, true)
+    SetCanClimbOnEntity(ghost, false)
+    FreezeEntityPosition(ghost, true)
+
+    AttachEntityToEntity(
+        ghost, trailer, 0,
+        offset.x, offset.y, offset.z,
+        0.0, 0.0, heading or 0.0,
+        false, false, false, false, 0, true
+    )
+
+    CurrentGhostEntity = ghost
+    return ghost
+end
+
+function ForkliftModule.SpawnForkliftGhost(trailer)
+    local off = ForkliftModule.GetForkliftSlotOffset(trailer)
+    local ghostVeh = ForkliftModule.SpawnGhostProp(trailer, 'forklift', off, 0.0)
+    return ghostVeh
+end
+
+function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex)
+    if not palletEntity or not DoesEntityExist(palletEntity) or not trailer or not DoesEntityExist(trailer) then
+        return false
+    end
+
+    local slotOffset = ForkliftModule.GetSlotOffset(trailer, slotIndex)
+
+    -- Controle de rede antes do acoplamento
+    local timeout = 1500
+    while not NetworkHasControlOfEntity(palletEntity) and timeout > 0 do
+        NetworkRequestControlOfEntity(palletEntity)
+        Wait(30)
+        timeout = timeout - 30
+    end
+
+    DetachEntity(palletEntity, true, true)
+
+    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º argumento = false)
+    FreezeEntityPosition(palletEntity, false)
+    AttachEntityToEntity(
+        palletEntity, trailer, 0,
+        slotOffset.x, slotOffset.y, slotOffset.z,
+        0.0, 0.0, 0.0,
+        false, false, false, false, 0, true
+    )
+
+    -- Reforço de colisão com o mundo (Pós-Attach)
+    FreezeEntityPosition(palletEntity, false)
+    SetEntityDynamic(palletEntity, false)
+    SetEntityCollision(palletEntity, true, true)
+    SetCanClimbOnEntity(palletEntity, true)
+    SetEntityNoCollisionEntity(palletEntity, trailer, true)
+    SetEntityNoCollisionEntity(trailer, palletEntity, true)
+
+    -- Deleta o holograma do slot recém-ocupado
+    ForkliftModule.DeleteGhostProp()
+    return true
 end
 
 local function AttachPalletToForklift(forklift, pallet)
@@ -122,7 +245,15 @@ end
 
 function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb)
     OperationActive = true
+    TargetTrailerEntity = trailer
+    CurrentSlotIndex = 1
     local loadedCount = 0
+
+    -- Spawna o holograma fantasma no Slot 1 ao iniciar
+    if trailer and DoesEntityExist(trailer) then
+        local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+        ForkliftModule.SpawnGhostProp(trailer, 'sm3d_prop_pallet_1', firstOffset)
+    end
 
     CreateThread(function()
         while OperationActive do
@@ -163,86 +294,54 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
                 else
-                    -- Caso 2: Acomodar palete na carreta (Estiva Manual / Posicionamento Livre na Caçamba)
+                    -- Caso 2: Acomodar palete na carreta (Slot Sequencial com Ghost Preview)
                     if trailer and DoesEntityExist(trailer) then
                         local palletEntity = CurrentForkliftPallet
                         local pCoords = palletEntity and DoesEntityExist(palletEntity) and GetEntityCoords(palletEntity) or GetEntityCoords(forklift)
                         local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-                        -- Validação da zona da caçamba do reboque:
-                        -- Largura X [-1.45, 1.45], Comprimento Y [-6.2, 5.0], Altura Z [-0.5, 1.8]
-                        local isOverTrailerBed = (math.abs(relPos.x) <= 1.55) and (relPos.y >= -6.5 and relPos.y <= 5.2) and (relPos.z >= -0.8 and relPos.z <= 2.2)
+                        -- Validação de aproximação da caçamba do reboque
+                        local isNearTrailerBed = (math.abs(relPos.x) <= 2.2) and (relPos.y >= -7.5 and relPos.y <= 6.2) and (relPos.z >= -1.0 and relPos.z <= 2.8)
 
-                        if isOverTrailerBed then
+                        if isNearTrailerBed then
                             sleep = 0
                             if TextUIShowing ~= 'drop' then
-                                lib.showTextUI('[G] Soltar / Estivar Palete na Carreta', { position = 'left-center', icon = 'truck-ramp-box' })
+                                lib.showTextUI(('[G] Fixar Palete no Slot %d (Fantasma)'):format(CurrentSlotIndex), { position = 'left-center', icon = 'truck-ramp-box' })
                                 TextUIShowing = 'drop'
                             end
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                -- Garante controle de rede antes de desanexar/anexar
-                                local timeout = 2000
-                                while not NetworkHasControlOfEntity(palletEntity) and timeout > 0 do
-                                    NetworkRequestControlOfEntity(palletEntity)
-                                    Wait(50)
-                                    timeout = timeout - 50
-                                end
+                                local ok = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
+                                if ok then
+                                    CurrentForkliftPallet = nil
+                                    loadedCount = loadedCount + 1
+                                    CurrentSlotIndex = CurrentSlotIndex + 1
+                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-                                DetachEntity(palletEntity, true, true)
-
-                                -- Rotação e orientação relativas ao reboque para respeitar o ângulo solto pelo jogador
-                                local tRot = GetEntityRotation(trailer, 2)
-                                local pRot = GetEntityRotation(palletEntity, 2)
-                                local relHeading = pRot.z - tRot.z
-
-                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp) e Gap de 1cm anti-clipping:
-                                local deckZ = (_G.GetTrailerDeckZ and _G.GetTrailerDeckZ(trailer))
-                                if not deckZ then
-                                    local _, tMax = GetModelDimensions(GetEntityModel(trailer))
-                                    deckZ = tMax.z - 0.14
-                                end
-                                local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
-
-                                -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
-                                FreezeEntityPosition(palletEntity, false)
-                                AttachEntityToEntity(
-                                    palletEntity, trailer, 0,
-                                    relPos.x, relPos.y, safeZ,
-                                    0.0, 0.0, relHeading,
-                                    false, false, false, false, 0, true
-                                )
-
-                                -- Reforço de colisão com o mundo (Pós-Attach)
-                                FreezeEntityPosition(palletEntity, false)
-                                SetEntityDynamic(palletEntity, false)
-                                SetEntityCollision(palletEntity, true, true)
-                                SetCanClimbOnEntity(palletEntity, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
-
-                                CurrentForkliftPallet = nil
-                                loadedCount = loadedCount + 1
-                                PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-
-                                if TextUIShowing then
-                                    lib.hideTextUI()
-                                    TextUIShowing = nil
-                                end
-
-                                -- Notifica o servidor
-                                TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
-
-                                if onLoadedCb then
-                                    onLoadedCb('dropped', palletEntity, loadedCount, requiredCount)
-                                end
-
-                                if loadedCount >= requiredCount then
-                                    ForkliftModule.StopOperation()
-                                    if onAllLoadedCb then
-                                        onAllLoadedCb()
+                                    if TextUIShowing then
+                                        lib.hideTextUI()
+                                        TextUIShowing = nil
                                     end
-                                    break
+
+                                    -- Notifica o servidor
+                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
+
+                                    if onLoadedCb then
+                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount)
+                                    end
+
+                                    if loadedCount < requiredCount then
+                                        -- Spawna o holograma no próximo slot sequencial
+                                        local nextOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                        ForkliftModule.SpawnGhostProp(trailer, 'sm3d_prop_pallet_1', nextOffset)
+                                    else
+                                        -- Todos os paletes carregados com sucesso
+                                        ForkliftModule.StopOperation()
+                                        if onAllLoadedCb then
+                                            onAllLoadedCb()
+                                        end
+                                        break
+                                    end
                                 end
                             end
                         else
@@ -280,6 +379,7 @@ function ForkliftModule.StopOperation()
         DetachEntity(CurrentForkliftPallet, true, true)
         CurrentForkliftPallet = nil
     end
+    ForkliftModule.DeleteGhostProp()
 end
 
 AddEventHandler('onResourceStop', function(res)

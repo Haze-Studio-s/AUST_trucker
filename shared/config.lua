@@ -466,3 +466,63 @@ Config.Licenses = {
 }
 
 Config.ForkliftAttachOffset = vector3(0.0, 1.2, -0.42) -- Eixo Z rebaixado para assentar perfeitamente sobre as lâminas
+
+-- =======================================================================
+-- SISTEMA DE SLOTS FIXOS COM GHOST PREVIEW (Padrão 0r-trucker / Polarix)
+-- =======================================================================
+Config.TrailerSlots = {
+    ['trflat'] = {
+        deckZ = 0.35,
+        pallets = {
+            vector3(-0.55,  3.6, 0.35), vector3( 0.55,  3.6, 0.35), -- Frente (slots 1 e 2)
+            vector3(-0.55,  1.2, 0.35), vector3( 0.55,  1.2, 0.35), -- Meio-Frente (slots 3 e 4)
+            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35), -- Meio-Trás (slots 5 e 6)
+            vector3(-0.55, -3.6, 0.35), vector3( 0.55, -3.6, 0.35), -- Traseira (slots 7 e 8)
+        },
+        forklift = vector3(0.0, -5.2, 0.35)
+    },
+    ['freighttrailer'] = {
+        deckZ = 0.35,
+        pallets = {
+            vector3(-0.55,  3.6, 0.35), vector3( 0.55,  3.6, 0.35),
+            vector3(-0.55,  1.2, 0.35), vector3( 0.55,  1.2, 0.35),
+            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35),
+            vector3(-0.55, -3.6, 0.35), vector3( 0.55, -3.6, 0.35),
+        },
+        forklift = vector3(0.0, -5.4, 0.35)
+    },
+    ['trailers2'] = {
+        deckZ = 0.35,
+        pallets = {
+            vector3(-0.55,  4.8, 0.35), vector3( 0.55,  4.8, 0.35),
+            vector3(-0.55,  2.8, 0.35), vector3( 0.55,  2.8, 0.35),
+            vector3(-0.55,  0.8, 0.35), vector3( 0.55,  0.8, 0.35),
+            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35),
+            vector3(-0.55, -3.2, 0.35), vector3( 0.55, -3.2, 0.35),
+            vector3(-0.55, -5.0, 0.35), vector3( 0.55, -5.0, 0.35),
+        },
+        forklift = vector3(0.0, -6.6, 0.35)
+    },
+    ['trailers'] = {
+        deckZ = 0.35,
+        pallets = {
+            vector3(-0.55,  4.8, 0.35), vector3( 0.55,  4.8, 0.35),
+            vector3(-0.55,  2.8, 0.35), vector3( 0.55,  2.8, 0.35),
+            vector3(-0.55,  0.8, 0.35), vector3( 0.55,  0.8, 0.35),
+            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35),
+            vector3(-0.55, -3.2, 0.35), vector3( 0.55, -3.2, 0.35),
+            vector3(-0.55, -5.0, 0.35), vector3( 0.55, -5.0, 0.35),
+        },
+        forklift = vector3(0.0, -6.6, 0.35)
+    },
+    ['docktrailer'] = {
+        deckZ = 0.35,
+        pallets = {
+            vector3(-0.55,  3.6, 0.35), vector3( 0.55,  3.6, 0.35),
+            vector3(-0.55,  1.2, 0.35), vector3( 0.55,  1.2, 0.35),
+            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35),
+            vector3(-0.55, -3.6, 0.35), vector3( 0.55, -3.6, 0.35),
+        },
+        forklift = vector3(0.0, -5.4, 0.35)
+    }
+}
