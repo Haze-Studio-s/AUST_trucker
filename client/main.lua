@@ -46,18 +46,19 @@ local ForkliftRiskLevel = 0
 -- Mapeamento autoritativo da altura exata da prancha de metal para evitar
 -- imperfeições de colisão e o bug de paletes flutuando no ar.
 -- =======================================================================
-local TrailerDeckHeights = {
-    [joaat('freighttrailer')] = 1.2,  -- Carreta de carga pesada
-    [joaat('armytrailer')]    = 1.15, -- Carreta militar plana
-    [joaat('trflat')]         = 1.1,  -- Prancha baixa padrão
-    [joaat('docktrailer')]    = 1.1,  -- Carreta dos docks / flatbed
-    [joaat('trailers')]       = 1.1,  -- Carreta baú / prancha industrial
-    [joaat('trailers2')]      = 1.1,  -- Carreta refrigerada
-    [joaat('trailers3')]      = 1.1,  -- Carreta de materiais
-    [joaat('trailers4')]      = 1.1,  -- Carreta especial
-    [joaat('trailerlogs')]    = 1.1,  -- Carreta florestal
+local TrailerDeckPalletHeights = {
+    [joaat('trflat')]         = 0.12,  -- Prancha baixa padrão (madeira rente ao metal)
+    [joaat('docktrailer')]    = 0.12,  -- Carreta dos docks / flatbed
+    [joaat('freighttrailer')] = 0.20,  -- Carreta de carga pesada
+    [joaat('armytrailer')]    = 0.15,  -- Carreta militar plana
+    [joaat('trailers')]       = 0.15,  -- Carreta baú / prancha industrial
+    [joaat('trailers2')]      = 0.15,  -- Carreta refrigerada
+    [joaat('trailers3')]      = 0.15,  -- Carreta de materiais
+    [joaat('trailers4')]      = 0.15,  -- Carreta especial
+    [joaat('trailerlogs')]    = 0.15,  -- Carreta florestal
 }
-_G.TrailerDeckHeights = TrailerDeckHeights
+_G.TrailerDeckHeights = TrailerDeckPalletHeights
+_G.TrailerDeckPalletHeights = TrailerDeckPalletHeights
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -200,11 +201,11 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
 
     if blip and DoesBlipExist(blip) then
         SetBlipSprite(blip, sprite)
-        SetBlipColour(blip, 2) -- Verde oficial FiveM
+        SetBlipColour(blip, (objType == 'delivery') and 5 or 2)
         SetBlipScale(blip, 0.85)
         if hasRoute then
             SetBlipRoute(blip, true)
-            SetBlipRouteColour(blip, 2)
+            SetBlipRouteColour(blip, (objType == 'delivery') and 5 or 2)
         end
         BeginTextCommandSetBlipName("STRING")
         AddTextComponentString(text or "Objetivo de Carga")
@@ -305,6 +306,9 @@ local function CleanupCurrentJob()
     CurrentStage = 'IDLE'
     hasRopes = false
     HasRopes = false
+    ForkliftLoadedOnTrailer = false
+    ForkliftSecured = false
+    ForkliftRiskLevel = 0
     currentTieIndex = 1
     currentStrappingIndex = 1
     LoadedPallets = {}
@@ -528,6 +532,44 @@ end
 -- ETAPA 6 & 7: SISTEMA DE CORDAS E AMARRAÇÃO INDIVIDUAL (PALETE A PALETE)
 -- =======================================================================
 
+local StartDeliveryRoute = nil
+
+local function CheckAllTiedAndStartRoute()
+    local palletList = LoadedPallets or LoadedPalletData or {}
+    local totalRequired = #palletList
+    local tiedCount = 0
+
+    for _, pData in ipairs(palletList) do
+        if pData.isSecured then
+            tiedCount = tiedCount + 1
+        end
+    end
+
+    local forkliftReady = true
+    if ActiveJob and ActiveJob.withForklift then
+        forkliftReady = ForkliftSecured
+    end
+
+    if (totalRequired == 0 or tiedCount >= totalRequired) and forkliftReady then
+        hasRopes = false
+        HasRopes = false
+        ClearObjectiveMarkers(false)
+
+        if ActiveStrappingZoneId then
+            pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
+            ActiveStrappingZoneId = nil
+        end
+
+        local dest = (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
+        if StartDeliveryRoute then
+            StartDeliveryRoute(dest, ActiveJob and ActiveJob.jobId)
+        end
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob and ActiveJob.jobId)
+        return true
+    end
+    return false
+end
+
 local function ExecutePalletTie(index)
     local palletData = LoadedPallets[index]
     if not palletData then return end
@@ -548,7 +590,7 @@ local function ExecutePalletTie(index)
     if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
         local pCoords = GetEntityCoords(palletEnt)
         local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-        local fixedZ = TrailerDeckHeights[GetEntityModel(trailer)] or 1.1
+        local fixedZ = (TrailerDeckPalletHeights and TrailerDeckPalletHeights[GetEntityModel(trailer)]) or 0.12
         local finalOffset = vector3(rawOffset.x, rawOffset.y, fixedZ)
 
         local tRot = GetEntityRotation(trailer, 2)
@@ -598,9 +640,11 @@ local function ExecutePalletTie(index)
         SendMissionNotify('Atenção', 'A corda ficou frouxa! Cuidado nas curvas.', 'error')
     end
 
-    -- Avança para o próximo da lista e reconstrói a zona do próximo palete
+    -- Avança para o próximo da lista e avalia condição de avanço sem deadlock
     currentTieIndex = currentTieIndex + 1
-    SetupNextPalletTarget()
+    if not CheckAllTiedAndStartRoute() then
+        SetupNextPalletTarget()
+    end
 end
 
 -- CORREÇÃO 2: REVISÃO DO GATILHO DA EMPILHADEIRA (FORKLIFT TIE-DOWN)
@@ -651,8 +695,8 @@ local function ExecuteForkliftTie(forkEntity)
 
     -- 3. Aplique o AttachEntityToEntity na extremidade traseira com Z cravado (ignora No-Snap)
     NetworkRequestControlOfEntity(fork)
-    local fixedZ = TrailerDeckHeights[GetEntityModel(trailer)] or 1.1
-    local forkZ = fixedZ - 0.75
+    local deckZ = (TrailerDeckPalletHeights and TrailerDeckPalletHeights[GetEntityModel(trailer)]) or 0.12
+    local forkZ = deckZ + 0.65 -- Centro de massa elevado (+0.65m) para apoiar as rodas perfeitamente na prancha
 
     DetachEntity(fork, true, true)
     -- useSoftPinning = false (9º), collision = false (10º) para evitar capotamentos
@@ -684,8 +728,9 @@ local function ExecuteForkliftTie(forkEntity)
     hasRopes = false
     HasRopes = false
     ClearObjectiveMarkers(false)
-    SendMissionNotify('Central Logística', 'Carga e equipamentos 100% amarrados! Assuma a boleia do caminhão.', 'success')
-    TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+    if not CheckAllTiedAndStartRoute() then
+        SetupNextPalletTarget()
+    end
 end
 
 local function SetupForkliftTieTarget()
@@ -745,11 +790,7 @@ function SetupNextPalletTarget()
             return
         end
 
-        hasRopes = false
-        HasRopes = false
-        ClearObjectiveMarkers(false)
-        SendMissionNotify('Central Logística', 'Todos os paletes foram amarrados com sucesso! Siga a rota até o destino.', 'success')
-        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        CheckAllTiedAndStartRoute()
         return
     end
 
@@ -800,9 +841,8 @@ local function StartStrappingPalletsStage()
     ClearObjectiveMarkers(false)
     currentTieIndex = 1
 
-    if #LoadedPallets == 0 and (not ActiveJob or not ActiveJob.withForklift or not ForkliftLoadedOnTrailer) then
-        SendMissionNotify('Central Logística', 'Nenhum item para amarrar! Siga para a entrega.', 'info')
-        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+    if #LoadedPallets == 0 and (not ActiveJob or not ActiveJob.withForklift or not ForkliftLoadedOnTrailer or ForkliftSecured) then
+        CheckAllTiedAndStartRoute()
         return
     end
 
@@ -942,7 +982,8 @@ end
 -- ETAPA 8 & 9: ROTA FINAL, ENTREGA E RECOMPENSA COM FÍSICA DE ROMPIMENTO
 -- =======================================================================
 
-local function SetupDeliveryDestination(deliveryCoords, jobId)
+function StartDeliveryRoute(deliveryCoords, jobId)
+    if CurrentStage == 'STEP_8_IN_TRANSIT' then return end
     CurrentStage = 'STEP_8_IN_TRANSIT'
     ClearObjectiveMarkers(false)
 
@@ -952,17 +993,25 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
     end
 
     -- Remove eventuais alvos remanescentes nos paletes
-    for idx, pData in ipairs(LoadedPallets) do
+    for idx, pData in ipairs(LoadedPallets or {}) do
         if pData.entity and DoesEntityExist(pData.entity) then
+            pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'aust_tie_current_pallet') end)
             pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'tie_pallet_' .. idx) end)
             pcall(function() exports.ox_target:removeLocalEntity(pData.entity) end)
         end
     end
 
-    -- Seta verde flutuante e rota GPS para o destino final
-    UpdateMissionObjective('delivery', deliveryCoords, 'Destino da Entrega')
+    local fork = JobEntities.forklift
+    if fork and DoesEntityExist(fork) then
+        pcall(function() exports.ox_target:removeLocalEntity(fork, 'aust_tie_forklift_model') end)
+    end
 
-    SendMissionNotify('Central Logística', 'Carga pronta para transporte! Siga a rota indicada até o destino final.', 'success')
+    local dest = deliveryCoords or (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
+    -- Seta verde flutuante e rota GPS para o destino final (cor 5 amarela/laranja oficial GTA V)
+    UpdateMissionObjective('delivery', dest, 'Destino da Entrega')
+
+    SendMissionNotify('Central Logística', 'Toda a carga está segura! Siga a rota no seu GPS para o destino.', 'success')
+    PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
 
     -- Ativa monitoramento de risco químico para cargas perigosas ADR
     if ActiveJob and ActiveJob.cargoType == 'adr' then
@@ -1424,6 +1473,12 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     ActiveJob = payload
     CurrentStage = 'STEP_1_START'
 
+    -- Prevenção de Deadlock: se não houver empilhadeira contratada, inicia como concluída
+    local hasFork = payload and payload.withForklift and (payload.forkliftNetId and payload.forkliftNetId ~= 0)
+    ForkliftSecured = not hasFork
+    ForkliftLoadedOnTrailer = not hasFork
+    ForkliftRiskLevel = 0
+
     CreateThread(function()
         -- Pré-carregamento assíncrono e protegido dos modelos de palete e contêiner
         CreateThread(function()
@@ -1581,7 +1636,7 @@ end)
 
 RegisterNetEvent('aurp_trucker:client:polarixReadyForTransit', function(deliveryCoords)
     if not ActiveJob then return end
-    SetupDeliveryDestination(deliveryCoords, ActiveJob.jobId)
+    StartDeliveryRoute(deliveryCoords, ActiveJob.jobId)
 end)
 
 RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)

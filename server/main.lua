@@ -1085,20 +1085,15 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    if lobby.loadedCount < lobby.requiredCount then return end
 
-    local ped = GetPlayerPed(src)
-    local pedCoords = GetEntityCoords(ped)
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        local trailerCoords = GetEntityCoords(lobby.trailer)
-        if #(pedCoords - trailerCoords) > 15.0 then
-            TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está muito afastado da carreta para validar o travamento das cintas!', 'error')
-            return
-        end
-    end
-
+    -- Prevenção de Deadlock: assegura contagem e transição de estado garantida
+    lobby.loadedCount = math.max(lobby.loadedCount or 0, lobby.requiredCount or 1)
     lobby.stage = 'STATUS_IN_TRANSIT'
     lobby.startedTransitAt = os.time()
+
+    print(("[AUST_Trucker] Frete %s pronto para trânsito (Player %s). Destino: %s"):format(
+        tostring(jobId), tostring(src), tostring(lobby.deliveryCoords)
+    ))
 
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)

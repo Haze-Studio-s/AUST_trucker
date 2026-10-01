@@ -198,13 +198,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp):
                                 -- O jogador define livremente X e Y, mas o Z é cravado na prancha de metal
                                 local trailerModel = GetEntityModel(trailer)
-                                local deckHeights = _G.TrailerDeckHeights or {
-                                    [joaat('freighttrailer')] = 1.2,
-                                    [joaat('armytrailer')]    = 1.15,
-                                    [joaat('trflat')]         = 1.1,
-                                    [joaat('docktrailer')]    = 1.1,
+                                local deckHeights = _G.TrailerDeckPalletHeights or _G.TrailerDeckHeights or {
+                                    [joaat('trflat')]         = 0.12,
+                                    [joaat('docktrailer')]    = 0.12,
+                                    [joaat('freighttrailer')] = 0.20,
+                                    [joaat('armytrailer')]    = 0.15,
                                 }
-                                local fixedZ = deckHeights[trailerModel] or 1.1
+                                local fixedZ = deckHeights[trailerModel] or 0.12
 
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
