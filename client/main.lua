@@ -428,6 +428,11 @@ end
 RegisterNUICallback('closeMenu', HandleCloseMenuNUI)
 RegisterNUICallback('closeModal', HandleCloseMenuNUI)
 RegisterNUICallback('cancelJob', HandleCloseMenuNUI)
+RegisterNUICallback('focusMenu', function(data, cb)
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    if cb then cb('ok') end
+end)
 
 -- =======================================================================
 -- ETAPA 3 & 4: ACOPLAMENTO DA CARRETA E POSICIONAMENTO NA BAÍA

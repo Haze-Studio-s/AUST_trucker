@@ -573,6 +573,14 @@ RegisterNUICallback('post', function(body, cb)
     local event = body and body.event
     local data  = body and body.data
 
+    if event == "focusMenu" then
+        isNUIOpen = true
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(false)
+        cb(200)
+        return
+    end
+
     if event == "close" or event == "closeMenu" or event == "closeUI" or event == "closeModal" then
         SetNuiFocus(false, false)
         CloseJobBoard()
@@ -839,6 +847,13 @@ end)
 RegisterNUICallback('closeModal', function(data, cb)
     SetNuiFocus(false, false)
     CloseJobBoard()
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('focusMenu', function(data, cb)
+    isNUIOpen = true
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
     if cb then cb('ok') end
 end)
 

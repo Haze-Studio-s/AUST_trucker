@@ -543,9 +543,9 @@ window.addEventListener("message", async function (event) {
                 button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
             } else {
                 if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                    partystart_btn = `<button onclick="openContractConfigModal('${contract.contract_id}', true, ${contract.reward || 0})" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
                 }
-                button = `<button onclick="openContractConfigModal('${contract.contract_id}', false, ${contract.reward || 0})" data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
                 if (contract.progress) {
                     button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                     partystart_btn = "";
@@ -1670,8 +1670,9 @@ $(document).ready(function () {
         e.stopPropagation();
         if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
+        let reward = Number($(this).attr("data-reward")) || 0;
         if (typeof id !== "undefined" && id !== null) {
-            startContract(Number(id) || id, false);
+            openContractConfigModal(id, false, reward);
         }
     });
 
@@ -1680,8 +1681,9 @@ $(document).ready(function () {
         e.stopPropagation();
         if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
+        let reward = Number($(this).attr("data-reward")) || 0;
         if (typeof id !== "undefined" && id !== null) {
-            startContract(Number(id) || id, true);
+            openContractConfigModal(id, true, reward);
         }
     });
 
@@ -1753,6 +1755,7 @@ function sendNuiAction(actionName, payload) {
 
 function openContractConfigModal(contract_id, party, baseReward) {
     baseReward = Number(baseReward) || 0;
+    sendNuiAction("focusMenu", { id: contract_id });
     Utils.showCustomModal({
         title: "Configurar Manifesto de Carga (Estiva)",
         dialogClass: "modal-dialog modal-dialog-centered",
@@ -1801,6 +1804,7 @@ function openContractConfigModal(contract_id, party, baseReward) {
             </div>
         `,
         onClose: function() {
+            $(".main").hide();
             sendNuiAction("closeMenu", { id: contract_id });
         },
         buttons: [
@@ -1809,6 +1813,7 @@ function openContractConfigModal(contract_id, party, baseReward) {
                 class: "btn btn-outline-secondary",
                 dismiss: true,
                 action: function() {
+                    $(".main").hide();
                     sendNuiAction("closeMenu", { id: contract_id });
                     sendNuiAction("cancelJob", { id: contract_id });
                 }
