@@ -42,23 +42,49 @@ local ForkliftSecured = false
 local ForkliftRiskLevel = 0
 
 -- =======================================================================
--- DICIONÁRIO DE ALTURAS DO DECK DA CARRETA (Z-AXIS CLAMP)
--- Mapeamento autoritativo da altura exata da prancha de metal para evitar
--- imperfeições de colisão e o bug de paletes flutuando no ar.
+-- CÁLCULO DINÂMICO DE BOUNDING BOX (Z-AXIS CLAMP) PARA CARRETAS E FORKLIFT
+-- Utiliza GetModelDimensions para obter o limite Z superior real da geometria
+-- da prancha, eliminando paletes flutuando no ar ou afundando no metal.
 -- =======================================================================
-local TrailerDeckPalletHeights = {
-    [joaat('trflat')]         = 0.12,  -- Prancha baixa padrão (madeira rente ao metal)
-    [joaat('docktrailer')]    = 0.12,  -- Carreta dos docks / flatbed
-    [joaat('freighttrailer')] = 0.20,  -- Carreta de carga pesada
-    [joaat('armytrailer')]    = 0.15,  -- Carreta militar plana
-    [joaat('trailers')]       = 0.15,  -- Carreta baú / prancha industrial
-    [joaat('trailers2')]      = 0.15,  -- Carreta refrigerada
-    [joaat('trailers3')]      = 0.15,  -- Carreta de materiais
-    [joaat('trailers4')]      = 0.15,  -- Carreta especial
-    [joaat('trailerlogs')]    = 0.15,  -- Carreta florestal
-}
-_G.TrailerDeckHeights = TrailerDeckPalletHeights
-_G.TrailerDeckPalletHeights = TrailerDeckPalletHeights
+local function GetTrailerDeckZ(trailer)
+    if not trailer or not DoesEntityExist(trailer) then return 0.95 end
+    local model = GetEntityModel(trailer)
+    local tMin, tMax = GetModelDimensions(model)
+
+    -- Para carretas prancha / flatbed (trflat, freighttrailer, armytrailer, docktrailer):
+    -- O tMax.z determina a superfície superior do chassi. Subtraímos uma margem milimétrica
+    -- apenas caso haja grade dianteira/pescoço saliente (gooseneck).
+    local deckZ = tMax.z
+    if model == joaat('trflat') then
+        deckZ = tMax.z - 0.14 -- Alinha a madeira do palete perfeitamente ao deck de ferro
+    elseif model == joaat('freighttrailer') then
+        deckZ = tMax.z - 0.10
+    elseif model == joaat('armytrailer') then
+        deckZ = tMax.z - 0.12
+    elseif model == joaat('docktrailer') then
+        deckZ = tMax.z - 0.14
+    else
+        -- Fallback universal para carretas fechadas ou customizadas
+        if (tMax.z - tMin.z) > 2.5 then
+            deckZ = tMin.z + 0.95
+        else
+            deckZ = tMax.z - 0.10
+        end
+    end
+    return deckZ
+end
+_G.GetTrailerDeckZ = GetTrailerDeckZ
+
+local function GetForkliftDeckZ(trailer, forkEntity)
+    local deckZ = GetTrailerDeckZ(trailer)
+    local forkModel = (forkEntity and DoesEntityExist(forkEntity) and GetEntityModel(forkEntity)) or joaat('forklift')
+    local fMin, fMax = GetModelDimensions(forkModel)
+    local halfHeight = (fMax.z - fMin.z) / 2.0
+    -- Pivot da empilhadeira fica no centro geométrico: somando halfHeight ao deckZ,
+    -- os pneus repousam com precisão cirúrgica na superfície da prancha
+    return deckZ + halfHeight
+end
+_G.GetForkliftDeckZ = GetForkliftDeckZ
 
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
@@ -590,7 +616,7 @@ local function ExecutePalletTie(index)
     if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
         local pCoords = GetEntityCoords(palletEnt)
         local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-        local fixedZ = (TrailerDeckPalletHeights and TrailerDeckPalletHeights[GetEntityModel(trailer)]) or 0.12
+        local fixedZ = GetTrailerDeckZ(trailer)
         local finalOffset = vector3(rawOffset.x, rawOffset.y, fixedZ)
 
         local tRot = GetEntityRotation(trailer, 2)
@@ -634,7 +660,6 @@ local function ExecutePalletTie(index)
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
         SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
     else
-        palletData.isSecured = true
         palletData.riskLevel = 'high'
         PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
         SendMissionNotify('Atenção', 'A corda ficou frouxa! Cuidado nas curvas.', 'error')
@@ -695,8 +720,7 @@ local function ExecuteForkliftTie(forkEntity)
 
     -- 3. Aplique o AttachEntityToEntity na extremidade traseira com Z cravado (ignora No-Snap)
     NetworkRequestControlOfEntity(fork)
-    local deckZ = (TrailerDeckPalletHeights and TrailerDeckPalletHeights[GetEntityModel(trailer)]) or 0.12
-    local forkZ = deckZ + 0.65 -- Centro de massa elevado (+0.65m) para apoiar as rodas perfeitamente na prancha
+    local forkZ = GetForkliftDeckZ(trailer, fork)
 
     DetachEntity(fork, true, true)
     -- useSoftPinning = false (9º), collision = false (10º) para evitar capotamentos
@@ -1067,9 +1091,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     local steering = GetVehicleSteeringAngle(truck) -- [-40, 40]
                     local now = GetGameTimer()
 
-                    -- Sensibilidade baseada na amarração: frouxa (1.45x) vs perfeita (0.85x)
-                    local sensitivity = hasHighRisk and 1.45 or 0.85
-                    local rawForce = (steering / 28.0) * (speedKmh / 70.0) * sensitivity
+                    -- Sensibilidade punitiva hardcore: frouxa (2.65x) vs perfeita (0.85x)
+                    local sensitivity = hasHighRisk and 2.65 or 0.85
+                    local rawForce = (steering / 20.0) * (speedKmh / 42.0) * sensitivity
                     if rawForce > 1.0 then rawForce = 1.0 elseif rawForce < -1.0 then rawForce = -1.0 end
 
                     -- Converte força lateral em porcentagem (0 a 100, 50 = centro)
@@ -1086,8 +1110,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         speed = speedKmh
                     })
 
-                    -- Gatilho de Física: rompimento ao cruzar faixa vermelha (>30 km/h) com debounce de 5s
-                    if isCritical and speedKmh > 30.0 and (now - lastDropTime >= 5000) then
+                    -- Gatilho de Física Hardcore: rompimento ao cruzar faixa vermelha (>24 km/h) com debounce de 4s
+                    if isCritical and speedKmh > 24.0 and (now - lastDropTime >= 4000) then
                         local candidatePallet = nil
 
                         -- 1. Prioridade para paletes com amarração frouxa
@@ -1273,7 +1297,19 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         onExit = function()
             lib.hideTextUI()
         end,
-        nearby = function()
+        nearby = function(self)
+            -- Restauração rigorosa dos parâmetros visuais do commit 8f218cf:
+            -- Cilindro tipo 1, diâmetro 4.0m, altura 1.5m, azul ciano translúcido (0, 150, 255, 140)
+            DrawMarker(
+                1,
+                self.coords.x, self.coords.y, self.coords.z - 1.0,
+                0.0, 0.0, 0.0,
+                0.0, 0.0, 0.0,
+                4.0, 4.0, 1.5,
+                0, 150, 255, 140,
+                false, true, 2, false, nil, nil, false
+            )
+
             if IsControlJustPressed(0, 38) then -- Tecla E
                 local ped = cache.ped or PlayerPedId()
                 if GetVehiclePedIsIn(ped, false) ~= 0 then
