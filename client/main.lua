@@ -707,8 +707,8 @@ local function SetupForkliftTieTarget()
     SendMissionNotify('Central Logística', 'Agora amarre a empilhadeira na traseira da carreta.', 'info')
 end
 
--- ox_target diretamente configurado para o modelo hash da empilhadeira
-exports.ox_target:addModel({ joaat('forklift'), 'forklift' }, {
+-- ox_target diretamente configurado para o modelo da empilhadeira
+exports.ox_target:addModel('forklift', {
     {
         name = 'aust_tie_forklift_model',
         icon = 'fas fa-link',
