@@ -392,20 +392,38 @@ function BuildInitialDataForPlayer(source, citizenId)
             })
         end
 
-        -- Ranking dos Top Caminhoneiros
+        -- Ranking dos Top Caminhoneiros (Leaderboard Competitivo Unificado)
         local topTruckersList = {}
         local topOk, topRows = pcall(function()
             return MySQL.query.await([[
-                SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp
-                FROM trucker_player_progression p
-                ORDER BY p.xp DESC
+                SELECT 
+                    COALESCE(r.citizenid, p.citizenid) as citizenid,
+                    COALESCE(p.total_distance, 0) as traveled_distance,
+                    GREATEST(COALESCE(r.xp, 0), COALESCE(p.xp, 0)) as exp,
+                    COALESCE(c.name, '') as company_name
+                FROM `0r_trucker` r
+                LEFT JOIN trucker_player_progression p ON p.citizenid = r.citizenid
+                LEFT JOIN trucker_company c ON c.user_id = r.citizenid
+                ORDER BY exp DESC, traveled_distance DESC
                 LIMIT 10
             ]])
         end)
-        if topOk and type(topRows) == 'table' then
+        if not topOk or not topRows or #topRows == 0 then
+            pcall(function()
+                topRows = MySQL.query.await([[
+                    SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp, COALESCE(c.name, '') as company_name
+                    FROM trucker_player_progression p
+                    LEFT JOIN trucker_company c ON c.user_id = p.citizenid
+                    ORDER BY p.xp DESC
+                    LIMIT 10
+                ]])
+            end)
+        end
+        if type(topRows) == 'table' then
             for _, row in ipairs(topRows) do
+                local label = (row.company_name and row.company_name ~= '') and row.company_name or ('Motorista #' .. string.sub(tostring(row.citizenid), 1, 6))
                 table.insert(topTruckersList, {
-                    name = 'Motorista #' .. string.sub(tostring(row.citizenid), 1, 5),
+                    name = label,
                     firstname = '',
                     traveled_distance = tonumber(row.traveled_distance) or 0,
                     exp = tonumber(row.exp) or 0

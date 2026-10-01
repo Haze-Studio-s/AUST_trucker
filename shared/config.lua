@@ -284,6 +284,28 @@ Config.CargoTypes = {
         defaultTrailer = 'trflat',
         forkliftModel = 'forklift',
     },
+    vehicle_carrier = {
+        label = 'Transporte de Veículos (Cegonha Car Carrier)',
+        allowedTrailers = {
+            joaat('tr2'),
+        },
+        allowedTrucks = {
+            joaat('hauler'),
+            joaat('hauler2'),
+            joaat('packer'),
+            joaat('phantom'),
+            joaat('phantom3'),
+        },
+        defaultTrailer = 'tr2',
+        carModels = { 'elegy2', 'jester', 'comet2' },
+        yard = {
+            stagingCoords = {
+                vector4(1235.0, -3150.0, 4.6, 90.0),
+                vector4(1235.0, -3155.0, 4.6, 90.0),
+                vector4(1235.0, -3160.0, 4.6, 90.0),
+            }
+        }
+    },
     liquid = {
         label = 'Carga Líquida (Tanque / Combustível)',
         allowedTrailers = {

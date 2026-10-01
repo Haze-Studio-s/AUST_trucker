@@ -516,6 +516,20 @@ local function StartCouplingWatcher()
                                     elseif ActiveJob and (ActiveJob.cargoType == 'liquid' or ActiveJob.cargoType == 'adr') then
                                         CurrentStage = 'STEP_5_FUEL_LOADING'
                                         SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira para o carregamento.', 'info')
+                                    elseif ActiveJob and ActiveJob.cargoType == 'vehicle_carrier' then
+                                        CurrentStage = 'STEP_5_LOAD_CARS'
+                                        SendMissionNotify('Central Logística', 'Caminhão posicionado! Aproxime-se da cegonha com uma chave de boca para abrir a rampa e embarcar os carros.', 'info')
+                                        if CarCarrierModule and CarCarrierModule.StartLoadingOperation then
+                                            CarCarrierModule.StartLoadingOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.vehicleNetIds or {}, function(action, loaded, total)
+                                                if action == 'completed' then
+                                                    SendMissionNotify('Central Logística', 'Cegonha 100% carregada e travada! Entre no caminhão e inicie a rota rodoviária.', 'success')
+                                                    UpdateMissionObjective('truck', JobEntities.truck, 'Seu Caminhão')
+                                                    if ActiveJob.deliveryCoords then
+                                                        StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                                                    end
+                                                end
+                                            end)
+                                        end
                                     else
                                         CurrentStage = 'STEP_5_ENTER_FORKLIFT'
                                         if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
@@ -1372,15 +1386,22 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             lib.hideTextUI()
         end,
         nearby = function(self)
-            -- Restauração rigorosa dos parâmetros visuais do commit 8f218cf:
-            -- Cilindro tipo 1, diâmetro 4.0m, altura 1.5m, azul ciano translúcido (0, 150, 255, 140)
+            local pedCoords = GetEntityCoords(cache.ped or PlayerPedId())
+            local dist = #(pedCoords - self.coords)
+            -- Gradiente dinâmico Proximity RGB: Vermelho (distante) -> Amarelo -> Verde Esmeralda (alinhado na doca)
+            local distFactor = math.max(0.0, math.min(1.0, (dist - 2.5) / 22.0))
+            local r = math.floor(255 * distFactor)
+            local g = math.floor(255 * (1.0 - distFactor))
+            local b = 50
+            local alpha = math.floor(185 - (distFactor * 70))
+
             DrawMarker(
                 1,
                 self.coords.x, self.coords.y, self.coords.z - 1.0,
                 0.0, 0.0, 0.0,
                 0.0, 0.0, 0.0,
                 4.0, 4.0, 1.5,
-                0, 150, 255, 140,
+                r, g, b, alpha,
                 false, true, 2, false, nil, nil, false
             )
 

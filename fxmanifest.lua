@@ -63,6 +63,7 @@ client_scripts {
     'client/modules/forklift.lua',
     'client/modules/reach_stacker.lua',
     'client/modules/adr_hazard.lua',
+    'client/modules/car_carrier.lua',
     'client/zones.lua',
     'client/cargo_dry.lua',
     'client/cargo_liquid.lua',
