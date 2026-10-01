@@ -715,8 +715,8 @@ local function ExecutePalletTie(index)
         palletData.relHeading = finalHeading
 
         -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
-        FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, true)
+        FreezeEntityPosition(palletEnt, true)
+        SetEntityDynamic(palletEnt, false)
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
@@ -724,13 +724,11 @@ local function ExecutePalletTie(index)
             false, false, false, false, 2, true
         )
 
-        -- Reforço de colisão com o mundo (Pós-Attach)
-        FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, true)
-        SetEntityCollision(palletEnt, true, true)
-        SetCanClimbOnEntity(palletEnt, true)
-        SetEntityNoCollisionEntity(palletEnt, trailer, true)
-        SetEntityNoCollisionEntity(trailer, palletEnt, true)
+        -- Neutralização definitiva de conflitos Havok com o reboque
+        FreezeEntityPosition(palletEnt, true)
+        SetEntityDynamic(palletEnt, false)
+        SetEntityCollision(palletEnt, false, false)
+        SetCanClimbOnEntity(palletEnt, false)
     end
 
     -- Minigame de perícia
@@ -829,8 +827,8 @@ local function ExecuteForkliftTie(forkEntity)
     DetachEntity(fork, true, true)
 
     -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
-    FreezeEntityPosition(fork, false)
-    SetEntityDynamic(fork, true)
+    FreezeEntityPosition(fork, true)
+    SetEntityDynamic(fork, false)
     AttachEntityToEntity(
         fork, trailer, 0,
         forkOffset.x, forkOffset.y, forkOffset.z,
@@ -838,13 +836,11 @@ local function ExecuteForkliftTie(forkEntity)
         false, false, false, false, 2, true
     )
 
-    -- Reforço de colisão com o mundo (Pós-Attach)
-    FreezeEntityPosition(fork, false)
-    SetEntityDynamic(fork, true)
-    SetEntityCollision(fork, true, true)
-    SetCanClimbOnEntity(fork, true)
-    SetEntityNoCollisionEntity(fork, trailer, true)
-    SetEntityNoCollisionEntity(trailer, fork, true)
+    -- Neutralização definitiva de conflitos Havok com o reboque
+    FreezeEntityPosition(fork, true)
+    SetEntityDynamic(fork, false)
+    SetEntityCollision(fork, false, false)
+    SetCanClimbOnEntity(fork, false)
 
     -- Remove o holograma da empilhadeira
     if ForkliftModule.DeleteGhostProp then
@@ -1237,12 +1233,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                 SetEntityAsMissionEntity(pEnt, true, true)
                 SetEntityLodDist(pEnt, 0xFFFF)
-                FreezeEntityPosition(pEnt, false)
-                SetEntityDynamic(pEnt, true)
-                SetEntityCollision(pEnt, true, true)
-                SetCanClimbOnEntity(pEnt, true)
-                SetEntityNoCollisionEntity(pEnt, trailer, true)
-                SetEntityNoCollisionEntity(trailer, pEnt, true)
+                FreezeEntityPosition(pEnt, true)
+                SetEntityDynamic(pEnt, false)
+                SetEntityCollision(pEnt, false, false)
+                SetCanClimbOnEntity(pEnt, false)
 
                 -- Reforço imediato de ancoragem na malha do trailer (origem bone 0)
                 if pData.relOffset then
@@ -1260,12 +1254,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
             SetEntityAsMissionEntity(fork, true, true)
             SetEntityLodDist(fork, 0xFFFF)
-            FreezeEntityPosition(fork, false)
-            SetEntityDynamic(fork, true)
-            SetEntityCollision(fork, true, true)
-            SetCanClimbOnEntity(fork, true)
-            SetEntityNoCollisionEntity(fork, trailer, true)
-            SetEntityNoCollisionEntity(trailer, fork, true)
+            FreezeEntityPosition(fork, true)
+            SetEntityDynamic(fork, false)
+            SetEntityCollision(fork, false, false)
+            SetCanClimbOnEntity(fork, false)
 
             local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
             local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
@@ -1306,32 +1298,22 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             if not isDrivingTruck then
                 if wasDrivingTruck then
                     wasDrivingTruck = false
-                    -- JOGADOR SAIU DO CAMINHÃO A PÉ: REATIVA A COLISÃO FÍSICA DOS PALETES E EMPILHADEIRA
+                    -- JOGADOR SAIU DO CAMINHÃO A PÉ: MANTÉM CARGA ACOPLADA ESTÁVEL E SEM CONFLITO HAVOK
                     local targetList = LoadedPallets or LoadedPalletData or {}
                     for _, pData in ipairs(targetList) do
                         local pEnt = pData.entity
                         if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                            SetEntityCollision(pEnt, true, true)
-                            SetEntityDynamic(pEnt, true)
-                            FreezeEntityPosition(pEnt, false)
-                            SetCanClimbOnEntity(pEnt, true)
-                            if trailer and DoesEntityExist(trailer) then
-                                SetEntityNoCollisionEntity(pEnt, trailer, true)
-                                SetEntityNoCollisionEntity(trailer, pEnt, true)
-                            end
+                            SetEntityCollision(pEnt, false, false)
+                            SetEntityDynamic(pEnt, false)
+                            FreezeEntityPosition(pEnt, true)
                         end
                     end
 
                     local fork = JobEntities.forklift
                     if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
-                        SetEntityCollision(fork, true, true)
-                        SetEntityDynamic(fork, true)
-                        FreezeEntityPosition(fork, false)
-                        SetCanClimbOnEntity(fork, true)
-                        if trailer and DoesEntityExist(trailer) then
-                            SetEntityNoCollisionEntity(fork, trailer, true)
-                            SetEntityNoCollisionEntity(trailer, fork, true)
-                        end
+                        SetEntityCollision(fork, false, false)
+                        SetEntityDynamic(fork, false)
+                        FreezeEntityPosition(fork, true)
                     end
                 end
                 SendNUIMessage({ action = 'gmeter_hide' })
@@ -1339,15 +1321,14 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             else
                 if not wasDrivingTruck then
                     wasDrivingTruck = true
-                    -- JOGADOR ENTROU NO CAMINHÃO PARA DIRIGIR: DESATIVA A COLISÃO DOS PALETES E EMPILHADEIRA
-                    -- Elimina 100% de micro-conflitos Havok, trepidações e lag na física do reboque
+                    -- JOGADOR ENTROU NO CAMINHÃO PARA DIRIGIR: GARANTE ANCORAGEM SEM COLISÃO
                     local targetList = LoadedPallets or LoadedPalletData or {}
                     for _, pData in ipairs(targetList) do
                         local pEnt = pData.entity
                         if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                             SetEntityCollision(pEnt, false, false)
-                            SetEntityDynamic(pEnt, true)
-                            FreezeEntityPosition(pEnt, false)
+                            SetEntityDynamic(pEnt, false)
+                            FreezeEntityPosition(pEnt, true)
                         end
                     end
 
@@ -1374,8 +1355,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                             local pEnt = pData.entity
                             if pEnt and DoesEntityExist(pEnt) and pData.isSecured and not pData.lost and not pData.isFallen then
                                 if not IsEntityAttachedToEntity(pEnt, tr) then
-                                    FreezeEntityPosition(pEnt, false)
-                                    SetEntityDynamic(pEnt, true)
+                                    FreezeEntityPosition(pEnt, true)
+                                    SetEntityDynamic(pEnt, false)
                                     SetEntityCollision(pEnt, false, false)
                                     local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
                                     local pHead = pData.relHeading or (type(off) == 'table' and off.heading) or 0.0
@@ -1392,8 +1373,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         local fork = JobEntities.forklift
                         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer and ForkliftSecured then
                             if not IsEntityAttachedToEntity(fork, tr) then
-                                FreezeEntityPosition(fork, false)
-                                SetEntityDynamic(fork, true)
+                                FreezeEntityPosition(fork, true)
+                                SetEntityDynamic(fork, false)
                                 SetEntityCollision(fork, false, false)
                                 local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(tr)) or vector3(0.0, -5.2, 0.35)
                                 local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
