@@ -687,34 +687,27 @@ local function ExecutePalletTie(index)
         return
     end
 
-    -- CORREÇÃO 1: TRAVA DO EIXO Z (Z-AXIS CLAMP) PARA PALETES
-    -- O cálculo de GetOffsetFromEntityGivenWorldCoords captura imperfeições de colisão,
-    -- resultando num eixo Z muito alto (palete flutuando no ar).
-    -- Mantemos as coordenadas X e Y originais definidas pelo jogador e cravamos o Z na prancha.
+    -- SINCRONIZAÇÃO ABSOLUTA: Palete físico herda a coordenada exata do slot calibrado no banco/fantasma
     if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
-        local pCoords = GetEntityCoords(palletEnt)
-        local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-        local deckZ = GetTrailerDeckZ(trailer)
-        local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
-        local finalOffset = vector3(rawOffset.x, rawOffset.y, safeZ)
+        local slotIdx = palletData.slotIndex or index
+        local finalOffset = palletData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, slotIdx))
+        if not finalOffset then
+            local pCoords = GetEntityCoords(palletEnt)
+            local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+            local deckZ = GetTrailerDeckZ(trailer)
+            finalOffset = vector3(rawOffset.x, rawOffset.y, deckZ + 0.01)
+        end
 
-        local tRot = GetEntityRotation(trailer, 2)
-        local pRot = GetEntityRotation(palletEnt, 2)
-        local relHeading = pRot.z - tRot.z
+        local relHeading = palletData.relHeading or 0.0
 
-        -- Armazena os offsets relativos para rastreamento
         palletData.relOffset = finalOffset
         palletData.relHeading = relHeading
 
-        -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false, 14º arg = false)
-        local trailerBone = GetEntityBoneIndexByName(trailer, "chassis")
-        if trailerBone == -1 then trailerBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
-        if trailerBone == -1 then trailerBone = 0 end
-
+        -- Ancoragem padronizada na origem do trailer (bone 0)
         FreezeEntityPosition(palletEnt, false)
         SetEntityDynamic(palletEnt, true)
         AttachEntityToEntity(
-            palletEnt, trailer, trailerBone,
+            palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, relHeading,
             false, false, false, false, 2, false
@@ -967,13 +960,17 @@ exports.ox_target:addModel(PalletPropModels, {
                 anim = { dict = 'anim@heists@box_carry@', clip = 'idle' }
             })
             if ok then
-                local snapped = ForkliftModule.SnapPalletToCurrentSlot(palletEnt, trailer, currentSlot)
+                local snapped, snappedOffset = ForkliftModule.SnapPalletToCurrentSlot(palletEnt, trailer, currentSlot)
                 if snapped then
+                    local sOffset = snappedOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, currentSlot)) or vector3(0.0, 0.0, 0.35)
                     table.insert(LoadedPallets, {
                         entity = palletEnt,
                         isSecured = false,
                         riskLevel = 0,
-                        lost = false
+                        lost = false,
+                        slotIndex = currentSlot,
+                        relOffset = sOffset,
+                        relHeading = 0.0
                     })
                     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
                     local loadedCount = #LoadedPallets
@@ -1238,10 +1235,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 SetEntityNoCollisionEntity(pEnt, trailer, true)
                 SetEntityNoCollisionEntity(trailer, pEnt, true)
 
-                -- Reforço imediato de ancoragem na malha do trailer (fixedRot = false para acompanhar rotação/translação)
+                -- Reforço imediato de ancoragem na malha do trailer (origem bone 0)
                 if pData.relOffset then
                     AttachEntityToEntity(
-                        pEnt, trailer, trailerBone,
+                        pEnt, trailer, 0,
                         pData.relOffset.x, pData.relOffset.y, pData.relOffset.z,
                         0.0, 0.0, pData.relHeading or 0.0,
                         false, false, false, false, 2, false
@@ -1263,7 +1260,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
             local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
             AttachEntityToEntity(
-                fork, trailer, trailerBone,
+                fork, trailer, 0,
                 forkOffset.x, forkOffset.y, forkOffset.z,
                 0.0, 0.0, 0.0,
                 false, false, false, false, 2, false
@@ -1370,9 +1367,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     FreezeEntityPosition(pEnt, false)
                                     SetEntityDynamic(pEnt, true)
                                     SetEntityCollision(pEnt, false, false)
-                                    local off = pData.relOffset or vector3(0.0, 0.0, 0.35)
+                                    local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
                                     AttachEntityToEntity(
-                                        pEnt, tr, trBone,
+                                        pEnt, tr, 0,
                                         off.x, off.y, off.z,
                                         0.0, 0.0, pData.relHeading or 0.0,
                                         false, false, false, false, 2, false
@@ -1389,7 +1386,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 SetEntityCollision(fork, false, false)
                                 local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(tr)) or vector3(0.0, -5.2, 0.35)
                                 AttachEntityToEntity(
-                                    fork, tr, trBone,
+                                    fork, tr, 0,
                                     forkOffset.x, forkOffset.y, forkOffset.z,
                                     0.0, 0.0, 0.0,
                                     false, false, false, false, 2, false

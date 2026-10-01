@@ -65,6 +65,7 @@ client_scripts {
     'client/modules/reach_stacker.lua',
     'client/modules/adr_hazard.lua',
     'client/modules/car_carrier.lua',
+    'client/modules/dataview.lua',
     'client/modules/offset_editor.lua',        -- Módulo de Calibração Visual 3D e Gestão de Spawns
     'client/zones.lua',
     'client/cargo_dry.lua',

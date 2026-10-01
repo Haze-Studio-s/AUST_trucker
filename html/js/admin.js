@@ -131,6 +131,25 @@
       if (trailerInput) trailerInput.value = item.trailerModel;
     }
 
+    const chkForklift = document.getElementById('offset-form-isforklift');
+    const propInput = document.getElementById('offset-form-prop');
+    const slotSelect = document.getElementById('offset-form-slot');
+    if (item && item.isForklift) {
+      if (chkForklift) chkForklift.checked = true;
+      if (propInput) {
+        propInput.value = 'forklift';
+        propInput.disabled = true;
+      }
+      if (slotSelect) slotSelect.disabled = true;
+    } else if (item && item.savedSlot) {
+      if (chkForklift) chkForklift.checked = false;
+      if (propInput) {
+        propInput.value = 'hei_prop_carrier_cargo_04b';
+        propInput.disabled = false;
+      }
+      if (slotSelect) slotSelect.disabled = false;
+    }
+
     // Garante refresh imediato dos cards da aba de offsets
     renderOffsetsTab();
   }
@@ -483,11 +502,30 @@
     }
   }
 
+  function setupForkliftToggle() {
+    const chkForklift = document.getElementById('offset-form-isforklift');
+    const propInput = document.getElementById('offset-form-prop');
+    const slotSelect = document.getElementById('offset-form-slot');
+    if (!chkForklift || !propInput) return;
+
+    chkForklift.addEventListener('change', () => {
+      if (chkForklift.checked) {
+        propInput.value = 'forklift';
+        propInput.disabled = true;
+        if (slotSelect) slotSelect.disabled = true;
+      } else {
+        propInput.value = 'hei_prop_carrier_cargo_04b';
+        propInput.disabled = false;
+        if (slotSelect) slotSelect.disabled = false;
+      }
+    });
+  }
+
   function startCalibrationTool() {
     const trailerModel = document.getElementById('offset-form-trailer').value.trim() || 'trailers2';
-    const slotIndex = parseInt(document.getElementById('offset-form-slot').value) || 1;
     const isForklift = document.getElementById('offset-form-isforklift').checked;
-    const propModel = document.getElementById('offset-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b';
+    const slotIndex = isForklift ? 7 : (parseInt(document.getElementById('offset-form-slot').value) || 1);
+    const propModel = isForklift ? 'forklift' : (document.getElementById('offset-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b');
 
     postNUI('adminStartOffsetCalibration', {
       trailerModel: trailerModel,
@@ -665,6 +703,9 @@
         postNUI('adminClose', {});
       });
     }
+
+    // Inicializa lock do prop da empilhadeira
+    setupForkliftToggle();
 
     // Botões de alternância de abas
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {

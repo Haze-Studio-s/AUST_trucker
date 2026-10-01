@@ -153,7 +153,15 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     end
 
     local tCoords = GetEntityCoords(trailer)
-    local ghost = CreateObject(modelHash, tCoords.x, tCoords.y, tCoords.z, false, false, false)
+    local ghost = nil
+    if IsModelAVehicle(modelHash) then
+        ghost = CreateVehicle(modelHash, tCoords.x, tCoords.y, tCoords.z, GetEntityHeading(trailer), false, false)
+        if ghost and DoesEntityExist(ghost) then
+            SetVehicleDoorsLocked(ghost, 2)
+        end
+    else
+        ghost = CreateObject(modelHash, tCoords.x, tCoords.y, tCoords.z, false, false, false)
+    end
     if not ghost or ghost == 0 or not DoesEntityExist(ghost) then return nil end
 
     -- Persistência de Memória & LOD Máximo (impede descarte e sumiço ao se aproximar)
@@ -214,15 +222,11 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º argumento = false, 14º arg = false)
-    local trailerBone = GetEntityBoneIndexByName(targetTrailer, "chassis")
-    if trailerBone == -1 then trailerBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
-    if trailerBone == -1 then trailerBone = 0 end
-
+    -- Matriz de Colisão Híbrida: Ancoragem na origem do trailer (bone 0) para consistência milimétrica com o fantasma
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
-        palletEntity, targetTrailer, trailerBone,
+        palletEntity, targetTrailer, 0,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, 0.0,
         false, false, false, false, 2, false
@@ -240,7 +244,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
-    return true
+    return true, slotOffset
 end
 
 local function AttachPalletToForklift(forklift, pallet)

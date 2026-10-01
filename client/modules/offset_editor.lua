@@ -16,6 +16,81 @@ local DynamicAdminPeds = {}
 -- FERRAMENTA VISUAL IN-GAME DE OFFSETS (GIZMO / NUDGE TOOL)
 -- ============================================================
 
+-- ============================================================
+-- MATRIX BUFFERS PARA IMGUIZMO (NATIVE 0xEB2EDCA2)
+-- ============================================================
+
+local function makeEntityMatrix(entity)
+    local f, r, u, a = GetEntityMatrix(entity)
+    local view = DataView.ArrayBuffer(60)
+    view:SetFloat32(0, r[1]):SetFloat32(4, r[2]):SetFloat32(8, r[3]):SetFloat32(12, 0)
+        :SetFloat32(16, f[1]):SetFloat32(20, f[2]):SetFloat32(24, f[3]):SetFloat32(28, 0)
+        :SetFloat32(32, u[1]):SetFloat32(36, u[2]):SetFloat32(40, u[3]):SetFloat32(44, 0)
+        :SetFloat32(48, a[1]):SetFloat32(52, a[2]):SetFloat32(56, a[3]):SetFloat32(60, 1)
+    return view
+end
+
+local function applyEntityMatrix(entity, view)
+    SetEntityMatrix(entity,
+        view:GetFloat32(16), view:GetFloat32(20), view:GetFloat32(24),
+        view:GetFloat32(0), view:GetFloat32(4), view:GetFloat32(8),
+        view:GetFloat32(32), view:GetFloat32(36), view:GetFloat32(40),
+        view:GetFloat32(48), view:GetFloat32(52), view:GetFloat32(56)
+    )
+end
+
+-- ============================================================
+-- SPAWN E GERENCIAMENTO DO FANTASMA
+-- ============================================================
+
+local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, heading)
+    if CalibGhost and DoesEntityExist(CalibGhost) then
+        DeleteEntity(CalibGhost)
+        CalibGhost = nil
+    end
+
+    local tCoords = GetEntityCoords(trailer)
+    local tHeading = GetEntityHeading(trailer)
+    local worldPos = GetOffsetFromEntityInWorldCoords(trailer, offsetVec.x, offsetVec.y, offsetVec.z)
+    local targetRotZ = (tHeading + (heading or 0.0)) % 360.0
+
+    local ghost = nil
+    if isForklift then
+        local forkHash = joaat('forklift')
+        lib.requestModel(forkHash, 5000)
+        ghost = CreateVehicle(forkHash, worldPos.x, worldPos.y, worldPos.z, targetRotZ, false, false)
+        if ghost and DoesEntityExist(ghost) then
+            SetVehicleDoorsLocked(ghost, 2)
+        end
+    else
+        local pHash = joaat(propModel or 'hei_prop_carrier_cargo_04b')
+        lib.requestModel(pHash, 5000)
+        ghost = CreateObject(pHash, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+        if ghost and DoesEntityExist(ghost) then
+            SetEntityHeading(ghost, targetRotZ)
+        end
+    end
+
+    if not ghost or ghost == 0 or not DoesEntityExist(ghost) then
+        print("[AUST_Trucker] Falha crítica ao spawnar entidade fantasma para calibração.")
+        return nil
+    end
+
+    SetEntityAsMissionEntity(ghost, true, true)
+    SetEntityLodDist(ghost, 0xFFFF)
+    SetEntityAlpha(ghost, 175, false)
+    SetEntityCollision(ghost, false, false)
+    SetEntityInvincible(ghost, true)
+    FreezeEntityPosition(ghost, true)
+
+    CalibGhost = ghost
+    return ghost
+end
+
+-- ============================================================
+-- FERRAMENTA VISUAL IN-GAME DE OFFSETS (GIZMO 3D & FREECAM)
+-- ============================================================
+
 function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel)
     if IsCalibrating then return end
     trailerModel = (trailerModel or 'trailers2'):lower()
@@ -30,23 +105,6 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         propModel = propModel
     }
 
-    -- Carrega o offset inicial da tabela atual
-    local hash = joaat(trailerModel)
-    local curVec = nil
-    if Config.TrailerSlots and Config.TrailerSlots[hash] then
-        if isForklift then
-            curVec = Config.TrailerSlots[hash].forklift
-        elseif Config.TrailerSlots[hash].pallets then
-            curVec = Config.TrailerSlots[hash].pallets[slotIndex]
-        end
-    end
-
-    if curVec then
-        CurrentOffsets = { x = curVec.x, y = curVec.y, z = curVec.z, heading = 0.0 }
-    else
-        CurrentOffsets = { x = 0.0, y = isForklift and -5.5 or (4.5 - (slotIndex - 1) * 1.5), z = isForklift and 0.4 or 0.05, heading = 0.0 }
-    end
-
     -- Fecha NUI temporariamente para focar na tela 3D
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'admin_minimize' })
@@ -57,9 +115,9 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
 
     -- Verifica se já há um trailer próximo ou spawna um para visualização
     local tHash = joaat(trailerModel)
-    lib.requestModel(tHash)
+    lib.requestModel(tHash, 5000)
 
-    local trailer = GetClosestVehicle(pCoords.x, pCoords.y, pCoords.z, 15.0, tHash, 70)
+    local trailer = GetClosestVehicle(pCoords.x, pCoords.y, pCoords.z, 18.0, tHash, 70)
     local createdTrailer = false
     if not trailer or trailer == 0 then
         local spawnPos = GetOffsetFromEntityInWorldCoords(ped, 0.0, 7.0, 0.2)
@@ -71,113 +129,161 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     end
     CalibTrailer = trailer
 
-    -- Spawna o objeto holográfico fantasma
-    local gHash = joaat(propModel)
-    lib.requestModel(gHash)
-    local ghost = nil
-    if isForklift then
-        local tPos = GetEntityCoords(trailer)
-        ghost = CreateVehicle(gHash, tPos.x, tPos.y, tPos.z, pHeading, false, false)
-    else
-        local tPos = GetEntityCoords(trailer)
-        ghost = CreateObject(gHash, tPos.x, tPos.y, tPos.z, false, false, false)
+    -- Carrega o offset inicial da tabela
+    local curVec = nil
+    if Config.TrailerSlots and Config.TrailerSlots[tHash] then
+        if isForklift then
+            curVec = Config.TrailerSlots[tHash].forklift
+        elseif Config.TrailerSlots[tHash].pallets then
+            curVec = Config.TrailerSlots[tHash].pallets[slotIndex]
+        end
+    end
+    if not curVec then
+        if isForklift then
+            curVec = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
+        else
+            curVec = (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, slotIndex)) or vector3(0.0, 0.0, 0.35)
+        end
     end
 
-    SetEntityAsMissionEntity(ghost, true, true)
-    SetEntityAlpha(ghost, 175, false)
-    SetEntityCollision(ghost, false, false)
-    SetEntityInvincible(ghost, true)
-    FreezeEntityPosition(ghost, true)
+    CurrentOffsets = { x = curVec.x, y = curVec.y, z = curVec.z, heading = 0.0 }
 
-    AttachEntityToEntity(
-        ghost, trailer, 0,
-        CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z,
-        0.0, 0.0, CurrentOffsets.heading,
-        false, false, false, false, 2, false
-    )
-    CalibGhost = ghost
+    -- Cria o primeiro fantasma
+    SpawnCalibGhost(trailer, isForklift, propModel, curVec, 0.0)
+
+    -- Criação da Câmera Livre (Blender / Unreal Engine Style)
+    local tCoords = GetEntityCoords(trailer)
+    local tHeadingRad = math.rad(GetEntityHeading(trailer))
+    local camX = tCoords.x - math.sin(tHeadingRad) * 9.0
+    local camY = tCoords.y - math.cos(tHeadingRad) * 9.0
+    local camZ = tCoords.z + 4.5
+    local camRot = vector3(-18.0, 0.0, GetEntityHeading(trailer))
+    local calibCam = CreateCameraWithParams('DEFAULT_SCRIPTED_CAMERA', camX, camY, camZ, camRot.x, camRot.y, camRot.z, 55.0, true, 2)
+    SetCamActive(calibCam, true)
+    RenderScriptCams(true, true, 600, true, true)
+
+    -- Ativa modo cursor e inicializa Gizmo em Translação
+    EnterCursorMode()
+    CreateThread(function()
+        Wait(50)
+        ExecuteCommand('+gizmoTranslation')
+        Wait(10)
+        ExecuteCommand('-gizmoTranslation')
+    end)
+
     IsCalibrating = true
+    local isFlyingCamera = false
 
     lib.notify({
-        title = 'Modo Calibração 3D Ativo',
-        description = ('Calibrando %s (%s %d).\nUse [WASD], [Q/E], [Z/C]. [ENTER] Salva | [BACKSPACE] Cancela'):format(
-            trailerModel, isForklift and 'Empilhadeira' or 'Palete Slot', slotIndex
-        ),
+        title = 'Gizmo 3D & Câmera Livre Ativos',
+        description = 'Mouse livre para usar o Gizmo.\nSegure o Botão Direito (RMB) para voar em volta com WASD.',
         type = 'info',
         duration = 7000
     })
 
-    -- Loop de controle e renderização HUD
+    -- LOOP PRINCIPAL DE GIZMO E FREECAM
     CreateThread(function()
         while IsCalibrating do
             Wait(0)
 
-            -- Modificadores de sensibilidade
-            local step = 0.02
-            local rotStep = 2.0
-            if IsControlPressed(0, 21) then -- SHIFT: Rápido
-                step = 0.10
-                rotStep = 10.0
-            elseif IsControlPressed(0, 19) then -- ALT: Precisão cirúrgica
-                step = 0.005
-                rotStep = 0.5
+            -- Desabilita ações de combate, movimentação e armas do Ped
+            DisableControlAction(0, 24, true)  -- Attack / Left Click
+            DisableControlAction(0, 25, true)  -- Aim / Right Click
+            DisableControlAction(0, 1, true)   -- Mouse Look X
+            DisableControlAction(0, 2, true)   -- Mouse Look Y
+            DisableControlAction(0, 30, true)  -- Move LR
+            DisableControlAction(0, 31, true)  -- Move UD
+            DisableControlAction(0, 32, true)  -- W
+            DisableControlAction(0, 33, true)  -- S
+            DisableControlAction(0, 34, true)  -- A
+            DisableControlAction(0, 35, true)  -- D
+            DisableControlAction(0, 44, true)  -- Cover (Q)
+            DisableControlAction(0, 38, true)  -- E
+            DisableControlAction(0, 45, true)  -- R
+            DisableControlAction(0, 245, true) -- T
+            DisablePlayerFiring(PlayerId(), true)
+
+            -- CONTROLE DE CÂMERA LIVRE: SEGURAR BOTÃO DIREITO DO MOUSE (RMB)
+            local holdingRMB = IsDisabledControlPressed(0, 25)
+            if holdingRMB then
+                if not isFlyingCamera then
+                    isFlyingCamera = true
+                    LeaveCursorMode()
+                end
+
+                -- Rotação da câmera pelo mouse
+                local mouseX = GetDisabledControlNormal(0, 1)
+                local mouseY = GetDisabledControlNormal(0, 2)
+                camRot = camRot - vector3(mouseY * 6.0, 0.0, mouseX * 6.0)
+                camRot = vector3(math.min(math.max(camRot.x, -85.0), 85.0), 0.0, camRot.z % 360.0)
+                SetCamRot(calibCam, camRot.x, camRot.y, camRot.z, 2)
+
+                -- Vetores de movimentação
+                local radP = math.rad(camRot.x)
+                local radY = math.rad(camRot.z)
+                local fwd = vector3(-math.sin(radY) * math.cos(radP), math.cos(radY) * math.cos(radP), math.sin(radP))
+                local rgt = vector3(math.cos(radY), math.sin(radY), 0.0)
+                local up = vector3(0.0, 0.0, 1.0)
+
+                local spd = 0.16
+                if IsDisabledControlPressed(0, 21) then spd = 0.45 end -- Shift (Rápido)
+                if IsDisabledControlPressed(0, 19) then spd = 0.03 end -- Alt (Lento / Preciso)
+
+                local camPos = GetCamCoord(calibCam)
+                if IsDisabledControlPressed(0, 32) then camPos = camPos + fwd * spd end -- W
+                if IsDisabledControlPressed(0, 33) then camPos = camPos - fwd * spd end -- S
+                if IsDisabledControlPressed(0, 34) then camPos = camPos - rgt * spd end -- A
+                if IsDisabledControlPressed(0, 35) then camPos = camPos + rgt * spd end -- D
+                if IsDisabledControlPressed(0, 22) or IsDisabledControlPressed(0, 203) then camPos = camPos + up * spd end -- Space
+                if IsDisabledControlPressed(0, 36) then camPos = camPos - up * spd end -- LCtrl
+                SetCamCoord(calibCam, camPos.x, camPos.y, camPos.z)
+            else
+                if isFlyingCamera then
+                    isFlyingCamera = false
+                    EnterCursorMode()
+                end
             end
 
-            local changed = false
-
-            -- Movimentação X (Esquerda / Direita)
-            if IsControlPressed(0, 34) then -- A
-                CurrentOffsets.x = CurrentOffsets.x - step
-                changed = true
-            elseif IsControlPressed(0, 35) then -- D
-                CurrentOffsets.x = CurrentOffsets.x + step
-                changed = true
+            -- ALTERNÂNCIA DE MODOS DO GIZMO COM AS TECLAS T E R
+            if IsDisabledControlJustPressed(0, 245) then -- T
+                ExecuteCommand('+gizmoTranslation')
+                Wait(10)
+                ExecuteCommand('-gizmoTranslation')
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas Lineares)', type = 'info', duration = 1500 })
+            elseif IsDisabledControlJustPressed(0, 45) then -- R
+                ExecuteCommand('+gizmoRotation')
+                Wait(10)
+                ExecuteCommand('-gizmoRotation')
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis Coloridos)', type = 'info', duration = 1500 })
             end
 
-            -- Movimentação Y (Frente / Trás na caçamba)
-            if IsControlPressed(0, 32) then -- W
-                CurrentOffsets.y = CurrentOffsets.y + step
-                changed = true
-            elseif IsControlPressed(0, 33) then -- S
-                CurrentOffsets.y = CurrentOffsets.y - step
-                changed = true
+            -- RENDERIZAÇÃO E MANIPULAÇÃO DO GIZMO NATIVO FIVEM (0xEB2EDCA2)
+            if CalibGhost and DoesEntityExist(CalibGhost) and not isFlyingCamera then
+                local matrixBuffer = makeEntityMatrix(CalibGhost)
+                local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'AustGizmo', Citizen.ReturnResultAnyway())
+                if changed then
+                    applyEntityMatrix(CalibGhost, matrixBuffer)
+                end
             end
 
-            -- Altura Z (Cima / Baixo)
-            if IsControlPressed(0, 44) then -- Q (Sobe)
-                CurrentOffsets.z = CurrentOffsets.z + step
-                changed = true
-            elseif IsControlPressed(0, 38) then -- E (Desce)
-                CurrentOffsets.z = CurrentOffsets.z - step
-                changed = true
+            -- CÁLCULO DAS COORDENADAS RELATIVAS AO REBOQUE (BONE 0)
+            if CalibGhost and DoesEntityExist(CalibGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
+                local gCoords = GetEntityCoords(CalibGhost)
+                local relOffset = GetOffsetFromEntityGivenWorldCoords(CalibTrailer, gCoords.x, gCoords.y, gCoords.z)
+                local gRot = GetEntityRotation(CalibGhost, 2)
+                local tRot = GetEntityRotation(CalibTrailer, 2)
+                local relHeading = (gRot.z - tRot.z) % 360.0
+                CurrentOffsets = { x = relOffset.x, y = relOffset.y, z = relOffset.z, heading = relHeading }
             end
 
-            -- Rotação Heading (Z / C)
-            if IsControlPressed(0, 20) then -- Z (Gira Esquerda)
-                CurrentOffsets.heading = (CurrentOffsets.heading - rotStep) % 360
-                changed = true
-            elseif IsControlPressed(0, 26) then -- C (Gira Direita)
-                CurrentOffsets.heading = (CurrentOffsets.heading + rotStep) % 360
-                changed = true
-            end
-
-            if changed and CalibGhost and CalibTrailer then
-                AttachEntityToEntity(
-                    CalibGhost, CalibTrailer, 0,
-                    CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z,
-                    0.0, 0.0, CurrentOffsets.heading,
-                    false, false, false, false, 2, false
-                )
-            end
-
-            -- RENDERIZAÇÃO DO HUD FLUTUANTE DE AJUSTE
-            local hudText = ('~g~[CALIBRAÇÃO DE REBOQUE 3D]~s~\n' ..
-                'Trailer: ~y~%s~s~ | Alvo: ~y~%s~s~\n' ..
-                'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~\n' ..
-                'Rotação: ~b~%.1f°~s~\n' ..
-                '~w~[WASD] Mover X/Y  |  [Q/E] Altura Z  |  [Z/C] Girar\n' ..
-                '[SHIFT] Veloz  |  [ALT] Fino  |  ~g~[ENTER] Salvar~s~  |  ~r~[BACKSPACE] Sair~s~'):format(
-                trailerModel, isForklift and 'Empilhadeira' or ('Slot ' .. slotIndex),
+            -- HUD INFORMATIVO NA TELA
+            local targetLabel = CalibParams.isForklift and '~y~Empilhadeira (Tie-Down)~s~' or ('~y~Palete Slot %d~s~'):format(CalibParams.slotIndex)
+            local hudText = ('~g~[GIZMO 3D & FREECAM]~s~ Trailer: ~w~%s~s~ | Alvo: %s\n' ..
+                'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~\n' ..
+                '~w~[T] Translação  |  [R] Rotação  |  [Mouse] Arrastar Gizmo\n' ..
+                '[Segurar RMB + WASD] Voo Câmera Livre (Shift: Acelera | Alt: Lento)\n' ..
+                '~g~[ENTER] Salvar & Próximo Slot~s~  |  ~r~[BACKSPACE] Finalizar~s~'):format(
+                CalibParams.trailerModel, targetLabel,
                 CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
             )
 
@@ -193,43 +299,102 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
 
-            -- CONFIRMAÇÃO COM ENTER
-            if IsControlJustPressed(0, 18) or IsControlJustPressed(0, 201) then -- ENTER
+            -- SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) COM ENTER
+            if IsControlJustPressed(0, 18) or IsControlJustPressed(0, 201) or IsDisabledControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 201) then
+                -- 1. Dispara salvamento no banco de dados
                 TriggerServerEvent('aurp_trucker:server:adminSaveTrailerOffset', {
                     trailerModel = CalibParams.trailerModel,
                     slotIndex = CalibParams.slotIndex,
                     isForklift = CalibParams.isForklift,
-                    x = CurrentOffsets.x,
-                    y = CurrentOffsets.y,
-                    z = CurrentOffsets.z,
-                    heading = CurrentOffsets.heading
+                    x = tonumber(string.format("%.3f", CurrentOffsets.x)),
+                    y = tonumber(string.format("%.3f", CurrentOffsets.y)),
+                    z = tonumber(string.format("%.3f", CurrentOffsets.z)),
+                    heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
                 })
+                PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-                OffsetEditor.StopCalibration(createdTrailer)
-                SendNUIMessage({
-                    action = 'admin_restore',
-                    savedSlot = CalibParams.slotIndex,
-                    isForklift = CalibParams.isForklift,
-                    trailerModel = CalibParams.trailerModel
-                })
-                SetNuiFocus(true, true)
-                break
+                -- 2. Determina o limite de slots de palete
+                local maxPallets = 6
+                local curHash = joaat(CalibParams.trailerModel)
+                if Config.TrailerSlots and Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets then
+                    local pCount = #Config.TrailerSlots[curHash].pallets
+                    if pCount > maxPallets then maxPallets = pCount end
+                end
+
+                -- 3. Transição contínua
+                if not CalibParams.isForklift then
+                    if CalibParams.slotIndex < maxPallets then
+                        local prevSlot = CalibParams.slotIndex
+                        CalibParams.slotIndex = CalibParams.slotIndex + 1
+                        lib.notify({
+                            title = 'Slot Salvo no Banco!',
+                            description = ('Slot %d registrado com sucesso. Avançando para o Slot %d.'):format(prevSlot, CalibParams.slotIndex),
+                            type = 'success',
+                            duration = 3500
+                        })
+
+                        local nextVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets and Config.TrailerSlots[curHash].pallets[CalibParams.slotIndex])
+                        if not nextVec then
+                            nextVec = ForkliftModule.GetSlotOffset(CalibTrailer, CalibParams.slotIndex)
+                        end
+                        CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = 0.0 }
+                        SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, 0.0)
+                    else
+                        -- Todos os paletes calibrados! Avança automaticamente para a Empilhadeira!
+                        CalibParams.isForklift = true
+                        CalibParams.slotIndex = maxPallets + 1
+                        lib.notify({
+                            title = 'Paletes Finalizados!',
+                            description = 'Todos os slots de paletes foram calibrados! Agora ajustando o Slot da Empilhadeira.',
+                            type = 'info',
+                            duration = 5000
+                        })
+
+                        local forkVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift) or ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
+                        CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = 0.0 }
+                        SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, 0.0)
+                    end
+                else
+                    -- Slot da empilhadeira finalizado! Ciclo completo!
+                    lib.notify({
+                        title = 'Calibração Concluída!',
+                        description = 'Configuração completa de slots e empilhadeira gravada com sucesso!',
+                        type = 'success',
+                        duration = 6000
+                    })
+                    OffsetEditor.StopCalibration(createdTrailer, calibCam)
+                    SendNUIMessage({
+                        action = 'admin_restore',
+                        savedSlot = CalibParams.slotIndex,
+                        isForklift = CalibParams.isForklift,
+                        trailerModel = CalibParams.trailerModel
+                    })
+                    SetNuiFocus(true, true)
+                    break
+                end
             end
 
-            -- CANCELAMENTO COM BACKSPACE
-            if IsControlJustPressed(0, 177) or IsControlJustPressed(0, 194) then -- BACKSPACE / ESC
-                OffsetEditor.StopCalibration(createdTrailer)
+            -- CANCELAMENTO COM BACKSPACE / ESC
+            if IsControlJustPressed(0, 177) or IsControlJustPressed(0, 194) or IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
+                OffsetEditor.StopCalibration(createdTrailer, calibCam)
                 SendNUIMessage({ action = 'admin_restore' })
                 SetNuiFocus(true, true)
-                lib.notify({ title = 'Calibração', description = 'Edição cancelada.', type = 'warning' })
+                lib.notify({ title = 'Calibração', description = 'Edição finalizada.', type = 'info' })
                 break
             end
         end
     end)
 end
 
-function OffsetEditor.StopCalibration(deleteTrailer)
+function OffsetEditor.StopCalibration(deleteTrailer, cam)
     IsCalibrating = false
+    LeaveCursorMode()
+    if cam and DoesCamExist(cam) then
+        DestroyCam(cam, false)
+    end
+    RenderScriptCams(false, true, 500, true, true)
+    SetPlayerControl(PlayerId(), true, 0)
+
     if CalibGhost and DoesEntityExist(CalibGhost) then
         DeleteEntity(CalibGhost)
         CalibGhost = nil
