@@ -108,13 +108,14 @@ local function AttachPalletToForklift(forklift, pallet)
     if forkBone == -1 then forkBone = 0 end
 
     local offset = Config.ForkliftAttachOffset or vector3(0.0, 1.2, -0.42)
+    FreezeEntityPosition(pallet, false)
     AttachEntityToEntity(
         pallet, 
         forklift, 
         forkBone, 
         offset.x, offset.y, offset.z,
         0.0, 0.0, 0.0, 
-        false, false, false, false, 2, true
+        false, false, false, false, 0, true
     )
     return true
 end
@@ -204,19 +205,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
                                 -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
+                                FreezeEntityPosition(palletEntity, false)
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
                                     relPos.x, relPos.y, safeZ,
                                     0.0, 0.0, relHeading,
-                                    false, false, false, false, 2, true
+                                    false, false, false, false, 0, true
                                 )
 
                                 -- Reforço de colisão com o mundo (Pós-Attach)
+                                FreezeEntityPosition(palletEntity, false)
+                                SetEntityDynamic(palletEntity, false)
                                 SetEntityCollision(palletEntity, true, true)
-                                SetEntityDynamic(palletEntity, true)
                                 SetCanClimbOnEntity(palletEntity, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
+                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
 
                                 CurrentForkliftPallet = nil
                                 loadedCount = loadedCount + 1

@@ -48,42 +48,21 @@ local ForkliftRiskLevel = 0
 -- da prancha, eliminando paletes flutuando no ar ou afundando no metal.
 -- =======================================================================
 local function GetTrailerDeckZ(trailer)
-    if not trailer or not DoesEntityExist(trailer) then return 0.95 end
+    if not trailer or not DoesEntityExist(trailer) then return 0.35 end
     local model = GetEntityModel(trailer)
-    local tMin, tMax = GetModelDimensions(model)
-
-    -- Para carretas prancha / flatbed (trflat, freighttrailer, armytrailer, docktrailer):
-    -- O tMax.z determina a superfície superior do chassi. Subtraímos uma margem milimétrica
-    -- apenas caso haja grade dianteira/pescoço saliente (gooseneck).
-    local deckZ = tMax.z
-    if model == joaat('trflat') then
-        deckZ = tMax.z - 0.14 -- Alinha a madeira do palete perfeitamente ao deck de ferro
-    elseif model == joaat('freighttrailer') then
-        deckZ = tMax.z - 0.10
-    elseif model == joaat('armytrailer') then
-        deckZ = tMax.z - 0.12
-    elseif model == joaat('docktrailer') then
-        deckZ = tMax.z - 0.14
-    else
-        -- Fallback universal para carretas fechadas ou customizadas
-        if (tMax.z - tMin.z) > 2.5 then
-            deckZ = tMin.z + 0.95
-        else
-            deckZ = tMax.z - 0.10
-        end
+    if model == joaat('trflat') or model == joaat('freighttrailer') or model == joaat('armytrailer') or model == joaat('docktrailer') then
+        return 0.35
     end
-    return deckZ
+    local tMin, tMax = GetModelDimensions(model)
+    if (tMax.z - tMin.z) > 2.5 then
+        return tMin.z + 0.95
+    end
+    return 0.35
 end
 _G.GetTrailerDeckZ = GetTrailerDeckZ
 
 local function GetForkliftDeckZ(trailer, forkEntity)
-    local deckZ = GetTrailerDeckZ(trailer)
-    local forkModel = (forkEntity and DoesEntityExist(forkEntity) and GetEntityModel(forkEntity)) or joaat('forklift')
-    local fMin, fMax = GetModelDimensions(forkModel)
-    local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
-    -- Gap de 1cm (0.01 unidades) para evitar clipping e capotamento por Havok
-    local safeForkZ = deckZ + forkliftHalfHeight + 0.01
-    return safeForkZ
+    return 0.35
 end
 _G.GetForkliftDeckZ = GetForkliftDeckZ
 
@@ -630,19 +609,21 @@ local function ExecutePalletTie(index)
         palletData.relHeading = relHeading
 
         -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
+        FreezeEntityPosition(palletEnt, false)
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, relHeading,
-            false, false, false, false, 2, true
+            false, false, false, false, 0, true
         )
 
         -- Reforço de colisão com o mundo (Pós-Attach)
+        FreezeEntityPosition(palletEnt, false)
+        SetEntityDynamic(palletEnt, false)
         SetEntityCollision(palletEnt, true, true)
-        SetEntityDynamic(palletEnt, true)
         SetCanClimbOnEntity(palletEnt, true)
-        SetEntityNoCollisionEntity(palletEnt, trailer, false)
-        SetEntityNoCollisionEntity(trailer, palletEnt, false)
+        SetEntityNoCollisionEntity(palletEnt, trailer, true)
+        SetEntityNoCollisionEntity(trailer, palletEnt, true)
     end
 
     -- Minigame de perícia
@@ -736,20 +717,21 @@ local function ExecuteForkliftTie(forkEntity)
     DetachEntity(fork, true, true)
 
     -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
+    FreezeEntityPosition(fork, false)
     AttachEntityToEntity(
         fork, trailer, 0,
-        0.0, -5.5, safeForkZ,
+        0.0, -5.5, 0.35,
         0.0, 0.0, 0.0,
-        false, false, false, false, 2, true
+        false, false, false, false, 0, true
     )
 
     -- Reforço de colisão com o mundo (Pós-Attach)
-    SetEntityCollision(fork, true, true)
-    SetEntityDynamic(fork, true)
-    SetCanClimbOnEntity(fork, true)
-    SetEntityNoCollisionEntity(fork, trailer, false)
-    SetEntityNoCollisionEntity(trailer, fork, false)
     FreezeEntityPosition(fork, false)
+    SetEntityDynamic(fork, false)
+    SetEntityCollision(fork, true, true)
+    SetCanClimbOnEntity(fork, true)
+    SetEntityNoCollisionEntity(fork, trailer, true)
+    SetEntityNoCollisionEntity(trailer, fork, true)
 
     ForkliftLoadedOnTrailer = true
 
@@ -1023,20 +1005,21 @@ SetupEmbarkForkliftStage = function()
 
                         -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
                         local tRot = GetEntityRotation(trailer, 2)
+                        FreezeEntityPosition(fork, false)
                         AttachEntityToEntity(
                             fork, trailer, 0,
                             0.0, -5.2, 0.35,
                             0.0, 0.0, 0.0,
-                            false, false, false, false, 2, true
+                            false, false, false, false, 0, true
                         )
 
                         -- Reforço de colisão com o mundo (Pós-Attach)
-                        SetEntityCollision(fork, true, true)
-                        SetEntityDynamic(fork, true)
-                        SetCanClimbOnEntity(fork, true)
-                        SetEntityNoCollisionEntity(fork, trailer, false)
-                        SetEntityNoCollisionEntity(trailer, fork, false)
                         FreezeEntityPosition(fork, false)
+                        SetEntityDynamic(fork, false)
+                        SetEntityCollision(fork, true, true)
+                        SetCanClimbOnEntity(fork, true)
+                        SetEntityNoCollisionEntity(fork, trailer, true)
+                        SetEntityNoCollisionEntity(trailer, fork, true)
 
                         ForkliftLoadedOnTrailer = true
                         PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
@@ -1110,7 +1093,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local pEnt = pData.entity
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                 FreezeEntityPosition(pEnt, false)
-                SetEntityDynamic(pEnt, true)
+                SetEntityDynamic(pEnt, false)
                 SetEntityCollision(pEnt, true, true)
                 SetCanClimbOnEntity(pEnt, true)
                 SetEntityNoCollisionEntity(pEnt, trailer, true)
@@ -1121,7 +1104,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         local fork = JobEntities.forklift
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
             FreezeEntityPosition(fork, false)
-            SetEntityDynamic(fork, true)
+            SetEntityDynamic(fork, false)
             SetEntityCollision(fork, true, true)
             SetCanClimbOnEntity(fork, true)
             SetEntityNoCollisionEntity(fork, trailer, true)
