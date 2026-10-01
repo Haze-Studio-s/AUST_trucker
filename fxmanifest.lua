@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
-version '20.2.0'
+version '20.3.0'
 
 dependencies {
     'oxmysql',
@@ -40,6 +40,7 @@ server_scripts {
     'server/services/progression_service.lua',
     'server/services/adr_service.lua',
     'server/services/forklift_service.lua',
+    'server/services/pallet_stacking_service.lua',   -- v20.3: Stacking Pallet Service
     'server/services/cargo_tracking_service.lua',   -- v14: após forklift, antes de job_service
     'server/services/anti_cheat_service.lua',        -- v15: após cargo_tracking, antes de job_service
     'server/services/container_handler_service.lua', -- v20: Handler portuário (integração oConteneur)
@@ -72,6 +73,7 @@ client_scripts {
     'client/cargo_liquid.lua',
     'client/main.lua',
     'client/carry_system.lua',             -- v19: CarrySystem (antes de todos)
+    'client/modules/pallet_stacking.lua',  -- v20.3: Módulo de Stacking Pallet
     'client/client.lua',
     'client/hud.client.lua',
     'client/adr.client.lua',

@@ -135,6 +135,10 @@ local PlayerPolarixLobbies = {}
 local function CleanupLobbyEntities(lobby)
     if not lobby then return end
 
+    if lobby.citizenId and PalletStackingService and PalletStackingService.Cleanup then
+        PalletStackingService.Cleanup(lobby.citizenId)
+    end
+
     if lobby.src and GetPlayerPing(lobby.src) > 0 then
         pcall(function() SetPlayerRoutingBucket(lobby.src, 0) end)
     end
@@ -751,39 +755,19 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, forkliftPlate)
         end
 
-        -- Spawn Dinâmico e Iterativo de Paletes Polarix com Fixação Física (Zero Limbo)
-        local palletSpawns = wh.PalletSpawns or {}
-        local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
+        -- Spawn de Paletes: Modo Stacking Manual (plt_lumberjack) vs Modo Pré-Gerado (Polarix)
+        local isManualStacking = (contractData.manualStacking == true) and (Config.Stacking and Config.Stacking.Enabled)
+        if isManualStacking then
+            PalletStackingService.StartSession(citizenId, src, jobId, wh, reqPallets)
+            print(("[AUST_Trucker Stacking] Sessão de Stacking Pallet iniciada para %s (Bônus +20%% ativado na conclusão)."):format(citizenId))
+        else
+            local palletSpawns = wh.PalletSpawns or {}
+            local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
-        for _, coord in ipairs(palletSpawns) do
-            if #pallets >= reqPallets then break end
-            local pModel = joaat(Config.Polarix.PalletModels[(#pallets % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
-            local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.1, true, true, false)
-            local waitTimer = GetGameTimer()
-            while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
-            if DoesEntityExist(pObj) then
-                FreezeEntityPosition(pObj, true)
-                SetEntityDistanceCullingRadius(pObj, 0.0)
-                ignoreEntities[pObj] = true
-                table.insert(pallets, pObj)
-                table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
-            end
-        end
-
-        -- Se a quantidade necessária de paletes for maior que os slots individuais livres, utiliza fallback seguro
-        if #pallets < reqPallets and wh.PalletStagingAnchor then
-            local anchor = wh.PalletStagingAnchor
-            local rad = math.rad(wh.PalletStagingHeading or 180.0)
-            local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
-            local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
-
-            for i = #pallets + 1, reqPallets do
-                local col = (i - 1) % 3
-                local row = math.floor((i - 1) / 3)
-                local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
-
-                local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
-                local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.1, true, true, false)
+            for _, coord in ipairs(palletSpawns) do
+                if #pallets >= reqPallets then break end
+                local pModel = joaat(Config.Polarix.PalletModels[(#pallets % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+                local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.1, true, true, false)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
@@ -794,9 +778,35 @@ local function StartTruckDelivery(src, contractData)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
                 end
             end
-        end
 
-        print(("[AUST_Trucker DEBUG - ETAPA 3] %d Paletes gerados com sucesso para o frete."):format(#pallets))
+            -- Se a quantidade necessária de paletes for maior que os slots individuais livres, utiliza fallback seguro
+            if #pallets < reqPallets and wh.PalletStagingAnchor then
+                local anchor = wh.PalletStagingAnchor
+                local rad = math.rad(wh.PalletStagingHeading or 180.0)
+                local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
+                local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
+
+                for i = #pallets + 1, reqPallets do
+                    local col = (i - 1) % 3
+                    local row = math.floor((i - 1) / 3)
+                    local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
+
+                    local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+                    local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.1, true, true, false)
+                    local waitTimer = GetGameTimer()
+                    while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+                    if DoesEntityExist(pObj) then
+                        FreezeEntityPosition(pObj, true)
+                        SetEntityDistanceCullingRadius(pObj, 0.0)
+                        ignoreEntities[pObj] = true
+                        table.insert(pallets, pObj)
+                        table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                    end
+                end
+            end
+
+            print(("[AUST_Trucker DEBUG - ETAPA 3] %d Paletes gerados com sucesso para o frete."):format(#pallets))
+        end
 
     elseif cargoType == 'heavy' then
         reqPallets = 1
@@ -1344,6 +1354,15 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local ratio = (lobby.cargoType == 'dry' and totalReq > 0) and math.max(0.2, deliveredCount / totalReq) or 1.0
     if lobby.cargoType == 'adr' then
         ratio = math.max(0.2, (lobby.cargoIntegrity or 100) / 100)
+    end
+
+    -- Bônus de Stacking Pallet (+20% pagamento e +150 XP)
+    local isStacked = (lobby.stackedWithBonus == true) or (VP_Trucker.ActiveJobs and VP_Trucker.ActiveJobs[citizenId] and VP_Trucker.ActiveJobs[citizenId].stackedWithBonus == true)
+    if isStacked then
+        local bonusMult = Config.Stacking and Config.Stacking.BonusRewardMultiplier or 0.20
+        local bonusXp = Config.Stacking and Config.Stacking.BonusXp or 150
+        basePayment = math.floor(basePayment * (1.0 + bonusMult))
+        baseXP = baseXP + bonusXp
     end
 
     local payment = math.floor(basePayment * ratio)

@@ -464,6 +464,22 @@ local function HandleStartDeliveryNUI(data, cb)
         return
     end
 
+    -- Opcional: Modal de Stacking Manual de Paletes (plt_lumberjack)
+    local isDry = (payload.cargoType == 'dry') or (not payload.cargoType and not payload.adrType and not payload.liquidType)
+    if isDry and Config.Stacking and Config.Stacking.Enabled then
+        local alert = lib.alertDialog({
+            header = 'Preparação de Carga no Pátio',
+            content = 'Deseja realizar a **Montagem Manual de Paletes (Stacking)** antes de carregar o trailer?\n\n- **Montar Manualmente:** Ganhe **+20% de Pagamento** e +150 XP de bônus!\n- **Pular Montagem:** Paletes gerados prontos no galpão.',
+            centered = true,
+            cancel = true,
+            labels = {
+                confirm = 'Sim (+20% Bônus)',
+                cancel = 'Pular (Paletes Prontos)'
+            }
+        })
+        payload.manualStacking = (alert == 'confirm')
+    end
+
     TriggerServerEvent('aurp_trucker:server:startDelivery', payload)
 
     if cb then cb('ok') end
