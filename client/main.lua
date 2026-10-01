@@ -822,7 +822,6 @@ exports.ox_target:addModel('forklift', {
         distance = 4.0,
         canInteract = function(entity)
             if not ActiveJob or not ActiveJob.withForklift or ForkliftSecured then return false end
-            if not (hasRopes or HasRopes) then return false end
             if IsPedInAnyVehicle(cache.ped, false) then return false end
             local trailer = JobEntities.trailer
             if not trailer or not DoesEntityExist(trailer) then return false end
@@ -831,7 +830,7 @@ exports.ox_target:addModel('forklift', {
             if totalLoaded > 0 and currentTieIndex <= totalLoaded then return false end
             local forkCoords = GetEntityCoords(entity)
             local trailerCoords = GetEntityCoords(trailer)
-            return #(trailerCoords - forkCoords) < 15.0
+            return #(trailerCoords - forkCoords) < 12.0
         end,
         onSelect = function(data)
             ExecuteForkliftTie(data and data.entity)
@@ -841,6 +840,7 @@ exports.ox_target:addModel('forklift', {
 
 -- ox_target para estiva manual a pé nos paletes no slot fantasma ativo
 local PalletPropModels = {
+    'hei_prop_carrier_cargo_04b',
     'm24_1_prop_m24_1_carrier_cargo_04a',
     'sm3d_prop_pallet_1',
     'sm3d_prop_pallet_2',
@@ -894,7 +894,7 @@ exports.ox_target:addModel(PalletPropModels, {
                     if loadedCount < requiredCount then
                         local nextSlot = currentSlot + 1
                         local nextOffset = ForkliftModule.GetSlotOffset(trailer, nextSlot)
-                        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', nextOffset)
+                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset)
                     else
                         ForkliftModule.StopOperation()
                         SetupRopesStage()
@@ -1100,10 +1100,23 @@ function StartDeliveryRoute(deliveryCoords, jobId)
     end
 
     local dest = deliveryCoords or (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
-    -- Seta verde flutuante e rota GPS para o destino final (cor 5 amarela/laranja oficial GTA V)
-    UpdateMissionObjective('delivery', dest, 'Destino da Entrega')
 
-    SendMissionNotify('Central Logística', 'Toda a carga está segura! Siga a rota no seu GPS para o destino.', 'success')
+    -- Traça rota e waypoint no GPS para o destino final
+    if dest then
+        SetNewWaypoint(dest.x, dest.y)
+    end
+
+    -- Orienta o jogador a entrar no caminhão com marcador e som
+    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+        UpdateMissionObjective('truck', JobEntities.truck, 'Entre no seu Caminhão')
+    elseif dest then
+        UpdateMissionObjective('delivery', dest, 'Destino da Entrega')
+    end
+
+    -- Ativa e exibe a interface NUI do G-Meter (Estabilidade da Carga)
+    SendNUIMessage({ action = 'gmeter_show' })
+
+    SendMissionNotify('Central Logística', 'Carga 100% amarrada e travada! Entre no caminhão e inicie a viagem.', 'success')
     PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
 
     -- Ativa monitoramento de risco químico para cargas perigosas ADR
@@ -1123,6 +1136,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         for _, pData in ipairs(LoadedPallets or {}) do
             local pEnt = pData.entity
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                SetEntityAsMissionEntity(pEnt, true, true)
+                SetEntityLodDist(pEnt, 0xFFFF)
                 FreezeEntityPosition(pEnt, false)
                 SetEntityDynamic(pEnt, false)
                 SetEntityCollision(pEnt, true, true)
@@ -1134,6 +1149,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
         local fork = JobEntities.forklift
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
+            SetEntityAsMissionEntity(fork, true, true)
+            SetEntityLodDist(fork, 0xFFFF)
             FreezeEntityPosition(fork, false)
             SetEntityDynamic(fork, false)
             SetEntityCollision(fork, true, true)
@@ -1146,6 +1163,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
     -- Monitoramento otimizado de Força G lateral, física híbrida e queda dinâmica de paletes frouxos
     CreateThread(function()
         local lastDropTime = 0
+        local enteredTruck = false
 
         while CurrentStage == 'STEP_8_IN_TRANSIT' do
             local truck = JobEntities.truck
@@ -1166,6 +1184,14 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 SendNUIMessage({ action = 'gmeter_hide' })
                 Wait(800)
             else
+                if not enteredTruck then
+                    enteredTruck = true
+                    SendNUIMessage({ action = 'gmeter_show' })
+                    if dest then
+                        UpdateMissionObjective('delivery', dest, 'Destino da Entrega')
+                    end
+                end
+
                 Wait(75)
 
                 local targetList = LoadedPallets or LoadedPalletData or {}
@@ -1768,6 +1794,9 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
             if netId and netId ~= 0 then
                 local ent = WaitForNetworkEntity(netId, 8000)
                 if ent and DoesEntityExist(ent) then
+                    SetEntityAsMissionEntity(ent, true, true)
+                    SetEntityLodDist(ent, 0xFFFF)
+                    SetEntityDistanceCullingRadius(ent, 0.0)
                     SetEntityVisible(ent, true)
                     ResetEntityAlpha(ent)
                     PlaceObjectOnGroundProperly(ent)

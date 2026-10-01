@@ -129,7 +129,7 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     ForkliftModule.DeleteGhostProp()
     if not trailer or not DoesEntityExist(trailer) or not offset then return nil end
 
-    local modelHash = type(model) == 'number' and model or joaat(model or 'm24_1_prop_m24_1_carrier_cargo_04a')
+    local modelHash = type(model) == 'number' and model or joaat(model or 'hei_prop_carrier_cargo_04b')
     if not HasModelLoaded(modelHash) then
         RequestModel(modelHash)
         local t = 1000
@@ -142,6 +142,11 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     local tCoords = GetEntityCoords(trailer)
     local ghost = CreateObject(modelHash, tCoords.x, tCoords.y, tCoords.z, false, false, false)
     if not ghost or ghost == 0 or not DoesEntityExist(ghost) then return nil end
+
+    -- Persistência de Memória & LOD Máximo (impede descarte e sumiço ao se aproximar)
+    SetEntityAsMissionEntity(ghost, true, true)
+    SetEntityLodDist(ghost, 0xFFFF)
+    SetEntityDistanceCullingRadius(ghost, 0.0)
 
     -- Holograma Fantasma: semi-transparente, sem colisão, invencível e imune
     SetEntityAlpha(ghost, 150, false)
@@ -206,7 +211,10 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         false, false, false, false, 0, true
     )
 
-    -- Reforço de colisão com o mundo (Pós-Attach)
+    -- Reforço de colisão com o mundo (Pós-Attach) & Persistência de Missão (Anti-LOD Drop)
+    SetEntityAsMissionEntity(palletEntity, true, true)
+    SetEntityLodDist(palletEntity, 0xFFFF)
+    SetEntityDistanceCullingRadius(palletEntity, 0.0)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityCollision(palletEntity, true, true)
@@ -265,7 +273,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     -- Spawna o holograma fantasma no Slot 1 ao iniciar
     if trailer and DoesEntityExist(trailer) then
         local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', firstOffset)
+        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset)
     end
 
     CreateThread(function()
@@ -346,7 +354,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     if loadedCount < requiredCount then
                                         -- Spawna o holograma no próximo slot sequencial
                                         local nextOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', nextOffset)
+                                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset)
                                     else
                                         -- Todos os paletes carregados com sucesso
                                         ForkliftModule.StopOperation()

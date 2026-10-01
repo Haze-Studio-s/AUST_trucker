@@ -763,6 +763,7 @@ local function StartTruckDelivery(src, contractData)
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(pObj) then
                 FreezeEntityPosition(pObj, true)
+                SetEntityDistanceCullingRadius(pObj, 0.0)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
                 table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
@@ -787,6 +788,7 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
                     FreezeEntityPosition(pObj, true)
+                    SetEntityDistanceCullingRadius(pObj, 0.0)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))

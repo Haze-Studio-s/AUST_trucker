@@ -11,15 +11,15 @@ Config.Polarix = {
     Target = 'ox_target',
     Debug = false,
 
-    -- Props de Paletes Oficiais de Carga (DLC Carrier Cargo)
+    -- Props de Paletes Oficiais de Carga (Carrier Cargo Heist)
     PalletProps = {
-        'm24_1_prop_m24_1_carrier_cargo_04a',
+        'hei_prop_carrier_cargo_04b',
     },
     PalletModels = {
-        'm24_1_prop_m24_1_carrier_cargo_04a',
+        'hei_prop_carrier_cargo_04b',
     },
 
-    DefaultPalletModel = 'm24_1_prop_m24_1_carrier_cargo_04a',
+    DefaultPalletModel = 'hei_prop_carrier_cargo_04b',
     ContainerModel = 'prop_contr_03b_ld',
 
     PalletWeightKg = 1000,
@@ -75,7 +75,7 @@ Config.Polarix = {
 
     LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
     PalletProps = {
-        'm24_1_prop_m24_1_carrier_cargo_04a',
+        'hei_prop_carrier_cargo_04b',
     },
 
     TrailerSpawns = {
