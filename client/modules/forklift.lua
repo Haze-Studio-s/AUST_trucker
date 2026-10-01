@@ -201,20 +201,25 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º argumento = false)
+    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º argumento = false, 14º arg = false)
+    local trailerBone = GetEntityBoneIndexByName(targetTrailer, "chassis")
+    if trailerBone == -1 then trailerBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
+    if trailerBone == -1 then trailerBone = 0 end
+
     FreezeEntityPosition(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
-        palletEntity, targetTrailer, 0,
+        palletEntity, targetTrailer, trailerBone,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, 0.0,
-        false, false, false, false, 0, true
+        false, false, false, false, 2, false
     )
 
     -- Reforço de colisão com o mundo (Pós-Attach) & Persistência de Missão (Anti-LOD Drop)
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, true)

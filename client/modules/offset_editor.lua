@@ -93,7 +93,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         ghost, trailer, 0,
         CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z,
         0.0, 0.0, CurrentOffsets.heading,
-        false, false, false, false, 0, true
+        false, false, false, false, 2, false
     )
     CalibGhost = ghost
     IsCalibrating = true
@@ -166,7 +166,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                     CalibGhost, CalibTrailer, 0,
                     CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z,
                     0.0, 0.0, CurrentOffsets.heading,
-                    false, false, false, false, 0, true
+                    false, false, false, false, 2, false
                 )
             end
 
