@@ -240,7 +240,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida e colisão desativada
+    -- Matriz Sólida Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida e colisão seletiva
     FreezeEntityPosition(palletEntity, true)
     SetEntityDynamic(palletEntity, false)
     AttachEntityToEntity(
@@ -250,13 +250,15 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         false, false, false, false, 2, true
     )
 
-    -- Persistência de Missão (Anti-LOD Drop) e neutralização total de forças parasitas Havok
+    -- Colisão Sólida com Player/Mundo ativa a todo momento + Isolamento estrito do chassi do reboque
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, true)
     SetEntityDynamic(palletEntity, false)
-    SetEntityCollision(palletEntity, false, false)
-    SetCanClimbOnEntity(palletEntity, false)
+    SetEntityCollision(palletEntity, true, true)
+    SetCanClimbOnEntity(palletEntity, true)
+    SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
+    SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
 
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
