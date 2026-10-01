@@ -474,22 +474,6 @@ local function HandleStartDeliveryNUI(data, cb)
     isStartingDeliveryLock = true
     SetTimeout(5000, function() isStartingDeliveryLock = false end)
 
-    -- Opcional: Modal de Stacking Manual de Paletes (plt_lumberjack)
-    local isDry = (payload.cargoType == 'dry') or (not payload.cargoType and not payload.adrType and not payload.liquidType)
-    if isDry and Config.Stacking and Config.Stacking.Enabled then
-        local alert = lib.alertDialog({
-            header = 'Preparação de Carga no Pátio',
-            content = 'Deseja realizar a **Montagem Manual de Paletes (Stacking)** antes de carregar o trailer?\n\n- **Montar Manualmente:** Ganhe **+20% de Pagamento** e +150 XP de bônus!\n- **Pular Montagem:** Paletes gerados prontos no galpão.',
-            centered = true,
-            cancel = true,
-            labels = {
-                confirm = 'Sim (+20% Bônus)',
-                cancel = 'Pular (Paletes Prontos)'
-            }
-        })
-        payload.manualStacking = (alert == 'confirm')
-    end
-
     TriggerServerEvent('aurp_trucker:server:startDelivery', payload)
 
     if cb then cb('ok') end
@@ -2245,21 +2229,9 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             FreezeEntityPosition(container, true)
         end
 
-        -- 2. Inicialização sequencial e determinística com suporte a BUILDING_PALLETS
-        if payload and (payload.stage == 'BUILDING_PALLETS' or payload.manualStacking) then
-            CurrentStage = 'BUILDING_PALLETS'
-            SendMissionNotify('Central Logística', 'Carga manual contratada! Vá até o pátio de montagem e monte os paletes para garantir o bônus de +20%.', 'info')
-        else
-            StartMissionStep1(truck, trailer, forklift)
-        end
+        -- 2. Inicialização sequencial e determinística da missão
+        StartMissionStep1(truck, trailer, forklift)
     end)
-end)
-
--- Conclusão da sub-tarefa de montagem e transição natural para a Etapa 1
-RegisterNetEvent('aurp_trucker:client:palletsBuildingCompleted', function()
-    if CurrentStage == 'BUILDING_PALLETS' then
-        StartMissionStep1(JobEntities.truck, JobEntities.trailer, JobEntities.forklift)
-    end
 end)
 
 -- Sincronização dos Paletes e Garantia de Física Estática (Anti-Limbo)

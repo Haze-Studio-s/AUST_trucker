@@ -518,23 +518,4 @@ Config.TrailerSlots = {
     }
 }
 
--- =======================================================================
--- SISTEMA DE STACKING PALLET (plt_lumberjack -> AUST_trucker)
--- =======================================================================
-Config.Stacking = {
-    Enabled = true,
-    BonusRewardMultiplier = 0.20, -- +20% no pagamento final do frete
-    BonusXp = 150,               -- XP extra concedido pela montagem física
-    PiecesPerPallet = 4,         -- Quantidade de peças necessárias por palete
-    BasePalletModel = 'prop_biotech_pallet', -- Palete base vazio de madeira
-    StageProps = {
-        [1] = 'prop_boxpile_07d', -- 25% (1 peça)
-        [2] = 'prop_boxpile_07c', -- 50% (2 peças)
-        [3] = 'prop_boxpile_07b', -- 75% (3 peças)
-        [4] = 'hei_prop_carrier_cargo_04b' -- 100% Consolidado oficial (compatível com trailer slots)
-    },
-    ItemStockpileModel = 'prop_boxpile_07d',
-    CarryType = 'small_box', -- Referência no Config.CarryProps
-    ProgressDuration = 2500, -- Duração da animação de colocar peça (ms)
-    QuickStackDuration = 4000 -- Duração da esteira rápida (ms)
-}
+
