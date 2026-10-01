@@ -91,36 +91,7 @@ function AdminService.LoadAll()
         AdminService.Spawns = spawnMap
 
         -- 3. Carrega Offsets de Reboques Mapeados Visualmente
-        local offsets = MySQL.query.await('SELECT * FROM aust_trucker_trailer_offsets') or {}
-        local offsetMap = {}
-        for _, o in ipairs(offsets) do
-            local model = o.trailer_model
-            if not offsetMap[model] then
-                offsetMap[model] = { pallets = {}, forklift = nil }
-            end
-            if o.is_forklift == 1 then
-                offsetMap[model].forklift = vector3(o.offset_x, o.offset_y, o.offset_z)
-            else
-                offsetMap[model].pallets[o.slot_index] = vector3(o.offset_x, o.offset_y, o.offset_z)
-            end
-        end
-        AdminService.TrailerOffsets = offsetMap
-
-        -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots
-        if Config and Config.TrailerSlots then
-            for model, data in pairs(offsetMap) do
-                local hash = joaat(model)
-                if not Config.TrailerSlots[hash] then
-                    Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
-                end
-                for idx, vec in pairs(data.pallets) do
-                    Config.TrailerSlots[hash].pallets[idx] = vec
-                end
-                if data.forklift then
-                    Config.TrailerSlots[hash].forklift = data.forklift
-                end
-            end
-        end
+        local offsetMap = AdminService.ReloadTrailerOffsets()
 
         -- 4. Carrega NPCs Despachantes
         local npcs = MySQL.query.await('SELECT * FROM aust_trucker_npcs') or {}
@@ -139,10 +110,62 @@ function AdminService.LoadAll()
             AdminService.Economy[e.key_name] = tonumber(e.numeric_value)
         end
 
+        local totalTrailers = 0
+        for _ in pairs(offsetMap) do totalTrailers = totalTrailers + 1 end
+
         print(("^2[AUST_Trucker Admin] Dados administrativos carregados: %d Rotas, %d Spawns, %d Reboques Calibrados, %d NPCs.^7"):format(
-            #routes, #spawns, #offsets, #npcs
+            #routes, #spawns, totalTrailers, #npcs
         ))
     end)
+end
+
+function AdminService.ReloadTrailerOffsets()
+    local offsets = MySQL.query.await('SELECT * FROM aust_trucker_trailer_offsets') or {}
+    local offsetMap = {}
+    for _, o in ipairs(offsets) do
+        local model = o.trailer_model:lower()
+        if not offsetMap[model] then
+            offsetMap[model] = { pallets = {}, forklift = nil }
+        end
+        local vecData = {
+            x = tonumber(o.offset_x) or 0.0,
+            y = tonumber(o.offset_y) or 0.0,
+            z = tonumber(o.offset_z) or 0.0,
+            heading = tonumber(o.heading) or 0.0
+        }
+        if o.is_forklift == 1 then
+            offsetMap[model].forklift = vecData
+        else
+            offsetMap[model].pallets[tostring(o.slot_index)] = vecData
+            offsetMap[model].pallets[tonumber(o.slot_index)] = vecData
+        end
+    end
+    AdminService.TrailerOffsets = offsetMap
+
+    -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
+    if Config and Config.TrailerSlots then
+        for model, data in pairs(offsetMap) do
+            local hash = joaat(model)
+            if not Config.TrailerSlots[hash] then
+                Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
+            end
+            if not Config.TrailerSlots[model] then
+                Config.TrailerSlots[model] = { pallets = {}, forklift = nil }
+            end
+            for idx, vec in pairs(data.pallets) do
+                local v = vector3(vec.x, vec.y, vec.z)
+                Config.TrailerSlots[hash].pallets[tonumber(idx)] = v
+                Config.TrailerSlots[model].pallets[tonumber(idx)] = v
+            end
+            if data.forklift then
+                local v = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
+                Config.TrailerSlots[hash].forklift = v
+                Config.TrailerSlots[model].forklift = v
+            end
+        end
+    end
+
+    return offsetMap
 end
 
 MySQL.ready(function()
@@ -168,10 +191,15 @@ RegisterCommand('truckeradmin', function(source, args)
         return
     end
 
+    -- Consulta viva do banco para garantir que o menu sempre abra com dados frescos
+    local currentOffsets = AdminService.ReloadTrailerOffsets()
+
     local payload = {
+        customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
-        offsets = AdminService.TrailerOffsets,
+        trailerOffsets = currentOffsets,
+        offsets = currentOffsets,
         npcs = AdminService.NPCs,
         economy = AdminService.Economy,
         defaultProps = Config.PalletProps or { 'hei_prop_carrier_cargo_04b' },
@@ -182,10 +210,13 @@ end, false)
 
 lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     if not AdminService.IsPlayerAdmin(source) then return nil end
+    local currentOffsets = AdminService.ReloadTrailerOffsets()
     return {
+        customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
-        offsets = AdminService.TrailerOffsets,
+        trailerOffsets = currentOffsets,
+        offsets = currentOffsets,
         npcs = AdminService.NPCs,
         economy = AdminService.Economy,
         defaultProps = Config.PalletProps or { 'hei_prop_carrier_cargo_04b' },
@@ -304,32 +335,14 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
         trailerModel, slotIndex, ox, oy, oz, heading, isForklift
     })
 
-    -- Atualiza cache em memória
-    if not AdminService.TrailerOffsets[trailerModel] then
-        AdminService.TrailerOffsets[trailerModel] = { pallets = {}, forklift = nil }
-    end
-    if isForklift == 1 then
-        AdminService.TrailerOffsets[trailerModel].forklift = vector3(ox, oy, oz)
-    else
-        AdminService.TrailerOffsets[trailerModel].pallets[slotIndex] = vector3(ox, oy, oz)
-    end
+    -- Recarrega e normaliza dados frescos do banco
+    local updatedOffsets = AdminService.ReloadTrailerOffsets()
 
-    -- Atualiza Config.TrailerSlots do servidor
-    local hash = joaat(trailerModel)
-    if not Config.TrailerSlots[hash] then
-        Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
-    end
-    if isForklift == 1 then
-        Config.TrailerSlots[hash].forklift = vector3(ox, oy, oz)
-    else
-        Config.TrailerSlots[hash].pallets[slotIndex] = vector3(ox, oy, oz)
-    end
-
-    -- Notifica todos os clientes para sincronizar os novos offsets instantaneamente
-    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, vector3(ox, oy, oz), heading)
+    -- Notifica todos os clientes para sincronizar os novos offsets e atualizar a interface NUI
+    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, vector3(ox, oy, oz), heading, updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {
         title = 'Offset Calibrado',
-        description = ('Offset do %s (Slot %s) gravado no banco e ativo em tempo real!'):format(trailerModel, tostring(slotIndex)),
+        description = ('Offset do %s (%s) gravado no banco e ativo em tempo real!'):format(trailerModel, isForklift == 1 and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))),
         type = 'success'
     })
 end)

@@ -33,7 +33,13 @@
         minimizeAdminPanel();
         break;
       case 'admin_restore':
-        restoreAdminPanel();
+        restoreAdminPanel(item);
+        break;
+      case 'admin_update_offsets':
+        if (item.offsets) {
+          adminData.trailerOffsets = item.offsets;
+          renderOffsetsTab();
+        }
         break;
     }
   });
@@ -61,7 +67,14 @@
 
   function openAdminPanel(data) {
     if (data) {
-      adminData = data;
+      adminData = {
+        customRoutes: data.customRoutes || data.routes || {},
+        spawns: data.spawns || {},
+        trailerOffsets: data.trailerOffsets || data.offsets || {},
+        npcs: data.npcs || {},
+        economy: data.economy || {},
+        defaultProps: data.defaultProps || []
+      };
     }
     const panel = document.getElementById('admin-panel');
     if (panel) {
@@ -84,11 +97,42 @@
     }
   }
 
-  function restoreAdminPanel() {
+  function restoreAdminPanel(item) {
     const panel = document.getElementById('admin-panel');
     if (panel) {
       panel.style.display = 'flex';
     }
+
+    // UX: Avança automaticamente para o próximo slot sequencial (ex: Slot 1 -> Slot 2)
+    if (item && item.savedSlot && !item.isForklift) {
+      const nextSlot = parseInt(item.savedSlot) + 1;
+      const slotSelect = document.getElementById('offset-form-slot');
+      if (slotSelect) {
+        let exists = false;
+        for (let i = 0; i < slotSelect.options.length; i++) {
+          if (parseInt(slotSelect.options[i].value) === nextSlot) {
+            slotSelect.selectedIndex = i;
+            exists = true;
+            break;
+          }
+        }
+        if (!exists && nextSlot <= 12) {
+          const opt = document.createElement('option');
+          opt.value = nextSlot;
+          opt.textContent = `Slot ${nextSlot} (Extra)`;
+          slotSelect.appendChild(opt);
+          slotSelect.value = nextSlot;
+        }
+      }
+    }
+
+    if (item && item.trailerModel) {
+      const trailerInput = document.getElementById('offset-form-trailer');
+      if (trailerInput) trailerInput.value = item.trailerModel;
+    }
+
+    // Garante refresh imediato dos cards da aba de offsets
+    renderOffsetsTab();
   }
 
   // Troca de Abas
@@ -395,6 +439,22 @@
     } else {
       keys.forEach(model => {
         const item = offsets[model];
+        let palletCount = 0;
+        let slotsList = [];
+        if (item.pallets) {
+          const uniqueSlots = new Set();
+          Object.keys(item.pallets).forEach(k => {
+            const num = parseInt(k);
+            if (!isNaN(num)) uniqueSlots.add(num);
+          });
+          slotsList = Array.from(uniqueSlots).sort((a, b) => a - b);
+          palletCount = slotsList.length;
+        }
+
+        const forkliftInfo = item.forklift ?
+          `<span style="color:var(--admin-primary)">Mapeada (X: ${Number(item.forklift.x).toFixed(2)}, Y: ${Number(item.forklift.y).toFixed(2)}, Z: ${Number(item.forklift.z).toFixed(2)})</span>` :
+          '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>';
+
         const card = document.createElement('div');
         card.className = 'admin-card';
         card.innerHTML = `
@@ -403,8 +463,8 @@
             <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(model)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Usar Modelo</button>
           </div>
           <div style="font-size:12px; line-height: 1.6;">
-            <div><strong>Slots de Paletes Salvos:</strong> ${item.pallets ? Object.keys(item.pallets).length : 0} posições</div>
-            <div><strong>Empilhadeira Traseira:</strong> ${item.forklift ? `<span style="color:var(--admin-primary)">Mapeada (X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)})</span>` : 'Padrão'}</div>
+            <div><strong>Slots de Paletes Salvos:</strong> ${palletCount > 0 ? `<span style="color:var(--admin-primary); font-weight:600;">${palletCount} posições</span> (${slotsList.map(s => 'Slot ' + s).join(', ')})` : '<span style="color:var(--admin-text-muted)">Nenhum slot calibrado</span>'}</div>
+            <div><strong>Empilhadeira Traseira:</strong> ${forkliftInfo}</div>
           </div>
         `;
         listContainer.appendChild(card);

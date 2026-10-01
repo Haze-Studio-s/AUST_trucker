@@ -88,9 +88,16 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
     if trailer and DoesEntityExist(trailer) then
         local tModel = GetEntityModel(trailer)
         if Config and Config.TrailerSlots then
-            for modelName, slotData in pairs(Config.TrailerSlots) do
-                if joaat(modelName) == tModel and slotData.pallets then
-                    local off = slotData.pallets[slotIndex]
+            -- 1. Verificação direta por hash da entidade
+            if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].pallets then
+                local off = Config.TrailerSlots[tModel].pallets[slotIndex] or Config.TrailerSlots[tModel].pallets[tostring(slotIndex)]
+                if off then return off end
+            end
+            -- 2. Varredura flexível por nome de modelo (string) ou hash numérico
+            for modelKey, slotData in pairs(Config.TrailerSlots) do
+                local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
+                if keyHash == tModel and slotData.pallets then
+                    local off = slotData.pallets[slotIndex] or slotData.pallets[tostring(slotIndex)]
                     if off then return off end
                 end
             end
@@ -115,8 +122,14 @@ function ForkliftModule.GetForkliftSlotOffset(trailer)
     if trailer and DoesEntityExist(trailer) then
         local tModel = GetEntityModel(trailer)
         if Config and Config.TrailerSlots then
-            for modelName, slotData in pairs(Config.TrailerSlots) do
-                if joaat(modelName) == tModel and slotData.forklift then
+            -- 1. Verificação direta por hash
+            if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].forklift then
+                return Config.TrailerSlots[tModel].forklift
+            end
+            -- 2. Varredura flexível por nome ou hash
+            for modelKey, slotData in pairs(Config.TrailerSlots) do
+                local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
+                if keyHash == tModel and slotData.forklift then
                     return slotData.forklift
                 end
             end

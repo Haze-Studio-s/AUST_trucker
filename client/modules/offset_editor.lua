@@ -206,7 +206,12 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 })
 
                 OffsetEditor.StopCalibration(createdTrailer)
-                SendNUIMessage({ action = 'admin_restore' })
+                SendNUIMessage({
+                    action = 'admin_restore',
+                    savedSlot = CalibParams.slotIndex,
+                    isForklift = CalibParams.isForklift,
+                    trailerModel = CalibParams.trailerModel
+                })
                 SetNuiFocus(true, true)
                 break
             end
@@ -260,18 +265,34 @@ end
 -- SINCRONIZAÇÃO EM TEMPO REAL NO CLIENTE (HOT-RELOAD)
 -- ============================================================
 
-RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, slotIndex, isForklift, offsetVec, heading)
+RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, slotIndex, isForklift, offsetVec, heading, updatedOffsets)
     trailerModel = trailerModel:lower()
     local hash = joaat(trailerModel)
     if not Config.TrailerSlots[hash] then
         Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
     end
+    if not Config.TrailerSlots[trailerModel] then
+        Config.TrailerSlots[trailerModel] = { pallets = {}, forklift = nil }
+    end
     if isForklift then
         Config.TrailerSlots[hash].forklift = offsetVec
+        Config.TrailerSlots[trailerModel].forklift = offsetVec
     else
         Config.TrailerSlots[hash].pallets[slotIndex] = offsetVec
+        Config.TrailerSlots[trailerModel].pallets[slotIndex] = offsetVec
     end
-    print(("^2[AUST_Trucker Client] Offset do reboque %s (Slot %s) sincronizado em tempo real!^7"):format(trailerModel, tostring(slotIndex)))
+
+    -- Se o pacote completo do banco foi enviado, sincroniza e atualiza imediatamente a UI
+    if updatedOffsets then
+        SendNUIMessage({
+            action = 'admin_update_offsets',
+            offsets = updatedOffsets
+        })
+    end
+
+    print(("^2[AUST_Trucker Client] Offset do reboque %s (%s) sincronizado em tempo real!^7"):format(
+        trailerModel, isForklift and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))
+    ))
 end)
 
 RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
