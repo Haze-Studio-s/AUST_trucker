@@ -1232,14 +1232,19 @@
 							</p>
 							<div class="admin-grid-3">
 								<div class="admin-form-group">
-									<label>Modelo do Trailer</label>
-									<select id="offset-form-trailer" class="admin-select">
+									<label>Modelo do Trailer (Digite ou Escolha)</label>
+									<input type="text" id="offset-form-trailer" class="admin-input" list="trailer-models-list" placeholder="ex: trailers2 ou mod custom" value="trailers2">
+									<datalist id="trailer-models-list">
 										<option value="trailers2">trailers2 (Prancha Baixa / Flatbed)</option>
 										<option value="trailers">trailers (Baú Fechado)</option>
 										<option value="trailers3">trailers3 (Tanque / Líquidos)</option>
 										<option value="trailers4">trailers4 (Carreta Carga)</option>
 										<option value="tr2">tr2 (Reboque Pequeno)</option>
-									</select>
+										<option value="trflat">trflat (Trailer Prancha Curto)</option>
+										<option value="docktrailer">docktrailer (Trailer Portuário)</option>
+										<option value="freighttrailer">freighttrailer (Carreta de Trem / Pesada)</option>
+										<option value="armytrailer">armytrailer (Trailer Militar)</option>
+									</datalist>
 								</div>
 								<div class="admin-form-group">
 									<label>Slot Alvo</label>

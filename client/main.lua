@@ -66,6 +66,14 @@ local function GetForkliftDeckZ(trailer, forkEntity)
 end
 _G.GetForkliftDeckZ = GetForkliftDeckZ
 
+local function GetEntityRightVector(entity)
+    if not entity or not DoesEntityExist(entity) then return vector3(1.0, 0.0, 0.0) end
+    local origin = GetEntityCoords(entity)
+    local rightPoint = GetOffsetFromEntityInWorldCoords(entity, 1.0, 0.0, 0.0)
+    return rightPoint - origin
+end
+_G.GetEntityRightVector = GetEntityRightVector
+
 -- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
 -- =======================================================================

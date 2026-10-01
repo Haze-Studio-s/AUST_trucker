@@ -400,6 +400,7 @@
         card.innerHTML = `
           <div class="admin-card-header">
             <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(model.toUpperCase())}</strong></span>
+            <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(model)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Usar Modelo</button>
           </div>
           <div style="font-size:12px; line-height: 1.6;">
             <div><strong>Slots de Paletes Salvos:</strong> ${item.pallets ? Object.keys(item.pallets).length : 0} posições</div>
@@ -407,6 +408,17 @@
           </div>
         `;
         listContainer.appendChild(card);
+      });
+
+      listContainer.querySelectorAll('.btn-select-trailer').forEach(btn => {
+        btn.addEventListener('click', function () {
+          const m = this.getAttribute('data-model');
+          const input = document.getElementById('offset-form-trailer');
+          if (input) {
+            input.value = m;
+            input.focus();
+          }
+        });
       });
     }
   }
