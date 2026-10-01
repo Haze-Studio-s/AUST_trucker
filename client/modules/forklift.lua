@@ -240,8 +240,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz Sólida Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida e colisão seletiva
-    FreezeEntityPosition(palletEntity, true)
+    -- Matriz Sólida Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida
+    FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     AttachEntityToEntity(
         palletEntity, targetTrailer, 0,
@@ -250,10 +250,10 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         false, false, false, false, 2, true
     )
 
-    -- Colisão Sólida com Player/Mundo ativa a todo momento + Isolamento estrito do chassi do reboque
+    -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
-    FreezeEntityPosition(palletEntity, true)
+    FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
