@@ -254,6 +254,7 @@ _G.UpdateMissionObjective = UpdateMissionObjective
 
 local function CleanupCurrentJob()
     ClearObjectiveMarkers(false)
+    SendNUIMessage({ action = 'gmeter_hide' })
 
     if ForkliftModule and ForkliftModule.StopOperation then
         ForkliftModule.StopOperation()
@@ -987,101 +988,153 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
                 break
             end
 
-            -- Otimização Resmon: Dorme 1000ms caso o motorista esteja fora do caminhão da missão
+            -- Otimização Resmon: Dorme e esconde HUD caso o motorista esteja fora do caminhão da missão
             local currentVeh = cache.vehicle or GetVehiclePedIsIn(ped, false)
             if currentVeh ~= truck or GetPedInVehicleSeat(truck, -1) ~= ped then
-                Wait(1000)
+                SendNUIMessage({ action = 'gmeter_hide' })
+                Wait(800)
             else
-                Wait(150)
+                Wait(75)
 
-                local speed = GetEntitySpeed(truck) -- m/s
-                local steering = GetVehicleSteeringAngle(truck) -- graus
-                local now = GetGameTimer()
+                local targetList = LoadedPallets or LoadedPalletData or {}
+                local hasHighRisk = false
+                local anyRemaining = false
 
-                -- Curva brusca em velocidade: > 15 m/s (~54 km/h) e volante virado > 25 graus com debounce de 4 segundos
-                if speed > 15.0 and math.abs(steering) > 25.0 and (now - lastDropTime >= 4000) then
-                    local targetList = LoadedPallets or LoadedPalletData or {}
+                for _, pData in ipairs(targetList) do
+                    if pData.isSecured and not pData.lost and not pData.isFallen then
+                        anyRemaining = true
+                        if pData.riskLevel == 'high' or pData.riskLevel == 'medium' then
+                            hasHighRisk = true
+                        end
+                    end
+                end
 
-                    for _, pData in ipairs(targetList) do
-                        if pData.isSecured and (pData.riskLevel == 'high' or pData.riskLevel == 'medium') and not pData.lost and not pData.isFallen then
-                            -- Probabilidade de 50% por solavanco severo
-                            if math.random(1, 100) <= 50 then
-                                lastDropTime = now
-                                pData.lost = true
-                                pData.isFallen = true
+                -- Se não há mais carga presa ou se a viagem acabou, oculta o medidor
+                if not anyRemaining and (not ActiveJob or not ActiveJob.withForklift or not ForkliftLoadedOnTrailer or not ForkliftSecured) then
+                    SendNUIMessage({ action = 'gmeter_hide' })
+                else
+                    local speed = GetEntitySpeed(truck) -- m/s
+                    local speedKmh = speed * 3.6
+                    local steering = GetVehicleSteeringAngle(truck) -- [-40, 40]
+                    local now = GetGameTimer()
 
-                                local palletEnt = pData.entity
-                                if palletEnt and DoesEntityExist(palletEnt) then
-                                    -- Garante autoridade de rede sobre a entidade antes de alterar física
-                                    if NetworkGetEntityIsNetworked(palletEnt) then
-                                        NetworkRequestControlOfEntity(palletEnt)
-                                    end
+                    -- Sensibilidade baseada na amarração: frouxa (1.45x) vs perfeita (0.85x)
+                    local sensitivity = hasHighRisk and 1.45 or 0.85
+                    local rawForce = (steering / 28.0) * (speedKmh / 70.0) * sensitivity
+                    if rawForce > 1.0 then rawForce = 1.0 elseif rawForce < -1.0 then rawForce = -1.0 end
 
-                                    -- Transição de Física Híbrida: Desacopla mantendo inércia do conjunto
-                                    DetachEntity(palletEnt, true, true)
-                                    SetEntityCollision(palletEnt, true, true)
-                                    FreezeEntityPosition(palletEnt, false)
-                                    SetEntityDynamic(palletEnt, true)
-                                    ActivatePhysics(palletEnt)
-                                    SetEntityMass(palletEnt, 250.0)
+                    -- Converte força lateral em porcentagem (0 a 100, 50 = centro)
+                    local percent = math.floor(50.0 + (rawForce * 50.0))
+                    if percent < 2 then percent = 2 elseif percent > 98 then percent = 98 end
 
-                                    -- Cálculo de Velocidade e Dano Estrutural no Impacto
-                                    local isShattered = false
-                                    if speed > 16.6 then -- > 60 km/h: Destruição total por alta energia cinética
-                                        isShattered = true
-                                        pData.isBroken = true
-                                        PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                        SendMissionNotify('CARGA DESTRUÍDA!', 'A amarração cedeu em alta velocidade (>60 km/h). O palete se despedaçou!', 'error')
-                                    else -- <= 60 km/h: 60% chance de sobreviver intacto
-                                        local roll = math.random(1, 100)
-                                        if roll <= 60 then
-                                            pData.isBroken = false
-                                            pData.canRescue = true
-                                            PlaySoundFrontend(-1, "COLLISION_DEFAULT", "CAR_STEAL_2_SOUNDSET", true)
-                                            SendMissionNotify('PALETE CAÍDO!', 'Um palete caiu na pista, mas a carga resistiu intacta! Pode ser resgatado com a empilhadeira.', 'warning')
-                                        else
-                                            isShattered = true
-                                            pData.isBroken = true
-                                            PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                            SendMissionNotify('CARGA DESTRUÍDA!', 'O palete caiu da carreta e a mercadoria foi destruída no impacto.', 'error')
-                                        end
-                                    end
+                    local isCritical = (percent <= 15 or percent >= 85)
 
-                                    -- Atualiza integridade de carga no cliente (-20% por perda)
-                                    if ActiveJob then
-                                        ActiveJob.cargoHealth = math.max(0, (ActiveJob.cargoHealth or 100) - 20)
-                                    end
+                    -- Atualiza HUD de estabilidade em tempo real
+                    SendNUIMessage({
+                        action = 'gmeter_update',
+                        percent = percent,
+                        isCritical = isCritical,
+                        speed = speedKmh
+                    })
 
-                                    -- Sincroniza perda autoritativa com o servidor
-                                    local netId = NetworkGetNetworkIdFromEntity(palletEnt)
-                                    TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
+                    -- Gatilho de Física: rompimento ao cruzar faixa vermelha (>30 km/h) com debounce de 5s
+                    if isCritical and speedKmh > 30.0 and (now - lastDropTime >= 5000) then
+                        local candidatePallet = nil
 
-                                    -- Thread de estabilização do palete
-                                    CreateThread(function()
-                                        local settleTimeout = GetGameTimer() + 8000
-                                        while DoesEntityExist(palletEnt) and GetGameTimer() < settleTimeout do
-                                            Wait(500)
-                                            if GetEntitySpeed(palletEnt) < 0.2 then
-                                                break
-                                            end
-                                        end
-                                        if DoesEntityExist(palletEnt) then
-                                            FreezeEntityPosition(palletEnt, true)
-                                            if isShattered then
-                                                SetEntityAsNoLongerNeeded(palletEnt)
-                                            else
-                                                -- Se sobreviveu e tem empilhadeira na missão, adiciona na lista para recolhimento
-                                                if ActiveJob and ActiveJob.withForklift then
-                                                    ForkliftModule.SetMissionPallets({ palletEnt })
-                                                else
-                                                    SetEntityAsNoLongerNeeded(palletEnt)
-                                                end
-                                            end
-                                        end
-                                    end)
+                        -- 1. Prioridade para paletes com amarração frouxa
+                        for _, pData in ipairs(targetList) do
+                            if pData.isSecured and (pData.riskLevel == 'high' or pData.riskLevel == 'medium') and not pData.lost and not pData.isFallen then
+                                candidatePallet = pData
+                                break
+                            end
+                        end
+
+                        -- 2. Se amarração for perfeita, rompe apenas em curvas extremas (> 80 km/h)
+                        if not candidatePallet and speedKmh > 80.0 then
+                            for _, pData in ipairs(targetList) do
+                                if pData.isSecured and not pData.lost and not pData.isFallen then
+                                    candidatePallet = pData
+                                    break
+                                end
+                            end
+                        end
+
+                        if candidatePallet then
+                            lastDropTime = now
+                            candidatePallet.lost = true
+                            candidatePallet.isFallen = true
+
+                            local palletEnt = candidatePallet.entity
+                            if palletEnt and DoesEntityExist(palletEnt) then
+                                if NetworkGetEntityIsNetworked(palletEnt) then
+                                    NetworkRequestControlOfEntity(palletEnt)
                                 end
 
-                                break -- Ejeta no máximo UM palete por solavanco
+                                -- Transição de Física Híbrida: Desacopla mantendo inércia do conjunto
+                                DetachEntity(palletEnt, true, true)
+                                SetEntityCollision(palletEnt, true, true)
+                                FreezeEntityPosition(palletEnt, false)
+                                SetEntityDynamic(palletEnt, true)
+                                ActivatePhysics(palletEnt)
+                                SetEntityMass(palletEnt, 250.0)
+
+                                -- Aplica impulso centrífugo realista para lançar o palete fora da caçamba
+                                local rightVector = GetEntityRightVector(truck)
+                                local sign = (steering > 0) and 1.0 or -1.0
+                                local palletImpulse = rightVector * (sign * 6.5) + vector3(0.0, 0.0, 1.2)
+                                ApplyForceToEntityCenterOfMass(palletEnt, 1, palletImpulse.x, palletImpulse.y, palletImpulse.z, false, false, true, false)
+
+                                -- Efeito de impacto no HUD
+                                SendNUIMessage({ action = 'gmeter_drop' })
+
+                                -- Cálculo de Velocidade e Dano Estrutural no Impacto
+                                local isShattered = false
+                                if speed > 16.6 then -- > 60 km/h
+                                    isShattered = true
+                                    candidatePallet.isBroken = true
+                                    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                    SendMissionNotify('CARGA DESTRUÍDA!', 'A amarração cedeu no limite da curva! O palete se despedaçou na pista.', 'error')
+                                else
+                                    local roll = math.random(1, 100)
+                                    if roll <= 60 then
+                                        candidatePallet.isBroken = false
+                                        candidatePallet.canRescue = true
+                                        PlaySoundFrontend(-1, "COLLISION_DEFAULT", "CAR_STEAL_2_SOUNDSET", true)
+                                        SendMissionNotify('PALETE CAÍDO!', 'Um palete caiu na pista, mas resistiu intacto! Pode ser resgatado com a empilhadeira.', 'warning')
+                                    else
+                                        isShattered = true
+                                        candidatePallet.isBroken = true
+                                        PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                        SendMissionNotify('CARGA DESTRUÍDA!', 'O palete caiu da carreta e a mercadoria foi destruída no impacto.', 'error')
+                                    end
+                                end
+
+                                if ActiveJob then
+                                    ActiveJob.cargoHealth = math.max(0, (ActiveJob.cargoHealth or 100) - 20)
+                                end
+
+                                local netId = NetworkGetNetworkIdFromEntity(palletEnt)
+                                TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
+
+                                CreateThread(function()
+                                    local settleTimeout = GetGameTimer() + 8000
+                                    while DoesEntityExist(palletEnt) and GetGameTimer() < settleTimeout do
+                                        Wait(500)
+                                        if GetEntitySpeed(palletEnt) < 0.2 then break end
+                                    end
+                                    if DoesEntityExist(palletEnt) then
+                                        FreezeEntityPosition(palletEnt, true)
+                                        if isShattered then
+                                            SetEntityAsNoLongerNeeded(palletEnt)
+                                        else
+                                            if ActiveJob and ActiveJob.withForklift then
+                                                ForkliftModule.SetMissionPallets({ palletEnt })
+                                            else
+                                                SetEntityAsNoLongerNeeded(palletEnt)
+                                            end
+                                        end
+                                    end
+                                end)
                             end
                         end
                     end
@@ -1181,6 +1234,7 @@ local function SetupDeliveryDestination(deliveryCoords, jobId)
 
                 lib.hideTextUI()
                 CurrentStage = 'STEP_9_DELIVERY'
+                SendNUIMessage({ action = 'gmeter_hide' })
 
                 local ok = lib.progressCircle({
                     duration = 6000,

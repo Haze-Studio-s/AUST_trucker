@@ -750,6 +750,156 @@
 		  .pt-header { display: flex; align-items: center; gap: 8px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; font-size: 13px; }
 		  #pt-list { list-style: none; padding: 0; margin: 0; }
 		  #pt-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; }
+
+		  /* --- G-METER HUD (ESTABILIDADE DA CARGA) --- */
+		  #g-meter-hud {
+		    display: none;
+		    position: fixed;
+		    bottom: 40px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 290px;
+		    z-index: 99998;
+		    background: rgba(15, 23, 42, 0.90);
+		    backdrop-filter: blur(8px);
+		    -webkit-backdrop-filter: blur(8px);
+		    border-radius: 12px;
+		    border: 1px solid rgba(16, 185, 129, 0.4);
+		    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65), 0 0 15px rgba(16, 185, 129, 0.15);
+		    padding: 10px 14px;
+		    font-family: 'Montserrat', 'Inter', sans-serif;
+		    color: #fff;
+		    user-select: none;
+		    pointer-events: none;
+		    flex-direction: column;
+		    gap: 6px;
+		    transition: border-color 0.2s, box-shadow 0.2s;
+		  }
+		  #g-meter-hud.gm-critical {
+		    border-color: #ef4444 !important;
+		    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.3) !important;
+		    animation: gmPulse 0.4s infinite alternate;
+		  }
+		  #g-meter-hud.gm-shake {
+		    animation: gmShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+		  }
+		  @keyframes gmPulse {
+		    from { transform: translateX(-50%) scale(1); }
+		    to { transform: translateX(-50%) scale(1.03); }
+		  }
+		  @keyframes gmShake {
+		    10%, 90% { transform: translateX(-52%); }
+		    20%, 80% { transform: translateX(-48%); }
+		    30%, 50%, 70% { transform: translateX(-53%); }
+		    40%, 60% { transform: translateX(-47%); }
+		  }
+		  .gm-header {
+		    display: flex;
+		    justify-content: space-between;
+		    align-items: center;
+		    font-size: 11px;
+		    letter-spacing: 0.5px;
+		    font-weight: 700;
+		  }
+		  .gm-title {
+		    display: flex;
+		    align-items: center;
+		    gap: 6px;
+		    color: #94a3b8;
+		  }
+		  .gm-title i {
+		    color: #10b981;
+		    font-size: 12px;
+		  }
+		  .gm-status {
+		    font-size: 10px;
+		    font-weight: 800;
+		    padding: 2px 6px;
+		    border-radius: 4px;
+		    background: rgba(16, 185, 129, 0.2);
+		    color: #10b981;
+		    text-transform: uppercase;
+		  }
+		  .gm-status.warning {
+		    background: rgba(245, 158, 11, 0.2);
+		    color: #f59e0b;
+		  }
+		  .gm-status.danger {
+		    background: rgba(239, 68, 68, 0.3);
+		    color: #ef4444;
+		  }
+		  .gm-track-container {
+		    position: relative;
+		    width: 100%;
+		    height: 12px;
+		    background: rgba(255, 255, 255, 0.08);
+		    border-radius: 6px;
+		    border: 1px solid rgba(255, 255, 255, 0.12);
+		    overflow: visible;
+		  }
+		  .gm-limit-line {
+		    position: absolute;
+		    top: -2px;
+		    bottom: -2px;
+		    width: 2px;
+		    background: #ef4444;
+		    box-shadow: 0 0 6px #ef4444;
+		    z-index: 2;
+		  }
+		  .gm-limit-line.left { left: 15%; }
+		  .gm-limit-line.right { right: 15%; }
+		  .gm-danger-area {
+		    position: absolute;
+		    top: 0;
+		    bottom: 0;
+		    width: 15%;
+		    background: rgba(239, 68, 68, 0.25);
+		  }
+		  .gm-danger-area.left { left: 0; border-radius: 6px 0 0 6px; }
+		  .gm-danger-area.right { right: 0; border-radius: 0 6px 6px 0; }
+		  .gm-center-notch {
+		    position: absolute;
+		    top: 1px;
+		    bottom: 1px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 2px;
+		    background: rgba(255, 255, 255, 0.35);
+		    z-index: 2;
+		  }
+		  .gm-indicator {
+		    position: absolute;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    width: 16px;
+		    height: 16px;
+		    border-radius: 50%;
+		    background: #10b981;
+		    border: 2px solid #ffffff;
+		    box-shadow: 0 0 10px rgba(16, 185, 129, 0.9);
+		    z-index: 5;
+		    transition: left 0.08s ease-out, background-color 0.15s, box-shadow 0.15s;
+		  }
+		  .gm-indicator.warning {
+		    background: #f59e0b;
+		    box-shadow: 0 0 12px rgba(245, 158, 11, 0.95);
+		  }
+		  .gm-indicator.danger {
+		    background: #ef4444;
+		    box-shadow: 0 0 16px rgba(239, 68, 68, 1);
+		  }
+		  .gm-labels {
+		    display: flex;
+		    justify-content: space-between;
+		    font-size: 9px;
+		    font-weight: 600;
+		    color: #64748b;
+		    margin-top: 1px;
+		  }
+		  .gm-labels .gm-danger-label {
+		    color: #ef4444;
+		  }
 		</style>
 		<div id="parcel-tracker" role="complementary" aria-label="Tracker de Entregas">
 		  <div class="pt-header">
@@ -757,6 +907,30 @@
 		    <span id="pt-route-label">Rota de Entrega</span>
 		  </div>
 		  <ul id="pt-list"></ul>
+		</div>
+
+		<!-- G-METER HUD: ESTABILIDADE DA CARGA -->
+		<div id="g-meter-hud" role="complementary" aria-label="Estabilidade da Carga">
+		  <div class="gm-header">
+		    <div class="gm-title">
+		      <i class="fas fa-truck-ramp-box"></i>
+		      <span>ESTABILIDADE DA CARGA</span>
+		    </div>
+		    <div class="gm-status" id="gm-status-label">ESTÁVEL</div>
+		  </div>
+		  <div class="gm-track-container">
+		    <div class="gm-danger-area left"></div>
+		    <div class="gm-danger-area right"></div>
+		    <div class="gm-limit-line left"></div>
+		    <div class="gm-limit-line right"></div>
+		    <div class="gm-center-notch"></div>
+		    <div class="gm-indicator" id="gm-indicator-dot"></div>
+		  </div>
+		  <div class="gm-labels">
+		    <span class="gm-danger-label">15% LIMITE</span>
+		    <span>CENTRO</span>
+		    <span class="gm-danger-label">85% LIMITE</span>
+		  </div>
 		</div>
 
 		<script>
@@ -770,6 +944,42 @@
 		      if (list) list.innerHTML = '';
 		    } else if (d.action === 'parcel_close') {
 		      if (tracker) tracker.style.display = 'none';
+		    }
+
+		    // G-METER HUD HANDLERS
+		    var gMeter = document.getElementById('g-meter-hud');
+		    var gDot = document.getElementById('gm-indicator-dot');
+		    var gStatus = document.getElementById('gm-status-label');
+
+		    if (d.action === 'gmeter_show') {
+		      if (gMeter) gMeter.style.display = 'flex';
+		    } else if (d.action === 'gmeter_hide') {
+		      if (gMeter) gMeter.style.display = 'none';
+		    } else if (d.action === 'gmeter_update') {
+		      if (gMeter && gDot) {
+		        if (gMeter.style.display !== 'flex') gMeter.style.display = 'flex';
+		        var pct = typeof d.percent === 'number' ? d.percent : 50;
+		        gDot.style.left = pct + '%';
+		        if (pct <= 15 || pct >= 85) {
+		          gDot.className = 'gm-indicator danger';
+		          gMeter.className = 'gm-critical';
+		          if (gStatus) { gStatus.innerText = 'CRÍTICO'; gStatus.className = 'gm-status danger'; }
+		        } else if (pct <= 28 || pct >= 72) {
+		          gDot.className = 'gm-indicator warning';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ALERTA'; gStatus.className = 'gm-status warning'; }
+		        } else {
+		          gDot.className = 'gm-indicator';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ESTÁVEL'; gStatus.className = 'gm-status'; }
+		        }
+		      }
+		    } else if (d.action === 'gmeter_drop') {
+		      if (gMeter) {
+		        gMeter.classList.remove('gm-shake');
+		        void gMeter.offsetWidth;
+		        gMeter.classList.add('gm-shake');
+		      }
 		    }
 		  });
 		</script>
