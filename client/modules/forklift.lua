@@ -195,12 +195,22 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local pRot = GetEntityRotation(palletEntity, 2)
                                 local relHeading = pRot.z - tRot.z
 
-                                -- Estiva manual: Fixação exata na posição onde o jogador soltou sobre o assoalho
+                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp):
+                                -- O jogador define livremente X e Y, mas o Z é cravado na prancha de metal
+                                local trailerModel = GetEntityModel(trailer)
+                                local deckHeights = _G.TrailerDeckHeights or {
+                                    [joaat('freighttrailer')] = 1.2,
+                                    [joaat('armytrailer')]    = 1.15,
+                                    [joaat('trflat')]         = 1.1,
+                                    [joaat('docktrailer')]    = 1.1,
+                                }
+                                local fixedZ = deckHeights[trailerModel] or 1.1
+
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
-                                    relPos.x, relPos.y, relPos.z,
+                                    relPos.x, relPos.y, fixedZ,
                                     0.0, 0.0, relHeading,
-                                    false, false, true, false, 2, true
+                                    false, false, false, false, 2, true
                                 )
                                 SetEntityCollision(palletEntity, true, true)
                                 SetEntityNoCollisionEntity(palletEntity, trailer, true)

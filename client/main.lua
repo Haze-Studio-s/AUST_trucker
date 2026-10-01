@@ -42,6 +42,24 @@ local ForkliftSecured = false
 local ForkliftRiskLevel = 0
 
 -- =======================================================================
+-- DICIONÁRIO DE ALTURAS DO DECK DA CARRETA (Z-AXIS CLAMP)
+-- Mapeamento autoritativo da altura exata da prancha de metal para evitar
+-- imperfeições de colisão e o bug de paletes flutuando no ar.
+-- =======================================================================
+local TrailerDeckHeights = {
+    [joaat('freighttrailer')] = 1.2,  -- Carreta de carga pesada
+    [joaat('armytrailer')]    = 1.15, -- Carreta militar plana
+    [joaat('trflat')]         = 1.1,  -- Prancha baixa padrão
+    [joaat('docktrailer')]    = 1.1,  -- Carreta dos docks / flatbed
+    [joaat('trailers')]       = 1.1,  -- Carreta baú / prancha industrial
+    [joaat('trailers2')]      = 1.1,  -- Carreta refrigerada
+    [joaat('trailers3')]      = 1.1,  -- Carreta de materiais
+    [joaat('trailers4')]      = 1.1,  -- Carreta especial
+    [joaat('trailerlogs')]    = 1.1,  -- Carreta florestal
+}
+_G.TrailerDeckHeights = TrailerDeckHeights
+
+-- =======================================================================
 -- 5. SISTEMA DE NOTIFICAÇÃO ESTILO LATION COM EFEITO SONORO
 -- =======================================================================
 
@@ -519,6 +537,38 @@ local function ExecutePalletTie(index)
         ActiveStrappingZoneId = nil
     end
 
+    local palletEnt = palletData.entity
+    local trailer = JobEntities.trailer
+
+    -- CORREÇÃO 1: TRAVA DO EIXO Z (Z-AXIS CLAMP) PARA PALETES
+    -- O cálculo de GetOffsetFromEntityGivenWorldCoords captura imperfeições de colisão,
+    -- resultando num eixo Z muito alto (palete flutuando no ar).
+    -- Mantemos as coordenadas X e Y originais definidas pelo jogador e cravamos o Z na prancha.
+    if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
+        local pCoords = GetEntityCoords(palletEnt)
+        local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+        local fixedZ = TrailerDeckHeights[GetEntityModel(trailer)] or 1.1
+        local finalOffset = vector3(rawOffset.x, rawOffset.y, fixedZ)
+
+        local tRot = GetEntityRotation(trailer, 2)
+        local pRot = GetEntityRotation(palletEnt, 2)
+        local relHeading = pRot.z - tRot.z
+
+        NetworkRequestControlOfEntity(palletEnt)
+        DetachEntity(palletEnt, true, true)
+        -- useSoftPinning = false (9º param), collision = false (10º param) para evitar conflitos de colisão
+        AttachEntityToEntity(
+            palletEnt, trailer, 0,
+            finalOffset.x, finalOffset.y, finalOffset.z,
+            0.0, 0.0, relHeading,
+            false, false, false, false, 2, true
+        )
+        SetEntityCollision(palletEnt, true, true)
+        SetEntityNoCollisionEntity(palletEnt, trailer, true)
+        SetEntityNoCollisionEntity(trailer, palletEnt, true)
+        FreezeEntityPosition(palletEnt, true)
+    end
+
     -- Minigame de perícia
     local success = lib.skillCheck({'easy', 'medium', 'medium'}, {'w', 'a', 's', 'd'})
 
@@ -552,11 +602,35 @@ local function ExecutePalletTie(index)
     SetupNextPalletTarget()
 end
 
--- Helper de amarração da empilhadeira embarcada
-local function ExecuteForkliftTie()
+-- CORREÇÃO 2: REVISÃO DO GATILHO DA EMPILHADEIRA (FORKLIFT TIE-DOWN)
+-- Removemos verificações rígidas de toque físico (IsEntityTouchingEntity quebrada por suspensões).
+-- Valida proximidade (< 15.0m) e aplica AttachEntityToEntity na extremidade traseira do trailer.
+local function ExecuteForkliftTie(forkEntity)
     if ActiveStrappingZoneId then
         pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
         ActiveStrappingZoneId = nil
+    end
+
+    local fork = forkEntity or JobEntities.forklift
+    local trailer = JobEntities.trailer
+
+    if not fork or not DoesEntityExist(fork) or not trailer or not DoesEntityExist(trailer) then
+        hasRopes = false
+        HasRopes = false
+        ClearObjectiveMarkers(false)
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        return
+    end
+
+    -- 1. Obtenha as coordenadas do trailer e da empilhadeira
+    local trailerCoords = GetEntityCoords(trailer)
+    local forkCoords = GetEntityCoords(fork)
+
+    -- 2. Verifique a distância (< 15.0 unidades)
+    local dist = #(trailerCoords - forkCoords)
+    if dist > 15.0 then
+        SendMissionNotify('Atenção', 'A empilhadeira deve estar na traseira da carreta (até 15m) para travar.', 'error')
+        return
     end
 
     local success = lib.skillCheck({'medium', 'hard'}, {'w', 'a', 's', 'd'})
@@ -573,6 +647,26 @@ local function ExecuteForkliftTie()
             flag = 49
         }
     })
+
+    -- 3. Aplique o AttachEntityToEntity na extremidade traseira com Z cravado (ignora No-Snap)
+    NetworkRequestControlOfEntity(fork)
+    local fixedZ = TrailerDeckHeights[GetEntityModel(trailer)] or 1.1
+    local forkZ = fixedZ - 0.75
+
+    DetachEntity(fork, true, true)
+    -- useSoftPinning = false (9º), collision = false (10º) para evitar capotamentos
+    AttachEntityToEntity(
+        fork, trailer, 0,
+        0.0, -5.5, forkZ,
+        0.0, 0.0, 0.0,
+        false, false, false, false, 2, true
+    )
+    SetEntityCollision(fork, true, true)
+    SetEntityNoCollisionEntity(fork, trailer, true)
+    SetEntityNoCollisionEntity(trailer, fork, true)
+    FreezeEntityPosition(fork, true)
+
+    ForkliftLoadedOnTrailer = true
 
     if success then
         ForkliftSecured = true
@@ -610,29 +704,31 @@ local function SetupForkliftTieTarget()
 
     local fCoords = GetEntityCoords(fork)
     UpdateMissionObjective('forklift', fCoords, 'Travar Empilhadeira na Carreta')
-
-    ActiveStrappingZoneId = exports.ox_target:addSphereZone({
-        coords = fCoords,
-        radius = 2.5,
-        debug = false,
-        options = {
-            {
-                name = 'aust_tie_forklift',
-                icon = 'fas fa-link',
-                label = 'Travar Empilhadeira com Correntes',
-                distance = 3.5,
-                canInteract = function()
-                    return (hasRopes or HasRopes) and not ForkliftSecured and not IsPedInAnyVehicle(cache.ped, false)
-                end,
-                onSelect = function()
-                    ExecuteForkliftTie()
-                end
-            }
-        }
-    })
-
-    SendMissionNotify('Central Logística', 'Agora amarre a empilhadeira embarcada na traseira da carreta.', 'info')
+    SendMissionNotify('Central Logística', 'Agora amarre a empilhadeira na traseira da carreta.', 'info')
 end
+
+-- ox_target diretamente configurado para o modelo hash da empilhadeira
+exports.ox_target:addModel({ joaat('forklift'), 'forklift' }, {
+    {
+        name = 'aust_tie_forklift_model',
+        icon = 'fas fa-link',
+        label = 'Travar Empilhadeira com Correntes',
+        distance = 3.5,
+        canInteract = function(entity)
+            if not ActiveJob or not ActiveJob.withForklift or ForkliftSecured then return false end
+            if not (hasRopes or HasRopes) then return false end
+            if IsPedInAnyVehicle(cache.ped, false) then return false end
+            local trailer = JobEntities.trailer
+            if not trailer or not DoesEntityExist(trailer) then return false end
+            local forkCoords = GetEntityCoords(entity)
+            local trailerCoords = GetEntityCoords(trailer)
+            return #(trailerCoords - forkCoords) < 15.0
+        end,
+        onSelect = function(data)
+            ExecuteForkliftTie(data and data.entity)
+        end
+    }
+})
 
 function SetupNextPalletTarget()
     -- Garante que qualquer zona ativa anterior seja destruída
@@ -643,7 +739,7 @@ function SetupNextPalletTarget()
 
     -- 1. Se completou todos os paletes
     if currentTieIndex > #LoadedPallets then
-        if ActiveJob and ActiveJob.withForklift and ForkliftLoadedOnTrailer and not ForkliftSecured then
+        if ActiveJob and ActiveJob.withForklift and not ForkliftSecured then
             SetupForkliftTieTarget()
             return
         end
