@@ -2052,3 +2052,80 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
 end)
 
+-- =======================================================================
+-- MÓDULO ADMINISTRATIVO (ADMIN MENU & ROTAS DINÂMICAS)
+-- =======================================================================
+
+RegisterNetEvent('aurp_trucker:client:openAdminPanel', function(payload)
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action = 'admin_open',
+        data = payload
+    })
+end)
+
+RegisterNUICallback('adminClose', function(data, cb)
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'admin_close' })
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminCaptureCoords', function(data, cb)
+    local coords = OffsetEditor.CaptureCurrentCoords()
+    if cb then cb({ ok = true, coords = coords }) end
+end)
+
+RegisterNUICallback('adminStartOffsetCalibration', function(data, cb)
+    if data and data.trailerModel then
+        OffsetEditor.StartCalibration(data.trailerModel, data.slotIndex or 1, data.isForklift or false, data.propModel)
+    end
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminSaveRoute', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveRoute', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminDeleteRoute', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteRoute', data and data.id)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminSaveSpawn', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveSpawn', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminDeleteSpawn', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteSpawn', data and data.id)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminSaveNPC', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveNPC', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminDeleteNPC', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteNPC', data and data.id)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminSaveEconomy', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveEconomy', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminTeleport', function(data, cb)
+    if data and data.coords then
+        local ped = cache.ped or PlayerPedId()
+        SetEntityCoords(ped, data.coords.x, data.coords.y, data.coords.z, false, false, false, false)
+        if data.coords.heading or data.coords.w then
+            SetEntityHeading(ped, data.coords.heading or data.coords.w)
+        end
+    end
+    if cb then cb('ok') end
+end)
+
+

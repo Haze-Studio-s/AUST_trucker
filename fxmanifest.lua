@@ -53,6 +53,7 @@ server_scripts {
     'server/crude_oil.lua',
     'server/services/parcel_service.lua',  -- v19/v20: Parcel Delivery (antes de exports — ParcelService global)
     'server/services/truck_rental_service.lua', -- Sistema de Aluguel e Caução de Caminhões
+    'server/services/admin_service.lua',       -- Painel Administrativo e Gestão de Rotas Dinâmicas
     'server/exports.lua',
     'server/exports_shop.lua',   -- v16: exports estoque lojas
     'server/callbacks.lua',
@@ -64,6 +65,7 @@ client_scripts {
     'client/modules/reach_stacker.lua',
     'client/modules/adr_hazard.lua',
     'client/modules/car_carrier.lua',
+    'client/modules/offset_editor.lua',        -- Módulo de Calibração Visual 3D e Gestão de Spawns
     'client/zones.lua',
     'client/cargo_dry.lua',
     'client/cargo_liquid.lua',

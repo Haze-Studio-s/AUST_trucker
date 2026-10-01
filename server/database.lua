@@ -409,6 +409,72 @@ local TABLES = {
         `deliveries` INT(11) NOT NULL DEFAULT 0,
         PRIMARY KEY (`citizenid`) USING BTREE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci]],
+
+    -- Módulo Administrativo: Rotas e Contratos Dinâmicos
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_custom_routes` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `type` ENUM('quick', 'freight', 'adr', 'heavy', 'carrier') NOT NULL DEFAULT 'quick',
+        `cargo_model` VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b',
+        `cargo_name` VARCHAR(100) NOT NULL DEFAULT 'Carga Padrão',
+        `truck_model` VARCHAR(50) NOT NULL DEFAULT 'hauler',
+        `trailer_model` VARCHAR(50) NOT NULL DEFAULT 'trailers2',
+        `base_payment` INT NOT NULL DEFAULT 5000,
+        `base_xp` INT NOT NULL DEFAULT 200,
+        `req_skill` INT NOT NULL DEFAULT 0,
+        `fragile` TINYINT(1) NOT NULL DEFAULT 0,
+        `valuable` TINYINT(1) NOT NULL DEFAULT 0,
+        `pickup_coords` JSON NOT NULL,
+        `delivery_coords` JSON NOT NULL,
+        `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Spawns e Baías Dinâmicas
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_spawns` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `spawn_type` ENUM('truck', 'trailer', 'forklift', 'handler', 'loading_bay', 'delivery') NOT NULL,
+        `coords` JSON NOT NULL,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Offsets de Slots de Trailer Mapeados Visualmente
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_trailer_offsets` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `trailer_model` VARCHAR(50) NOT NULL,
+        `slot_index` INT NOT NULL,
+        `offset_x` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_y` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_z` FLOAT NOT NULL DEFAULT 0.0,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `is_forklift` TINYINT(1) NOT NULL DEFAULT 0,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_trailer_slot` (`trailer_model`, `slot_index`, `is_forklift`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: NPCs Despachantes Dinâmicos
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_npcs` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `model` VARCHAR(50) NOT NULL DEFAULT 's_m_m_dockwork_01',
+        `coords` JSON NOT NULL,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `blip_sprite` INT NOT NULL DEFAULT 477,
+        `blip_color` INT NOT NULL DEFAULT 2,
+        `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Configurações de Economia e Multiplicadores
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_economy_settings` (
+        `key_name` VARCHAR(50) PRIMARY KEY,
+        `numeric_value` FLOAT NOT NULL,
+        `description` VARCHAR(255) NULL,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 }
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)

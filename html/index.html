@@ -37,6 +37,7 @@
 		<link rel="stylesheet" href="css/style.css">
 		<link id="css-light" rel="stylesheet" href="css/light-style.css" disabled>
 		<link id="css-dark" rel="stylesheet" href="css/dark-style.css">
+		<link rel="stylesheet" href="css/admin.css">
 
 		<!-- Font Awesome 6 -->
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" />
@@ -981,6 +982,418 @@
 		    }
 		  });
 		</script>
+		<!-- ========================================== -->
+		<!-- PAINEL ADMINISTRATIVO: GESTÃO DINÂMICA      -->
+		<!-- ========================================== -->
+		<div id="admin-panel">
+			<!-- Header -->
+			<div class="admin-header">
+				<div class="admin-header-title">
+					<i class="fas fa-truck-monster"></i>
+					<h4>PAINEL ADMINISTRATIVO • GESTÃO DINÂMICA</h4>
+					<span>Admin V2.5</span>
+				</div>
+				<button class="admin-close-btn" title="Fechar (ESC)"><i class="fas fa-times"></i></button>
+			</div>
+
+			<!-- Body -->
+			<div class="admin-body">
+				<!-- Sidebar de Abas -->
+				<div class="admin-sidebar">
+					<button class="admin-tab-btn active" data-tab="routes">
+						<i class="fas fa-route"></i> Contratos & Rotas
+					</button>
+					<button class="admin-tab-btn" data-tab="spawns">
+						<i class="fas fa-map-marker-alt"></i> Spawns Dinâmicos
+					</button>
+					<button class="admin-tab-btn" data-tab="props">
+						<i class="fas fa-boxes"></i> Cargas & Props
+					</button>
+					<button class="admin-tab-btn" data-tab="offsets">
+						<i class="fas fa-truck-loading"></i> Offsets Trailer 3D
+					</button>
+					<button class="admin-tab-btn" data-tab="economy">
+						<i class="fas fa-chart-line"></i> Economia & XP
+					</button>
+					<button class="admin-tab-btn" data-tab="npcs">
+						<i class="fas fa-user-tie"></i> NPCs Despachantes
+					</button>
+				</div>
+
+				<!-- Área de Conteúdo -->
+				<div class="admin-content">
+					<!-- ABA 1: ROTAS & CONTRATOS -->
+					<div id="admin-tab-routes" class="admin-tab-pane active">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-list-ul"></i> Rotas e Contratos Dinâmicos Ativos</span>
+							</div>
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID Rota</th>
+											<th>Título da Carga</th>
+											<th>Tipo</th>
+											<th>Recompensa</th>
+											<th>Distância / Nível</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-routes-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus-circle"></i> Criar ou Editar Rota Dinâmica</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único (ID)</label>
+									<input type="text" id="route-form-id" class="admin-input" placeholder="ex: rota_paleto_oil">
+								</div>
+								<div class="admin-form-group">
+									<label>Título / Descrição da Carga</label>
+									<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
+								</div>
+								<div class="admin-form-group">
+									<label>Tipo de Contrato</label>
+									<select id="route-form-type" class="admin-select">
+										<option value="freight">Trabalho de Frete (Veículo Próprio)</option>
+										<option value="quick">Trabalho Rápido (Caminhão da Empresa)</option>
+										<option value="adr">Carga Perigosa ADR (Certificação)</option>
+										<option value="heavy">Carga Pesada / Maquinário</option>
+										<option value="carrier">Cegonha / Transporte de Veículos</option>
+									</select>
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo 3D da Carga (Prop)</label>
+									<input type="text" id="route-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+								<div class="admin-form-group">
+									<label>Pagamento Base (R$)</label>
+									<input type="number" id="route-form-payment" class="admin-input" value="2500">
+								</div>
+								<div class="admin-form-group">
+									<label>Recompensa de XP</label>
+									<input type="number" id="route-form-xp" class="admin-input" value="150">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Distância Estimada (KM)</label>
+									<input type="number" step="0.1" id="route-form-distance" class="admin-input" value="6.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Nível Mínimo Requerido</label>
+									<input type="number" id="route-form-level" class="admin-input" value="1">
+								</div>
+							</div>
+
+							<div class="admin-grid-2" style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Coleta (X, Y, Z)</label>
+										<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-pickup-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-pickup-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-pickup-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Entrega (X, Y, Z)</label>
+										<button id="btn-cap-deliv" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-deliv-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-deliv-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-deliv-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+							</div>
+
+							<div style="display: flex; justify-content: space-between; align-items: center;">
+								<div style="display:flex; gap: 20px;">
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-forklift"> Incluir Empilhadeira no Trailer
+									</label>
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-adr"> Exigir Licença ADR
+									</label>
+								</div>
+								<button id="btn-save-route" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar Rota em Tempo Real</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 2: SPAWNS DINÂMICOS -->
+					<div id="admin-tab-spawns" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-map-marked-alt"></i> Spawns de Veículos, Trailers e Cargas</span>
+							</div>
+							<div style="max-height: 240px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Nome do Ponto</th>
+											<th>Tipo</th>
+											<th>Coordenadas / Heading</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-spawns-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus"></i> Novo Ponto de Spawn</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador (ID)</label>
+									<input type="text" id="spawn-form-id" class="admin-input" placeholder="ex: spawn_truck_paleto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Ponto</label>
+									<input type="text" id="spawn-form-name" class="admin-input" placeholder="ex: Vaga de Caminhão Paleto">
+								</div>
+								<div class="admin-form-group">
+									<label>Tipo de Entidade</label>
+									<select id="spawn-form-type" class="admin-select">
+										<option value="truck">Caminhão (Truck)</option>
+										<option value="trailer">Reboque (Trailer)</option>
+										<option value="forklift">Empilhadeira (Forklift)</option>
+										<option value="handler">Container Handler (Porto)</option>
+										<option value="load_bay">Baia de Carregamento (DrawMarker 30)</option>
+										<option value="delivery_bay">Ponto de Entrega (DrawMarker 30)</option>
+									</select>
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição & Heading</button>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="spawn-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="spawn-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="spawn-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="spawn-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end;">
+								<button id="btn-save-spawn" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Gravar Ponto de Spawn</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 3: CARGAS & PROPS -->
+					<div id="admin-tab-props" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cubes"></i> Modelos 3D de Cargas Homologados</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
+								Estes modelos contam com suporte a renderização forçada de missão (LOD Máximo), detecção de colisão seletiva e ancoragem magnética por cordas.
+							</p>
+							<div id="admin-props-grid" class="admin-grid-3">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 4: OFFSETS VISUAIS 3D NO TRAILER -->
+					<div id="admin-tab-offsets" class="admin-tab-pane">
+						<div class="admin-card" style="border-left: 4px solid var(--admin-primary);">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-vr-cardboard"></i> Ferramenta In-Game de Calibração 3D (Gizmo Nudge)</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
+								Permite posicionar visualmente em cima do reboque os hologramas fantasmas e os slots onde os paletes reais ou a empilhadeira serão encaixados. Use as teclas de atalho in-game (<kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">WASD</kbd>, <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">Q/E</kbd>, <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">Z/C</kbd>) e confirme com <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">ENTER</kbd>.
+							</p>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo do Trailer</label>
+									<select id="offset-form-trailer" class="admin-select">
+										<option value="trailers2">trailers2 (Prancha Baixa / Flatbed)</option>
+										<option value="trailers">trailers (Baú Fechado)</option>
+										<option value="trailers3">trailers3 (Tanque / Líquidos)</option>
+										<option value="trailers4">trailers4 (Carreta Carga)</option>
+										<option value="tr2">tr2 (Reboque Pequeno)</option>
+									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Slot Alvo</label>
+									<select id="offset-form-slot" class="admin-select">
+										<option value="1">Slot 1 (Frente)</option>
+										<option value="2">Slot 2 (Meio-Frente)</option>
+										<option value="3">Slot 3 (Meio-Trás)</option>
+										<option value="4">Slot 4 (Traseira)</option>
+										<option value="5">Slot 5 (Extra)</option>
+										<option value="6">Slot 6 (Extra)</option>
+									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Prop de Teste</label>
+									<input type="text" id="offset-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+							</div>
+							<div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+									<input type="checkbox" id="offset-form-isforklift"> Calibrar Posição da Empilhadeira (Forklift Tie-Down)
+								</label>
+								<button id="btn-start-calibration" class="admin-btn admin-btn-primary" style="padding: 10px 18px; font-size: 13px;">
+									<i class="fas fa-eye"></i> INICIAR CALIBRAÇÃO VISUAL 3D
+								</button>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-database"></i> Offsets Customizados Salvos no Banco</span>
+							</div>
+							<div id="admin-offsets-list">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 5: ECONOMIA & XP -->
+					<div id="admin-tab-economy" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-balance-scale"></i> Parâmetros Globais de Economia e Progressão</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
+								Alterações nesta aba são aplicadas instantaneamente no cálculo de contratos e recompensas de todos os jogadores logados.
+							</p>
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Pagamento Base por Quilômetro (R$ / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-pay" class="admin-input" value="18.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Multiplicador de XP por Quilômetro (XP / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-xp" class="admin-input" value="5.0">
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Multiplicador ADR (Cargas Perigosas)</label>
+									<input type="number" step="0.05" id="eco-form-adr-mult" class="admin-input" value="1.45">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Frágil</label>
+									<input type="number" step="0.05" id="eco-form-fragile-mult" class="admin-input" value="1.25">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Valiosa</label>
+									<input type="number" step="0.05" id="eco-form-valuable-mult" class="admin-input" value="1.35">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Penalidade por Carga Perdida / Queda (R$)</label>
+									<input type="number" id="eco-form-penalty" class="admin-input" value="500">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+								<button id="btn-save-economy" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Sincronizar Economia</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 6: NPCS DESPACHANTES -->
+					<div id="admin-tab-npcs" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-users-cog"></i> NPCs Despachantes Ativos no Mapa</span>
+							</div>
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Nome</th>
+											<th>Modelo Ped</th>
+											<th>Coordenadas</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-npcs-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-user-plus"></i> Adicionar ou Atualizar NPC</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único</label>
+									<input type="text" id="npc-form-id" class="admin-input" placeholder="ex: dispatcher_porto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Despachante</label>
+									<input type="text" id="npc-form-name" class="admin-input" placeholder="ex: Sr. Roberto (Despachante)">
+								</div>
+								<div class="admin-form-group">
+									<label>Modelo do Ped (Hash / String)</label>
+									<input type="text" id="npc-form-model" class="admin-input" value="s_m_m_trucker_01">
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<button id="btn-cap-npc" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="npc-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="npc-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="npc-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="npc-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:space-between; align-items:center;">
+								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+									<input type="checkbox" id="npc-form-target" checked> Habilitar Interação via ox_target
+								</label>
+								<button id="btn-save-npc" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Spawnar NPC</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<script src="panel.js" type="text/javascript"></script>
+		<script src="js/admin.js" type="text/javascript"></script>
 	</body>
 </html>
