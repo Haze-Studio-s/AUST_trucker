@@ -140,6 +140,13 @@ function AdminService.ReloadTrailerOffsets()
             offsetMap[model].pallets[tonumber(o.slot_index)] = vecData
         end
     end
+
+    -- Dual-indexação por hash para compatibilidade absoluta com queries do cliente
+    for model, data in pairs(offsetMap) do
+        local h = joaat(model)
+        offsetMap[h] = data
+        offsetMap[tostring(h)] = data
+    end
     AdminService.TrailerOffsets = offsetMap
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
@@ -229,9 +236,9 @@ lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(
     local modelKey = tostring(trailerModel or ''):lower()
     local hash = tonumber(trailerModel) or joaat(modelKey)
 
-    local targetData = offsets[modelKey]
+    local targetData = offsets[modelKey] or offsets[hash] or offsets[tostring(hash)]
     if not targetData and Config.TrailerSlots then
-        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[modelKey]
+        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[modelKey] or Config.TrailerSlots[tostring(hash)]
     end
 
     return {

@@ -12,6 +12,9 @@ local CalibParams = { trailerModel = 'trailers2', slotIndex = 1, isForklift = fa
 local CurrentGizmoMode = 'translate' -- 'translate' | 'rotate'
 local IsGizmoCursorActive = false
 
+local ActiveCreatedTrailer = false
+local ActiveCalibCam = nil
+
 -- Cache de NPCs dinâmicos criados pelo Admin
 local DynamicAdminPeds = {}
 
@@ -64,7 +67,7 @@ local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, headin
 end
 
 -- ============================================================
--- NUI CALLBACK: RECEBE MANIPULAÇÃO DO GIZMO 3D (THREE.JS)
+-- NUI CALLBACKS: MANIPULAÇÃO DO GIZMO 3D (THREE.JS)
 -- ============================================================
 
 RegisterNUICallback('moveGizmoOffset', function(data, cb)
@@ -101,6 +104,127 @@ RegisterNUICallback('moveGizmoOffset', function(data, cb)
 
     if cb then cb({ ok = true }) end
 end)
+
+RegisterNUICallback('confirmGizmoSlot', function(data, cb)
+    if IsCalibrating then
+        OffsetEditor.ConfirmCurrentSlot()
+    end
+    if cb then cb({ ok = true }) end
+end)
+
+RegisterNUICallback('cancelGizmo', function(data, cb)
+    if IsCalibrating then
+        OffsetEditor.CancelCalibration()
+    end
+    if cb then cb({ ok = true }) end
+end)
+
+-- ============================================================
+-- CONFIRMAÇÃO E PROGRESSÃO CONTÍNUA DE SLOTS
+-- ============================================================
+
+function OffsetEditor.ConfirmCurrentSlot()
+    if not IsCalibrating then return end
+
+    -- 1. Dispara salvamento no banco de dados
+    TriggerServerEvent('aurp_trucker:server:adminSaveTrailerOffset', {
+        trailerModel = CalibParams.trailerModel,
+        slotIndex = CalibParams.slotIndex,
+        isForklift = CalibParams.isForklift,
+        x = tonumber(string.format("%.3f", CurrentOffsets.x)),
+        y = tonumber(string.format("%.3f", CurrentOffsets.y)),
+        z = tonumber(string.format("%.3f", CurrentOffsets.z)),
+        heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
+    })
+    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+    -- 2. Determina o limite de slots de palete
+    local maxPallets = 6
+    local curHash = joaat(CalibParams.trailerModel)
+    if Config.TrailerSlots and Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets then
+        local pCount = #Config.TrailerSlots[curHash].pallets
+        if pCount > maxPallets then maxPallets = pCount end
+    end
+
+    -- 3. Transição contínua entre slots
+    if not CalibParams.isForklift then
+        if CalibParams.slotIndex < maxPallets then
+            local prevSlot = CalibParams.slotIndex
+            CalibParams.slotIndex = CalibParams.slotIndex + 1
+            lib.notify({
+                title = 'Slot Salvo no Banco!',
+                description = ('Slot %d registrado com sucesso. Avançando para o Slot %d.'):format(prevSlot, CalibParams.slotIndex),
+                type = 'success',
+                duration = 3500
+            })
+
+            local nextVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets and Config.TrailerSlots[curHash].pallets[CalibParams.slotIndex])
+            if not nextVec then
+                nextVec = ForkliftModule.GetSlotOffset(CalibTrailer, CalibParams.slotIndex)
+            end
+            CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = 0.0 }
+            SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, 0.0)
+
+            -- Reposiciona o Gizmo Three.js no novo fantasma
+            local nextGhostPos = GetEntityCoords(CalibGhost)
+            local nextGhostRot = GetEntityRotation(CalibGhost, 2)
+            SendNUIMessage({
+                action = 'setGizmoEntity',
+                data = {
+                    position = { x = nextGhostPos.x, y = nextGhostPos.y, z = nextGhostPos.z },
+                    rotation = { x = nextGhostRot.x, y = nextGhostRot.y, z = nextGhostRot.z }
+                }
+            })
+        else
+            -- Todos os paletes calibrados! Avança automaticamente para a Empilhadeira!
+            CalibParams.isForklift = true
+            CalibParams.slotIndex = maxPallets + 1
+            lib.notify({
+                title = 'Paletes Finalizados!',
+                description = 'Todos os slots de paletes foram calibrados! Agora ajustando o Slot da Empilhadeira.',
+                type = 'info',
+                duration = 5000
+            })
+
+            local forkVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift) or ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
+            CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = 0.0 }
+            SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, 0.0)
+
+            local forkPos = GetEntityCoords(CalibGhost)
+            local forkRot = GetEntityRotation(CalibGhost, 2)
+            SendNUIMessage({
+                action = 'setGizmoEntity',
+                data = {
+                    position = { x = forkPos.x, y = forkPos.y, z = forkPos.z },
+                    rotation = { x = forkPos.x, y = forkRot.y, z = forkRot.z }
+                }
+            })
+        end
+    else
+        -- Slot da empilhadeira finalizado! Ciclo completo!
+        lib.notify({
+            title = 'Calibração Concluída!',
+            description = 'Configuração completa de slots e empilhadeira gravada com sucesso!',
+            type = 'success',
+            duration = 6000
+        })
+        OffsetEditor.StopCalibration(ActiveCreatedTrailer, ActiveCalibCam)
+        SendNUIMessage({
+            action = 'admin_restore',
+            savedSlot = CalibParams.slotIndex,
+            isForklift = CalibParams.isForklift,
+            trailerModel = CalibParams.trailerModel
+        })
+        SetNuiFocus(true, true)
+    end
+end
+
+function OffsetEditor.CancelCalibration()
+    OffsetEditor.StopCalibration(ActiveCreatedTrailer, ActiveCalibCam)
+    SendNUIMessage({ action = 'admin_restore' })
+    SetNuiFocus(true, true)
+    lib.notify({ title = 'Calibração', description = 'Edição finalizada.', type = 'info' })
+end
 
 -- ============================================================
 -- FERRAMENTA VISUAL IN-GAME DE OFFSETS (FREECAM & 3D GIZMO)
@@ -153,6 +277,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         createdTrailer = true
     end
     CalibTrailer = trailer
+    ActiveCreatedTrailer = createdTrailer
 
     -- Carrega o offset inicial da tabela
     local curVec = nil
@@ -187,6 +312,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     local calibCam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', camX, camY, camZ, camRot.x, camRot.y, camRot.z, 55.0, true, 2)
     SetCamActive(calibCam, true)
     RenderScriptCams(true, false, 0, true, true)
+    ActiveCalibCam = calibCam
 
     -- Inicializa o Gizmo 3D (Three.js + TransformControls) sobreposto na tela
     local gWorldCoords = GetEntityCoords(CalibGhost)
@@ -200,8 +326,8 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     })
 
     lib.notify({
-        title = 'Gizmo 3D Ativo (vp_staff_studio)',
-        description = 'WASD: Voo Livre.\nSegure [ALT] para liberar o mouse e arrastar o Gizmo.\n[T] Setas | [R] Rotação | [ENTER] Salvar.',
+        title = 'Gizmo 3D Ativo',
+        description = 'WASD: Voo Livre.\nSegure [ALT] para liberar o mouse e arrastar o Gizmo.\n[ENTER] ou Botão: Confirmar Slot.',
         type = 'info',
         duration = 8000
     })
@@ -211,7 +337,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         while IsCalibrating do
             Wait(0)
 
-            -- Desabilita ações normais do jogo
+            -- Desabilita ações normais do jogo (garante isolamento total)
             DisableAllControlActions(0)
 
             -- 1. SINCRONIZAÇÃO DA CÂMERA FIVEM COM O THREE.JS (FRAME A FRAME)
@@ -339,7 +465,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
                 '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
                 '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
-                '~g~[ENTER] Salvar & Próximo Slot~s~  |  ~r~[BACKSPACE] Finalizar~s~'):format(
+                '~g~[ENTER ou Botão] Salvar & Próximo Slot~s~  |  ~r~[ESC] Finalizar~s~'):format(
                 modeStatus,
                 CalibParams.trailerModel, targetLabel, gizmoModeLabel,
                 CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
@@ -357,108 +483,21 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
 
-            -- 7. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) COM ENTER
-            if IsDisabledControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 201) then
-                -- Dispara salvamento no banco de dados
-                TriggerServerEvent('aurp_trucker:server:adminSaveTrailerOffset', {
-                    trailerModel = CalibParams.trailerModel,
-                    slotIndex = CalibParams.slotIndex,
-                    isForklift = CalibParams.isForklift,
-                    x = tonumber(string.format("%.3f", CurrentOffsets.x)),
-                    y = tonumber(string.format("%.3f", CurrentOffsets.y)),
-                    z = tonumber(string.format("%.3f", CurrentOffsets.z)),
-                    heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
-                })
-                PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+            -- 7. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) ESTRITAMENTE VIA TECLADO ENTER
+            -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar no Gizmo
+            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
+                and not IsDisabledControlPressed(0, 24)
+                and not IsDisabledControlJustPressed(0, 24)
+                and not IsDisabledControlPressed(0, 18)
+                and not IsDisabledControlJustPressed(0, 18)
 
-                -- Determina o limite de slots de palete
-                local maxPallets = 6
-                local curHash = joaat(CalibParams.trailerModel)
-                if Config.TrailerSlots and Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets then
-                    local pCount = #Config.TrailerSlots[curHash].pallets
-                    if pCount > maxPallets then maxPallets = pCount end
-                end
-
-                -- Transição contínua entre slots
-                if not CalibParams.isForklift then
-                    if CalibParams.slotIndex < maxPallets then
-                        local prevSlot = CalibParams.slotIndex
-                        CalibParams.slotIndex = CalibParams.slotIndex + 1
-                        lib.notify({
-                            title = 'Slot Salvo no Banco!',
-                            description = ('Slot %d registrado com sucesso. Avançando para o Slot %d.'):format(prevSlot, CalibParams.slotIndex),
-                            type = 'success',
-                            duration = 3500
-                        })
-
-                        local nextVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets and Config.TrailerSlots[curHash].pallets[CalibParams.slotIndex])
-                        if not nextVec then
-                            nextVec = ForkliftModule.GetSlotOffset(CalibTrailer, CalibParams.slotIndex)
-                        end
-                        CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = 0.0 }
-                        SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, 0.0)
-
-                        -- Reposiciona o Gizmo Three.js no novo fantasma
-                        local nextGhostPos = GetEntityCoords(CalibGhost)
-                        local nextGhostRot = GetEntityRotation(CalibGhost, 2)
-                        SendNUIMessage({
-                            action = 'setGizmoEntity',
-                            data = {
-                                position = { x = nextGhostPos.x, y = nextGhostPos.y, z = nextGhostPos.z },
-                                rotation = { x = nextGhostRot.x, y = nextGhostRot.y, z = nextGhostRot.z }
-                            }
-                        })
-                    else
-                        -- Todos os paletes calibrados! Avança automaticamente para a Empilhadeira!
-                        CalibParams.isForklift = true
-                        CalibParams.slotIndex = maxPallets + 1
-                        lib.notify({
-                            title = 'Paletes Finalizados!',
-                            description = 'Todos os slots de paletes foram calibrados! Agora ajustando o Slot da Empilhadeira.',
-                            type = 'info',
-                            duration = 5000
-                        })
-
-                        local forkVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift) or ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
-                        CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = 0.0 }
-                        SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, 0.0)
-
-                        local forkPos = GetEntityCoords(CalibGhost)
-                        local forkRot = GetEntityRotation(CalibGhost, 2)
-                        SendNUIMessage({
-                            action = 'setGizmoEntity',
-                            data = {
-                                position = { x = forkPos.x, y = forkPos.y, z = forkPos.z },
-                                rotation = { x = forkPos.x, y = forkRot.y, z = forkRot.z }
-                            }
-                        })
-                    end
-                else
-                    -- Slot da empilhadeira finalizado! Ciclo completo!
-                    lib.notify({
-                        title = 'Calibração Concluída!',
-                        description = 'Configuração completa de slots e empilhadeira gravada com sucesso!',
-                        type = 'success',
-                        duration = 6000
-                    })
-                    OffsetEditor.StopCalibration(createdTrailer, calibCam)
-                    SendNUIMessage({
-                        action = 'admin_restore',
-                        savedSlot = CalibParams.slotIndex,
-                        isForklift = CalibParams.isForklift,
-                        trailerModel = CalibParams.trailerModel
-                    })
-                    SetNuiFocus(true, true)
-                    break
-                end
+            if isKeyboardEnter then
+                OffsetEditor.ConfirmCurrentSlot()
             end
 
             -- 8. CANCELAMENTO OU FINALIZAÇÃO ANTECIPADA COM BACKSPACE / ESC
             if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
-                OffsetEditor.StopCalibration(createdTrailer, calibCam)
-                SendNUIMessage({ action = 'admin_restore' })
-                SetNuiFocus(true, true)
-                lib.notify({ title = 'Calibração', description = 'Edição finalizada.', type = 'info' })
+                OffsetEditor.CancelCalibration()
                 break
             end
         end

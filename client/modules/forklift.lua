@@ -290,12 +290,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     CurrentSlotIndex = 1
     local loadedCount = 0
 
-    -- Runtime Data Fetching: Carrega os offsets mais recentes do banco antes de renderizar o primeiro holograma
-    if trailer and DoesEntityExist(trailer) then
-        local tModel = GetEntityModel(trailer)
-        pcall(function()
-            local res = lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, tostring(tModel))
-            if res and res.all then
+    CreateThread(function()
+        -- Lock 2: Coroutine Sequencial & Yield Bloqueante antes de Instanciar o Primeiro Fantasma
+        if trailer and DoesEntityExist(trailer) then
+            local tModel = GetEntityModel(trailer)
+            local ok, res = pcall(function()
+                return lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, tModel)
+            end)
+
+            if ok and res and res.all then
                 for mKey, data in pairs(res.all) do
                     local h = (type(mKey) == 'number') and mKey or joaat(tostring(mKey):lower())
                     if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
@@ -311,14 +314,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         Config.TrailerSlots[mKey].forklift = vec
                     end
                 end
+                print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7")
             end
-        end)
 
-        local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset)
-    end
+            -- Yield defensivo para garantia de propagação atômica em memória
+            Wait(50)
 
-    CreateThread(function()
+            local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+            ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset)
+        end
+
         while OperationActive do
             local sleep = 250
             local forklift = ForkliftModule.GetPlayerForklift()

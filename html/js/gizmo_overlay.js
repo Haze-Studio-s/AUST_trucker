@@ -16,6 +16,55 @@
 
     const container = document.getElementById('gizmo-overlay-container');
     const canvas = document.getElementById('gizmo-three-canvas');
+    const btnConfirm = document.getElementById('btn-gizmo-confirm');
+    const btnMode = document.getElementById('btn-gizmo-mode');
+    const btnCancel = document.getElementById('btn-gizmo-cancel');
+
+    function sendCallback(endpoint, data = {}) {
+        const resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
+        fetch(`https://${resName}/${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+            body: JSON.stringify(data)
+        }).catch(() => {});
+    }
+
+    function initButtons() {
+        if (btnConfirm) {
+            btnConfirm.onclick = function (e) {
+                e.stopPropagation();
+                sendCallback('confirmGizmoSlot');
+            };
+        }
+        if (btnMode) {
+            btnMode.onclick = function (e) {
+                e.stopPropagation();
+                const newMode = currentMode === 'translate' ? 'rotate' : 'translate';
+                setGizmoMode(newMode);
+            };
+        }
+        if (btnCancel) {
+            btnCancel.onclick = function (e) {
+                e.stopPropagation();
+                sendCallback('cancelGizmo');
+            };
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (!isActive) return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                sendCallback('confirmGizmoSlot');
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                sendCallback('cancelGizmo');
+            } else if (e.key === 't' || e.key === 'T') {
+                setGizmoMode('translate');
+            } else if (e.key === 'r' || e.key === 'R') {
+                setGizmoMode('rotate');
+            }
+        });
+    }
 
     function initThree() {
         if (scene) return;
@@ -67,6 +116,7 @@
         });
 
         window.addEventListener('resize', onWindowResize);
+        initButtons();
     }
 
     function onWindowResize() {
@@ -82,8 +132,6 @@
         if (now - lastSentTime < 14) return; // Limite de ~60 fps para tráfego leve
         lastSentTime = now;
 
-        const resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-
         // Conversão Three.js (Y-Up) -> FiveM (Z-Up)
         const payload = {
             position: {
@@ -98,11 +146,7 @@
             }
         };
 
-        fetch(`https://${resName}/moveGizmoOffset`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify(payload)
-        }).catch(() => {});
+        sendCallback('moveGizmoOffset', payload);
     }
 
     // ====================================================================
@@ -126,6 +170,7 @@
         }
 
         currentMode = 'translate';
+        updateModeButtonUI();
         if (transformControls) {
             transformControls.setMode('translate');
             transformControls.enabled = true;
@@ -184,8 +229,21 @@
         }
     }
 
+    function updateModeButtonUI() {
+        if (btnMode) {
+            if (currentMode === 'translate') {
+                btnMode.innerHTML = '<i class="fas fa-arrows-alt"></i> Modo: Setas (T)';
+                btnMode.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)';
+            } else {
+                btnMode.innerHTML = '<i class="fas fa-sync-alt"></i> Modo: Rotação (R)';
+                btnMode.style.background = 'linear-gradient(135deg, #8b5cf6, #7c3aed)';
+            }
+        }
+    }
+
     function setGizmoMode(mode) {
         currentMode = mode === 'rotate' ? 'rotate' : 'translate';
+        updateModeButtonUI();
         if (transformControls) {
             transformControls.setMode(currentMode);
             renderer.render(scene, camera);
@@ -193,9 +251,6 @@
     }
 
     function setCursorActive(active) {
-        if (container) {
-            container.style.pointerEvents = active ? 'auto' : 'none';
-        }
         if (canvas) {
             canvas.style.pointerEvents = active ? 'auto' : 'none';
         }

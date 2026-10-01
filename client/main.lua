@@ -2036,6 +2036,34 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             SetVehicleExplodesOnHighExplosionDamage(trailer, false)
             SetVehicleCanBeVisiblyDamaged(trailer, false)
             SetVehicleStrong(trailer, true)
+
+            -- Lock 1: Identificação Sequencial e Requisição Bloqueante de Offsets do Reboque
+            local tHash = GetEntityModel(trailer)
+            local tModelName = payload.trailerModel or tostring(tHash)
+            local ok, res = pcall(function()
+                return lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, tModelName)
+            end)
+
+            if ok and res and (res.specific or res.all) then
+                local data = res.specific or (res.all and (res.all[tModelName:lower()] or res.all[tHash] or res.all[tostring(tHash)]))
+                if data then
+                    if not Config.TrailerSlots[tHash] then Config.TrailerSlots[tHash] = { pallets = {}, forklift = nil } end
+                    if not Config.TrailerSlots[tModelName:lower()] then Config.TrailerSlots[tModelName:lower()] = { pallets = {}, forklift = nil } end
+                    for idx, v in pairs(data.pallets or {}) do
+                        local vec = vector3(v.x, v.y, v.z)
+                        Config.TrailerSlots[tHash].pallets[tonumber(idx)] = vec
+                        Config.TrailerSlots[tModelName:lower()].pallets[tonumber(idx)] = vec
+                    end
+                    if data.forklift then
+                        local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
+                        Config.TrailerSlots[tHash].forklift = vec
+                        Config.TrailerSlots[tModelName:lower()].forklift = vec
+                    end
+                    print(("^2[AUST_Trucker Client] Lock 1 Sucesso: Offsets customizados injetados em memória para trailer %s (Hash %s)!^7"):format(
+                        tModelName, tostring(tHash)
+                    ))
+                end
+            end
         end
 
         if forklift and DoesEntityExist(forklift) then
