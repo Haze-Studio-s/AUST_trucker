@@ -203,22 +203,14 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 end
                                 local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
-                                -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
+                                -- NA DOCA: Coloca o palete com precisão sobre o trailer como objeto 100% sólido do mundo
+                                local worldDropCoords = GetOffsetFromEntityInWorldCoords(trailer, relPos.x, relPos.y, safeZ)
+                                DetachEntity(palletEntity, true, true)
+                                SetEntityCoords(palletEntity, worldDropCoords.x, worldDropCoords.y, worldDropCoords.z, false, false, false, false)
+                                SetEntityRotation(palletEntity, 0.0, 0.0, tRot.z + relHeading, 2, true)
                                 SetEntityDynamic(palletEntity, false)
                                 SetEntityCollision(palletEntity, true, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
-
-                                -- 2. ANEXAÇÃO SEGURA (ATTACH)
-                                AttachEntityToEntity(
-                                    palletEntity, trailer, 0,
-                                    relPos.x, relPos.y, safeZ,
-                                    0.0, 0.0, relHeading,
-                                    false, false, false, false, 2, true
-                                )
-                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
-                                FreezeEntityPosition(palletEntity, false)
+                                FreezeEntityPosition(palletEntity, true)
 
                                 CurrentForkliftPallet = nil
                                 loadedCount = loadedCount + 1

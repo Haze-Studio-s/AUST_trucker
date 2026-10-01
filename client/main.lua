@@ -624,29 +624,18 @@ local function ExecutePalletTie(index)
         local pRot = GetEntityRotation(palletEnt, 2)
         local relHeading = pRot.z - tRot.z
 
-        NetworkRequestControlOfEntity(palletEnt)
+        -- Armazena os offsets relativos para o acoplamento dinâmico na viagem
+        palletData.relOffset = finalOffset
+        palletData.relHeading = relHeading
+
+        -- NA DOCA: Palete permanece como objeto 100% sólido do mundo (o jogador esbarra, sobe e não atravessa!)
+        local worldPos = GetOffsetFromEntityInWorldCoords(trailer, finalOffset.x, finalOffset.y, finalOffset.z)
         DetachEntity(palletEnt, true, true)
-
-        -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
-        -- Desliga reação física (gravidade/massa), tornando-a estática para a engine Havok
+        SetEntityCoords(palletEnt, worldPos.x, worldPos.y, worldPos.z, false, false, false, false)
+        SetEntityRotation(palletEnt, 0.0, 0.0, tRot.z + relHeading, 2, true)
         SetEntityDynamic(palletEnt, false)
-        -- Garante que a colisão global do objeto continua ativa (para que os jogadores esbarrem nele)
         SetEntityCollision(palletEnt, true, true)
-        -- Força o motor a ignorar a colisão estritamente entre a carga e o reboque (em ambas as direções)
-        SetEntityNoCollisionEntity(palletEnt, trailer, false)
-        SetEntityNoCollisionEntity(trailer, palletEnt, false)
-
-        -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
-        AttachEntityToEntity(
-            palletEnt, trailer, 0,
-            finalOffset.x, finalOffset.y, finalOffset.z,
-            0.0, 0.0, relHeading,
-            false, false, false, false, 2, true
-        )
-        -- Reforça a blindagem de colisão mútua Pallet x Trailer sem afetar o Player
-        SetEntityNoCollisionEntity(palletEnt, trailer, false)
-        SetEntityNoCollisionEntity(trailer, palletEnt, false)
-        FreezeEntityPosition(palletEnt, false)
+        FreezeEntityPosition(palletEnt, true)
     end
 
     -- Minigame de perícia
@@ -1065,6 +1054,60 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         end)
     end
 
+    -- TRANSIÇÃO DE ESTADO INTELIGENTE: ACOPLAMENTO DAS CARGAS PARA A VIAGEM
+    local trailer = JobEntities.trailer
+    if trailer and DoesEntityExist(trailer) then
+        for _, pData in ipairs(LoadedPallets or {}) do
+            local pEnt = pData.entity
+            if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                local pCoords = GetEntityCoords(pEnt)
+                local rawOffset = pData.relOffset or GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+                local tRot = GetEntityRotation(trailer, 2)
+                local pRot = GetEntityRotation(pEnt, 2)
+                local relHeading = pData.relHeading or (pRot.z - tRot.z)
+
+                FreezeEntityPosition(pEnt, false)
+                SetEntityDynamic(pEnt, false)
+                SetEntityCollision(pEnt, true, true)
+                SetEntityNoCollisionEntity(pEnt, trailer, false)
+                SetEntityNoCollisionEntity(trailer, pEnt, false)
+
+                AttachEntityToEntity(
+                    pEnt, trailer, 0,
+                    rawOffset.x, rawOffset.y, rawOffset.z,
+                    0.0, 0.0, relHeading,
+                    false, false, false, false, 2, true
+                )
+                SetEntityNoCollisionEntity(pEnt, trailer, false)
+                SetEntityNoCollisionEntity(trailer, pEnt, false)
+            end
+        end
+
+        local fork = JobEntities.forklift
+        if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
+            local deckZ = GetTrailerDeckZ(trailer)
+            local forkModel = GetEntityModel(fork)
+            local fMin, fMax = GetModelDimensions(forkModel)
+            local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
+            local safeForkZ = deckZ + forkliftHalfHeight + 0.01
+
+            FreezeEntityPosition(fork, false)
+            SetEntityDynamic(fork, false)
+            SetEntityCollision(fork, true, true)
+            SetEntityNoCollisionEntity(fork, trailer, false)
+            SetEntityNoCollisionEntity(trailer, fork, false)
+
+            AttachEntityToEntity(
+                fork, trailer, 0,
+                0.0, -5.5, safeForkZ,
+                0.0, 0.0, 0.0,
+                false, false, false, false, 2, true
+            )
+            SetEntityNoCollisionEntity(fork, trailer, false)
+            SetEntityNoCollisionEntity(trailer, fork, false)
+        end
+    end
+
     -- Monitoramento otimizado de Força G lateral, física híbrida e queda dinâmica de paletes frouxos
     CreateThread(function()
         local lastDropTime = 0
@@ -1347,6 +1390,17 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 lib.hideTextUI()
                 CurrentStage = 'STEP_9_DELIVERY'
                 SendNUIMessage({ action = 'gmeter_hide' })
+
+                -- Restauração de solidez total na entrega
+                for _, pData in ipairs(LoadedPallets or {}) do
+                    local pEnt = pData.entity
+                    if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                        DetachEntity(pEnt, true, true)
+                        SetEntityDynamic(pEnt, false)
+                        SetEntityCollision(pEnt, true, true)
+                        FreezeEntityPosition(pEnt, true)
+                    end
+                end
 
                 local ok = lib.progressCircle({
                     duration = 6000,
