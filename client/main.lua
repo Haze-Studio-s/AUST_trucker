@@ -1836,7 +1836,7 @@ lib.onCache('vehicle', function(veh)
             SendMissionNotify('Central Logística', 'Utilize a empilhadeira para carregar os pallets. Aproxime os garfos e aperte [G].', 'info')
 
             -- Inicia ciclo de manuseio com a tecla [G]
-            ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total)
+            ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total, stowedSlot, slotOffset)
                 if action == 'picked' then
                     -- Com o pallet carregado, a seta aponta para o interior/traseira da carreta
                     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
@@ -1844,12 +1844,16 @@ lib.onCache('vehicle', function(veh)
                         UpdateMissionObjective('trailer_rear', rearCoords, 'Aperte [G] na caçamba para posicionar o pallet')
                     end
                 elseif action == 'dropped' then
-                    -- Registra o palete carregado para a futura amarração individual
+                    -- Registra o palete carregado com os dados exatos do slot para a amarração individual
+                    local sOffset = slotOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(JobEntities.trailer, stowedSlot or loaded)) or vector3(0.0, 0.0, 0.35)
                     table.insert(LoadedPallets, {
                         entity = palletEnt,
                         isSecured = false,
                         riskLevel = 0,
-                        lost = false
+                        lost = false,
+                        slotIndex = stowedSlot or loaded,
+                        relOffset = sOffset,
+                        relHeading = 0.0
                     })
 
                     -- Pallet acomodado: seta volta a apontar para o próximo pallet
@@ -1917,6 +1921,25 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     ForkliftSecured = not hasFork
     ForkliftLoadedOnTrailer = not hasFork
     ForkliftRiskLevel = 0
+
+    -- Runtime Synchronization: Sobrescreve os offsets em memória com os dados mais recentes do banco
+    if payload and payload.trailerOffsets then
+        for mKey, data in pairs(payload.trailerOffsets) do
+            local h = (type(mKey) == 'number') and mKey or joaat(tostring(mKey):lower())
+            if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
+            if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
+            for idx, v in pairs(data.pallets or {}) do
+                local vec = vector3(v.x, v.y, v.z)
+                Config.TrailerSlots[h].pallets[tonumber(idx)] = vec
+                Config.TrailerSlots[mKey].pallets[tonumber(idx)] = vec
+            end
+            if data.forklift then
+                local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
+                Config.TrailerSlots[h].forklift = vec
+                Config.TrailerSlots[mKey].forklift = vec
+            end
+        end
+    end
 
     CreateThread(function()
         -- Pré-carregamento assíncrono e protegido dos modelos de palete e contêiner

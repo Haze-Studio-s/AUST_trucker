@@ -290,8 +290,30 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     CurrentSlotIndex = 1
     local loadedCount = 0
 
-    -- Spawna o holograma fantasma no Slot 1 ao iniciar
+    -- Runtime Data Fetching: Carrega os offsets mais recentes do banco antes de renderizar o primeiro holograma
     if trailer and DoesEntityExist(trailer) then
+        local tModel = GetEntityModel(trailer)
+        pcall(function()
+            local res = lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, tostring(tModel))
+            if res and res.all then
+                for mKey, data in pairs(res.all) do
+                    local h = (type(mKey) == 'number') and mKey or joaat(tostring(mKey):lower())
+                    if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
+                    if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
+                    for idx, v in pairs(data.pallets or {}) do
+                        local vec = vector3(v.x, v.y, v.z)
+                        Config.TrailerSlots[h].pallets[tonumber(idx)] = vec
+                        Config.TrailerSlots[mKey].pallets[tonumber(idx)] = vec
+                    end
+                    if data.forklift then
+                        local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
+                        Config.TrailerSlots[h].forklift = vec
+                        Config.TrailerSlots[mKey].forklift = vec
+                    end
+                end
+            end
+        end)
+
         local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
         ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset)
     end
@@ -352,8 +374,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             end
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                local ok = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
+                                local ok, slotOffset = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
                                 if ok then
+                                    local stowedSlot = CurrentSlotIndex
                                     CurrentForkliftPallet = nil
                                     loadedCount = loadedCount + 1
                                     CurrentSlotIndex = CurrentSlotIndex + 1
@@ -368,7 +391,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
 
                                     if onLoadedCb then
-                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount)
+                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, slotOffset)
                                     end
 
                                     if loadedCount < requiredCount then

@@ -171,12 +171,11 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         ExecuteCommand('-gizmoTranslation')
     end)
 
-    IsCalibrating = true
-    local isFlyingCamera = false
+    local isGizmoCursorActive = false
 
     lib.notify({
         title = 'Gizmo 3D & Câmera Livre Ativos',
-        description = 'Mouse livre para usar o Gizmo.\nSegure o Botão Direito (RMB) para voar em volta com WASD.',
+        description = 'Teclado [WASD] voa a câmera livre.\n[SEGURE ALT] para ativar o mouse e arrastar o Gizmo.',
         type = 'info',
         duration = 7000
     })
@@ -186,11 +185,9 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         while IsCalibrating do
             Wait(0)
 
-            -- Desabilita ações de combate, movimentação e armas do Ped
+            -- Desabilita ações do ped
             DisableControlAction(0, 24, true)  -- Attack / Left Click
             DisableControlAction(0, 25, true)  -- Aim / Right Click
-            DisableControlAction(0, 1, true)   -- Mouse Look X
-            DisableControlAction(0, 2, true)   -- Mouse Look Y
             DisableControlAction(0, 30, true)  -- Move LR
             DisableControlAction(0, 31, true)  -- Move UD
             DisableControlAction(0, 32, true)  -- W
@@ -201,64 +198,70 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             DisableControlAction(0, 38, true)  -- E
             DisableControlAction(0, 45, true)  -- R
             DisableControlAction(0, 245, true) -- T
+            DisableControlAction(0, 19, true)  -- Left Alt
             DisablePlayerFiring(PlayerId(), true)
 
-            -- CONTROLE DE CÂMERA LIVRE: SEGURAR BOTÃO DIREITO DO MOUSE (RMB)
-            local holdingRMB = IsDisabledControlPressed(0, 25)
-            if holdingRMB then
-                if not isFlyingCamera then
-                    isFlyingCamera = true
-                    LeaveCursorMode()
+            -- CONTROLE DE CURSOR vs MOUSE LOOK VIA TECLA ALT (HOLD)
+            local isAltHeld = IsDisabledControlPressed(0, 19) or IsControlPressed(0, 19)
+            if isAltHeld then
+                if not isGizmoCursorActive then
+                    isGizmoCursorActive = true
+                    SetNuiFocus(true, true)
+                    SetNuiFocusKeepInput(true)
+                end
+            else
+                if isGizmoCursorActive then
+                    isGizmoCursorActive = false
+                    SetNuiFocus(false, false)
                 end
 
-                -- Rotação da câmera pelo mouse
+                -- Rotação de câmera suave pelo mouse (somente quando ALT não estiver pressionado)
+                DisableControlAction(0, 1, true) -- Look LR
+                DisableControlAction(0, 2, true) -- Look UD
                 local mouseX = GetDisabledControlNormal(0, 1)
                 local mouseY = GetDisabledControlNormal(0, 2)
-                camRot = camRot - vector3(mouseY * 6.0, 0.0, mouseX * 6.0)
+                camRot = camRot - vector3(mouseY * 5.0, 0.0, mouseX * 5.0)
                 camRot = vector3(math.min(math.max(camRot.x, -85.0), 85.0), 0.0, camRot.z % 360.0)
                 SetCamRot(calibCam, camRot.x, camRot.y, camRot.z, 2)
+            end
 
-                -- Vetores de movimentação
-                local radP = math.rad(camRot.x)
-                local radY = math.rad(camRot.z)
-                local fwd = vector3(-math.sin(radY) * math.cos(radP), math.cos(radY) * math.cos(radP), math.sin(radP))
-                local rgt = vector3(math.cos(radY), math.sin(radY), 0.0)
-                local up = vector3(0.0, 0.0, 1.0)
+            -- VOO DA CÂMERA LIVRE VIA TECLADO (WASD / Space / LCtrl / Shift) — SEMPRE ATIVO
+            local radP = math.rad(camRot.x)
+            local radY = math.rad(camRot.z)
+            local fwd = vector3(-math.sin(radY) * math.cos(radP), math.cos(radY) * math.cos(radP), math.sin(radP))
+            local rgt = vector3(math.cos(radY), math.sin(radY), 0.0)
+            local up = vector3(0.0, 0.0, 1.0)
 
-                local spd = 0.16
-                if IsDisabledControlPressed(0, 21) then spd = 0.45 end -- Shift (Rápido)
-                if IsDisabledControlPressed(0, 19) then spd = 0.03 end -- Alt (Lento / Preciso)
+            local spd = 0.16
+            if IsDisabledControlPressed(0, 21) or IsControlPressed(0, 21) then spd = 0.45 end -- Shift (Rápido)
 
-                local camPos = GetCamCoord(calibCam)
-                if IsDisabledControlPressed(0, 32) then camPos = camPos + fwd * spd end -- W
-                if IsDisabledControlPressed(0, 33) then camPos = camPos - fwd * spd end -- S
-                if IsDisabledControlPressed(0, 34) then camPos = camPos - rgt * spd end -- A
-                if IsDisabledControlPressed(0, 35) then camPos = camPos + rgt * spd end -- D
-                if IsDisabledControlPressed(0, 22) or IsDisabledControlPressed(0, 203) then camPos = camPos + up * spd end -- Space
-                if IsDisabledControlPressed(0, 36) then camPos = camPos - up * spd end -- LCtrl
+            local moved = false
+            local camPos = GetCamCoord(calibCam)
+            if IsDisabledControlPressed(0, 32) or IsControlPressed(0, 32) then camPos = camPos + fwd * spd; moved = true end -- W
+            if IsDisabledControlPressed(0, 33) or IsControlPressed(0, 33) then camPos = camPos - fwd * spd; moved = true end -- S
+            if IsDisabledControlPressed(0, 34) or IsControlPressed(0, 34) then camPos = camPos - rgt * spd; moved = true end -- A
+            if IsDisabledControlPressed(0, 35) or IsControlPressed(0, 35) then camPos = camPos + rgt * spd; moved = true end -- D
+            if IsDisabledControlPressed(0, 22) or IsControlPressed(0, 22) or IsDisabledControlPressed(0, 203) or IsControlPressed(0, 203) then camPos = camPos + up * spd; moved = true end -- Space
+            if IsDisabledControlPressed(0, 36) or IsControlPressed(0, 36) then camPos = camPos - up * spd; moved = true end -- LCtrl
+            if moved then
                 SetCamCoord(calibCam, camPos.x, camPos.y, camPos.z)
-            else
-                if isFlyingCamera then
-                    isFlyingCamera = false
-                    EnterCursorMode()
-                end
             end
 
             -- ALTERNÂNCIA DE MODOS DO GIZMO COM AS TECLAS T E R
-            if IsDisabledControlJustPressed(0, 245) then -- T
+            if IsDisabledControlJustPressed(0, 245) or IsControlJustPressed(0, 245) then -- T
                 ExecuteCommand('+gizmoTranslation')
                 Wait(10)
                 ExecuteCommand('-gizmoTranslation')
-                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas Lineares)', type = 'info', duration = 1500 })
-            elseif IsDisabledControlJustPressed(0, 45) then -- R
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas)', type = 'info', duration = 1200 })
+            elseif IsDisabledControlJustPressed(0, 45) or IsControlJustPressed(0, 45) then -- R
                 ExecuteCommand('+gizmoRotation')
                 Wait(10)
                 ExecuteCommand('-gizmoRotation')
-                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis Coloridos)', type = 'info', duration = 1500 })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
             -- RENDERIZAÇÃO E MANIPULAÇÃO DO GIZMO NATIVO FIVEM (0xEB2EDCA2)
-            if CalibGhost and DoesEntityExist(CalibGhost) and not isFlyingCamera then
+            if CalibGhost and DoesEntityExist(CalibGhost) then
                 local matrixBuffer = makeEntityMatrix(CalibGhost)
                 local changed = Citizen.InvokeNative(0xEB2EDCA2, matrixBuffer:Buffer(), 'AustGizmo', Citizen.ReturnResultAnyway())
                 if changed then
@@ -278,11 +281,15 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
 
             -- HUD INFORMATIVO NA TELA
             local targetLabel = CalibParams.isForklift and '~y~Empilhadeira (Tie-Down)~s~' or ('~y~Palete Slot %d~s~'):format(CalibParams.slotIndex)
-            local hudText = ('~g~[GIZMO 3D & FREECAM]~s~ Trailer: ~w~%s~s~ | Alvo: %s\n' ..
+            local modeStatus = isAltHeld and '~g~[CURSOR GIZMO ATIVO]~s~' or '~b~[CÂMERA LIVRE]~s~'
+            local hudText = ('~g~[GIZMO 3D & FREECAM]~s~ %s\n' ..
+                'Trailer: ~w~%s~s~ | Alvo: %s\n' ..
                 'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~\n' ..
-                '~w~[T] Translação  |  [R] Rotação  |  [Mouse] Arrastar Gizmo\n' ..
-                '[Segurar RMB + WASD] Voo Câmera Livre (Shift: Acelera | Alt: Lento)\n' ..
+                '~w~[WASD/Space/Ctrl] Voo Livre  |  [Shift] Acelera\n' ..
+                '~y~[SEGURE ALT]~w~ Ativa Mouse para Arrastar o Gizmo\n' ..
+                '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
                 '~g~[ENTER] Salvar & Próximo Slot~s~  |  ~r~[BACKSPACE] Finalizar~s~'):format(
+                modeStatus,
                 CalibParams.trailerModel, targetLabel,
                 CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
             )
@@ -297,7 +304,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             SetTextOutline()
             SetTextEntry("STRING")
             AddTextComponentString(hudText)
-            DrawText(0.015, 0.65)
+            DrawText(0.015, 0.62)
 
             -- SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) COM ENTER
             if IsControlJustPressed(0, 18) or IsControlJustPressed(0, 201) or IsDisabledControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 201) then
@@ -388,11 +395,17 @@ end
 
 function OffsetEditor.StopCalibration(deleteTrailer, cam)
     IsCalibrating = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
     LeaveCursorMode()
     if cam and DoesCamExist(cam) then
         DestroyCam(cam, false)
     end
     RenderScriptCams(false, true, 500, true, true)
+    local ped = cache.ped or PlayerPedId()
+    FreezeEntityPosition(ped, false)
+    SetEntityCollision(ped, true, true)
+    SetEntityVisible(ped, true, false)
     SetPlayerControl(PlayerId(), true, 0)
 
     if CalibGhost and DoesEntityExist(CalibGhost) then

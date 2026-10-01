@@ -962,7 +962,9 @@ local function StartTruckDelivery(src, contractData)
         cargoName = lobbyData.cargoName,
         requiredCount = reqPallets,
         loadedCount = 0,
-        deliveryCoords = destCoords
+        deliveryCoords = destCoords,
+        trailerModel = selectedTrailerModel,
+        trailerOffsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
     }
 
     print(("[AUST_Trucker DEBUG - ETAPA 4] Enviando aurp_trucker:client:polarixJobStarted para jogador %s (JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s)"):format(

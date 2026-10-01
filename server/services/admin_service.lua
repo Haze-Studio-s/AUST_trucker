@@ -223,6 +223,23 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     }
 end)
 
+-- Callback em tempo de execução para sincronização fresca de offsets de reboque
+lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
+    local offsets = AdminService.ReloadTrailerOffsets()
+    local modelKey = tostring(trailerModel or ''):lower()
+    local hash = tonumber(trailerModel) or joaat(modelKey)
+
+    local targetData = offsets[modelKey]
+    if not targetData and Config.TrailerSlots then
+        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[modelKey]
+    end
+
+    return {
+        specific = targetData,
+        all = offsets
+    }
+end)
+
 -- ============================================================
 -- EVENTOS DE SALVAMENTO & HOT-RELOAD EM TEMPO REAL
 -- ============================================================
