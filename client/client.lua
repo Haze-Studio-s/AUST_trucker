@@ -822,9 +822,10 @@ local function HandleDirectStartContract(data, cb)
     cb('ok')
 end
 
-RegisterNUICallback('startJob', HandleDirectStartContract)
-RegisterNUICallback('startContract', HandleDirectStartContract)
-RegisterNUICallback('confirmJob', HandleDirectStartContract)
+-- Centralizado exclusivamente em client/main.lua (HandleStartDeliveryNUI) com suporte a sub-estados e montagem manual
+-- RegisterNUICallback('startJob', HandleDirectStartContract)
+-- RegisterNUICallback('startContract', HandleDirectStartContract)
+-- RegisterNUICallback('confirmJob', HandleDirectStartContract)
 
 RegisterNUICallback('close', function(data, cb)
     SetNuiFocus(false, false)
@@ -921,33 +922,11 @@ RegisterNUICallback('returnTruck', function(data, cb)
     end
 end)
 
-RegisterNUICallback('acceptJob', function(data, cb)
-    local jobId = data and (data.jobId or data.id or data.contractId or data.contract_id)
-    print(("^2[AUST_Trucker Client] NUI acceptJob received with jobId: %s^7"):format(tostring(jobId)))
-
-    if not jobId then
-        lib.notify({ title = 'Erro', description = 'ID do trabalho inválido', type = 'error' })
-        cb('ok')
-        return
-    end
-
-    CloseJobBoard()
-    SetNuiFocus(false, false)
-
-    if tonumber(jobId) then
-        print(("^2[AUST_Trucker Client] Routing numeric jobId %s to startDelivery^7"):format(tostring(jobId)))
-        TriggerServerEvent('aurp_trucker:server:startDelivery', {
-            id = tonumber(jobId),
-            contractId = tonumber(jobId),
-            contractType = data.contractType or 0,
-            isParty = false
-        })
-    else
-        print(("^2[AUST_Trucker Client] Routing string jobId %s to aurp_trucker:acceptJob^7"):format(tostring(jobId)))
-        TriggerServerEvent('aurp_trucker:acceptJob', jobId)
-    end
-    cb('ok')
-end)
+-- Centralizado exclusivamente em client/main.lua (HandleStartDeliveryNUI)
+-- RegisterNUICallback('acceptJob', function(data, cb)
+--     local jobId = data and (data.jobId or data.id or data.contractId or data.contract_id)
+--     ...
+-- end)
 
 RegisterNUICallback('spawnTrailer', function(data, cb)
     local model = data.model

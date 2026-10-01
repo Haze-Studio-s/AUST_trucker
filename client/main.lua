@@ -444,6 +444,8 @@ end)
 -- CALLBACKS NUI: INICIAR ENTREGA (START DELIVERY)
 -- =======================================================================
 
+local isStartingDeliveryLock = false
+
 local function HandleStartDeliveryNUI(data, cb)
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close', hidemenu = true })
@@ -454,6 +456,11 @@ local function HandleStartDeliveryNUI(data, cb)
     SetEntityVisible(ped, true)
     ResetEntityAlpha(ped)
 
+    if isStartingDeliveryLock then
+        if cb then cb({ ok = false, message = 'Aguarde o processamento anterior...' }) end
+        return
+    end
+
     local payload = data or {}
     local contractId = payload.id or payload.contract_id or payload.contractId or payload.jobId
     print(("^2[AUST_Trucker DEBUG - ETAPA 1] HandleStartDeliveryNUI disparado! ID=%s^7"):format(tostring(contractId)))
@@ -463,6 +470,9 @@ local function HandleStartDeliveryNUI(data, cb)
         if cb then cb({ ok = false, message = 'Já em serviço' }) end
         return
     end
+
+    isStartingDeliveryLock = true
+    SetTimeout(5000, function() isStartingDeliveryLock = false end)
 
     -- Opcional: Modal de Stacking Manual de Paletes (plt_lumberjack)
     local isDry = (payload.cargoType == 'dry') or (not payload.cargoType and not payload.adrType and not payload.liquidType)
@@ -730,7 +740,8 @@ local function ExecutePalletTie(index)
         palletData.relOffset = finalOffset
         palletData.relHeading = finalHeading
 
-        -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
+        -- BLINDAGEM TRÍPLA HAVOK:
+        -- 1. Ancoragem padronizada na origem do trailer (bone 0) com trava rígida e collision = false
         FreezeEntityPosition(palletEnt, false)
         SetEntityDynamic(palletEnt, false)
         AttachEntityToEntity(
@@ -740,13 +751,17 @@ local function ExecutePalletTie(index)
             false, false, false, false, 2, true
         )
 
-        -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
-        FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, false)
-        SetEntityCollision(palletEnt, true, true)
-        SetCanClimbOnEntity(palletEnt, true)
+        -- 2. Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
         SetEntityNoCollisionEntity(palletEnt, trailer, false)
         SetEntityNoCollisionEntity(trailer, palletEnt, false)
+        local tk = JobEntities.truck
+        if tk and DoesEntityExist(tk) then
+            SetEntityNoCollisionEntity(palletEnt, tk, false)
+            SetEntityNoCollisionEntity(tk, palletEnt, false)
+        end
+        -- Damping do Ped durante amarração para evitar loop de mola física (Trailer <-> Ped <-> Palete)
+        local ped = cache.ped or PlayerPedId()
+        SetEntityNoCollisionEntity(palletEnt, ped, true)
 
         -- Sincronização OneSync via Entity StateBags (Pilar 1)
         if trailer and DoesEntityExist(trailer) and NetworkGetEntityIsNetworked(trailer) and NetworkGetEntityIsNetworked(palletEnt) then
@@ -867,13 +882,14 @@ local function ExecuteForkliftTie(forkEntity)
         false, false, false, false, 2, true
     )
 
-    -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
-    FreezeEntityPosition(fork, false)
-    SetEntityDynamic(fork, false)
-    SetEntityCollision(fork, true, true)
-    SetCanClimbOnEntity(fork, true)
+    -- Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
     SetEntityNoCollisionEntity(fork, trailer, false)
     SetEntityNoCollisionEntity(trailer, fork, false)
+    local tk = JobEntities.truck
+    if tk and DoesEntityExist(tk) then
+        SetEntityNoCollisionEntity(fork, tk, false)
+        SetEntityNoCollisionEntity(tk, fork, false)
+    end
 
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if trailer and DoesEntityExist(trailer) and NetworkGetEntityIsNetworked(trailer) and NetworkGetEntityIsNetworked(fork) then
@@ -1049,6 +1065,7 @@ exports.ox_target:addModel(PalletPropModels, {
 CreateThread(function()
     while true do
         local trailer = JobEntities.trailer
+        local truck = JobEntities.truck
         local hasCargo = false
 
         if trailer and DoesEntityExist(trailer) then
@@ -1059,6 +1076,10 @@ CreateThread(function()
                     hasCargo = true
                     SetEntityNoCollisionEntity(pEnt, trailer, true)
                     SetEntityNoCollisionEntity(trailer, pEnt, true)
+                    if truck and DoesEntityExist(truck) then
+                        SetEntityNoCollisionEntity(pEnt, truck, true)
+                        SetEntityNoCollisionEntity(truck, pEnt, true)
+                    end
                 end
             end
 
@@ -1067,6 +1088,10 @@ CreateThread(function()
                 hasCargo = true
                 SetEntityNoCollisionEntity(fork, trailer, true)
                 SetEntityNoCollisionEntity(trailer, fork, true)
+                if truck and DoesEntityExist(truck) then
+                    SetEntityNoCollisionEntity(fork, truck, true)
+                    SetEntityNoCollisionEntity(truck, fork, true)
+                end
             end
         end
 
@@ -1278,10 +1303,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 SetEntityLodDist(pEnt, 0xFFFF)
                 FreezeEntityPosition(pEnt, false)
                 SetEntityDynamic(pEnt, false)
-                SetEntityCollision(pEnt, true, true)
-                SetCanClimbOnEntity(pEnt, true)
                 SetEntityNoCollisionEntity(pEnt, trailer, false)
                 SetEntityNoCollisionEntity(trailer, pEnt, false)
+                if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                    SetEntityNoCollisionEntity(pEnt, JobEntities.truck, false)
+                    SetEntityNoCollisionEntity(JobEntities.truck, pEnt, false)
+                end
 
                 -- Reforço imediato de ancoragem na malha do trailer (origem bone 0)
                 if pData.relOffset then
@@ -1301,10 +1328,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             SetEntityLodDist(fork, 0xFFFF)
             FreezeEntityPosition(fork, false)
             SetEntityDynamic(fork, false)
-            SetEntityCollision(fork, true, true)
-            SetCanClimbOnEntity(fork, true)
             SetEntityNoCollisionEntity(fork, trailer, false)
             SetEntityNoCollisionEntity(trailer, fork, false)
+            if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                SetEntityNoCollisionEntity(fork, JobEntities.truck, false)
+                SetEntityNoCollisionEntity(JobEntities.truck, fork, false)
+            end
 
             local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
             local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
@@ -2216,9 +2245,21 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             FreezeEntityPosition(container, true)
         end
 
-        -- 2. Inicialização sequencial e determinística da Etapa 1
-        StartMissionStep1(truck, trailer, forklift)
+        -- 2. Inicialização sequencial e determinística com suporte a BUILDING_PALLETS
+        if payload and (payload.stage == 'BUILDING_PALLETS' or payload.manualStacking) then
+            CurrentStage = 'BUILDING_PALLETS'
+            SendMissionNotify('Central Logística', 'Carga manual contratada! Vá até o pátio de montagem e monte os paletes para garantir o bônus de +20%.', 'info')
+        else
+            StartMissionStep1(truck, trailer, forklift)
+        end
     end)
+end)
+
+-- Conclusão da sub-tarefa de montagem e transição natural para a Etapa 1
+RegisterNetEvent('aurp_trucker:client:palletsBuildingCompleted', function()
+    if CurrentStage == 'BUILDING_PALLETS' then
+        StartMissionStep1(JobEntities.truck, JobEntities.trailer, JobEntities.forklift)
+    end
 end)
 
 -- Sincronização dos Paletes e Garantia de Física Estática (Anti-Limbo)

@@ -402,6 +402,14 @@ local function StartTruckDelivery(src, contractData)
             CleanupLobbyEntities(oldJobId)
             PlayerPolarixLobbies[citizenId] = nil
         else
+            -- Se for uma transição de sub-tarefa do mesmo contrato (ex: aceitou empilhamento manual após criação)
+            local reqJobId = contractData and (contractData.jobId or contractData.contractId or contractData.id)
+            if reqJobId and (tostring(reqJobId) == tostring(oldJobId) or (oldLobby and oldLobby.stage == 'BUILDING_PALLETS')) then
+                print(("[AUST_Trucker] Permitindo transição de sub-tarefa/estado no contrato ativo para %s"):format(tostring(citizenId)))
+                ActiveSpawningPlayers[citizenId] = nil
+                return
+            end
+
             ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Contrato em Andamento', 'Você já possui uma rota ou contrato em andamento!', 'error')
             return
@@ -938,7 +946,8 @@ local function StartTruckDelivery(src, contractData)
         payment = basePayment,
         xp = baseXP,
         deliveryCoords = destCoords,
-        stage = 'STEP_GET_TRUCK',
+        stage = isManualStacking and 'BUILDING_PALLETS' or 'STEP_GET_TRUCK',
+        manualStacking = isManualStacking,
         current_object = nil,
         hoseProp = nil,
         hoseConnected = false
@@ -950,7 +959,8 @@ local function StartTruckDelivery(src, contractData)
     local payload = {
         jobId = jobId,
         cargoType = cargoType,
-        stage = 'STEP_GET_TRUCK',
+        stage = isManualStacking and 'BUILDING_PALLETS' or 'STEP_GET_TRUCK',
+        manualStacking = isManualStacking,
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
         truckCoords = chosenTruckCoord and vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z),
         truckPlate = plate,

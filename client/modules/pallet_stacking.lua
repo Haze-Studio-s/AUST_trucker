@@ -205,6 +205,7 @@ RegisterNetEvent('aurp_trucker:client:allPalletsConsolidated', function(finalNet
         duration = 8000
     })
 
+    TriggerEvent('aurp_trucker:client:palletsBuildingCompleted')
     PalletStackingModule.Cleanup()
 end)
 
