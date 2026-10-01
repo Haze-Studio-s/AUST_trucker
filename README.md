@@ -1,10 +1,10 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.1.0-blue)
+![Version](https://img.shields.io/badge/version-20.2.0-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 
-Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios, Repo Man, interface React e muito mais.
+Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios, calibracao visual 3D com Gizmo vetorial, colisao inteligente adaptativa, OneSync StateBags, blindagem anti-exploit e interface React.
 
 ---
 

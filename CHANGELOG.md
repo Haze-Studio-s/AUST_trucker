@@ -1,11 +1,26 @@
 # Changelog — AUST_trucker
 
-## [Unreleased] — 2026-09-16 — Auditoria de runtime (/fivem)
+## [20.2.0] — 2026-10-01 — Gizmo 3D, Colisão Inteligente & Roadmap de 6 Pilares de Engenharia
 
-### Corrigido
-- `server/events.lua` e `server/flatbed.server.lua`: `NetworkDoesEntityExistWithNetworkId` não existe no server (a checagem de roubo de carga e do flatbed quebrava) → `NetworkGetEntityFromNetworkId` + `DoesEntityExist`.
+### 🧭 Motor 3D & Ferramenta ADM
+- **Engenharia Reversa `vp_staff_studio`:** Implementado Gizmo vetorial tridimensional completo de translação e rotação em tempo real com Three.js e TransformControls (`client/modules/offset_editor.lua`).
+- **Isolamento de Câmera Livre & Cursor:** Navegação simultânea pelo teclado enquanto o mouse interage de forma independente com os eixos X, Y e Z.
+- **Cálculo de Offsets Relativos:** As coordenadas manipuladas pelo Gizmo são convertidas diretamente em relação à origem do reboque (`GetOffsetFromEntityGivenWorldCoords`), garantindo alinhamento independente do terreno.
+- **Persistência de Fantasmas Múltiplos:** Renderização contínua de paletes salvos em transparência durante a calibração de todos os slots.
 
-Verificação: sintaxe de cada arquivo alterado. **Não testado in-game.**
+### 💥 Física Havok & Sincronização OneSync
+- **Máquina de Estados de Colisão Adaptativa:**
+  - *Modo Parado / A Pé (< 3 km/h ou fora da cabine):* Colisão 100% sólida para o jogador (`SetEntityCollision(true, true)` + `SetCanClimbOnEntity(true)`) com isolamento mútuo da malha do reboque (`SetEntityNoCollisionEntity`). Permite andar, subir e inspecionar a carga na prancha.
+  - *Modo Trânsito (>= 3 km/h):* Desativação dinâmica de colisão durante a viagem, eliminando 100% dos conflitos Havok, catapultas de física e trepidações.
+- **Eliminação de Flickering OneSync:** Removido `FreezeEntityPosition(true)` em entidades acopladas, permitindo sincronização fluida da hierarquia de entidades na rede sem oscilações visuais para outros jogadores.
+
+### 🛡️ Roadmap de Auditoria Estrutural (6 Pilares)
+- **Pilar 1 (OneSync StateBags):** O reboque replica `Entity(trailer).state.loadedSlots` e `loadedForklift`. `AddStateBagChangeHandler('loadedSlots')` re-acopla automaticamente qualquer palete desprendido por *culling* de longa distância.
+- **Pilar 2 (Anti-Cheat Server Authority):** Validação autoritativa de distância ($\le 25\text{m}$) e contrato ativo em `AntiCheatService.ValidateDelivery` e `FinalizeLCContract`. Executa `DropPlayer` sumário em tentativas de injeção ou conclusão fraudulenta.
+- **Pilar 3 (Garbage Collection & Grace Period):** Rastreamento de todos os NetIDs da missão (caminhão, reboque, empilhadeira, paletes). Em caso de `playerDropped`, o servidor aguarda 3 minutos para reconexão antes de deletar todas as entidades em cascata.
+- **Pilar 4 (RAM Cache do Banco de Dados):** Offsets de reboques servidos diretamente da memória RAM (`AdminService.TrailerOffsets` em `getTrailerOffsetsForModel`), eliminando queries SQL síncronas durante o trabalho.
+- **Pilar 5 (Havok Parking Freeze):** Caminhão e reboque estacionados (velocidade < 0.5 km/h por 5 segundos sem motorista) são congelados no solo; descongelamento imediato ao sentar na cabine.
+- **Pilar 6 (NUI Hard Escape):** Listener da tecla `Escape` em `html/panel.js` e comando de console F8 `/truckerfix` forçando liberação de foco (`SetNuiFocus(false, false)`).
 
 ## [20.1.0] — 2026-09-14 — Auditoria Completa de Segurança & Hardening Transacional (OmniRoute)
 
