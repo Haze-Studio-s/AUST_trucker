@@ -71,7 +71,8 @@ local function GetTrailerDeckZ(trailer)
             deckZ = tMax.z - 0.10
         end
     end
-    return deckZ
+    -- Margem de respiro (+0.05m) para prevenir Z-fighting e repulsão Havok com a malha do reboque
+    return deckZ + 0.05
 end
 _G.GetTrailerDeckZ = GetTrailerDeckZ
 
@@ -625,7 +626,13 @@ local function ExecutePalletTie(index)
 
         NetworkRequestControlOfEntity(palletEnt)
         DetachEntity(palletEnt, true, true)
-        -- useSoftPinning = false (9º param), collision = false (10º param) para evitar conflitos de colisão
+
+        -- 1. DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
+        -- Deve ser chamada OBRIGATORIAMENTE antes do attach com 'false' (não apenas no frame atual)
+        SetEntityNoCollisionEntity(palletEnt, trailer, false)
+        SetEntityNoCollisionEntity(trailer, palletEnt, false)
+
+        -- 2. ATTACH SEGURO COM PARÂMETRO 'collision = false' E RESPIRO Z
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
@@ -633,8 +640,8 @@ local function ExecutePalletTie(index)
             false, false, false, false, 2, true
         )
         SetEntityCollision(palletEnt, true, true)
-        SetEntityNoCollisionEntity(palletEnt, trailer, true)
-        SetEntityNoCollisionEntity(trailer, palletEnt, true)
+        SetEntityNoCollisionEntity(palletEnt, trailer, false)
+        SetEntityNoCollisionEntity(trailer, palletEnt, false)
         FreezeEntityPosition(palletEnt, true)
     end
 
@@ -723,7 +730,12 @@ local function ExecuteForkliftTie(forkEntity)
     local forkZ = GetForkliftDeckZ(trailer, fork)
 
     DetachEntity(fork, true, true)
-    -- useSoftPinning = false (9º), collision = false (10º) para evitar capotamentos
+
+    -- DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
+    SetEntityNoCollisionEntity(fork, trailer, false)
+    SetEntityNoCollisionEntity(trailer, fork, false)
+
+    -- Attach com 'collision = false' para evitar arremessos
     AttachEntityToEntity(
         fork, trailer, 0,
         0.0, -5.5, forkZ,
@@ -731,8 +743,8 @@ local function ExecuteForkliftTie(forkEntity)
         false, false, false, false, 2, true
     )
     SetEntityCollision(fork, true, true)
-    SetEntityNoCollisionEntity(fork, trailer, true)
-    SetEntityNoCollisionEntity(trailer, fork, true)
+    SetEntityNoCollisionEntity(fork, trailer, false)
+    SetEntityNoCollisionEntity(trailer, fork, false)
     FreezeEntityPosition(fork, true)
 
     ForkliftLoadedOnTrailer = true

@@ -195,23 +195,26 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local pRot = GetEntityRotation(palletEntity, 2)
                                 local relHeading = pRot.z - tRot.z
 
-                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp) via Bounding Box dinâmico:
-                                -- O jogador define livremente X e Y, mas o Z é cravado na superfície da prancha
-                                local fixedZ = (_G.GetTrailerDeckZ and _G.GetTrailerDeckZ(trailer))
-                                if not fixedZ then
+                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp) via Bounding Box dinâmico e Safety Lock:
+                                local safeZ = (_G.GetTrailerDeckZ and _G.GetTrailerDeckZ(trailer))
+                                if not safeZ then
                                     local _, tMax = GetModelDimensions(GetEntityModel(trailer))
-                                    fixedZ = tMax.z - 0.14
+                                    safeZ = tMax.z - 0.14 + 0.05
                                 end
+
+                                -- DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
+                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
 
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
-                                    relPos.x, relPos.y, fixedZ,
+                                    relPos.x, relPos.y, safeZ,
                                     0.0, 0.0, relHeading,
                                     false, false, false, false, 2, true
                                 )
                                 SetEntityCollision(palletEntity, true, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
+                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
                                 FreezeEntityPosition(palletEntity, true)
 
                                 CurrentForkliftPallet = nil
