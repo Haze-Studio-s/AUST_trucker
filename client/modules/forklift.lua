@@ -203,14 +203,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 end
                                 local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
-                                -- NA DOCA: Coloca o palete com precisão sobre o trailer como objeto 100% sólido do mundo
-                                local worldDropCoords = GetOffsetFromEntityInWorldCoords(trailer, relPos.x, relPos.y, safeZ)
-                                DetachEntity(palletEntity, true, true)
-                                SetEntityCoords(palletEntity, worldDropCoords.x, worldDropCoords.y, worldDropCoords.z, false, false, false, false)
-                                SetEntityRotation(palletEntity, 0.0, 0.0, tRot.z + relHeading, 2, true)
+                                -- Acoplamento seguro imediato com colisão ativa para o Player (collision = true)
+                                FreezeEntityPosition(palletEntity, false)
                                 SetEntityDynamic(palletEntity, false)
                                 SetEntityCollision(palletEntity, true, true)
-                                FreezeEntityPosition(palletEntity, true)
+                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
+
+                                AttachEntityToEntity(
+                                    palletEntity, trailer, 0,
+                                    relPos.x, relPos.y, safeZ,
+                                    0.0, 0.0, relHeading,
+                                    false, false, true, false, 2, true
+                                )
+                                SetEntityNoCollisionEntity(palletEntity, trailer, true)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, true)
 
                                 CurrentForkliftPallet = nil
                                 loadedCount = loadedCount + 1

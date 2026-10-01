@@ -37,6 +37,7 @@ local DispatcherPed = nil
 local LoadedPallets = {}
 local LoadedPalletData = LoadedPallets
 Config.LoadedPallets = LoadedPallets
+_G.LoadedPallets = LoadedPallets
 local ForkliftLoadedOnTrailer = false
 local ForkliftSecured = false
 local ForkliftRiskLevel = 0
@@ -624,18 +625,25 @@ local function ExecutePalletTie(index)
         local pRot = GetEntityRotation(palletEnt, 2)
         local relHeading = pRot.z - tRot.z
 
-        -- Armazena os offsets relativos para o acoplamento dinâmico na viagem
+        -- Armazena os offsets relativos para rastreamento
         palletData.relOffset = finalOffset
         palletData.relHeading = relHeading
 
-        -- NA DOCA: Palete permanece como objeto 100% sólido do mundo (o jogador esbarra, sobe e não atravessa!)
-        local worldPos = GetOffsetFromEntityInWorldCoords(trailer, finalOffset.x, finalOffset.y, finalOffset.z)
-        DetachEntity(palletEnt, true, true)
-        SetEntityCoords(palletEnt, worldPos.x, worldPos.y, worldPos.z, false, false, false, false)
-        SetEntityRotation(palletEnt, 0.0, 0.0, tRot.z + relHeading, 2, true)
+        -- Acoplamento seguro imediato com colisão ativa para o Player (collision = true)
+        FreezeEntityPosition(palletEnt, false)
         SetEntityDynamic(palletEnt, false)
         SetEntityCollision(palletEnt, true, true)
-        FreezeEntityPosition(palletEnt, true)
+        SetEntityNoCollisionEntity(palletEnt, trailer, true)
+        SetEntityNoCollisionEntity(trailer, palletEnt, true)
+
+        AttachEntityToEntity(
+            palletEnt, trailer, 0,
+            finalOffset.x, finalOffset.y, finalOffset.z,
+            0.0, 0.0, relHeading,
+            false, false, true, false, 2, true
+        )
+        SetEntityNoCollisionEntity(palletEnt, trailer, true)
+        SetEntityNoCollisionEntity(trailer, palletEnt, true)
     end
 
     -- Minigame de perícia
@@ -731,18 +739,18 @@ local function ExecuteForkliftTie(forkEntity)
     -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
     SetEntityDynamic(fork, false)
     SetEntityCollision(fork, true, true)
-    SetEntityNoCollisionEntity(fork, trailer, false)
-    SetEntityNoCollisionEntity(trailer, fork, false)
+    SetEntityNoCollisionEntity(fork, trailer, true)
+    SetEntityNoCollisionEntity(trailer, fork, true)
 
-    -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
+    -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO ATIVA PARA PLAYER E ISOLADA DO TRAILER
     AttachEntityToEntity(
         fork, trailer, 0,
         0.0, -5.5, safeForkZ,
         0.0, 0.0, 0.0,
-        false, false, false, false, 2, true
+        false, false, true, false, 2, true
     )
-    SetEntityNoCollisionEntity(fork, trailer, false)
-    SetEntityNoCollisionEntity(trailer, fork, false)
+    SetEntityNoCollisionEntity(fork, trailer, true)
+    SetEntityNoCollisionEntity(trailer, fork, true)
     FreezeEntityPosition(fork, false)
 
     ForkliftLoadedOnTrailer = true
@@ -809,6 +817,41 @@ exports.ox_target:addModel('forklift', {
         end
     }
 })
+
+-- =======================================================================
+-- BLINDAGEM CONTÍNUA DE COLISÃO MÚTUA POR FRAME (ANTI-EXPLOSÃO / HAVOK SHIELD)
+-- Executa SetEntityNoCollisionEntity a cada tick (Wait(0)) com thisFrameOnly = true
+-- enquanto houver carga (paletes / empilhadeira) sobre a carreta.
+-- Isso anula 100% o choque físico entre carga e carreta sem desativar a colisão
+-- da carga com o Player (o jogador NÃO atravessa o palete).
+-- =======================================================================
+CreateThread(function()
+    while true do
+        local trailer = JobEntities.trailer
+        local hasCargo = false
+
+        if trailer and DoesEntityExist(trailer) then
+            local pList = LoadedPallets or LoadedPalletData or {}
+            for _, pData in ipairs(pList) do
+                local pEnt = pData.entity
+                if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                    hasCargo = true
+                    SetEntityNoCollisionEntity(pEnt, trailer, true)
+                    SetEntityNoCollisionEntity(trailer, pEnt, true)
+                end
+            end
+
+            local fork = JobEntities.forklift
+            if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
+                hasCargo = true
+                SetEntityNoCollisionEntity(fork, trailer, true)
+                SetEntityNoCollisionEntity(trailer, fork, true)
+            end
+        end
+
+        Wait(hasCargo and 0 or 300)
+    end
+end)
 
 function SetupNextPalletTarget()
     -- Garante que qualquer zona ativa anterior seja destruída
@@ -982,16 +1025,20 @@ SetupEmbarkForkliftStage = function()
 
                         -- Anexa a empilhadeira com segurança na traseira da carreta
                         local tRot = GetEntityRotation(trailer, 2)
+                        SetEntityDynamic(fork, false)
+                        SetEntityCollision(fork, true, true)
+                        SetEntityNoCollisionEntity(fork, trailer, true)
+                        SetEntityNoCollisionEntity(trailer, fork, true)
+
                         AttachEntityToEntity(
                             fork, trailer, 0,
                             0.0, -5.2, 0.35,
                             0.0, 0.0, 0.0,
                             false, false, true, false, 2, true
                         )
-                        SetEntityCollision(fork, true, true)
                         SetEntityNoCollisionEntity(fork, trailer, true)
                         SetEntityNoCollisionEntity(trailer, fork, true)
-                        FreezeEntityPosition(fork, true)
+                        FreezeEntityPosition(fork, false)
 
                         ForkliftLoadedOnTrailer = true
                         PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
@@ -1054,57 +1101,31 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         end)
     end
 
-    -- TRANSIÇÃO DE ESTADO INTELIGENTE: ACOPLAMENTO DAS CARGAS PARA A VIAGEM
+    -- BLINDAGEM DE ESTABILIDADE: PREPARAÇÃO DA CARGA PARA A VIAGEM
     local trailer = JobEntities.trailer
     if trailer and DoesEntityExist(trailer) then
+        SetVehicleExplodesOnHighExplosionDamage(trailer, false)
+        SetVehicleCanBeVisiblyDamaged(trailer, false)
+        SetVehicleStrong(trailer, true)
+
         for _, pData in ipairs(LoadedPallets or {}) do
             local pEnt = pData.entity
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                local pCoords = GetEntityCoords(pEnt)
-                local rawOffset = pData.relOffset or GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-                local tRot = GetEntityRotation(trailer, 2)
-                local pRot = GetEntityRotation(pEnt, 2)
-                local relHeading = pData.relHeading or (pRot.z - tRot.z)
-
                 FreezeEntityPosition(pEnt, false)
                 SetEntityDynamic(pEnt, false)
                 SetEntityCollision(pEnt, true, true)
-                SetEntityNoCollisionEntity(pEnt, trailer, false)
-                SetEntityNoCollisionEntity(trailer, pEnt, false)
-
-                AttachEntityToEntity(
-                    pEnt, trailer, 0,
-                    rawOffset.x, rawOffset.y, rawOffset.z,
-                    0.0, 0.0, relHeading,
-                    false, false, false, false, 2, true
-                )
-                SetEntityNoCollisionEntity(pEnt, trailer, false)
-                SetEntityNoCollisionEntity(trailer, pEnt, false)
+                SetEntityNoCollisionEntity(pEnt, trailer, true)
+                SetEntityNoCollisionEntity(trailer, pEnt, true)
             end
         end
 
         local fork = JobEntities.forklift
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
-            local deckZ = GetTrailerDeckZ(trailer)
-            local forkModel = GetEntityModel(fork)
-            local fMin, fMax = GetModelDimensions(forkModel)
-            local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
-            local safeForkZ = deckZ + forkliftHalfHeight + 0.01
-
             FreezeEntityPosition(fork, false)
             SetEntityDynamic(fork, false)
             SetEntityCollision(fork, true, true)
-            SetEntityNoCollisionEntity(fork, trailer, false)
-            SetEntityNoCollisionEntity(trailer, fork, false)
-
-            AttachEntityToEntity(
-                fork, trailer, 0,
-                0.0, -5.5, safeForkZ,
-                0.0, 0.0, 0.0,
-                false, false, false, false, 2, true
-            )
-            SetEntityNoCollisionEntity(fork, trailer, false)
-            SetEntityNoCollisionEntity(trailer, fork, false)
+            SetEntityNoCollisionEntity(fork, trailer, true)
+            SetEntityNoCollisionEntity(trailer, fork, true)
         end
     end
 
@@ -1390,17 +1411,6 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 lib.hideTextUI()
                 CurrentStage = 'STEP_9_DELIVERY'
                 SendNUIMessage({ action = 'gmeter_hide' })
-
-                -- Restauração de solidez total na entrega
-                for _, pData in ipairs(LoadedPallets or {}) do
-                    local pEnt = pData.entity
-                    if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                        DetachEntity(pEnt, true, true)
-                        SetEntityDynamic(pEnt, false)
-                        SetEntityCollision(pEnt, true, true)
-                        FreezeEntityPosition(pEnt, true)
-                    end
-                end
 
                 local ok = lib.progressCircle({
                     duration = 6000,
@@ -1688,6 +1698,9 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             SetEntityCollision(trailer, true, true)
             SetVehicleDoorsLocked(trailer, 1)
             SetVehicleDoorsLockedForAllPlayers(trailer, false)
+            SetVehicleExplodesOnHighExplosionDamage(trailer, false)
+            SetVehicleCanBeVisiblyDamaged(trailer, false)
+            SetVehicleStrong(trailer, true)
         end
 
         if forklift and DoesEntityExist(forklift) then
