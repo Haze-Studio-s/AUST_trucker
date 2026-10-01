@@ -11,21 +11,15 @@ Config.Polarix = {
     Target = 'ox_target',
     Debug = false,
 
-    -- Props Exclusivos de Paletes Polarix (Sem props genéricos do GTA V)
+    -- Props de Paletes Oficiais de Carga (DLC Carrier Cargo)
     PalletProps = {
-        'sm3d_prop_pallet_1',
-        'sm3d_prop_pallet_2',
-        'sm3d_prop_pallet_1_rep',
-        'sm3d_prop_pallet_1_open',
+        'm24_1_prop_m24_1_carrier_cargo_04a',
     },
     PalletModels = {
-        'sm3d_prop_pallet_1',
-        'sm3d_prop_pallet_2',
-        'sm3d_prop_pallet_1_rep',
-        'sm3d_prop_pallet_1_open',
+        'm24_1_prop_m24_1_carrier_cargo_04a',
     },
 
-    DefaultPalletModel = 'sm3d_prop_pallet_1',
+    DefaultPalletModel = 'm24_1_prop_m24_1_carrier_cargo_04a',
     ContainerModel = 'prop_contr_03b_ld',
 
     PalletWeightKg = 1000,
@@ -81,10 +75,7 @@ Config.Polarix = {
 
     LoadingBayCoords = vector3(1244.53, -3135.57, 4.53),
     PalletProps = {
-        'sm3d_prop_pallet_1',
-        'sm3d_prop_pallet_2',
-        'sm3d_prop_pallet_1_rep',
-        'sm3d_prop_pallet_1_open',
+        'm24_1_prop_m24_1_carrier_cargo_04a',
     },
 
     TrailerSpawns = {

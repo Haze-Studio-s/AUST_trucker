@@ -603,6 +603,12 @@ local function ExecutePalletTie(index)
     local palletEnt = palletData.entity
     local trailer = JobEntities.trailer
 
+    -- BLINDAGEM ESTRITA: Garantir que o trailer seja o reboque do contrato e não a empilhadeira
+    if JobEntities.forklift and (palletEnt == JobEntities.forklift or trailer == JobEntities.forklift) then
+        print("[AUST_Trucker] ERRO: Tentativa de amarrar empilhadeira no fluxo de paletes!")
+        return
+    end
+
     -- CORREÇÃO 1: TRAVA DO EIXO Z (Z-AXIS CLAMP) PARA PALETES
     -- O cálculo de GetOffsetFromEntityGivenWorldCoords captura imperfeições de colisão,
     -- resultando num eixo Z muito alto (palete flutuando no ar).
@@ -720,13 +726,15 @@ local function ExecuteForkliftTie(forkEntity)
         }
     })
 
-    -- 3. Aplique o AttachEntityToEntity na extremidade traseira com gap de segurança de 1cm
+    -- 3. Aplique o AttachEntityToEntity na extremidade traseira com a Matriz de Colisão Híbrida
     NetworkRequestControlOfEntity(fork)
-    local deckZ = GetTrailerDeckZ(trailer)
-    local forkModel = (fork and DoesEntityExist(fork) and GetEntityModel(fork)) or joaat('forklift')
-    local fMin, fMax = GetModelDimensions(forkModel)
-    local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
-    local safeForkZ = deckZ + forkliftHalfHeight + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
+    local timeout = 1000
+    while not NetworkHasControlOfEntity(fork) and timeout > 0 do
+        Wait(50)
+        timeout = timeout - 50
+    end
+
+    local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
 
     DetachEntity(fork, true, true)
 
@@ -734,7 +742,7 @@ local function ExecuteForkliftTie(forkEntity)
     FreezeEntityPosition(fork, false)
     AttachEntityToEntity(
         fork, trailer, 0,
-        0.0, -5.5, 0.35,
+        forkOffset.x, forkOffset.y, forkOffset.z,
         0.0, 0.0, 0.0,
         false, false, false, false, 0, true
     )
@@ -747,13 +755,18 @@ local function ExecuteForkliftTie(forkEntity)
     SetEntityNoCollisionEntity(fork, trailer, true)
     SetEntityNoCollisionEntity(trailer, fork, true)
 
+    -- Remove o holograma da empilhadeira
+    if ForkliftModule.DeleteGhostProp then
+        ForkliftModule.DeleteGhostProp()
+    end
+
     ForkliftLoadedOnTrailer = true
 
     if success then
         ForkliftSecured = true
         ForkliftRiskLevel = 0
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
-        SendMissionNotify('Central Logística', 'Empilhadeira travada com correntes de alta resistência.', 'success')
+        SendMissionNotify('Central Logística', 'Empilhadeira travada com correntes de alta resistência!', 'success')
     else
         ForkliftSecured = true
         ForkliftRiskLevel = 'high'
@@ -764,8 +777,12 @@ local function ExecuteForkliftTie(forkEntity)
     hasRopes = false
     HasRopes = false
     ClearObjectiveMarkers(false)
-    if not CheckAllTiedAndStartRoute() then
-        SetupNextPalletTarget()
+
+    -- Transição direta para a rota de entrega
+    local dest = (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
+    TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob and ActiveJob.jobId)
+    if StartDeliveryRoute then
+        StartDeliveryRoute(dest, ActiveJob and ActiveJob.jobId)
     end
 end
 
@@ -776,17 +793,24 @@ local function SetupForkliftTieTarget()
     end
 
     local fork = JobEntities.forklift
-    if not fork or not DoesEntityExist(fork) then
+    local trailer = JobEntities.trailer
+    if not fork or not DoesEntityExist(fork) or not trailer or not DoesEntityExist(trailer) then
         hasRopes = false
         HasRopes = false
         ClearObjectiveMarkers(false)
-        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob.jobId)
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob and ActiveJob.jobId)
         return
     end
 
+    -- 1. Spawna o holograma fantasma da empilhadeira na extremidade traseira da carreta
+    if ForkliftModule.SpawnForkliftGhost then
+        ForkliftModule.SpawnForkliftGhost(trailer)
+    end
+
+    -- 2. Atualiza a rota/objetivo visual para guiar o jogador até a empilhadeira
     local fCoords = GetEntityCoords(fork)
-    UpdateMissionObjective('forklift', fCoords, 'Travar Empilhadeira na Carreta')
-    SendMissionNotify('Central Logística', 'Agora amarre a empilhadeira na traseira da carreta.', 'info')
+    UpdateMissionObjective('forklift', fCoords, 'Amarrar Empilhadeira na Carreta')
+    SendMissionNotify('Central Logística', 'Paletes amarrados! Estacione a empilhadeira na traseira da carreta e use as cintas para amarrá-la a pé.', 'info')
 end
 
 -- ox_target diretamente configurado para o modelo da empilhadeira
@@ -794,14 +818,17 @@ exports.ox_target:addModel('forklift', {
     {
         name = 'aust_tie_forklift_model',
         icon = 'fas fa-link',
-        label = 'Travar Empilhadeira com Correntes',
-        distance = 3.5,
+        label = 'Amarrar Empilhadeira na Carreta',
+        distance = 4.0,
         canInteract = function(entity)
             if not ActiveJob or not ActiveJob.withForklift or ForkliftSecured then return false end
             if not (hasRopes or HasRopes) then return false end
             if IsPedInAnyVehicle(cache.ped, false) then return false end
             local trailer = JobEntities.trailer
             if not trailer or not DoesEntityExist(trailer) then return false end
+            -- Deve ser liberado estritamente após todos os paletes estarem amarrados
+            local totalLoaded = #LoadedPallets
+            if totalLoaded > 0 and currentTieIndex <= totalLoaded then return false end
             local forkCoords = GetEntityCoords(entity)
             local trailerCoords = GetEntityCoords(trailer)
             return #(trailerCoords - forkCoords) < 15.0
@@ -813,7 +840,8 @@ exports.ox_target:addModel('forklift', {
 })
 
 -- ox_target para estiva manual a pé nos paletes no slot fantasma ativo
-local PalletPropModels = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {
+local PalletPropModels = {
+    'm24_1_prop_m24_1_carrier_cargo_04a',
     'sm3d_prop_pallet_1',
     'sm3d_prop_pallet_2',
     'sm3d_prop_pallet_1_rep',
@@ -866,14 +894,10 @@ exports.ox_target:addModel(PalletPropModels, {
                     if loadedCount < requiredCount then
                         local nextSlot = currentSlot + 1
                         local nextOffset = ForkliftModule.GetSlotOffset(trailer, nextSlot)
-                        ForkliftModule.SpawnGhostProp(trailer, 'sm3d_prop_pallet_1', nextOffset)
+                        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', nextOffset)
                     else
                         ForkliftModule.StopOperation()
-                        if ActiveJob.withForklift and (ActiveJob.forkliftNetId and ActiveJob.forkliftNetId ~= 0) then
-                            SetupEmbarkForkliftStage()
-                        else
-                            SetupRopesStage()
-                        end
+                        SetupRopesStage()
                     end
                 end
             end
@@ -1044,93 +1068,7 @@ SetupRopesStage = function()
 end
 
 SetupEmbarkForkliftStage = function()
-    CurrentStage = 'STEP_6_EMBARK_FORKLIFT'
-    ClearObjectiveMarkers(false)
-
-    local fork = JobEntities.forklift
-    local trailer = JobEntities.trailer
-
-    if not fork or not DoesEntityExist(fork) or not trailer or not DoesEntityExist(trailer) then
-        SetupRopesStage()
-        return
-    end
-
-    -- Spawna o holograma fantasma da empilhadeira na extremidade traseira da carreta
-    local forkOffset = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or vector3(0.0, -5.2, 0.35)
-    if ForkliftModule.SpawnForkliftGhost then
-        ForkliftModule.SpawnForkliftGhost(trailer)
-    end
-
-    local trailerRear = GetOffsetFromEntityInWorldCoords(trailer, forkOffset.x, forkOffset.y, forkOffset.z + 0.5)
-    UpdateMissionObjective('trailer_rear', trailerRear, 'Embarcar Empilhadeira no Fantasma Traseiro')
-    SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira no holograma traseiro da carreta para embarque.', 'info')
-
-    CreateThread(function()
-        while CurrentStage == 'STEP_6_EMBARK_FORKLIFT' do
-            local sleep = 250
-            local ped = cache.ped or PlayerPedId()
-            local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
-
-            if veh == fork then
-                local tCoords = GetOffsetFromEntityInWorldCoords(trailer, forkOffset.x, forkOffset.y, forkOffset.z)
-                local dist = #(GetEntityCoords(fork) - tCoords)
-
-                if dist < 6.5 then
-                    sleep = 0
-                    lib.showTextUI('[E] Embarcar Empilhadeira no Fantasma', { position = 'left-center', icon = 'truck-ramp-box' })
-
-                    if IsControlJustPressed(0, 38) then -- Tecla E
-                        lib.hideTextUI()
-                        TaskLeaveVehicle(ped, fork, 0)
-                        Wait(1200)
-
-                        -- Garante controle de rede
-                        NetworkRequestControlOfEntity(fork)
-                        local timeout = 1000
-                        while not NetworkHasControlOfEntity(fork) and timeout > 0 do
-                            Wait(50)
-                            timeout = timeout - 50
-                        end
-
-                        -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
-                        FreezeEntityPosition(fork, false)
-                        AttachEntityToEntity(
-                            fork, trailer, 0,
-                            forkOffset.x, forkOffset.y, forkOffset.z,
-                            0.0, 0.0, 0.0,
-                            false, false, false, false, 0, true
-                        )
-
-                        -- Reforço de colisão com o mundo (Pós-Attach)
-                        FreezeEntityPosition(fork, false)
-                        SetEntityDynamic(fork, false)
-                        SetEntityCollision(fork, true, true)
-                        SetCanClimbOnEntity(fork, true)
-                        SetEntityNoCollisionEntity(fork, trailer, true)
-                        SetEntityNoCollisionEntity(trailer, fork, true)
-
-                        -- Remove o holograma da empilhadeira
-                        if ForkliftModule.DeleteGhostProp then
-                            ForkliftModule.DeleteGhostProp()
-                        end
-
-                        ForkliftLoadedOnTrailer = true
-                        PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
-                        SendMissionNotify('Central Logística', 'Empilhadeira embarcada na carreta! Agora pegue as cintas para travar.', 'success')
-
-                        SetupRopesStage()
-                        break
-                    end
-                else
-                    lib.hideTextUI()
-                end
-            else
-                lib.hideTextUI()
-            end
-
-            Wait(sleep)
-        end
-    end)
+    SetupForkliftTieTarget()
 end
 
 -- =======================================================================
@@ -1627,12 +1565,9 @@ lib.onCache('vehicle', function(veh)
                     end
                 end
             end, function()
-                -- Todos os pallets carregados! Se configurado com empilhadeira embarcada, embarca primeiro
-                if ActiveJob and ActiveJob.withForklift and JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                    SetupEmbarkForkliftStage()
-                else
-                    SetupRopesStage()
-                end
+                -- Todos os pallets carregados! Prossegue diretamente para a etapa de amarração com cintas
+                ForkliftModule.StopOperation()
+                SetupRopesStage()
             end)
         end
     end

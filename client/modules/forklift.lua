@@ -129,7 +129,7 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     ForkliftModule.DeleteGhostProp()
     if not trailer or not DoesEntityExist(trailer) or not offset then return nil end
 
-    local modelHash = type(model) == 'number' and model or joaat(model or 'sm3d_prop_pallet_1')
+    local modelHash = type(model) == 'number' and model or joaat(model or 'm24_1_prop_m24_1_carrier_cargo_04a')
     if not HasModelLoaded(modelHash) then
         RequestModel(modelHash)
         local t = 1000
@@ -168,11 +168,24 @@ function ForkliftModule.SpawnForkliftGhost(trailer)
 end
 
 function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex)
-    if not palletEntity or not DoesEntityExist(palletEntity) or not trailer or not DoesEntityExist(trailer) then
+    if not palletEntity or not DoesEntityExist(palletEntity) then
         return false
     end
 
-    local slotOffset = ForkliftModule.GetSlotOffset(trailer, slotIndex)
+    -- BLINDAGEM ESTRITA: Forçar estritamente o reboque (trailer) e JAMAIS a empilhadeira
+    local targetTrailer = (trailer and DoesEntityExist(trailer) and trailer) or (_G.JobEntities and _G.JobEntities.trailer)
+    if not targetTrailer or not DoesEntityExist(targetTrailer) then
+        print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento do palete.")
+        return false
+    end
+
+    -- Garante que o alvo não seja a própria empilhadeira
+    if _G.JobEntities and targetTrailer == _G.JobEntities.forklift then
+        print("[AUST_Trucker] ERRO: Alvo de estiva detectado como empilhadeira! Abortando attach errôneo.")
+        return false
+    end
+
+    local slotOffset = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -187,7 +200,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º argumento = false)
     FreezeEntityPosition(palletEntity, false)
     AttachEntityToEntity(
-        palletEntity, trailer, 0,
+        palletEntity, targetTrailer, 0,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, 0.0,
         false, false, false, false, 0, true
@@ -198,8 +211,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityDynamic(palletEntity, false)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
-    SetEntityNoCollisionEntity(palletEntity, trailer, true)
-    SetEntityNoCollisionEntity(trailer, palletEntity, true)
+    SetEntityNoCollisionEntity(palletEntity, targetTrailer, true)
+    SetEntityNoCollisionEntity(targetTrailer, palletEntity, true)
 
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
@@ -252,7 +265,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     -- Spawna o holograma fantasma no Slot 1 ao iniciar
     if trailer and DoesEntityExist(trailer) then
         local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-        ForkliftModule.SpawnGhostProp(trailer, 'sm3d_prop_pallet_1', firstOffset)
+        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', firstOffset)
     end
 
     CreateThread(function()
@@ -303,7 +316,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         -- Validação de aproximação da caçamba do reboque
                         local isNearTrailerBed = (math.abs(relPos.x) <= 2.2) and (relPos.y >= -7.5 and relPos.y <= 6.2) and (relPos.z >= -1.0 and relPos.z <= 2.8)
 
-                        if isNearTrailerBed then
+                        if isNearTrailerBed and CurrentSlotIndex <= requiredCount then
                             sleep = 0
                             if TextUIShowing ~= 'drop' then
                                 lib.showTextUI(('[G] Fixar Palete no Slot %d (Fantasma)'):format(CurrentSlotIndex), { position = 'left-center', icon = 'truck-ramp-box' })
@@ -333,7 +346,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     if loadedCount < requiredCount then
                                         -- Spawna o holograma no próximo slot sequencial
                                         local nextOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                        ForkliftModule.SpawnGhostProp(trailer, 'sm3d_prop_pallet_1', nextOffset)
+                                        ForkliftModule.SpawnGhostProp(trailer, 'm24_1_prop_m24_1_carrier_cargo_04a', nextOffset)
                                     else
                                         -- Todos os paletes carregados com sucesso
                                         ForkliftModule.StopOperation()
