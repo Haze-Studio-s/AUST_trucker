@@ -629,21 +629,20 @@ local function ExecutePalletTie(index)
         palletData.relOffset = finalOffset
         palletData.relHeading = relHeading
 
-        -- Acoplamento seguro imediato com colisão ativa para o Player (collision = true)
-        FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, false)
-        SetEntityCollision(palletEnt, true, true)
-        SetEntityNoCollisionEntity(palletEnt, trailer, true)
-        SetEntityNoCollisionEntity(trailer, palletEnt, true)
-
+        -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, relHeading,
-            false, false, true, false, 2, true
+            false, false, false, false, 2, true
         )
-        SetEntityNoCollisionEntity(palletEnt, trailer, true)
-        SetEntityNoCollisionEntity(trailer, palletEnt, true)
+
+        -- Reforço de colisão com o mundo (Pós-Attach)
+        SetEntityCollision(palletEnt, true, true)
+        SetEntityDynamic(palletEnt, true)
+        SetCanClimbOnEntity(palletEnt, true)
+        SetEntityNoCollisionEntity(palletEnt, trailer, false)
+        SetEntityNoCollisionEntity(trailer, palletEnt, false)
     end
 
     -- Minigame de perícia
@@ -736,21 +735,20 @@ local function ExecuteForkliftTie(forkEntity)
 
     DetachEntity(fork, true, true)
 
-    -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
-    SetEntityDynamic(fork, false)
-    SetEntityCollision(fork, true, true)
-    SetEntityNoCollisionEntity(fork, trailer, true)
-    SetEntityNoCollisionEntity(trailer, fork, true)
-
-    -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO ATIVA PARA PLAYER E ISOLADA DO TRAILER
+    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
     AttachEntityToEntity(
         fork, trailer, 0,
         0.0, -5.5, safeForkZ,
         0.0, 0.0, 0.0,
-        false, false, true, false, 2, true
+        false, false, false, false, 2, true
     )
-    SetEntityNoCollisionEntity(fork, trailer, true)
-    SetEntityNoCollisionEntity(trailer, fork, true)
+
+    -- Reforço de colisão com o mundo (Pós-Attach)
+    SetEntityCollision(fork, true, true)
+    SetEntityDynamic(fork, true)
+    SetCanClimbOnEntity(fork, true)
+    SetEntityNoCollisionEntity(fork, trailer, false)
+    SetEntityNoCollisionEntity(trailer, fork, false)
     FreezeEntityPosition(fork, false)
 
     ForkliftLoadedOnTrailer = true
@@ -1023,21 +1021,21 @@ SetupEmbarkForkliftStage = function()
                             timeout = timeout - 50
                         end
 
-                        -- Anexa a empilhadeira com segurança na traseira da carreta
+                        -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false)
                         local tRot = GetEntityRotation(trailer, 2)
-                        SetEntityDynamic(fork, false)
-                        SetEntityCollision(fork, true, true)
-                        SetEntityNoCollisionEntity(fork, trailer, true)
-                        SetEntityNoCollisionEntity(trailer, fork, true)
-
                         AttachEntityToEntity(
                             fork, trailer, 0,
                             0.0, -5.2, 0.35,
                             0.0, 0.0, 0.0,
-                            false, false, true, false, 2, true
+                            false, false, false, false, 2, true
                         )
-                        SetEntityNoCollisionEntity(fork, trailer, true)
-                        SetEntityNoCollisionEntity(trailer, fork, true)
+
+                        -- Reforço de colisão com o mundo (Pós-Attach)
+                        SetEntityCollision(fork, true, true)
+                        SetEntityDynamic(fork, true)
+                        SetCanClimbOnEntity(fork, true)
+                        SetEntityNoCollisionEntity(fork, trailer, false)
+                        SetEntityNoCollisionEntity(trailer, fork, false)
                         FreezeEntityPosition(fork, false)
 
                         ForkliftLoadedOnTrailer = true
@@ -1112,8 +1110,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local pEnt = pData.entity
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                 FreezeEntityPosition(pEnt, false)
-                SetEntityDynamic(pEnt, false)
+                SetEntityDynamic(pEnt, true)
                 SetEntityCollision(pEnt, true, true)
+                SetCanClimbOnEntity(pEnt, true)
                 SetEntityNoCollisionEntity(pEnt, trailer, true)
                 SetEntityNoCollisionEntity(trailer, pEnt, true)
             end
@@ -1122,8 +1121,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         local fork = JobEntities.forklift
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
             FreezeEntityPosition(fork, false)
-            SetEntityDynamic(fork, false)
+            SetEntityDynamic(fork, true)
             SetEntityCollision(fork, true, true)
+            SetCanClimbOnEntity(fork, true)
             SetEntityNoCollisionEntity(fork, trailer, true)
             SetEntityNoCollisionEntity(trailer, fork, true)
         end
