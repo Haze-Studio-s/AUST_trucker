@@ -146,7 +146,6 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     -- Persistência de Memória & LOD Máximo (impede descarte e sumiço ao se aproximar)
     SetEntityAsMissionEntity(ghost, true, true)
     SetEntityLodDist(ghost, 0xFFFF)
-    SetEntityDistanceCullingRadius(ghost, 0.0)
 
     -- Holograma Fantasma: semi-transparente, sem colisão, invencível e imune
     SetEntityAlpha(ghost, 150, false)
@@ -214,7 +213,6 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- Reforço de colisão com o mundo (Pós-Attach) & Persistência de Missão (Anti-LOD Drop)
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
-    SetEntityDistanceCullingRadius(palletEntity, 0.0)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityCollision(palletEntity, true, true)

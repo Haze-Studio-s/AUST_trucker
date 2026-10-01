@@ -1796,7 +1796,6 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                 if ent and DoesEntityExist(ent) then
                     SetEntityAsMissionEntity(ent, true, true)
                     SetEntityLodDist(ent, 0xFFFF)
-                    SetEntityDistanceCullingRadius(ent, 0.0)
                     SetEntityVisible(ent, true)
                     ResetEntityAlpha(ent)
                     PlaceObjectOnGroundProperly(ent)
