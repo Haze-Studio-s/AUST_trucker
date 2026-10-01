@@ -741,9 +741,9 @@ local function ExecuteForkliftTie(forkEntity)
 
     -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
     SetEntityDynamic(fork, false)
+    SetEntityCollision(fork, true, true)
     SetEntityNoCollisionEntity(fork, trailer, false)
     SetEntityNoCollisionEntity(trailer, fork, false)
-    SetEntityCollision(fork, true, true)
 
     -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
     AttachEntityToEntity(
@@ -752,6 +752,8 @@ local function ExecuteForkliftTie(forkEntity)
         0.0, 0.0, 0.0,
         false, false, false, false, 2, true
     )
+    SetEntityNoCollisionEntity(fork, trailer, false)
+    SetEntityNoCollisionEntity(trailer, fork, false)
     FreezeEntityPosition(fork, false)
 
     ForkliftLoadedOnTrailer = true
@@ -1092,11 +1094,17 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 local hasHighRisk = false
                 local anyRemaining = false
 
+                local trailer = JobEntities.trailer
                 for _, pData in ipairs(targetList) do
                     if pData.isSecured and not pData.lost and not pData.isFallen then
                         anyRemaining = true
                         if pData.riskLevel == 'high' or pData.riskLevel == 'medium' then
                             hasHighRisk = true
+                        end
+                        -- Blindagem contínua: anula colisão Pallet x Trailer mantendo o Player sólido
+                        if trailer and DoesEntityExist(trailer) and pData.entity and DoesEntityExist(pData.entity) then
+                            SetEntityNoCollisionEntity(pData.entity, trailer, true)
+                            SetEntityNoCollisionEntity(trailer, pData.entity, true)
                         end
                     end
                 end

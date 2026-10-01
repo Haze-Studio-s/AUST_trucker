@@ -205,9 +205,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                 -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
                                 SetEntityDynamic(palletEntity, false)
+                                SetEntityCollision(palletEntity, true, true)
                                 SetEntityNoCollisionEntity(palletEntity, trailer, false)
                                 SetEntityNoCollisionEntity(trailer, palletEntity, false)
-                                SetEntityCollision(palletEntity, true, true)
 
                                 -- 2. ANEXAÇÃO SEGURA (ATTACH)
                                 AttachEntityToEntity(
@@ -216,6 +216,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     0.0, 0.0, relHeading,
                                     false, false, false, false, 2, true
                                 )
+                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
+                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
                                 FreezeEntityPosition(palletEntity, false)
 
                                 CurrentForkliftPallet = nil
