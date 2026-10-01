@@ -1,5 +1,6 @@
 -- aurp_trucker — client/modules/offset_editor.lua
 -- Módulo In-Game de Calibração Visual 3D de Offsets de Reboque e Gerenciamento de Spawns/NPCs
+-- Motor de Gizmo 3D (Three.js + TransformControls) adaptado do vp_staff_studio (Haze-Studio-s)
 
 OffsetEditor = {}
 
@@ -8,6 +9,8 @@ local CalibTrailer = nil
 local CalibGhost = nil
 local CurrentOffsets = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local CalibParams = { trailerModel = 'trailers2', slotIndex = 1, isForklift = false, propModel = 'hei_prop_carrier_cargo_04b' }
+local CurrentGizmoMode = 'translate' -- 'translate' | 'rotate'
+local IsGizmoCursorActive = false
 
 -- Cache de NPCs dinâmicos criados pelo Admin
 local DynamicAdminPeds = {}
@@ -51,7 +54,7 @@ local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, headin
 
     SetEntityAsMissionEntity(ghost, true, true)
     SetEntityLodDist(ghost, 0xFFFF)
-    SetEntityAlpha(ghost, 185, false)
+    SetEntityAlpha(ghost, 190, false)
     SetEntityCollision(ghost, false, false)
     SetEntityInvincible(ghost, true)
     FreezeEntityPosition(ghost, true)
@@ -61,41 +64,43 @@ local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, headin
 end
 
 -- ============================================================
--- RENDERIZAÇÃO DE GIZMO 3D VISUAL (RGB AXES & ROTATION RING)
+-- NUI CALLBACK: RECEBE MANIPULAÇÃO DO GIZMO 3D (THREE.JS)
 -- ============================================================
 
-local function DrawVisualGizmo(ghost, trailer)
-    if not ghost or not DoesEntityExist(ghost) or not trailer or not DoesEntityExist(trailer) then return end
+RegisterNUICallback('moveGizmoOffset', function(data, cb)
+    if not IsCalibrating or not CalibTrailer or not DoesEntityExist(CalibTrailer) or not CalibGhost or not DoesEntityExist(CalibGhost) then
+        if cb then cb({ ok = false }) end
+        return
+    end
 
-    local gCoords = GetEntityCoords(ghost)
-    local tHeading = GetEntityHeading(trailer)
-    local tRad = math.rad(tHeading)
+    local worldPos = data.position
+    local worldRot = data.rotation
 
-    -- Vetores unitários alinhados com o reboque
-    local tFwd = vector3(-math.sin(tRad), math.cos(tRad), 0.0)
-    local tRgt = vector3(math.cos(tRad), math.sin(tRad), 0.0)
-    local tUp  = vector3(0.0, 0.0, 1.0)
+    if worldPos then
+        -- 1. Converte coordenadas globais (World) do Gizmo para Offset Relativo ao reboque
+        local relOffset = GetOffsetFromEntityGivenWorldCoords(CalibTrailer, worldPos.x, worldPos.y, worldPos.z)
+        local tRot = GetEntityRotation(CalibTrailer, 2)
+        local relHeading = 0.0
+        if worldRot and worldRot.z then
+            relHeading = (worldRot.z - tRot.z) % 360.0
+        end
 
-    local axisLen = 1.1
+        CurrentOffsets = {
+            x = tonumber(string.format("%.3f", relOffset.x)),
+            y = tonumber(string.format("%.3f", relOffset.y)),
+            z = tonumber(string.format("%.3f", relOffset.z)),
+            heading = tonumber(string.format("%.1f", relHeading))
+        }
 
-    -- Eixo X (Vermelho): Lateral do Reboque (Esquerda / Direita)
-    local xEnd = gCoords + tRgt * axisLen
-    DrawLine(gCoords.x, gCoords.y, gCoords.z, xEnd.x, xEnd.y, xEnd.z, 240, 50, 50, 240)
-    DrawMarker(28, xEnd.x, xEnd.y, xEnd.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.07, 0.07, 0.07, 240, 50, 50, 220, false, false, 2, false, nil, nil, false)
+        -- 2. Atualiza entidade fantasma em tempo real
+        SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+        if worldRot and worldRot.z then
+            SetEntityHeading(CalibGhost, worldRot.z)
+        end
+    end
 
-    -- Eixo Y (Verde): Comprimento do Reboque (Frente / Trás)
-    local yEnd = gCoords + tFwd * axisLen
-    DrawLine(gCoords.x, gCoords.y, gCoords.z, yEnd.x, yEnd.y, yEnd.z, 50, 240, 50, 240)
-    DrawMarker(28, yEnd.x, yEnd.y, yEnd.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.07, 0.07, 0.07, 50, 240, 50, 220, false, false, 2, false, nil, nil, false)
-
-    -- Eixo Z (Azul): Altura do Reboque (Cima / Baixo)
-    local zEnd = gCoords + tUp * axisLen
-    DrawLine(gCoords.x, gCoords.y, gCoords.z, zEnd.x, zEnd.y, zEnd.z, 60, 150, 255, 240)
-    DrawMarker(28, zEnd.x, zEnd.y, zEnd.z, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.07, 0.07, 0.07, 60, 150, 255, 220, false, false, 2, false, nil, nil, false)
-
-    -- Anel de Rotação (Amarelo / Dourado) na base
-    DrawMarker(23, gCoords.x, gCoords.y, gCoords.z - 0.15, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.25, 1.25, 0.04, 255, 215, 0, 140, false, false, 2, false, nil, nil, false)
-end
+    if cb then cb({ ok = true }) end
+end)
 
 -- ============================================================
 -- FERRAMENTA VISUAL IN-GAME DE OFFSETS (FREECAM & 3D GIZMO)
@@ -104,6 +109,8 @@ end
 function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel)
     if IsCalibrating then return end
     IsCalibrating = true
+    IsGizmoCursorActive = false
+    CurrentGizmoMode = 'translate'
 
     trailerModel = (trailerModel or 'trailers2'):lower()
     slotIndex = tonumber(slotIndex) or 1
@@ -117,7 +124,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         propModel = propModel
     }
 
-    -- Fecha NUI temporariamente para liberar tela e controles 3D
+    -- Minimiza o menu administrativo principal
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'admin_minimize' })
@@ -181,9 +188,20 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     SetCamActive(calibCam, true)
     RenderScriptCams(true, false, 0, true, true)
 
+    -- Inicializa o Gizmo 3D (Three.js + TransformControls) sobreposto na tela
+    local gWorldCoords = GetEntityCoords(CalibGhost)
+    local gWorldRot = GetEntityRotation(CalibGhost, 2)
+    SendNUIMessage({
+        action = 'initGizmo',
+        data = {
+            position = { x = gWorldCoords.x, y = gWorldCoords.y, z = gWorldCoords.z },
+            rotation = { x = gWorldRot.x, y = gWorldRot.y, z = gWorldRot.z }
+        }
+    })
+
     lib.notify({
-        title = 'Calibração 3D Ativa',
-        description = 'WASD + Mouse: Voar câmera livre.\nSetas + Q/E + R/F: Posicionar a carga.\nENTER: Salvar e Avançar.',
+        title = 'Gizmo 3D Ativo (vp_staff_studio)',
+        description = 'WASD: Voo Livre.\nSegure [ALT] para liberar o mouse e arrastar o Gizmo.\n[T] Setas | [R] Rotação | [ENTER] Salvar.',
         type = 'info',
         duration = 8000
     })
@@ -193,23 +211,52 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         while IsCalibrating do
             Wait(0)
 
-            -- Desabilita ações normais do jogo para isolar o controle da câmera e da carga
+            -- Desabilita ações normais do jogo
             DisableAllControlActions(0)
 
-            -- 1. ROTAÇÃO DA CÂMERA LIVRE PELO MOUSE (LOOK AROUND)
-            local mouseX = GetDisabledControlNormal(0, 1) -- Look LR
-            local mouseY = GetDisabledControlNormal(0, 2) -- Look UD
-            if mouseX ~= 0.0 or mouseY ~= 0.0 then
-                local camSens = 4.0
-                camRot = vector3(
-                    math.max(-85.0, math.min(85.0, camRot.x - mouseY * camSens)),
-                    0.0,
-                    (camRot.z - mouseX * camSens) % 360.0
-                )
-                SetCamRot(calibCam, camRot.x, camRot.y, camRot.z, 2)
+            -- 1. SINCRONIZAÇÃO DA CÂMERA FIVEM COM O THREE.JS (FRAME A FRAME)
+            local finalCamPos = GetFinalRenderedCamCoord()
+            local finalCamRot = GetFinalRenderedCamRot(2)
+            SendNUIMessage({
+                action = 'setCameraPosition',
+                data = {
+                    position = { x = finalCamPos.x, y = finalCamPos.y, z = finalCamPos.z },
+                    rotation = { x = finalCamRot.x, y = finalCamRot.y, z = finalCamRot.z }
+                }
+            })
+
+            -- 2. ALTERNÂNCIA DE CURSOR VS MOUSE LOOK VIA TECLA ALT (HOLD)
+            local isAltHeld = IsDisabledControlPressed(0, 19) or IsControlPressed(0, 19)
+            if isAltHeld then
+                if not IsGizmoCursorActive then
+                    IsGizmoCursorActive = true
+                    SetNuiFocus(true, true)
+                    SetNuiFocusKeepInput(true)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = true } })
+                end
+            else
+                if IsGizmoCursorActive then
+                    IsGizmoCursorActive = false
+                    SetNuiFocus(false, false)
+                    SetNuiFocusKeepInput(false)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = false } })
+                end
+
+                -- Rotação de câmera suave pelo mouse (somente quando ALT não estiver segurado)
+                local mouseX = GetDisabledControlNormal(0, 1) -- Look LR
+                local mouseY = GetDisabledControlNormal(0, 2) -- Look UD
+                if mouseX ~= 0.0 or mouseY ~= 0.0 then
+                    local camSens = 4.0
+                    camRot = vector3(
+                        math.max(-85.0, math.min(85.0, camRot.x - mouseY * camSens)),
+                        0.0,
+                        (camRot.z - mouseX * camSens) % 360.0
+                    )
+                    SetCamRot(calibCam, camRot.x, camRot.y, camRot.z, 2)
+                end
             end
 
-            -- 2. VOO LIVRE DA CÂMERA (WASD / Space / LCtrl)
+            -- 3. VOO LIVRE DA CÂMERA (WASD / Space / LCtrl / Shift) — SEMPRE ATIVO
             local radX = math.rad(camRot.x)
             local radZ = math.rad(camRot.z)
             local cosX = math.cos(radX)
@@ -223,7 +270,6 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
 
             local camSpeed = 0.16
             if IsDisabledControlPressed(0, 21) then camSpeed = 0.45 end -- LShift (Turbo)
-            if IsDisabledControlPressed(0, 19) then camSpeed = 0.04 end -- LAlt (Precision / Voo Lento)
 
             local camPos = GetCamCoord(calibCam)
             local camMoved = false
@@ -239,91 +285,70 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 SetCamCoord(calibCam, camPos.x, camPos.y, camPos.z)
             end
 
-            -- 3. MANIPULAÇÃO DO OBJETO FANTASMA (SETAS + Q/E + R/F)
-            local moveStep = 0.02
+            -- 4. ALTERNÂNCIA DE MODO DO GIZMO COM AS TECLAS T E R
+            if IsDisabledControlJustPressed(0, 245) or IsControlJustPressed(0, 245) then -- T
+                CurrentGizmoMode = 'translate'
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'translate' } })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas)', type = 'info', duration = 1200 })
+            elseif IsDisabledControlJustPressed(0, 45) or IsControlJustPressed(0, 45) then -- R
+                CurrentGizmoMode = 'rotate'
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'rotate' } })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
+            end
+
+            -- 5. AJUSTE FINO AUXILIAR VIA TECLADO (SETAS + Q/E)
+            local moveStep = 0.015
             local rotStep = 1.0
-
-            if IsDisabledControlPressed(0, 21) then -- Shift (Rápido)
-                moveStep = 0.08
+            if IsDisabledControlPressed(0, 21) then
+                moveStep = 0.06
                 rotStep = 3.5
-            elseif IsDisabledControlPressed(0, 19) then -- Alt (Micro-ajuste milimétrico)
-                moveStep = 0.003
-                rotStep = 0.2
             end
 
-            local objChanged = false
+            local kbMoved = false
+            if IsDisabledControlPressed(0, 172) or IsDisabledControlPressed(0, 27) then CurrentOffsets.y = CurrentOffsets.y + moveStep; kbMoved = true end
+            if IsDisabledControlPressed(0, 173) then CurrentOffsets.y = CurrentOffsets.y - moveStep; kbMoved = true end
+            if IsDisabledControlPressed(0, 174) then CurrentOffsets.x = CurrentOffsets.x - moveStep; kbMoved = true end
+            if IsDisabledControlPressed(0, 175) then CurrentOffsets.x = CurrentOffsets.x + moveStep; kbMoved = true end
+            if IsDisabledControlPressed(0, 44) then CurrentOffsets.z = CurrentOffsets.z - moveStep; kbMoved = true end -- Q
+            if IsDisabledControlPressed(0, 38) then CurrentOffsets.z = CurrentOffsets.z + moveStep; kbMoved = true end -- E
 
-            -- Setas Cima / Baixo: Eixo Y (Frente / Trás do reboque)
-            if IsDisabledControlPressed(0, 172) or IsDisabledControlPressed(0, 27) then -- Seta Cima
-                CurrentOffsets.y = CurrentOffsets.y + moveStep
-                objChanged = true
-            end
-            if IsDisabledControlPressed(0, 173) then -- Seta Baixo
-                CurrentOffsets.y = CurrentOffsets.y - moveStep
-                objChanged = true
-            end
-
-            -- Setas Esquerda / Direita: Eixo X (Lateral do reboque)
-            if IsDisabledControlPressed(0, 174) then -- Seta Esquerda
-                CurrentOffsets.x = CurrentOffsets.x - moveStep
-                objChanged = true
-            end
-            if IsDisabledControlPressed(0, 175) then -- Seta Direita
-                CurrentOffsets.x = CurrentOffsets.x + moveStep
-                objChanged = true
-            end
-
-            -- Q / E: Eixo Z (Altura / Cima / Baixo)
-            if IsDisabledControlPressed(0, 44) then -- Q (Baixo)
-                CurrentOffsets.z = CurrentOffsets.z - moveStep
-                objChanged = true
-            end
-            if IsDisabledControlPressed(0, 38) then -- E (Cima)
-                CurrentOffsets.z = CurrentOffsets.z + moveStep
-                objChanged = true
-            end
-
-            -- R / F: Rotação (Heading)
-            if IsDisabledControlPressed(0, 45) then -- R (Anti-horário)
-                CurrentOffsets.heading = (CurrentOffsets.heading - rotStep) % 360.0
-                objChanged = true
-            end
-            if IsDisabledControlPressed(0, 23) or IsDisabledControlPressed(0, 49) then -- F (Horário)
-                CurrentOffsets.heading = (CurrentOffsets.heading + rotStep) % 360.0
-                objChanged = true
-            end
-
-            -- Aplica nova posição e rotação ao fantasma no mundo
-            if objChanged and CalibGhost and DoesEntityExist(CalibGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
+            if kbMoved and CalibGhost and DoesEntityExist(CalibGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
                 local worldPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z)
                 SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
                 local tHeading = GetEntityHeading(CalibTrailer)
                 SetEntityHeading(CalibGhost, (tHeading + CurrentOffsets.heading) % 360.0)
+
+                -- Notifica o Three.js para sincronizar a posição do Gizmo
+                SendNUIMessage({
+                    action = 'setGizmoEntity',
+                    data = {
+                        position = { x = worldPos.x, y = worldPos.y, z = worldPos.z },
+                        rotation = { x = 0, y = 0, z = (tHeading + CurrentOffsets.heading) % 360.0 }
+                    }
+                })
             end
 
-            -- 4. RENDERIZAÇÃO DO GIZMO 3D VISUAL (EIXOS RGB + ANEL DE ROTAÇÃO)
-            DrawVisualGizmo(CalibGhost, CalibTrailer)
-
-            -- 5. HUD INFORMATIVO NA TELA
+            -- 6. HUD INFORMATIVO NA TELA
             local targetLabel = CalibParams.isForklift and '~y~Empilhadeira (Slot Final)~s~' or ('~y~Palete Slot %d~s~'):format(CalibParams.slotIndex)
-            local speedLabel = IsDisabledControlPressed(0, 21) and '~r~[TURBO]~s~' or (IsDisabledControlPressed(0, 19) and '~y~[PRECISÃO MILIMÉTRICA]~s~' or '~b~[NORMAL]~s~')
+            local modeStatus = IsGizmoCursorActive and '~g~[CURSOR GIZMO ATIVO]~s~' or '~b~[CÂMERA LIVRE]~s~'
+            local gizmoModeLabel = CurrentGizmoMode == 'translate' and '~w~Translação (Setas)~s~' or '~w~Rotação (Anéis)~s~'
 
-            local hudText = ('~g~[CALIBRAÇÃO 3D & FREECAM]~s~ %s\n' ..
-                'Trailer: ~w~%s~s~  |  Alvo: %s\n' ..
+            local hudText = ('~g~[GIZMO 3D vp_staff_studio]~s~ %s\n' ..
+                'Trailer: ~w~%s~s~  |  Alvo: %s  |  Gizmo: %s\n' ..
                 'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~\n' ..
-                '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Space/LCtrl] Subir/Descer\n' ..
-                '~y~[Setas ↑↓←→] Mover Carga (X/Y)  |  [Q / E] Altura (Z)  |  [R / F] Girar\n' ..
-                '~c~[Shift] Turbo  |  [Alt] Micro-ajuste milimétrico~s~\n' ..
+                '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
+                '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
+                '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
                 '~g~[ENTER] Salvar & Próximo Slot~s~  |  ~r~[BACKSPACE] Finalizar~s~'):format(
-                speedLabel,
-                CalibParams.trailerModel, targetLabel,
+                modeStatus,
+                CalibParams.trailerModel, targetLabel, gizmoModeLabel,
                 CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
             )
 
             SetTextFont(0)
             SetTextProportional(1)
             SetTextScale(0.35, 0.35)
-            SetTextColour(255, 255, 255, 230)
+            SetTextColour(255, 255, 255, 235)
             SetTextDropshadow(1, 0, 0, 0, 200)
             SetTextEdge(1, 0, 0, 0, 250)
             SetTextDropShadow()
@@ -332,7 +357,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
 
-            -- 6. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) COM ENTER
+            -- 7. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) COM ENTER
             if IsDisabledControlJustPressed(0, 18) or IsDisabledControlJustPressed(0, 201) then
                 -- Dispara salvamento no banco de dados
                 TriggerServerEvent('aurp_trucker:server:adminSaveTrailerOffset', {
@@ -372,6 +397,17 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                         end
                         CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = 0.0 }
                         SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, 0.0)
+
+                        -- Reposiciona o Gizmo Three.js no novo fantasma
+                        local nextGhostPos = GetEntityCoords(CalibGhost)
+                        local nextGhostRot = GetEntityRotation(CalibGhost, 2)
+                        SendNUIMessage({
+                            action = 'setGizmoEntity',
+                            data = {
+                                position = { x = nextGhostPos.x, y = nextGhostPos.y, z = nextGhostPos.z },
+                                rotation = { x = nextGhostRot.x, y = nextGhostRot.y, z = nextGhostRot.z }
+                            }
+                        })
                     else
                         -- Todos os paletes calibrados! Avança automaticamente para a Empilhadeira!
                         CalibParams.isForklift = true
@@ -386,6 +422,16 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                         local forkVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift) or ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
                         CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = 0.0 }
                         SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, 0.0)
+
+                        local forkPos = GetEntityCoords(CalibGhost)
+                        local forkRot = GetEntityRotation(CalibGhost, 2)
+                        SendNUIMessage({
+                            action = 'setGizmoEntity',
+                            data = {
+                                position = { x = forkPos.x, y = forkPos.y, z = forkPos.z },
+                                rotation = { x = forkPos.x, y = forkRot.y, z = forkRot.z }
+                            }
+                        })
                     end
                 else
                     -- Slot da empilhadeira finalizado! Ciclo completo!
@@ -407,7 +453,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 end
             end
 
-            -- 7. CANCELAMENTO OU FINALIZAÇÃO ANTECIPADA COM BACKSPACE / ESC
+            -- 8. CANCELAMENTO OU FINALIZAÇÃO ANTECIPADA COM BACKSPACE / ESC
             if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
                 OffsetEditor.StopCalibration(createdTrailer, calibCam)
                 SendNUIMessage({ action = 'admin_restore' })
@@ -421,8 +467,11 @@ end
 
 function OffsetEditor.StopCalibration(deleteTrailer, cam)
     IsCalibrating = false
+    IsGizmoCursorActive = false
+
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'hideGizmo' })
 
     if cam and DoesCamExist(cam) then
         DestroyCam(cam, false)
