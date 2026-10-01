@@ -627,22 +627,23 @@ local function ExecutePalletTie(index)
         NetworkRequestControlOfEntity(palletEnt)
         DetachEntity(palletEnt, true, true)
 
-        -- 1. DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
-        -- Deve ser chamada OBRIGATORIAMENTE antes do attach com 'false' (não apenas no frame atual)
+        -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
+        -- Desliga reação física (gravidade/massa), tornando-a estática para a engine Havok
+        SetEntityDynamic(palletEnt, false)
+        -- Força o motor a ignorar a colisão estritamente entre a carga e o reboque (em ambas as direções)
         SetEntityNoCollisionEntity(palletEnt, trailer, false)
         SetEntityNoCollisionEntity(trailer, palletEnt, false)
+        -- Garante que a colisão global do objeto continua ativa (para jogadores e mundo)
+        SetEntityCollision(palletEnt, true, true)
 
-        -- 2. ATTACH SEGURO COM PARÂMETRO 'collision = false' E RESPIRO Z
+        -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, relHeading,
             false, false, false, false, 2, true
         )
-        SetEntityCollision(palletEnt, true, true)
-        SetEntityNoCollisionEntity(palletEnt, trailer, false)
-        SetEntityNoCollisionEntity(trailer, palletEnt, false)
-        FreezeEntityPosition(palletEnt, true)
+        FreezeEntityPosition(palletEnt, false)
     end
 
     -- Minigame de perícia
@@ -735,21 +736,20 @@ local function ExecuteForkliftTie(forkEntity)
 
     DetachEntity(fork, true, true)
 
-    -- DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
+    -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
+    SetEntityDynamic(fork, false)
     SetEntityNoCollisionEntity(fork, trailer, false)
     SetEntityNoCollisionEntity(trailer, fork, false)
+    SetEntityCollision(fork, true, true)
 
-    -- Attach com 'collision = false' para evitar arremessos
+    -- 2. ANEXAÇÃO SEGURA (ATTACH) COM COLISÃO INTERNA FALSE
     AttachEntityToEntity(
         fork, trailer, 0,
         0.0, -5.5, safeForkZ,
         0.0, 0.0, 0.0,
         false, false, false, false, 2, true
     )
-    SetEntityCollision(fork, true, true)
-    SetEntityNoCollisionEntity(fork, trailer, false)
-    SetEntityNoCollisionEntity(trailer, fork, false)
-    FreezeEntityPosition(fork, true)
+    FreezeEntityPosition(fork, false)
 
     ForkliftLoadedOnTrailer = true
 
@@ -1159,11 +1159,11 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     NetworkRequestControlOfEntity(palletEnt)
                                 end
 
-                                -- Transição de Física Híbrida: Desacopla mantendo inércia do conjunto
+                                -- 3. RESTAURAÇÃO NA QUEDA (IMEDIATAMENTE ANTES DO DETACH)
+                                SetEntityDynamic(palletEnt, true)
                                 DetachEntity(palletEnt, true, true)
                                 SetEntityCollision(palletEnt, true, true)
                                 FreezeEntityPosition(palletEnt, false)
-                                SetEntityDynamic(palletEnt, true)
                                 ActivatePhysics(palletEnt)
                                 SetEntityMass(palletEnt, 250.0)
 

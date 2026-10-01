@@ -203,20 +203,20 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 end
                                 local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
-                                -- DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
+                                -- 1. PREPARAÇÃO DA ENTIDADE (ANTES DO ATTACH)
+                                SetEntityDynamic(palletEntity, false)
                                 SetEntityNoCollisionEntity(palletEntity, trailer, false)
                                 SetEntityNoCollisionEntity(trailer, palletEntity, false)
+                                SetEntityCollision(palletEntity, true, true)
 
+                                -- 2. ANEXAÇÃO SEGURA (ATTACH)
                                 AttachEntityToEntity(
                                     palletEntity, trailer, 0,
                                     relPos.x, relPos.y, safeZ,
                                     0.0, 0.0, relHeading,
                                     false, false, false, false, 2, true
                                 )
-                                SetEntityCollision(palletEntity, true, true)
-                                SetEntityNoCollisionEntity(palletEntity, trailer, false)
-                                SetEntityNoCollisionEntity(trailer, palletEntity, false)
-                                FreezeEntityPosition(palletEntity, true)
+                                FreezeEntityPosition(palletEntity, false)
 
                                 CurrentForkliftPallet = nil
                                 loadedCount = loadedCount + 1
