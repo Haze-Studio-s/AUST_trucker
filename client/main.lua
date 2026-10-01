@@ -690,27 +690,38 @@ local function ExecutePalletTie(index)
     -- SINCRONIZAÇÃO ABSOLUTA: Palete físico herda a coordenada exata do slot calibrado no banco/fantasma
     if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
         local slotIdx = palletData.slotIndex or index
-        local finalOffset = palletData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, slotIdx))
+        local finalOffset = palletData.relOffset
+        local finalHeading = palletData.relHeading or 0.0
+
         if not finalOffset then
-            local pCoords = GetEntityCoords(palletEnt)
-            local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-            local deckZ = GetTrailerDeckZ(trailer)
-            finalOffset = vector3(rawOffset.x, rawOffset.y, deckZ + 0.01)
+            local off, h = ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, slotIdx)
+            if off then
+                finalOffset = off
+                finalHeading = h or (type(off) == 'table' and off.heading) or 0.0
+            else
+                local pCoords = GetEntityCoords(palletEnt)
+                local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+                local deckZ = GetTrailerDeckZ(trailer)
+                finalOffset = vector3(rawOffset.x, rawOffset.y, deckZ + 0.01)
+                finalHeading = 0.0
+            end
+        else
+            if finalHeading == 0.0 and type(finalOffset) == 'table' and finalOffset.heading then
+                finalHeading = finalOffset.heading
+            end
         end
 
-        local relHeading = palletData.relHeading or 0.0
-
         palletData.relOffset = finalOffset
-        palletData.relHeading = relHeading
+        palletData.relHeading = finalHeading
 
-        -- Ancoragem padronizada na origem do trailer (bone 0)
+        -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
         FreezeEntityPosition(palletEnt, false)
         SetEntityDynamic(palletEnt, true)
         AttachEntityToEntity(
             palletEnt, trailer, 0,
             finalOffset.x, finalOffset.y, finalOffset.z,
-            0.0, 0.0, relHeading,
-            false, false, false, false, 2, false
+            0.0, 0.0, finalHeading,
+            false, false, false, false, 2, true
         )
 
         -- Reforço de colisão com o mundo (Pós-Attach)
@@ -811,22 +822,20 @@ local function ExecuteForkliftTie(forkEntity)
         timeout = timeout - 50
     end
 
-    local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
+    local forkOffset, forkHeading = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)
+    if not forkOffset then forkOffset = vector3(0.0, -5.2, 0.35) end
+    forkHeading = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
 
     DetachEntity(fork, true, true)
 
-    -- Matriz de Colisão Híbrida: Isolamento mútuo no Attach (12º arg = false, 14º arg = false)
-    local trailerBone = GetEntityBoneIndexByName(trailer, "chassis")
-    if trailerBone == -1 then trailerBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
-    if trailerBone == -1 then trailerBone = 0 end
-
+    -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
     FreezeEntityPosition(fork, false)
     SetEntityDynamic(fork, true)
     AttachEntityToEntity(
-        fork, trailer, trailerBone,
+        fork, trailer, 0,
         forkOffset.x, forkOffset.y, forkOffset.z,
-        0.0, 0.0, 0.0,
-        false, false, false, false, 2, false
+        0.0, 0.0, forkHeading,
+        false, false, false, false, 2, true
     )
 
     -- Reforço de colisão com o mundo (Pós-Attach)
@@ -1241,7 +1250,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         pEnt, trailer, 0,
                         pData.relOffset.x, pData.relOffset.y, pData.relOffset.z,
                         0.0, 0.0, pData.relHeading or 0.0,
-                        false, false, false, false, 2, false
+                        false, false, false, false, 2, true
                     )
                 end
             end
@@ -1258,12 +1267,13 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             SetEntityNoCollisionEntity(fork, trailer, true)
             SetEntityNoCollisionEntity(trailer, fork, true)
 
-            local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
+            local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
+            local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
             AttachEntityToEntity(
                 fork, trailer, 0,
                 forkOffset.x, forkOffset.y, forkOffset.z,
-                0.0, 0.0, 0.0,
-                false, false, false, false, 2, false
+                0.0, 0.0, fHead,
+                false, false, false, false, 2, true
             )
         end
     end
@@ -1368,11 +1378,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     SetEntityDynamic(pEnt, true)
                                     SetEntityCollision(pEnt, false, false)
                                     local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
+                                    local pHead = pData.relHeading or (type(off) == 'table' and off.heading) or 0.0
                                     AttachEntityToEntity(
                                         pEnt, tr, 0,
                                         off.x, off.y, off.z,
-                                        0.0, 0.0, pData.relHeading or 0.0,
-                                        false, false, false, false, 2, false
+                                        0.0, 0.0, pHead,
+                                        false, false, false, false, 2, true
                                     )
                                 end
                             end
@@ -1384,12 +1395,13 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 FreezeEntityPosition(fork, false)
                                 SetEntityDynamic(fork, true)
                                 SetEntityCollision(fork, false, false)
-                                local forkOffset = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(tr)) or vector3(0.0, -5.2, 0.35)
+                                local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(tr)) or vector3(0.0, -5.2, 0.35)
+                                local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
                                 AttachEntityToEntity(
                                     fork, tr, 0,
                                     forkOffset.x, forkOffset.y, forkOffset.z,
-                                    0.0, 0.0, 0.0,
-                                    false, false, false, false, 2, false
+                                    0.0, 0.0, fHead,
+                                    false, false, false, false, 2, true
                                 )
                             end
                         end
@@ -1836,7 +1848,7 @@ lib.onCache('vehicle', function(veh)
             SendMissionNotify('Central Logística', 'Utilize a empilhadeira para carregar os pallets. Aproxime os garfos e aperte [G].', 'info')
 
             -- Inicia ciclo de manuseio com a tecla [G]
-            ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total, stowedSlot, slotOffset)
+            ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total, stowedSlot, slotOffset, slotHeading)
                 if action == 'picked' then
                     -- Com o pallet carregado, a seta aponta para o interior/traseira da carreta
                     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
@@ -1845,7 +1857,13 @@ lib.onCache('vehicle', function(veh)
                     end
                 elseif action == 'dropped' then
                     -- Registra o palete carregado com os dados exatos do slot para a amarração individual
-                    local sOffset = slotOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(JobEntities.trailer, stowedSlot or loaded)) or vector3(0.0, 0.0, 0.35)
+                    local sOffset, sHead = slotOffset, slotHeading
+                    if not sOffset and ForkliftModule.GetSlotOffset then
+                        sOffset, sHead = ForkliftModule.GetSlotOffset(JobEntities.trailer, stowedSlot or loaded)
+                    end
+                    if not sOffset then sOffset = vector3(0.0, 0.0, 0.35) end
+                    local finalH = sHead or (type(sOffset) == 'table' and sOffset.heading) or 0.0
+
                     table.insert(LoadedPallets, {
                         entity = palletEnt,
                         isSecured = false,
@@ -1853,7 +1871,7 @@ lib.onCache('vehicle', function(veh)
                         lost = false,
                         slotIndex = stowedSlot or loaded,
                         relOffset = sOffset,
-                        relHeading = 0.0
+                        relHeading = finalH
                     })
 
                     -- Pallet acomodado: seta volta a apontar para o próximo pallet
@@ -1929,14 +1947,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
             if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
             for idx, v in pairs(data.pallets or {}) do
-                local vec = vector3(v.x, v.y, v.z)
-                Config.TrailerSlots[h].pallets[tonumber(idx)] = vec
-                Config.TrailerSlots[mKey].pallets[tonumber(idx)] = vec
+                local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                Config.TrailerSlots[h].pallets[tonumber(idx)] = slotEntry
+                Config.TrailerSlots[mKey].pallets[tonumber(idx)] = slotEntry
             end
             if data.forklift then
-                local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
-                Config.TrailerSlots[h].forklift = vec
-                Config.TrailerSlots[mKey].forklift = vec
+                local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                Config.TrailerSlots[h].forklift = slotEntry
+                Config.TrailerSlots[mKey].forklift = slotEntry
             end
         end
     end

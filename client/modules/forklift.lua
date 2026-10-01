@@ -91,14 +91,20 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
             -- 1. Verificação direta por hash da entidade
             if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].pallets then
                 local off = Config.TrailerSlots[tModel].pallets[slotIndex] or Config.TrailerSlots[tModel].pallets[tostring(slotIndex)]
-                if off then return off end
+                if off then
+                    local h = (type(off) == 'table' and off.heading) or 0.0
+                    return off, h
+                end
             end
             -- 2. Varredura flexível por nome de modelo (string) ou hash numérico
             for modelKey, slotData in pairs(Config.TrailerSlots) do
                 local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
                 if keyHash == tModel and slotData.pallets then
                     local off = slotData.pallets[slotIndex] or slotData.pallets[tostring(slotIndex)]
-                    if off then return off end
+                    if off then
+                        local h = (type(off) == 'table' and off.heading) or 0.0
+                        return off, h
+                    end
                 end
             end
         end
@@ -106,7 +112,10 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
             for modelName, tData in pairs(Config.Polarix.CompatibleTrailers) do
                 if joaat(modelName) == tModel and tData.attachOffsets then
                     local off = tData.attachOffsets[slotIndex]
-                    if off then return vector3(off.x, off.y, off.z) end
+                    if off then
+                        local h = (type(off) == 'table' and off.heading) or 0.0
+                        return off, h
+                    end
                 end
             end
         end
@@ -115,7 +124,8 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
     local col = ((slotIndex - 1) % 2 == 0) and -0.55 or 0.55
     local row = math.floor((slotIndex - 1) / 2)
     local yOffset = 3.6 - (row * 2.4)
-    return vector3(col, yOffset, 0.35)
+    local fallback = { x = col, y = yOffset, z = 0.35, heading = 0.0 }
+    return fallback, 0.0
 end
 
 function ForkliftModule.GetForkliftSlotOffset(trailer)
@@ -124,18 +134,23 @@ function ForkliftModule.GetForkliftSlotOffset(trailer)
         if Config and Config.TrailerSlots then
             -- 1. Verificação direta por hash
             if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].forklift then
-                return Config.TrailerSlots[tModel].forklift
+                local off = Config.TrailerSlots[tModel].forklift
+                local h = (type(off) == 'table' and off.heading) or 0.0
+                return off, h
             end
             -- 2. Varredura flexível por nome ou hash
             for modelKey, slotData in pairs(Config.TrailerSlots) do
                 local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
                 if keyHash == tModel and slotData.forklift then
-                    return slotData.forklift
+                    local off = slotData.forklift
+                    local h = (type(off) == 'table' and off.heading) or 0.0
+                    return off, h
                 end
             end
         end
     end
-    return vector3(0.0, -5.2, 0.35)
+    local fallback = { x = 0.0, y = -5.2, z = 0.35, heading = 0.0 }
+    return fallback, 0.0
 end
 
 function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
@@ -175,10 +190,12 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     SetCanClimbOnEntity(ghost, false)
     FreezeEntityPosition(ghost, true)
 
+    local finalH = heading or (type(offset) == 'table' and offset.heading) or 0.0
+
     AttachEntityToEntity(
         ghost, trailer, 0,
         offset.x, offset.y, offset.z,
-        0.0, 0.0, heading or 0.0,
+        0.0, 0.0, finalH,
         false, false, false, false, 0, true
     )
 
@@ -187,8 +204,8 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
 end
 
 function ForkliftModule.SpawnForkliftGhost(trailer)
-    local off = ForkliftModule.GetForkliftSlotOffset(trailer)
-    local ghostVeh = ForkliftModule.SpawnGhostProp(trailer, 'forklift', off, 0.0)
+    local off, h = ForkliftModule.GetForkliftSlotOffset(trailer)
+    local ghostVeh = ForkliftModule.SpawnGhostProp(trailer, 'forklift', off, h)
     return ghostVeh
 end
 
@@ -210,7 +227,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         return false
     end
 
-    local slotOffset = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
+    local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
+    slotHeading = slotHeading or (type(slotOffset) == 'table' and slotOffset.heading) or 0.0
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -222,14 +240,14 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz de Colisão Híbrida: Ancoragem na origem do trailer (bone 0) para consistência milimétrica com o fantasma
+    -- Matriz de Colisão Híbrida: Ancoragem na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
         palletEntity, targetTrailer, 0,
         slotOffset.x, slotOffset.y, slotOffset.z,
-        0.0, 0.0, 0.0,
-        false, false, false, false, 2, false
+        0.0, 0.0, slotHeading,
+        false, false, false, false, 2, true
     )
 
     -- Reforço de colisão com o mundo (Pós-Attach) & Persistência de Missão (Anti-LOD Drop)
@@ -244,7 +262,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
-    return true, slotOffset
+    return true, slotOffset, slotHeading
 end
 
 local function AttachPalletToForklift(forklift, pallet)
@@ -304,14 +322,14 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
                     if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
                     for idx, v in pairs(data.pallets or {}) do
-                        local vec = vector3(v.x, v.y, v.z)
-                        Config.TrailerSlots[h].pallets[tonumber(idx)] = vec
-                        Config.TrailerSlots[mKey].pallets[tonumber(idx)] = vec
+                        local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                        Config.TrailerSlots[h].pallets[tonumber(idx)] = slotEntry
+                        Config.TrailerSlots[mKey].pallets[tonumber(idx)] = slotEntry
                     end
                     if data.forklift then
-                        local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
-                        Config.TrailerSlots[h].forklift = vec
-                        Config.TrailerSlots[mKey].forklift = vec
+                        local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                        Config.TrailerSlots[h].forklift = slotEntry
+                        Config.TrailerSlots[mKey].forklift = slotEntry
                     end
                 end
                 print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7")
@@ -320,8 +338,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             -- Yield defensivo para garantia de propagação atômica em memória
             Wait(50)
 
-            local firstOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-            ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset)
+            local firstOffset, firstHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+            ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset, firstHeading)
         end
 
         while OperationActive do
@@ -379,7 +397,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             end
 
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                local ok, slotOffset = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
+                                local ok, slotOffset, slotHeading = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
                                 if ok then
                                     local stowedSlot = CurrentSlotIndex
                                     CurrentForkliftPallet = nil
@@ -396,13 +414,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
 
                                     if onLoadedCb then
-                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, slotOffset)
+                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, slotOffset, slotHeading)
                                     end
 
                                     if loadedCount < requiredCount then
                                         -- Spawna o holograma no próximo slot sequencial
-                                        local nextOffset = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset)
+                                        local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
                                     else
                                         -- Todos os paletes carregados com sucesso
                                         ForkliftModule.StopOperation()

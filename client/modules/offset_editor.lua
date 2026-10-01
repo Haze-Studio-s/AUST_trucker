@@ -7,6 +7,7 @@ OffsetEditor = {}
 local IsCalibrating = false
 local CalibTrailer = nil
 local CalibGhost = nil
+local SavedGhosts = {}
 local CurrentOffsets = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local CalibParams = { trailerModel = 'trailers2', slotIndex = 1, isForklift = false, propModel = 'hei_prop_carrier_cargo_04b' }
 local CurrentGizmoMode = 'translate' -- 'translate' | 'rotate'
@@ -57,7 +58,7 @@ local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, headin
 
     SetEntityAsMissionEntity(ghost, true, true)
     SetEntityLodDist(ghost, 0xFFFF)
-    SetEntityAlpha(ghost, 190, false)
+    SetEntityAlpha(ghost, 200, false)
     SetEntityCollision(ghost, false, false)
     SetEntityInvincible(ghost, true)
     FreezeEntityPosition(ghost, true)
@@ -146,7 +147,14 @@ function OffsetEditor.ConfirmCurrentSlot()
         if pCount > maxPallets then maxPallets = pCount end
     end
 
-    -- 3. Transição contínua entre slots
+    -- 3. Preserva o fantasma do slot recém-calibrado como guia visual translúcido
+    if CalibGhost and DoesEntityExist(CalibGhost) then
+        SetEntityAlpha(CalibGhost, 110, false)
+        table.insert(SavedGhosts, CalibGhost)
+        CalibGhost = nil
+    end
+
+    -- 4. Transição contínua entre slots
     if not CalibParams.isForklift then
         if CalibParams.slotIndex < maxPallets then
             local prevSlot = CalibParams.slotIndex
@@ -159,11 +167,14 @@ function OffsetEditor.ConfirmCurrentSlot()
             })
 
             local nextVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].pallets and Config.TrailerSlots[curHash].pallets[CalibParams.slotIndex])
+            local nextHeading = 0.0
             if not nextVec then
-                nextVec = ForkliftModule.GetSlotOffset(CalibTrailer, CalibParams.slotIndex)
+                nextVec, nextHeading = ForkliftModule.GetSlotOffset(CalibTrailer, CalibParams.slotIndex)
+            else
+                nextHeading = (type(nextVec) == 'table' and nextVec.heading) or 0.0
             end
-            CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = 0.0 }
-            SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, 0.0)
+            CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = nextHeading }
+            SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, nextHeading)
 
             -- Reposiciona o Gizmo Three.js no novo fantasma
             local nextGhostPos = GetEntityCoords(CalibGhost)
@@ -186,9 +197,14 @@ function OffsetEditor.ConfirmCurrentSlot()
                 duration = 5000
             })
 
-            local forkVec = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift) or ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
-            CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = 0.0 }
-            SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, 0.0)
+            local forkVec, forkHeading = (Config.TrailerSlots[curHash] and Config.TrailerSlots[curHash].forklift), 0.0
+            if not forkVec then
+                forkVec, forkHeading = ForkliftModule.GetForkliftSlotOffset(CalibTrailer)
+            else
+                forkHeading = (type(forkVec) == 'table' and forkVec.heading) or 0.0
+            end
+            CurrentOffsets = { x = forkVec.x, y = forkVec.y, z = forkVec.z, heading = forkHeading }
+            SpawnCalibGhost(CalibTrailer, true, 'forklift', forkVec, forkHeading)
 
             local forkPos = GetEntityCoords(CalibGhost)
             local forkRot = GetEntityRotation(CalibGhost, 2)
@@ -235,6 +251,14 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     IsCalibrating = true
     IsGizmoCursorActive = false
     CurrentGizmoMode = 'translate'
+
+    -- Limpa lista e entidades de sessões anteriores
+    for _, gEnt in ipairs(SavedGhosts) do
+        if gEnt and DoesEntityExist(gEnt) then
+            DeleteEntity(gEnt)
+        end
+    end
+    SavedGhosts = {}
 
     trailerModel = (trailerModel or 'trailers2'):lower()
     slotIndex = tonumber(slotIndex) or 1
@@ -527,6 +551,12 @@ function OffsetEditor.StopCalibration(deleteTrailer, cam)
         DeleteEntity(CalibGhost)
         CalibGhost = nil
     end
+    for _, gEnt in ipairs(SavedGhosts) do
+        if gEnt and DoesEntityExist(gEnt) then
+            DeleteEntity(gEnt)
+        end
+    end
+    SavedGhosts = {}
     if deleteTrailer and CalibTrailer and DoesEntityExist(CalibTrailer) then
         DeleteEntity(CalibTrailer)
         CalibTrailer = nil
@@ -567,12 +597,18 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
     if not Config.TrailerSlots[trailerModel] then
         Config.TrailerSlots[trailerModel] = { pallets = {}, forklift = nil }
     end
+    local slotEntry = {
+        x = tonumber(offsetVec.x) or 0.0,
+        y = tonumber(offsetVec.y) or 0.0,
+        z = tonumber(offsetVec.z) or 0.0,
+        heading = tonumber(heading) or (type(offsetVec) == 'table' and offsetVec.heading) or 0.0
+    }
     if isForklift then
-        Config.TrailerSlots[hash].forklift = offsetVec
-        Config.TrailerSlots[trailerModel].forklift = offsetVec
+        Config.TrailerSlots[hash].forklift = slotEntry
+        Config.TrailerSlots[trailerModel].forklift = slotEntry
     else
-        Config.TrailerSlots[hash].pallets[slotIndex] = offsetVec
-        Config.TrailerSlots[trailerModel].pallets[slotIndex] = offsetVec
+        Config.TrailerSlots[hash].pallets[slotIndex] = slotEntry
+        Config.TrailerSlots[trailerModel].pallets[slotIndex] = slotEntry
     end
 
     -- Se o pacote completo do banco foi enviado, sincroniza e atualiza imediatamente a UI

@@ -160,14 +160,14 @@ function AdminService.ReloadTrailerOffsets()
                 Config.TrailerSlots[model] = { pallets = {}, forklift = nil }
             end
             for idx, vec in pairs(data.pallets) do
-                local v = vector3(vec.x, vec.y, vec.z)
-                Config.TrailerSlots[hash].pallets[tonumber(idx)] = v
-                Config.TrailerSlots[model].pallets[tonumber(idx)] = v
+                local slotEntry = { x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
+                Config.TrailerSlots[hash].pallets[tonumber(idx)] = slotEntry
+                Config.TrailerSlots[model].pallets[tonumber(idx)] = slotEntry
             end
             if data.forklift then
-                local v = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
-                Config.TrailerSlots[hash].forklift = v
-                Config.TrailerSlots[model].forklift = v
+                local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                Config.TrailerSlots[hash].forklift = slotEntry
+                Config.TrailerSlots[model].forklift = slotEntry
             end
         end
     end
