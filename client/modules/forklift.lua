@@ -195,12 +195,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local pRot = GetEntityRotation(palletEntity, 2)
                                 local relHeading = pRot.z - tRot.z
 
-                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp) via Bounding Box dinâmico e Safety Lock:
-                                local safeZ = (_G.GetTrailerDeckZ and _G.GetTrailerDeckZ(trailer))
-                                if not safeZ then
+                                -- Estiva manual com Trava do Eixo Z (Z-Axis Clamp) e Gap de 1cm anti-clipping:
+                                local deckZ = (_G.GetTrailerDeckZ and _G.GetTrailerDeckZ(trailer))
+                                if not deckZ then
                                     local _, tMax = GetModelDimensions(GetEntityModel(trailer))
-                                    safeZ = tMax.z - 0.14 + 0.05
+                                    deckZ = tMax.z - 0.14
                                 end
+                                local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
                                 -- DESATIVAÇÃO DE COLISÃO MÚTUA PERMANENTE (SAFETY LOCK HAVOK)
                                 SetEntityNoCollisionEntity(palletEntity, trailer, false)

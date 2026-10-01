@@ -71,8 +71,7 @@ local function GetTrailerDeckZ(trailer)
             deckZ = tMax.z - 0.10
         end
     end
-    -- Margem de respiro (+0.05m) para prevenir Z-fighting e repulsão Havok com a malha do reboque
-    return deckZ + 0.05
+    return deckZ
 end
 _G.GetTrailerDeckZ = GetTrailerDeckZ
 
@@ -80,10 +79,10 @@ local function GetForkliftDeckZ(trailer, forkEntity)
     local deckZ = GetTrailerDeckZ(trailer)
     local forkModel = (forkEntity and DoesEntityExist(forkEntity) and GetEntityModel(forkEntity)) or joaat('forklift')
     local fMin, fMax = GetModelDimensions(forkModel)
-    local halfHeight = (fMax.z - fMin.z) / 2.0
-    -- Pivot da empilhadeira fica no centro geométrico: somando halfHeight ao deckZ,
-    -- os pneus repousam com precisão cirúrgica na superfície da prancha
-    return deckZ + halfHeight
+    local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
+    -- Gap de 1cm (0.01 unidades) para evitar clipping e capotamento por Havok
+    local safeForkZ = deckZ + forkliftHalfHeight + 0.01
+    return safeForkZ
 end
 _G.GetForkliftDeckZ = GetForkliftDeckZ
 
@@ -617,8 +616,9 @@ local function ExecutePalletTie(index)
     if palletEnt and DoesEntityExist(palletEnt) and trailer and DoesEntityExist(trailer) then
         local pCoords = GetEntityCoords(palletEnt)
         local rawOffset = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
-        local fixedZ = GetTrailerDeckZ(trailer)
-        local finalOffset = vector3(rawOffset.x, rawOffset.y, fixedZ)
+        local deckZ = GetTrailerDeckZ(trailer)
+        local safeZ = deckZ + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
+        local finalOffset = vector3(rawOffset.x, rawOffset.y, safeZ)
 
         local tRot = GetEntityRotation(trailer, 2)
         local pRot = GetEntityRotation(palletEnt, 2)
@@ -725,9 +725,13 @@ local function ExecuteForkliftTie(forkEntity)
         }
     })
 
-    -- 3. Aplique o AttachEntityToEntity na extremidade traseira com Z cravado (ignora No-Snap)
+    -- 3. Aplique o AttachEntityToEntity na extremidade traseira com gap de segurança de 1cm
     NetworkRequestControlOfEntity(fork)
-    local forkZ = GetForkliftDeckZ(trailer, fork)
+    local deckZ = GetTrailerDeckZ(trailer)
+    local forkModel = (fork and DoesEntityExist(fork) and GetEntityModel(fork)) or joaat('forklift')
+    local fMin, fMax = GetModelDimensions(forkModel)
+    local forkliftHalfHeight = (fMax.z - fMin.z) / 2.0
+    local safeForkZ = deckZ + forkliftHalfHeight + 0.01 -- Gap de 1cm para evitar clipping e capotamento por Havok
 
     DetachEntity(fork, true, true)
 
@@ -738,7 +742,7 @@ local function ExecuteForkliftTie(forkEntity)
     -- Attach com 'collision = false' para evitar arremessos
     AttachEntityToEntity(
         fork, trailer, 0,
-        0.0, -5.5, forkZ,
+        0.0, -5.5, safeForkZ,
         0.0, 0.0, 0.0,
         false, false, false, false, 2, true
     )
