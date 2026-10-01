@@ -1515,78 +1515,82 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
                             local palletEnt = candidatePallet.entity
                             if palletEnt and DoesEntityExist(palletEnt) then
-                                if NetworkGetEntityIsNetworked(palletEnt) then
-                                    NetworkRequestControlOfEntity(palletEnt)
-                                end
+                                pcall(function()
+                                    if NetworkGetEntityIsNetworked(palletEnt) then
+                                        NetworkRequestControlOfEntity(palletEnt)
+                                    end
 
-                                -- RESTAURAÇÃO TOTAL NA QUEDA: REATIVA COLISÃO E FÍSICA DINÂMICA
-                                DetachEntity(palletEnt, true, true)
-                                SetEntityDynamic(palletEnt, true)
-                                SetEntityCollision(palletEnt, true, true)
-                                FreezeEntityPosition(palletEnt, false)
-                                ActivatePhysics(palletEnt)
-                                SetEntityMass(palletEnt, 300.0)
+                                    -- RESTAURAÇÃO TOTAL NA QUEDA: REATIVA COLISÃO E FÍSICA DINÂMICA
+                                    DetachEntity(palletEnt, true, true)
+                                    SetEntityDynamic(palletEnt, true)
+                                    SetEntityCollision(palletEnt, true, true)
+                                    FreezeEntityPosition(palletEnt, false)
+                                    SetEntityHasGravity(palletEnt, true)
+                                    ActivatePhysics(palletEnt)
 
-                                -- Aplica impulso centrífugo realista para lançar o palete para fora da caçamba
-                                local refEntity = (trailer and DoesEntityExist(trailer)) and trailer or truck
-                                local rightVector = GetEntityRightVector(refEntity)
-                                local sign = (rawForce > 0) and 1.0 or -1.0
-                                if isSevereTilt and not isCentrifugalCritical then
-                                    sign = (activeRoll > 0) and 1.0 or -1.0
-                                end
-                                local palletImpulse = rightVector * (sign * 7.5) + vector3(0.0, 0.0, 1.6)
-                                ApplyForceToEntityCenterOfMass(palletEnt, 1, palletImpulse.x, palletImpulse.y, palletImpulse.z, false, false, true, false)
+                                    -- Aplica impulso centrífugo realista para lançar o palete para fora da caçamba
+                                    local refEntity = (trailer and DoesEntityExist(trailer)) and trailer or truck
+                                    local rightVector = GetEntityRightVector(refEntity)
+                                    local sign = (rawForce > 0) and 1.0 or -1.0
+                                    if isSevereTilt and not isCentrifugalCritical then
+                                        sign = (activeRoll > 0) and 1.0 or -1.0
+                                    end
+                                    local palletImpulse = rightVector * (sign * 7.5) + vector3(0.0, 0.0, 1.6)
+                                    ApplyForceToEntityCenterOfMass(palletEnt, 1, palletImpulse.x, palletImpulse.y, palletImpulse.z, false, false, true, false)
 
-                                -- Efeito de impacto no HUD
-                                SendNUIMessage({ action = 'gmeter_drop' })
+                                    -- Efeito de impacto no HUD
+                                    SendNUIMessage({ action = 'gmeter_drop' })
 
-                                -- Cálculo de Velocidade e Dano Estrutural no Impacto
-                                local isShattered = false
-                                if speed > 16.6 then -- > 60 km/h
-                                    isShattered = true
-                                    candidatePallet.isBroken = true
-                                    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                    SendMissionNotify('CARGA DESTRUÍDA!', 'A amarração cedeu no limite da curva! O palete se despedaçou na pista.', 'error')
-                                else
-                                    local roll = math.random(1, 100)
-                                    if roll <= 60 then
-                                        candidatePallet.isBroken = false
-                                        candidatePallet.canRescue = true
-                                        PlaySoundFrontend(-1, "COLLISION_DEFAULT", "CAR_STEAL_2_SOUNDSET", true)
-                                        SendMissionNotify('PALETE CAÍDO!', 'Um palete caiu na pista, mas resistiu intacto! Pode ser resgatado com a empilhadeira.', 'warning')
-                                    else
+                                    -- Cálculo de Velocidade e Dano Estrutural no Impacto
+                                    local isShattered = false
+                                    if speed > 16.6 then -- > 60 km/h
                                         isShattered = true
                                         candidatePallet.isBroken = true
                                         PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                        SendMissionNotify('CARGA DESTRUÍDA!', 'O palete caiu da carreta e a mercadoria foi destruída no impacto.', 'error')
-                                    end
-                                end
-
-                                if ActiveJob then
-                                    ActiveJob.cargoHealth = math.max(0, (ActiveJob.cargoHealth or 100) - 20)
-                                end
-
-                                local netId = NetworkGetNetworkIdFromEntity(palletEnt)
-                                TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
-
-                                CreateThread(function()
-                                    local settleTimeout = GetGameTimer() + 8000
-                                    while DoesEntityExist(palletEnt) and GetGameTimer() < settleTimeout do
-                                        Wait(500)
-                                        if GetEntitySpeed(palletEnt) < 0.2 then break end
-                                    end
-                                    if DoesEntityExist(palletEnt) then
-                                        FreezeEntityPosition(palletEnt, true)
-                                        if isShattered then
-                                            SetEntityAsNoLongerNeeded(palletEnt)
+                                        SendMissionNotify('CARGA DESTRUÍDA!', 'A amarração cedeu no limite da curva! O palete se despedaçou na pista.', 'error')
+                                    else
+                                        local roll = math.random(1, 100)
+                                        if roll <= 60 then
+                                            candidatePallet.isBroken = false
+                                            candidatePallet.canRescue = true
+                                            PlaySoundFrontend(-1, "COLLISION_DEFAULT", "CAR_STEAL_2_SOUNDSET", true)
+                                            SendMissionNotify('PALETE CAÍDO!', 'Um palete caiu na pista, mas resistiu intacto! Pode ser resgatado com a empilhadeira.', 'warning')
                                         else
-                                            if ActiveJob and ActiveJob.withForklift then
-                                                ForkliftModule.SetMissionPallets({ palletEnt })
-                                            else
-                                                SetEntityAsNoLongerNeeded(palletEnt)
-                                            end
+                                            isShattered = true
+                                            candidatePallet.isBroken = true
+                                            PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                            SendMissionNotify('CARGA DESTRUÍDA!', 'O palete caiu da carreta e a mercadoria foi destruída no impacto.', 'error')
                                         end
                                     end
+
+                                    if ActiveJob then
+                                        ActiveJob.cargoHealth = math.max(0, (ActiveJob.cargoHealth or 100) - 20)
+                                    end
+
+                                    local netId = NetworkGetEntityIsNetworked(palletEnt) and NetworkGetNetworkIdFromEntity(palletEnt) or 0
+                                    if ActiveJob and ActiveJob.jobId then
+                                        TriggerServerEvent('aurp_trucker:server:palletLost', ActiveJob.jobId, netId)
+                                    end
+
+                                    CreateThread(function()
+                                        local settleTimeout = GetGameTimer() + 8000
+                                        while DoesEntityExist(palletEnt) and GetGameTimer() < settleTimeout do
+                                            Wait(500)
+                                            if GetEntitySpeed(palletEnt) < 0.2 then break end
+                                        end
+                                        if DoesEntityExist(palletEnt) then
+                                            FreezeEntityPosition(palletEnt, true)
+                                            if isShattered then
+                                                SetEntityAsNoLongerNeeded(palletEnt)
+                                            else
+                                                if ActiveJob and ActiveJob.withForklift then
+                                                    ForkliftModule.SetMissionPallets({ palletEnt })
+                                                else
+                                                    SetEntityAsNoLongerNeeded(palletEnt)
+                                                end
+                                            end
+                                        end
+                                    end)
                                 end)
                             end
                         end
@@ -1601,23 +1605,25 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 ForkliftLoadedOnTrailer = false
                                 ForkliftSecured = false
 
-                                if NetworkGetEntityIsNetworked(fork) then
-                                    NetworkRequestControlOfEntity(fork)
-                                end
+                                pcall(function()
+                                    if NetworkGetEntityIsNetworked(fork) then
+                                        NetworkRequestControlOfEntity(fork)
+                                    end
 
-                                DetachEntity(fork, true, true)
-                                SetEntityCollision(fork, true, true)
-                                FreezeEntityPosition(fork, false)
-                                SetVehicleEngineHealth(fork, 350.0) -- Dano severo no motor
-                                SetVehicleBodyHealth(fork, 400.0)
+                                    DetachEntity(fork, true, true)
+                                    SetEntityCollision(fork, true, true)
+                                    FreezeEntityPosition(fork, false)
+                                    SetVehicleEngineHealth(fork, 350.0) -- Dano severo no motor
+                                    SetVehicleBodyHealth(fork, 400.0)
 
-                                local rightVector = GetEntityRightVector(truck)
-                                local sign = (rawForce > 0) and -1.0 or 1.0
-                                local forkImpulse = rightVector * (sign * 8.0) + vector3(0.0, 0.0, 1.8)
-                                ApplyForceToEntityCenterOfMass(fork, 1, forkImpulse.x, forkImpulse.y, forkImpulse.z, false, false, true, false)
+                                    local rightVector = GetEntityRightVector(truck)
+                                    local sign = (rawForce > 0) and -1.0 or 1.0
+                                    local forkImpulse = rightVector * (sign * 8.0) + vector3(0.0, 0.0, 1.8)
+                                    ApplyForceToEntityCenterOfMass(fork, 1, forkImpulse.x, forkImpulse.y, forkImpulse.z, false, false, true, false)
 
-                                PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
-                                SendMissionNotify('ALERTA MÁXIMO!', 'A corrente cedeu e a empilhadeira capotou na rodovia!', 'error')
+                                    PlaySoundFrontend(-1, "WRECKED", "CAR_STEAL_2_SOUNDSET", true)
+                                    SendMissionNotify('ALERTA MÁXIMO!', 'A corrente cedeu e a empilhadeira capotou na rodovia!', 'error')
+                                end)
 
                                 -- Adiciona interação ox_target para empurrar e desvirar a empilhadeira
                                 exports.ox_target:addLocalEntity(fork, {
