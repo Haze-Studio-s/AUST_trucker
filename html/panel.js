@@ -1,10 +1,26 @@
 let config = {};
 
+// Hard Escape Listener (Prevenção de NUI Deadlock)
+window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" || e.keyCode === 27) {
+        $(".main").fadeOut(150);
+        if (typeof Utils !== "undefined" && Utils.post) {
+            Utils.post("escapeNui", {});
+        } else {
+            fetch(`https://${GetParentResourceName()}/escapeNui`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json; charset=UTF-8" },
+                body: JSON.stringify({})
+            }).catch(() => {});
+        }
+    }
+});
+
 window.addEventListener("message", async function (event) {
     let item = event.data;
     if (!item) return;
 
-    if (item.action === "close" || item.hidemenu) {
+    if (item.action === "close" || item.action === "close_all" || item.hidemenu) {
         $(".main").fadeOut(200);
         return;
     }

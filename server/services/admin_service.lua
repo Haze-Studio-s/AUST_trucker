@@ -230,9 +230,13 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     }
 end)
 
--- Callback em tempo de execução para sincronização fresca de offsets de reboque
+-- Callback em tempo de execução para sincronização de offsets de reboque (100% da RAM, zero SQL overhead)
 lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
-    local offsets = AdminService.ReloadTrailerOffsets()
+    local offsets = AdminService.TrailerOffsets
+    if not offsets or next(offsets) == nil then
+        offsets = AdminService.ReloadTrailerOffsets()
+    end
+
     local modelKey = tostring(trailerModel or ''):lower()
     local hash = tonumber(trailerModel) or joaat(modelKey)
 

@@ -126,7 +126,7 @@ RegisterNetEvent('aurp_trucker:abandonJob', function()
     local citizenId = Framework.GetCitizenId(Player)
     JobService.Abandon(citizenId)
 
-    -- Limpeza estrita de entidades (caminhão e trailer) no servidor
+    -- Limpeza estrita de todas as entidades do trabalho (caminhão, trailer, empilhadeira, paletes)
     if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
         local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
         if jobEnts.truckNetId then
@@ -137,18 +137,36 @@ RegisterNetEvent('aurp_trucker:abandonJob', function()
             local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
             if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
         end
+        if jobEnts.forkliftNetId then
+            local fork = NetworkGetEntityFromNetworkId(jobEnts.forkliftNetId)
+            if fork and DoesEntityExist(fork) then DeleteEntity(fork) end
+        end
+        if jobEnts.palletNetIds and type(jobEnts.palletNetIds) == 'table' then
+            for _, pNet in ipairs(jobEnts.palletNetIds) do
+                local p = NetworkGetEntityFromNetworkId(tonumber(pNet))
+                if p and DoesEntityExist(p) then DeleteEntity(p) end
+            end
+        end
         VP_Trucker.PlayerJobEntities[citizenId] = nil
     end
 
     TriggerClientEvent('aurp_trucker:client:jobAbandoned', src)
 end)
 
--- Registra netId de caminhão e trailer do jogador para tracking e cleanup autoritativo
-RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId, trailerNetId)
+-- Registra netIds de caminhão, trailer, empilhadeira e paletes para tracking e garbage collection
+RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId, trailerNetId, forkliftNetId, palletNetIds)
     local src = source
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
+
+    -- Cancela qualquer timer de limpeza pendente caso o jogador tenha acabado de reconectar
+    JobService.PendingCleanups = JobService.PendingCleanups or {}
+    if JobService.PendingCleanups[citizenId] then
+        JobService.PendingCleanups[citizenId].cancelled = true
+        JobService.PendingCleanups[citizenId] = nil
+        print(("^2[AUST_Trucker GC] Grace period cancelado para %s (jogador reconectou com sucesso).^7"):format(tostring(citizenId)))
+    end
 
     VP_Trucker.PlayerJobEntities = VP_Trucker.PlayerJobEntities or {}
     VP_Trucker.PlayerJobEntities[citizenId] = VP_Trucker.PlayerJobEntities[citizenId] or {}
@@ -169,6 +187,67 @@ RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId,
     end
     if trailerNetId and tonumber(trailerNetId) then
         VP_Trucker.PlayerJobEntities[citizenId].trailerNetId = tonumber(trailerNetId)
+    end
+    if forkliftNetId and tonumber(forkliftNetId) then
+        VP_Trucker.PlayerJobEntities[citizenId].forkliftNetId = tonumber(forkliftNetId)
+    end
+    if palletNetIds and type(palletNetIds) == 'table' then
+        VP_Trucker.PlayerJobEntities[citizenId].palletNetIds = palletNetIds
+    end
+end)
+
+-- ============================================================
+-- GARBAGE COLLECTION: GRACE PERIOD DE 3 MINUTOS (PILAR 3)
+-- ============================================================
+AddEventHandler('playerDropped', function(reason)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    if not citizenId then return end
+
+    if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
+        local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
+        print(("^3[AUST_Trucker GC] Jogador %s desconectou (%s). Iniciando Grace Period de 3 minutos para limpeza de entidades.^7"):format(tostring(citizenId), tostring(reason)))
+
+        JobService.PendingCleanups = JobService.PendingCleanups or {}
+        if JobService.PendingCleanups[citizenId] then
+            JobService.PendingCleanups[citizenId].cancelled = true
+        end
+
+        local cleanupRef = { cancelled = false, entities = jobEnts }
+        JobService.PendingCleanups[citizenId] = cleanupRef
+
+        SetTimeout(180000, function()
+            if cleanupRef.cancelled then
+                print(("^2[AUST_Trucker GC] Limpeza cancelada para %s: jogador retornou a tempo.^7"):format(tostring(citizenId)))
+                return
+            end
+
+            print(("^1[AUST_Trucker GC] Grace period expirado (3 min) para %s. Deletando entidades órfãs no servidor.^7"):format(tostring(citizenId)))
+            if jobEnts.truckNetId then
+                local e = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
+                if e and DoesEntityExist(e) then DeleteEntity(e) end
+            end
+            if jobEnts.trailerNetId then
+                local e = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
+                if e and DoesEntityExist(e) then DeleteEntity(e) end
+            end
+            if jobEnts.forkliftNetId then
+                local e = NetworkGetEntityFromNetworkId(jobEnts.forkliftNetId)
+                if e and DoesEntityExist(e) then DeleteEntity(e) end
+            end
+            if jobEnts.palletNetIds and type(jobEnts.palletNetIds) == 'table' then
+                for _, pNet in ipairs(jobEnts.palletNetIds) do
+                    local p = NetworkGetEntityFromNetworkId(tonumber(pNet))
+                    if p and DoesEntityExist(p) then DeleteEntity(p) end
+                end
+            end
+
+            VP_Trucker.PlayerJobEntities[citizenId] = nil
+            JobService.PendingCleanups[citizenId] = nil
+            JobService.Abandon(citizenId)
+        end)
     end
 end)
 
@@ -1901,21 +1980,57 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
     end)
 end
 
--- Roteamento Retrocompatível
+-- Roteamento Retrocompatível & Blindagem Anti-Cheat (Pilar 2)
 local function FinalizeLCContract(src, jobId, parkedManually)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
 
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return end
+    local pCoords = GetEntityCoords(ped)
+
     local row = nil
     if jobId then
         row = MySQL.single.await([[
-            SELECT contract_type FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active' LIMIT 1
+            SELECT * FROM trucker_jobs WHERE id = ? AND assigned_citizenid = ? AND status = 'active' LIMIT 1
         ]], { jobId, citizenId })
     else
         row = MySQL.single.await([[
-            SELECT contract_type FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
+            SELECT * FROM trucker_jobs WHERE assigned_citizenid = ? AND status = 'active' ORDER BY created_at DESC LIMIT 1
         ]], { citizenId })
+    end
+
+    if not row then
+        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de finalizar contrato sem job ativo.'):format(tostring(citizenId), tostring(src)))
+        DropPlayer(src, '[AUST_Trucker Anti-Cheat] Violação de segurança: finalização sem contrato ativo.')
+        return
+    end
+
+    -- Validação de proximidade geográfica autoritativa
+    local destCoords = nil
+    if row.dest_coords and type(row.dest_coords) == 'string' then
+        pcall(function() destCoords = json.decode(row.dest_coords) end)
+    end
+    if not destCoords and row.dest_id then
+        local sec = Config.SecondaryIndustries or {}
+        for _, ind in ipairs(sec) do
+            if ind.id == row.dest_id then
+                destCoords = ind.coords
+                break
+            end
+        end
+    end
+
+    if destCoords and destCoords.x then
+        local dVec = vector3(destCoords.x, destCoords.y, destCoords.z)
+        local dist = #(pCoords - dVec)
+        if dist > 35.0 then
+            print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): finalização fora da baía de entrega (%.1fm > 35.0m)'):format(
+                tostring(citizenId), tostring(src), dist))
+            DropPlayer(src, ('[AUST_Trucker Anti-Cheat] Violação de segurança: finalização acionada a %.1f metros do ponto de entrega.'):format(dist))
+            return
+        end
     end
 
     if row and row.contract_type == 1 then

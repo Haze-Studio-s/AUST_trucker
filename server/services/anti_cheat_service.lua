@@ -104,12 +104,12 @@ function AntiCheatService.ValidateDelivery(src, citizenId, activeJob, elapsedSec
 
     local destVec = vec3(destCoords.x, destCoords.y, destCoords.z)
     local dist = #(pos - destVec)
-    if dist > Config.AntiCheat.DestinationRadius then
-        if Config.Debug then
-            print(('[AC] ValidateDelivery FAIL posição: %s dist_dest=%.1fm max=%.1fm'):format(
-                citizenId, dist, Config.AntiCheat.DestinationRadius))
-        end
-        return false, 'Você não está no destino de entrega.'
+    local maxRadius = (Config.AntiCheat and Config.AntiCheat.DestinationRadius) or 25.0
+    if dist > maxRadius then
+        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de finalizar entrega a %.1f metros (max: %.1fm)'):format(
+            tostring(citizenId), tostring(src), dist, maxRadius))
+        DropPlayer(src, ('[AUST_Trucker Anti-Cheat] Violação de segurança: entrega acionada a %.1f metros do destino.'):format(dist))
+        return false, 'Violação de segurança detectada.'
     end
 
     return true, nil

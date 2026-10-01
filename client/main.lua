@@ -731,6 +731,19 @@ local function ExecutePalletTie(index)
         SetCanClimbOnEntity(palletEnt, true)
         SetEntityNoCollisionEntity(palletEnt, trailer, false)
         SetEntityNoCollisionEntity(trailer, palletEnt, false)
+
+        -- Sincronização OneSync via Entity StateBags (Pilar 1)
+        if trailer and DoesEntityExist(trailer) and NetworkGetEntityIsNetworked(trailer) and NetworkGetEntityIsNetworked(palletEnt) then
+            local pNet = NetworkGetNetworkIdFromEntity(palletEnt)
+            local curSlots = Entity(trailer).state.loadedSlots or {}
+            local slotKey = tostring(palletData.slotIndex or 1)
+            curSlots[slotKey] = {
+                palletNet = pNet,
+                offset = { x = finalOffset.x, y = finalOffset.y, z = finalOffset.z },
+                heading = finalHeading
+            }
+            Entity(trailer).state:set('loadedSlots', curSlots, true)
+        end
     end
 
     -- Minigame de perícia
@@ -845,6 +858,16 @@ local function ExecuteForkliftTie(forkEntity)
     SetCanClimbOnEntity(fork, true)
     SetEntityNoCollisionEntity(fork, trailer, false)
     SetEntityNoCollisionEntity(trailer, fork, false)
+
+    -- Sincronização OneSync via Entity StateBags (Pilar 1)
+    if trailer and DoesEntityExist(trailer) and NetworkGetEntityIsNetworked(trailer) and NetworkGetEntityIsNetworked(fork) then
+        local fNet = NetworkGetNetworkIdFromEntity(fork)
+        Entity(trailer).state:set('loadedForklift', {
+            forkNet = fNet,
+            offset = { x = forkOffset.x, y = forkOffset.y, z = forkOffset.z },
+            heading = forkHeading
+        }, true)
+    end
 
     -- Remove o holograma da empilhadeira
     if ForkliftModule.DeleteGhostProp then
@@ -1276,6 +1299,18 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 false, false, false, false, 2, true
             )
         end
+
+        -- Registra todas as entidades da missão no servidor para Garbage Collection e Anti-Cheat (Pilares 2 e 3)
+        local truckNet = (JobEntities.truck and DoesEntityExist(JobEntities.truck) and NetworkGetEntityIsNetworked(JobEntities.truck)) and NetworkGetNetworkIdFromEntity(JobEntities.truck) or nil
+        local trailerNet = (JobEntities.trailer and DoesEntityExist(JobEntities.trailer) and NetworkGetEntityIsNetworked(JobEntities.trailer)) and NetworkGetNetworkIdFromEntity(JobEntities.trailer) or nil
+        local forkNet = (JobEntities.forklift and DoesEntityExist(JobEntities.forklift) and NetworkGetEntityIsNetworked(JobEntities.forklift)) and NetworkGetNetworkIdFromEntity(JobEntities.forklift) or nil
+        local palletNets = {}
+        for _, pData in ipairs(LoadedPallets or {}) do
+            if pData.entity and DoesEntityExist(pData.entity) and NetworkGetEntityIsNetworked(pData.entity) then
+                table.insert(palletNets, NetworkGetNetworkIdFromEntity(pData.entity))
+            end
+        end
+        TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNet, trailerNet, forkNet, palletNets)
     end
 
     -- Monitoramento otimizado de Força G lateral, física híbrida e queda dinâmica de paletes frouxos
@@ -1284,6 +1319,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         local lastSyncAnchorTime = 0
         local enteredTruck = false
         local isCargoInTransitMode = false
+        local stoppedSince = 0
+        local isParkFrozen = false
         local currentSmoothPercent = 50.0
 
         while CurrentStage == 'STEP_8_IN_TRANSIT' do
@@ -1304,6 +1341,27 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local isDrivingTruck = (currentVeh == truck and GetPedInVehicleSeat(truck, -1) == ped)
             local truckSpeed = (truck and DoesEntityExist(truck)) and (GetEntitySpeed(truck) * 3.6) or 0.0
             local shouldBeInTransit = isDrivingTruck and (truckSpeed >= 3.0)
+
+            -- PILAR 5: ESTABILIDADE FÍSICA HAVOK (PARKING FREEZE)
+            if truckSpeed < 0.5 and not isDrivingTruck then
+                if stoppedSince == 0 then stoppedSince = GetGameTimer() end
+                if GetGameTimer() - stoppedSince >= 5000 and not isParkFrozen then
+                    isParkFrozen = true
+                    FreezeEntityPosition(truck, true)
+                    if trailer and DoesEntityExist(trailer) then
+                        FreezeEntityPosition(trailer, true)
+                    end
+                end
+            else
+                stoppedSince = 0
+                if isParkFrozen then
+                    isParkFrozen = false
+                    FreezeEntityPosition(truck, false)
+                    if trailer and DoesEntityExist(trailer) then
+                        FreezeEntityPosition(trailer, false)
+                    end
+                end
+            end
 
             if shouldBeInTransit then
                 if not isCargoInTransitMode then
@@ -2332,6 +2390,59 @@ RegisterNUICallback('adminTeleport', function(data, cb)
         end
     end
     if cb then cb('ok') end
+end)
+
+-- ============================================================
+-- NUI HARD ESCAPE & PREVENÇÃO DE DEADLOCK (PILAR 6)
+-- ============================================================
+RegisterNUICallback('escapeNui', function(_, cb)
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close_all' })
+    if cb then cb('ok') end
+end)
+
+RegisterCommand('truckerfix', function()
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close_all' })
+    lib.notify({
+        title = 'Trucker UI',
+        description = 'Foco de interface liberado com sucesso!',
+        type = 'info'
+    })
+end, false)
+
+-- ============================================================
+-- ONESYNC STATEBAGS: RECONEXÃO AUTOMÁTICA PÓS-CULLING (PILAR 1)
+-- ============================================================
+AddStateBagChangeHandler('loadedSlots', nil, function(bagName, key, value, _unused, replicated)
+    if not value or type(value) ~= 'table' then return end
+    local trailerEnt = GetEntityFromStateBagName(bagName)
+    if not trailerEnt or trailerEnt == 0 or not DoesEntityExist(trailerEnt) then return end
+
+    -- Se o reboque estiver no escopo do cliente, re-acopla paletes se descolados por culling
+    for slotIndex, sData in pairs(value) do
+        if sData and sData.palletNet then
+            local pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
+            if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
+                if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
+                    local off = sData.offset or vector3(0.0, 0.0, 0.35)
+                    local heading = sData.heading or 0.0
+                    SetEntityCollision(pEnt, true, true)
+                    SetCanClimbOnEntity(pEnt, true)
+                    FreezeEntityPosition(pEnt, false)
+                    SetEntityDynamic(pEnt, false)
+                    SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
+                    SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
+                    AttachEntityToEntity(
+                        pEnt, trailerEnt, 0,
+                        off.x, off.y, off.z,
+                        0.0, 0.0, heading,
+                        false, false, false, false, 2, true
+                    )
+                end
+            end
+        end
+    end
 end)
 
 

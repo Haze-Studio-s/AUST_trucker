@@ -332,7 +332,11 @@ function JobService.Complete(src, payload)
 
     local citizenId = Framework.GetCitizenId(Player)
     local activeJob = DB_GetActiveJobByPlayer(citizenId)
-    if not activeJob then return false end
+    if not activeJob then
+        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de entrega sem job ativo'):format(tostring(citizenId), tostring(src)))
+        DropPlayer(src, '[AUST_Trucker Anti-Cheat] Violação de segurança: finalização sem contrato ativo.')
+        return false
+    end
 
     -- Validação estrita de tempo server-side: nunca confiar no client
     if not activeJob.accepted_at_unix or activeJob.accepted_at_unix <= 0 then

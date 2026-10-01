@@ -260,6 +260,18 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
 
+    -- Sincronização OneSync via Entity StateBags (Pilar 1)
+    if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
+        local pNet = NetworkGetNetworkIdFromEntity(palletEntity)
+        local curSlots = Entity(targetTrailer).state.loadedSlots or {}
+        curSlots[tostring(slotIndex)] = {
+            palletNet = pNet,
+            offset = { x = slotOffset.x, y = slotOffset.y, z = slotOffset.z },
+            heading = slotHeading
+        }
+        Entity(targetTrailer).state:set('loadedSlots', curSlots, true)
+    end
+
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
     return true, slotOffset, slotHeading
