@@ -1,5 +1,16 @@
 # Changelog — AUST_trucker
 
+## [20.3.0] — 2026-10-02 — Cinemática Rígida Anti-Inércia, Zero-Desync na Arrancada & OneSync Handoff
+
+### 🚚 Física Havok & Estabilidade de Carga (Micro-Desync Zero)
+- **Eliminação do Arrasto Inercial Havok:** Paletes e empilhadeiras agora são mantidos estritamente como corpos cinemáticos (`SetEntityDynamic = false`, `SetEntityHasGravity = false`, `SetEntityVelocity = 0.0`) enquanto anexados à prancha do reboque (`client/modules/forklift.lua`, `client/main.lua`). Isso impede que o solver do Havok simule inércia de massa e arraste a carga para trás no momento da aceleração inicial do caminhão.
+- **Remoção do Toggle de Colisão aos 3 km/h:** Eliminada a oscilação de `SetEntityCollision` entre repouso e movimento (< 3 km/h vs $\ge$ 3 km/h) que provocava recriação síncrona de *physics proxies* da engine física no exato instante da arrancada. A alternância de colisão agora é governada exclusivamente pelo estado de permanência do jogador na cabine (`isDrivingTruck`), assegurando transição estática inalterada durante toda a aceleração.
+- **Reativação Cinemática Segura na Queda Dinâmica:** `SetEntityDynamic(true)`, gravidade e impulsos físicos são restaurados exclusivamente na rotina de perda/tombamento de carga (`palletLost` / `isFallen`), preservando o realismo de acidentes e capotamentos sem penalizar a fixação em trânsito estável.
+
+### 🌐 Sincronização OneSync & Controle de Rede
+- **Aperto de Mão Autoritativo Síncrono (Network Handoff):** Refatorada a rotina de controle de entidades em `StartDeliveryRoute` e `Sync Anchor` para aguardar ativamente o controle do cliente (`NetworkRequestControlOfEntity` com timeout seguro) antes de invocar `SetNetworkIdCanMigrate(netId, false)`. Impede que entidades de carga fiquem presas sob controle do servidor enquanto a carreta é movida localmente pelo motorista.
+- **Sincronização Ativa em Repouso:** Garantida a propriedade da rede no momento em que o motorista assume o volante, eliminando pacotes de correção de posição mundiais defasados emitidos pelo servidor na partida.
+
 ## [20.2.0] — 2026-10-01 — Gizmo 3D, Colisão Inteligente & Roadmap de 6 Pilares de Engenharia
 
 ### 🧭 Motor 3D & Ferramenta ADM

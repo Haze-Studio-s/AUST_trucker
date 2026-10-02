@@ -1,10 +1,10 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.2.0-blue)
+![Version](https://img.shields.io/badge/version-20.3.0-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 
-Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios, calibracao visual 3D com Gizmo vetorial, colisao inteligente adaptativa, OneSync StateBags, blindagem anti-exploit e interface React.
+Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios, calibracao visual 3D com Gizmo vetorial, colisao inteligente adaptativa, cinemática rígida anti-inércia (zero-desync na arrancada), OneSync StateBags, blindagem anti-exploit e interface React.
 
 ---
 
@@ -115,7 +115,8 @@ Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega co
 - Jobs multi-pallet: estiva com a empilhadeira utilizando a tecla [G] ou manual
 - Mini-jobs de Trade Point: pallets em tempo limite com bônus de velocidade
 - Validação server-side via StateBag (`forklift_owner` e `loadedSlots`)
-- **Blindagem Havok & Colisão Sólida Preservada:** Isolamento contínuo de colisão entre qualquer prop de carga e o reboque (`SetEntityNoCollisionEntity`) eliminando catapultas de física, com colisão 100% sólida e ativa para o jogador (`SetEntityCollision(true, true)` + `SetCanClimbOnEntity(true)`).
+- **Cinemática Rígida Anti-Inércia & Zero-Desync (v20.3.0):** Cargas atreladas operam 100% como corpos cinemáticos (`SetEntityDynamic = false`, `SetEntityHasGravity = false`, `SetEntityVelocity = 0.0`), eliminando o arrasto inercial do Havok ao arrancar.
+- **Blindagem Havok & Colisão Adaptativa:** Isolamento contínuo de colisão entre qualquer prop de carga e o reboque (`SetEntityNoCollisionEntity`) eliminando catapultas de física, com colisão 100% sólida e ativa para o jogador (`SetEntityCollision(true, true)` + `SetCanClimbOnEntity(true)`) fora da cabine.
 
 ### Simulacao de Caminhao
 - Peso afeta velocidade e frenagem
@@ -353,6 +354,9 @@ Consulte o arquivo `CHANGELOG.md` para o historico completo de versoes.
 
 | Versao | Descricao |
 |--------|-----------|
+| v20.3.0 | Cinemática Rígida Anti-Inércia, Zero-Desync na Arrancada & OneSync Handoff |
+| v20.2.0 | Gizmo 3D, Colisão Inteligente & Roadmap de 6 Pilares de Engenharia |
+| v20.1.0 | Auditoria Completa de Segurança & Hardening Transacional (OmniRoute) |
 | v19.1.0 | Auditoria Fase 2/3 + Historico Convoy + DB unificado + Config hardcoded |
 | v19.0.0 | CarrySystem + Parcel Delivery + Container Handler |
 | v18.4.0 | Auditoria de Seguranca Completa (15 issues criticos) |
