@@ -49,8 +49,9 @@ end
 function ForkliftModule.GetNearestGroundPallet(forklift)
     if not forklift or not DoesEntityExist(forklift) then return nil end
     local forkCoords = GetForkliftForksCoords(forklift)
-    local bestEntity, bestDist = nil, 2.8
+    local bestEntity, bestDist = nil, 3.2
 
+    -- 1. Verifica tabela de paletes cadastrados na missão
     for _, pallet in pairs(ActiveMissionPallets) do
         if pallet and DoesEntityExist(pallet) and not IsEntityAttached(pallet) then
             local pCoords = GetEntityCoords(pallet)
@@ -61,6 +62,29 @@ function ForkliftModule.GetNearestGroundPallet(forklift)
             end
         end
     end
+
+    -- 2. Varredura dinâmica de pool para paletes soltos próximos (caso tenha caído em trânsito)
+    if not bestEntity then
+        local PalletPropModels = {
+            joaat('hei_prop_carrier_cargo_04b'),
+            joaat('m24_1_prop_m24_1_carrier_cargo_04a'),
+            joaat('sm3d_prop_pallet_1'),
+            joaat('sm3d_prop_pallet_2'),
+            joaat('sm3d_prop_pallet_1_rep'),
+            joaat('sm3d_prop_pallet_1_open'),
+        }
+        for _, mHash in ipairs(PalletPropModels) do
+            local nearbyObj = GetClosestObjectOfType(forkCoords.x, forkCoords.y, forkCoords.z, 3.2, mHash, false, false, false)
+            if nearbyObj and nearbyObj ~= 0 and DoesEntityExist(nearbyObj) and not IsEntityAttached(nearbyObj) then
+                local dist = #(forkCoords - GetEntityCoords(nearbyObj))
+                if dist < bestDist then
+                    bestDist = dist
+                    bestEntity = nearbyObj
+                end
+            end
+        end
+    end
+
     return bestEntity
 end
 

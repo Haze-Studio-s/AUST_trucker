@@ -993,6 +993,74 @@ exports.ox_target:addModel('forklift', {
         onSelect = function(data)
             ExecuteForkliftTie(data and data.entity)
         end
+    },
+    {
+        name = 'aust_unload_forklift_model',
+        icon = 'fas fa-arrow-down',
+        label = 'Descer Empilhadeira da Carreta',
+        distance = 4.0,
+        canInteract = function(entity)
+            if not ActiveJob or not ActiveJob.withForklift then return false end
+            if not ForkliftLoadedOnTrailer then return false end
+            if IsPedInAnyVehicle(cache.ped, false) then return false end
+            local trailer = JobEntities.trailer
+            if not trailer or not DoesEntityExist(trailer) then return false end
+            return IsEntityAttachedToEntity(entity, trailer)
+        end,
+        onSelect = function(data)
+            local fork = data and data.entity
+            if not fork or not DoesEntityExist(fork) then return end
+            local trailer = JobEntities.trailer
+
+            local ok = lib.progressBar({
+                duration = 3500,
+                label = 'Soltando travas e descendo empilhadeira...',
+                useWhileDead = false,
+                canCancel = true,
+                disable = { move = true, car = true, combat = true },
+                anim = {
+                    dict = 'anim@amb@clubhouse@tutorial@bkr_tut_ig3@',
+                    clip = 'machinic_loop_meano',
+                    flag = 49
+                }
+            })
+
+            if ok then
+                NetworkRequestControlOfEntity(fork)
+                local timeout = 1000
+                while not NetworkHasControlOfEntity(fork) and timeout > 0 do
+                    Wait(50)
+                    timeout = timeout - 50
+                end
+
+                DetachEntity(fork, true, true)
+                SetEntityCollision(fork, true, true)
+                FreezeEntityPosition(fork, false)
+                SetEntityDynamic(fork, true)
+                SetEntityHasGravity(fork, true)
+                ActivatePhysics(fork)
+
+                -- Posiciona a empilhadeira logo atrás do trailer com segurança no chão
+                if trailer and DoesEntityExist(trailer) then
+                    local groundPos = GetOffsetFromEntityInWorldCoords(trailer, 0.0, -8.5, 0.0)
+                    SetEntityCoords(fork, groundPos.x, groundPos.y, groundPos.z, false, false, false, true)
+                    SetEntityHeading(fork, GetEntityHeading(trailer))
+                    SetVehicleOnGroundProperly(fork)
+                end
+
+                ForkliftLoadedOnTrailer = false
+                ForkliftSecured = false
+                ForkliftRiskLevel = 0
+
+                -- Atualiza StateBag
+                if trailer and DoesEntityExist(trailer) and NetworkGetEntityIsNetworked(trailer) then
+                    Entity(trailer).state:set('loadedForklift', nil, true)
+                end
+
+                PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
+                SendMissionNotify('Empilhadeira', 'Empilhadeira descarregada no solo com sucesso! Pronta para operação.', 'success')
+            end
+        end
     }
 })
 
@@ -1060,6 +1128,73 @@ exports.ox_target:addModel(PalletPropModels, {
                     else
                         ForkliftModule.StopOperation()
                         SetupRopesStage()
+                    end
+                end
+            end
+        end
+    },
+    {
+        name = 'aust_rescue_fallen_pallet',
+        icon = 'fas fa-hand-holding-box',
+        label = 'Recuperar Palete Caído',
+        distance = 3.5,
+        canInteract = function(entity)
+            if CurrentStage ~= 'STEP_8_IN_TRANSIT' then return false end
+            if not ActiveJob or not JobEntities.trailer or not DoesEntityExist(JobEntities.trailer) then return false end
+            if IsPedInAnyVehicle(cache.ped, false) then return false end
+            if IsEntityAttached(entity) then return false end
+
+            local targetList = LoadedPallets or LoadedPalletData or {}
+            for _, pData in ipairs(targetList) do
+                if pData.entity == entity and pData.isFallen and not pData.isBroken then
+                    return true
+                end
+            end
+            return false
+        end,
+        onSelect = function(data)
+            local palletEnt = data and data.entity
+            if not palletEnt or not DoesEntityExist(palletEnt) then return end
+            local trailer = JobEntities.trailer
+            if not trailer or not DoesEntityExist(trailer) then return end
+
+            local targetList = LoadedPallets or LoadedPalletData or {}
+            local matchedPData = nil
+            for _, pData in ipairs(targetList) do
+                if pData.entity == palletEnt then
+                    matchedPData = pData
+                    break
+                end
+            end
+
+            local ok = lib.progressBar({
+                duration = 4000,
+                label = 'Recolhendo e içando palete para a carreta...',
+                useWhileDead = false,
+                canCancel = true,
+                disable = { move = true, car = true, combat = true },
+                anim = { dict = 'anim@heists@box_carry@', clip = 'idle' }
+            })
+
+            if ok then
+                local slotIdx = (matchedPData and matchedPData.slotIndex) or 1
+                local snapped, snappedOffset, snappedHeading = ForkliftModule.SnapPalletToCurrentSlot(palletEnt, trailer, slotIdx)
+                if snapped then
+                    if matchedPData then
+                        matchedPData.lost = false
+                        matchedPData.isFallen = false
+                        matchedPData.isSecured = true
+                        matchedPData.riskLevel = 0
+                        matchedPData.relOffset = snappedOffset
+                        matchedPData.relHeading = snappedHeading
+                    end
+
+                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                    SendMissionNotify('Carga Recuperada', 'Palete estivado e fixado novamente com sucesso!', 'success')
+
+                    local netId = NetworkGetEntityIsNetworked(palletEnt) and NetworkGetNetworkIdFromEntity(palletEnt) or 0
+                    if ActiveJob and ActiveJob.jobId then
+                        TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', ActiveJob.jobId, #LoadedPallets)
                     end
                 end
             end
@@ -1615,12 +1750,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     -- Aceleração centrífuga lateral (a = v * omega_yaw / 9.81 em Gs)
                     local centripetalG = (speed * yawRate) / 9.81
 
-                    -- Componente de inclinação/tombamento (25° já indica risco severo)
-                    local rollG = (activeRoll / 28.0)
+                    -- Componente de inclinação/tombamento (calibrado para veículos pesados / suspensão rígida)
+                    local rollG = (activeRoll / 38.0)
 
-                    -- Sensibilidade punitiva: se houver amarração frouxa, amplia a instabilidade
-                    local riskMultiplier = hasHighRisk and 1.65 or 1.05
-                    local rawForce = ((centripetalG * 1.4) + (rollG * 1.25)) * riskMultiplier
+                    -- Sensibilidade equilibrada e realista: tolerância aumentada contra falsos positivos
+                    local riskMultiplier = hasHighRisk and 1.35 or 0.85
+                    local rawForce = ((centripetalG * 0.95) + (rollG * 0.85)) * riskMultiplier
                     if rawForce > 1.0 then rawForce = 1.0 elseif rawForce < -1.0 then rawForce = -1.0 end
 
                     -- Converte força lateral em porcentagem (0 a 100, 50 = centro)
@@ -1628,9 +1763,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     if targetPercent < 2 then targetPercent = 2 elseif targetPercent > 98 then targetPercent = 98 end
 
                     -- Suavização exponencial para resposta fluida no HUD
-                    currentSmoothPercent = currentSmoothPercent + (targetPercent - currentSmoothPercent) * 0.4
+                    currentSmoothPercent = currentSmoothPercent + (targetPercent - currentSmoothPercent) * 0.35
                     local percent = math.floor(currentSmoothPercent + 0.5)
-                    local isCritical = (percent <= 15 or percent >= 85)
+                    local isCritical = (percent <= 10 or percent >= 90)
 
                     -- Atualiza HUD de estabilidade em tempo real
                     SendNUIMessage({
@@ -1641,12 +1776,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     })
 
                     -- GATILHO DINÂMICO E REALISTA DE QUEDA DE CARGA:
-                    -- Ativado por inclinação crítica (|Roll| > 25° quase tombando) OU força sustentada na faixa vermelha (> 35 km/h)
+                    -- Tolerância aumentada: exige inclinação severa (> 32° real de roll) OU curva em alta velocidade (> 55 km/h na faixa crítica)
                     local absRoll = math.abs(activeRoll)
-                    local isSevereTilt = absRoll > 25.0
-                    local isCentrifugalCritical = isCritical and speedKmh > 35.0
+                    local isSevereTilt = absRoll > 32.0
+                    local isCentrifugalCritical = isCritical and speedKmh > 55.0
 
-                    if (isSevereTilt or isCentrifugalCritical) and (now - lastDropTime >= 3500) then
+                    if (isSevereTilt or isCentrifugalCritical) and (now - lastDropTime >= 4500) then
                         local candidatePallet = nil
 
                         -- 1. Prioridade absoluta para paletes com amarração frouxa
@@ -1657,8 +1792,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                             end
                         end
 
-                        -- 2. Se amarração for perfeita, rompe se carreta quase capotar (|Roll| > 30°) OU curva extrema sustentada (> 65 km/h na faixa vermelha)
-                        if not candidatePallet and (absRoll > 30.0 or (isCritical and speedKmh > 65.0)) then
+                        -- 2. Se amarração for perfeita, rompe se carreta estiver na iminência de tombar (|Roll| > 38°) OU curva extrema sustentada (> 80 km/h)
+                        if not candidatePallet and (absRoll > 38.0 or (isCritical and speedKmh > 80.0)) then
                             for _, pData in ipairs(targetList) do
                                 if pData.isSecured and not pData.lost and not pData.isFallen then
                                     candidatePallet = pData
