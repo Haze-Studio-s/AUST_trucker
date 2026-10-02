@@ -272,6 +272,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- collision = false no AttachEntityToEntity desativa a física mútua palete <-> trailer
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
+    SetEntityHasGravity(palletEntity, false)
+    SetEntityVelocity(palletEntity, 0.0, 0.0, 0.0)
     AttachEntityToEntity(
         palletEntity, targetTrailer, trBone,
         slotOffset.x, slotOffset.y, slotOffset.z,
