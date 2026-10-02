@@ -111,10 +111,11 @@ Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega co
 - Validacao fisica de proximidade da refinaria e tempo minimo de descarga
 - Transporte de combustivel com certificacao ADR obrigatoria
 
-### Empilhadeira (Forklift)
-- Jobs multi-pallet: carregar manualmente ou alugar empilhadeira ($500, devolucao recupera $250)
-- Mini-jobs de Trade Point: 5 pallets em tempo limite com bonus de velocidade
-- Validacao server-side via StateBag (`forklift_owner`)
+### Empilhadeira (Forklift) e Estiva Física de Paletes
+- Jobs multi-pallet: estiva com a empilhadeira utilizando a tecla [G] ou manual
+- Mini-jobs de Trade Point: pallets em tempo limite com bônus de velocidade
+- Validação server-side via StateBag (`forklift_owner` e `loadedSlots`)
+- **Blindagem Havok & Colisão Sólida Preservada:** Isolamento contínuo de colisão entre qualquer prop de carga e o reboque (`SetEntityNoCollisionEntity`) eliminando catapultas de física, com colisão 100% sólida e ativa para o jogador (`SetEntityCollision(true, true)` + `SetCanClimbOnEntity(true)`).
 
 ### Simulacao de Caminhao
 - Peso afeta velocidade e frenagem
