@@ -1067,6 +1067,14 @@ local function HandlePalletLoaded(src, jobId, slotIndex)
     lobby.loadedCount = lobby.loadedCount + 1
     lobby.current_object = slotIndex
 
+    if lobby.pallets then
+        for _, pObj in ipairs(lobby.pallets) do
+            if DoesEntityExist(pObj) then
+                FreezeEntityPosition(pObj, false)
+            end
+        end
+    end
+
     TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
     TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount, lobby.requiredCount)
 
@@ -1246,6 +1254,18 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     lobby.loadedCount = math.max(lobby.loadedCount or 0, lobby.requiredCount or 1)
     lobby.stage = 'STATUS_IN_TRANSIT'
     lobby.startedTransitAt = os.time()
+
+    -- OneSync Anti-Rubberbanding: Descongela todas as entidades de carga no servidor para que o OneSync acompanhe o reboque
+    if lobby.pallets then
+        for _, pObj in ipairs(lobby.pallets) do
+            if DoesEntityExist(pObj) then
+                FreezeEntityPosition(pObj, false)
+            end
+        end
+    end
+    if lobby.forklift and DoesEntityExist(lobby.forklift) then
+        FreezeEntityPosition(lobby.forklift, false)
+    end
 
     print(("[AUST_Trucker] Frete %s pronto para trânsito (Player %s). Destino: %s"):format(
         tostring(jobId), tostring(src), tostring(lobby.deliveryCoords)

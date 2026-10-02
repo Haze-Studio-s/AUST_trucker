@@ -240,25 +240,34 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz Sólida Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida
+    local trBone = GetEntityBoneIndexByName(targetTrailer, "chassis")
+    if trBone == -1 then trBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
+    if trBone == -1 then trBone = 0 end
+
+    -- Ancoragem física estável OneSync: trava rígida na malha com matriz dinâmica de rotação
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
-        palletEntity, targetTrailer, 0,
+        palletEntity, targetTrailer, trBone,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, slotHeading,
-        false, false, false, false, 2, true
+        true, true, false, false, 1, true
     )
 
     -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
+
+    -- Bloqueia migração de rede do OneSync para impedir rubberbanding (o motorista local governa a entidade)
+    if NetworkGetEntityIsNetworked(palletEntity) then
+        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEntity), false)
+    end
 
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
