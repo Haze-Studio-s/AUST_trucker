@@ -1370,16 +1370,183 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local payment = math.floor(basePayment * ratio)
     local xp = math.floor(baseXP * ratio)
 
-    if exports.qbx_core then
-        exports.qbx_core:AddMoney(src, 'bank', payment, 'polarix-trucker-job')
-    else
-        Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
+    -- Remoção autoritativa de chaves secundárias (empilhadeira, reach stacker, carros cegonha)
+    if lobby.forkliftPlate or lobby.handlerPlate or lobby.carrierCars then
+        RemoveJobKeys(src, {
+            forkliftPlate = lobby.forkliftPlate,
+            forklift = lobby.forklift,
+            handlerPlate = lobby.handlerPlate,
+            handler = lobby.handler,
+            carrierCars = lobby.carrierCars
+        })
     end
 
-    -- Remoção autoritativa de chaves
+    if lobby.isOwned then
+        -- =======================================================================
+        -- FLUXO 1: CAMINHÃO PRÓPRIO (OWNED TRUCK)
+        -- Pagamento e XP imediatos. Jogador liberado do frete no ato da entrega.
+        -- =======================================================================
+        if exports.qbx_core then
+            exports.qbx_core:AddMoney(src, 'bank', payment, 'polarix-trucker-job')
+        else
+            Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
+        end
+
+        -- Atualização autoritativa da tabela 0r_trucker
+        pcall(function()
+            MySQL.query.await([[
+                INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
+                VALUES (?, 1, ?, 1, ?)
+                ON DUPLICATE KEY UPDATE
+                    xp = xp + VALUES(xp),
+                    total_deliveries = total_deliveries + 1,
+                    total_earned = total_earned + VALUES(total_earned),
+                    level = FLOOR(1 + (xp / 1000))
+            ]], { citizenId, xp, payment })
+        end)
+
+        pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
+
+        -- Deleta apenas a carreta da carga e adereços da entrega, preservando o caminhão do jogador
+        if lobby.trailer and DoesEntityExist(lobby.trailer) then
+            DeleteEntity(lobby.trailer)
+        end
+        if lobby.container and DoesEntityExist(lobby.container) then
+            DeleteEntity(lobby.container)
+        end
+        if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+            DeleteEntity(lobby.hoseProp)
+        end
+        if lobby.pallets then
+            for _, p in ipairs(lobby.pallets) do
+                if p and DoesEntityExist(p) then DeleteEntity(p) end
+            end
+        end
+        if lobby.carrierCars then
+            for _, c in ipairs(lobby.carrierCars) do
+                if c and DoesEntityExist(c) then DeleteEntity(c) end
+            end
+        end
+
+        PolarixLobbies[jobId] = nil
+        PlayerPolarixLobbies[citizenId] = nil
+
+        TriggerClientEvent('aust_trucker:client:ClearObjective', src)
+        TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
+            isQuickJob = false,
+            payment = payment,
+            xp = xp,
+            lostPallets = lostCount,
+            deliveredPallets = deliveredCount,
+            distance = 3.5
+        })
+    else
+        -- =======================================================================
+        -- FLUXO 2: TRABALHO RÁPIDO / VEÍCULO DA EMPRESA (QUICK JOB)
+        -- Pagamento fica retido. Deleta carreta/carga e exige devolução à base de origem.
+        -- =======================================================================
+        lobby.stage = 'STATUS_RETURNING_TO_BASE'
+        lobby.retainedPayment = payment
+        lobby.retainedXP = xp
+        lobby.lostPallets = lostCount
+        lobby.deliveredPallets = deliveredCount
+
+        -- Deleta apenas a carreta e carga entregue no destino
+        if lobby.trailer and DoesEntityExist(lobby.trailer) then
+            DeleteEntity(lobby.trailer)
+            lobby.trailer = nil
+        end
+        if lobby.container and DoesEntityExist(lobby.container) then
+            DeleteEntity(lobby.container)
+            lobby.container = nil
+        end
+        if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+            DeleteEntity(lobby.hoseProp)
+            lobby.hoseProp = nil
+        end
+        if lobby.pallets then
+            for _, p in ipairs(lobby.pallets) do
+                if p and DoesEntityExist(p) then DeleteEntity(p) end
+            end
+            lobby.pallets = {}
+        end
+        if lobby.carrierCars then
+            for _, c in ipairs(lobby.carrierCars) do
+                if c and DoesEntityExist(c) then DeleteEntity(c) end
+            end
+            lobby.carrierCars = {}
+        end
+
+        local returnCoords = (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.TruckSpawnCoords)
+            or vector4(1245.79, -3155.76, 4.6, 90.0)
+
+        TriggerClientEvent('aurp_trucker:client:polarixCargoDeliveredReturnRequired', src, {
+            jobId = jobId,
+            returnCoords = returnCoords,
+            retainedPayment = payment,
+            retainedXP = xp
+        })
+    end
+end)
+
+-- Devolução e Vistoria de Danos do Caminhão da Empresa (Trabalho Rápido)
+RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, inspection)
+    local src = source
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.citizenId ~= citizenId then return end
+    if lobby.stage ~= 'STATUS_RETURNING_TO_BASE' then return end
+
+    -- Validação de proximidade da base de retorno
+    local ped = GetPlayerPed(src)
+    local pCoords = GetEntityCoords(ped)
+    local returnCoords = (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.TruckSpawnCoords)
+        or vector4(1245.79, -3155.76, 4.6, 90.0)
+    local distBase = #(pCoords - vector3(returnCoords.x, returnCoords.y, returnCoords.z))
+
+    if distBase > 45.0 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Você precisa estar no pátio da empresa para devolver o caminhão!', 'error')
+        return
+    end
+
+    local payment = lobby.retainedPayment or 0
+    local xp = lobby.retainedXP or 0
+    local repairCost = 0
+
+    -- Vistoria Autoritativa de Avarias
+    if inspection and type(inspection) == 'table' then
+        local engineHealth = tonumber(inspection.engineHealth) or 1000.0
+        local bodyHealth = tonumber(inspection.bodyHealth) or 1000.0
+        local burstTires = tonumber(inspection.burstTires) or 0
+
+        -- Cálculo do custo de conserto baseado no desgaste real
+        local engineDamage = math.max(0.0, 1000.0 - engineHealth)
+        local bodyDamage = math.max(0.0, 1000.0 - bodyHealth)
+
+        local engineCost = math.floor(engineDamage * 1.5)      -- até ~$1500 se motor destruído
+        local bodyCost = math.floor(bodyDamage * 1.0)          -- até ~$1000 se lataria destruída
+        local tireCost = burstTires * 150                      -- $150 por pneu estourado
+
+        repairCost = engineCost + bodyCost + tireCost
+        -- Desconto limitado a no máximo 65% do pagamento retido para evitar saldo negativo
+        repairCost = math.min(repairCost, math.floor(payment * 0.65))
+    end
+
+    local finalPayment = math.max(100, payment - repairCost)
+
+    if exports.qbx_core then
+        exports.qbx_core:AddMoney(src, 'bank', finalPayment, 'polarix-quickjob-returned')
+    else
+        Framework.AddMoney(Player, 'bank', finalPayment, 'polarix-quickjob-returned')
+    end
+
+    -- Remoção de chaves do caminhão da empresa
     RemoveJobKeys(src, lobby)
 
-    -- Atualização autoritativa da tabela 0r_trucker
+    -- Atualização de estatísticas 0r_trucker
     pcall(function()
         MySQL.query.await([[
             INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
@@ -1389,13 +1556,12 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
                 total_deliveries = total_deliveries + 1,
                 total_earned = total_earned + VALUES(total_earned),
                 level = FLOOR(1 + (xp / 1000))
-        ]], { citizenId, xp, payment })
+        ]], { citizenId, xp, finalPayment })
     end)
 
-    -- Atualiza aust_trucker_stats para manter paridade estatística do painel
     pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
-    -- Limpeza OneSync autoritativa de entidades geradas
+    -- Limpeza definitiva das entidades restantes (caminhão da firma)
     CleanupLobbyEntities(lobby)
 
     PolarixLobbies[jobId] = nil
@@ -1403,11 +1569,13 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
 
     TriggerClientEvent('aust_trucker:client:ClearObjective', src)
     TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
-        payment = payment,
+        isQuickJob = true,
+        payment = finalPayment,
+        originalPayment = payment,
+        repairCost = repairCost,
         xp = xp,
-        lostPallets = lostCount,
-        deliveredPallets = deliveredCount,
-        distance = 3.5
+        lostPallets = lobby.lostPallets or 0,
+        deliveredPallets = lobby.deliveredPallets or 0
     })
 end)
 

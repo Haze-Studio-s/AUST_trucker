@@ -2458,7 +2458,13 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
     CleanupCurrentJob()
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-    if summary.lostPallets and summary.lostPallets > 0 then
+    if summary.isQuickJob and summary.repairCost and summary.repairCost > 0 then
+        SendMissionNotify('Central Logística', ('Caminhão devolvido com avarias!\nCusto de Reparo: -$%d\nPagamento Final: $%d creditado no banco\nXP Ganho: +%d'):format(
+            summary.repairCost,
+            summary.payment or 0,
+            summary.xp or 0
+        ), 'warning')
+    elseif summary.lostPallets and summary.lostPallets > 0 then
         SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.lostPallets,
             summary.payment or 0,
@@ -2470,6 +2476,119 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
             summary.xp or 0
         ), 'success')
     end
+end)
+
+-- FLUXO TRABALHO RÁPIDO: Carga descarregada, pagamento retido, rota de retorno para devolução
+RegisterNetEvent('aurp_trucker:client:polarixCargoDeliveredReturnRequired', function(data)
+    ClearObjectiveMarkers(false)
+    PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
+
+    SendMissionNotify('Carga Entregue!', ('A carga foi descarregada com sucesso! Seu pagamento de $%d está retido.\nRetorne à Central de Logística e devolva o caminhão da empresa para receber.'):format(
+        data.retainedPayment or 0
+    ), 'inform')
+
+    local returnCoords = data.returnCoords or vector4(1245.79, -3155.76, 4.6, 90.0)
+    SetNewWaypoint(returnCoords.x, returnCoords.y)
+
+    local retBlip = AddBlipForCoord(returnCoords.x, returnCoords.y, returnCoords.z)
+    SetBlipSprite(retBlip, 357)
+    SetBlipColour(retBlip, 5)
+    SetBlipScale(retBlip, 0.95)
+    SetBlipRoute(retBlip, true)
+    SetBlipRouteColour(retBlip, 5)
+    BeginTextCommandSetBlipName("STRING")
+    AddTextComponentString("Devolução: Central Logística")
+    EndTextCommandSetBlipName(retBlip)
+
+    CurrentStage = 'STEP_RETURN_TRUCK'
+
+    CreateThread(function()
+        local retX, retY, retZ = returnCoords.x, returnCoords.y, returnCoords.z
+        local retTextUi = nil
+        local returning = false
+        local targetJobId = data.jobId
+
+        while ActiveJob and ActiveJob.jobId == targetJobId and not returning do
+            local sleep = 1000
+            local ped = cache.ped or PlayerPedId()
+            local currentVeh = GetVehiclePedIsIn(ped, false)
+            local pCoords = GetEntityCoords(ped)
+            local dist = #(pCoords - vector3(retX, retY, retZ))
+
+            if dist <= 60.0 then
+                sleep = 2
+                DrawMarker(1, retX, retY, retZ - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 5.0, 5.0, 1.2, 255, 180, 0, 140, false, false, 2, false, nil, nil, false)
+
+                if dist <= 5.0 then
+                    local isCompanyTruck = (currentVeh ~= 0) and (JobEntities.truck and currentVeh == JobEntities.truck or DoesEntityExist(JobEntities.truck))
+                    if isCompanyTruck and currentVeh ~= 0 then
+                        if retTextUi ~= 'return' then
+                            lib.showTextUI('[E] Devolver Caminhão da Empresa e Receber Pagamento')
+                            retTextUi = 'return'
+                        end
+
+                        if IsControlJustPressed(0, 38) then
+                            returning = true
+                            if retTextUi then
+                                lib.hideTextUI()
+                                retTextUi = nil
+                            end
+
+                            BringVehicleToHalt(currentVeh, 2.5, 1, false)
+                            Wait(100)
+                            DoScreenFadeOut(500)
+                            Wait(500)
+
+                            local engH = GetVehicleEngineHealth(currentVeh)
+                            local bdyH = GetVehicleBodyHealth(currentVeh)
+                            local burst = 0
+                            for tIdx = 0, 7 do
+                                if IsVehicleTyreBurst(currentVeh, tIdx, false) then
+                                    burst = burst + 1
+                                end
+                            end
+
+                            TaskLeaveVehicle(ped, currentVeh, 0)
+                            Wait(250)
+
+                            if DoesBlipExist(retBlip) then
+                                RemoveBlip(retBlip)
+                            end
+
+                            TriggerServerEvent('aurp_trucker:server:returnQuickJobTruck', targetJobId, {
+                                engineHealth = engH,
+                                bodyHealth = bdyH,
+                                burstTires = burst
+                            })
+
+                            Wait(600)
+                            DoScreenFadeIn(800)
+                            break
+                        end
+                    else
+                        if retTextUi ~= 'not_truck' then
+                            lib.showTextUI('Você deve estar no caminhão da empresa para devolver!')
+                            retTextUi = 'not_truck'
+                        end
+                    end
+                else
+                    if retTextUi then
+                        lib.hideTextUI()
+                        retTextUi = nil
+                    end
+                end
+            else
+                if retTextUi then
+                    lib.hideTextUI()
+                    retTextUi = nil
+                end
+            end
+            Wait(sleep)
+        end
+
+        if retTextUi then lib.hideTextUI() end
+        if DoesBlipExist(retBlip) then RemoveBlip(retBlip) end
+    end)
 end)
 
 -- =======================================================================
