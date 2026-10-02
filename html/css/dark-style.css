@@ -3,51 +3,87 @@
    Dark Theme & Glassmorphism Design System
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
 :root {
-    /* Lation Signature Emerald & Amber Palette */
-    --primary-accent: #10b981;
-    --primary-accent-hover: #059669;
-    --primary-color: #10b981;
-    --primary-color-hover: #059669;
-    --primary-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-    --primary-glow: rgba(16, 185, 129, 0.45);
+    /* Lation Modern UI (Emerald Edition) Official Palette */
+    --surface: #1e1f24;           /* Fundo principal de cards e modais */
+    --surface-band: #18191e;      /* Faixas de cabeçalho, sidebar e divisores */
+    --surface-hover: #252630;     /* Estado hover de cards/linhas */
+    --surface-elevated: #2a2b31;  /* Elementos elevados / containers internos */
+    --surface-deep: #16171b;      /* Fundo de slots, inputs e tabelas */
 
-    --accent-emerald: #10b981;
-    --accent-neon: #6afe87;
+    /* Linhas & Bordas */
+    --line: #2a2b31;              /* Borda padrão */
+    --line-strong: #3a3b41;       /* Borda destacada / divisórias */
+    --line-hover: #4a4b51;        /* Borda ao passar o mouse */
+
+    /* Conteúdo & Tipografia */
+    --content: #e4e4e7;           /* Texto padrão de leitura */
+    --content-secondary: #a1a1aa; /* Subtítulos, descrições secundárias */
+    --content-muted: #71717a;     /* Labels desativadas, dicas fracas */
+    --content-heading: #ffffff;   /* Títulos principais em destaque */
+
+    /* Acentos Verde Esmeralda (Lation Emerald / Success Palette) */
+    --accent: #10b981;            /* Verde esmeralda padrão */
+    --accent-soft: #34d399;       /* Verde claro / destaques suaves */
+    --accent-bright: #6afe87;     /* Verde neon brilhante (valores/XP/sucesso) */
+    --accent-dim: rgba(16, 185, 129, 0.12); /* Fundo de chips e glow suave */
+    --accent-glow: rgba(16, 185, 129, 0.28);/* Brilho de botões e seleções */
+
+    /* Botões Especializados */
+    --btn-green-bg: #1b3b2d;
+    --btn-green-text: #6afe87;
+    --btn-green-border: #224d3a;
+    --btn-green-hover: #234d3b;
+
+    --btn-warn-bg: #3b2f1b;
+    --btn-warn-text: #fcd34d;
+    --btn-warn-border: #4d3e24;
+
+    --btn-err-bg: #35202b;
+    --btn-err-text: #ff9f87;
+    --btn-err-border: #4a2b3b;
+
+    /* Aliases para Compatibilidade de Classes Existentes */
+    --primary-accent: var(--accent);
+    --primary-accent-hover: var(--accent-soft);
+    --primary-color: var(--accent);
+    --primary-color-hover: var(--accent-soft);
+    --primary-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --primary-glow: var(--accent-glow);
+    --accent-emerald: var(--accent);
+    --accent-neon: var(--accent-bright);
     --accent-amber: #f59e0b;
-    --accent-amber-glow: rgba(245, 158, 11, 0.4);
+    --accent-amber-glow: rgba(245, 158, 11, 0.35);
     --accent-rose: #f43f5e;
 
-    /* OLED Black & Midnight Dark Surfaces (Strict OLED Dark Mode) */
-    --bg-main: #050505;
-    --bg-sidebar: #080808;
-    --bg-card: #0d0d0d;
-    --bg-card-hover: #181818;
-    --bg-card-alt: #121212;
-    --bg-input: #121212;
-    --bg-input-focus: #181818;
+    --bg-main: var(--surface-deep);
+    --bg-sidebar: var(--surface-band);
+    --bg-card: var(--surface);
+    --bg-card-hover: var(--surface-hover);
+    --bg-card-alt: var(--surface-band);
+    --bg-input: var(--surface-deep);
+    --bg-input-focus: var(--surface-elevated);
 
-    /* Borders & Lines (Ultra-refined subtle borders) */
-    --border-subtle: rgba(255, 255, 255, 0.06);
-    --border-hover: rgba(16, 185, 129, 0.5);
-    --border-active: #10b981;
+    --border-subtle: var(--line);
+    --border-hover: var(--accent);
+    --border-active: var(--accent);
 
-    /* Typography */
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --text-primary: var(--content-heading);
+    --text-secondary: var(--content);
+    --text-muted: var(--content-secondary);
 
-    /* Radii */
     --radius-sm: 6px;
     --radius-md: 8px;
     --radius-lg: 10px;
     --radius-xl: 14px;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 
-    /* Shadows (Deep Dark Contrast) */
-    --shadow-main: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.06);
-    --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.6);
+    --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.25), 0 16px 40px rgba(0, 0, 0, 0.6);
+    --shadow-main: var(--panel-shadow);
+    --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
 /* Base & Font (100% Transparent, No filters, No shadows on outer viewport) */
@@ -311,13 +347,16 @@ ul.list-inline li.card-theme {
     background: var(--bg-card) !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
-    transition: all 0.22s ease !important;
+    box-shadow: var(--shadow-card) !important;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
 }
 
 ul.list-inline li.card-theme:hover {
     background: var(--bg-card-hover) !important;
     border-color: var(--border-hover) !important;
-    transform: scale(1.008);
+    box-shadow: inset 3px 0 0 var(--accent), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+    transform: translateY(-1px) scale(1.004) !important;
 }
 
 /* User Profile & Candidate Cards */
@@ -367,18 +406,19 @@ ul.list-inline li.card-theme:hover {
 }
 
 .btn-primary {
-    background: var(--primary-gradient) !important;
-    border: none !important;
-    color: #ffffff !important;
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4), 0 4px 14px rgba(16, 185, 129, 0.25) !important;
+    background: var(--btn-green-bg) !important;
+    border: 1px solid var(--btn-green-border) !important;
+    color: var(--btn-green-text) !important;
+    box-shadow: 0 0 10px var(--accent-dim), 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+    font-family: var(--font-mono) !important;
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.6), 0 6px 20px rgba(16, 185, 129, 0.35) !important;
-    filter: brightness(1.1) !important;
+    background: var(--btn-green-hover) !important;
+    border-color: var(--accent) !important;
     color: #ffffff !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 0 16px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.5) !important;
 }
 
 .btn-primary:active {
