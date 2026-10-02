@@ -951,8 +951,8 @@ local function StartTruckDelivery(src, contractData)
             xp = baseXP
         }, true)
     end
-    if Player(src) then
-        Player(src).state:set('activeJobId', jobId, true)
+    if _G.Player and _G.Player(src) then
+        _G.Player(src).state:set('activeJobId', jobId, true)
     end
 
     local payload = {
@@ -1473,8 +1473,8 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         if lobby.truck and DoesEntityExist(lobby.truck) then
             Entity(lobby.truck).state:set('activeJobData', nil, true)
         end
-        if Player(src) then
-            Player(src).state:set('activeJobId', nil, true)
+        if _G.Player and _G.Player(src) then
+            _G.Player(src).state:set('activeJobId', nil, true)
         end
 
         TriggerClientEvent('aust_trucker:client:ClearObjective', src)
@@ -1613,8 +1613,8 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
     if lobby.truck and DoesEntityExist(lobby.truck) then
         Entity(lobby.truck).state:set('activeJobData', nil, true)
     end
-    if Player(src) then
-        Player(src).state:set('activeJobId', nil, true)
+    if _G.Player and _G.Player(src) then
+        _G.Player(src).state:set('activeJobId', nil, true)
     end
 
     PolarixLobbies[jobId] = nil
@@ -1648,8 +1648,8 @@ RegisterNetEvent('aurp_trucker:server:cancelDelivery', function(jobId, reason)
     if lobby.truck and DoesEntityExist(lobby.truck) then
         Entity(lobby.truck).state:set('activeJobData', nil, true)
     end
-    if Player(src) then
-        Player(src).state:set('activeJobId', nil, true)
+    if _G.Player and _G.Player(src) then
+        _G.Player(src).state:set('activeJobId', nil, true)
     end
 
     PolarixLobbies[jobId] = nil
