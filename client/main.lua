@@ -605,6 +605,13 @@ local function StartCouplingWatcher()
                                             end
                                         else
                                             CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                            -- Trava os freios de mão do caminhão e trailer para impedir efeito alavanca no quinto prato
+                                            if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                                                SetVehicleHandbrake(JobEntities.truck, true)
+                                            end
+                                            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                                                SetVehicleHandbrake(JobEntities.trailer, true)
+                                            end
                                             if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
                                                 UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
                                             end
@@ -1096,13 +1103,23 @@ CreateThread(function()
             end
 
             local fork = JobEntities.forklift
-            if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
-                hasCargo = true
-                SetEntityNoCollisionEntity(fork, trailer, true)
-                SetEntityNoCollisionEntity(trailer, fork, true)
-                if truck and DoesEntityExist(truck) then
-                    SetEntityNoCollisionEntity(fork, truck, true)
-                    SetEntityNoCollisionEntity(truck, fork, true)
+            if fork and DoesEntityExist(fork) then
+                local shouldShieldForklift = ForkliftLoadedOnTrailer or (CurrentStage == 'STEP_6_LOAD_PALLETS')
+                if not shouldShieldForklift and trailer and DoesEntityExist(trailer) then
+                    local dist = #(GetEntityCoords(fork) - GetEntityCoords(trailer))
+                    if dist <= 16.0 then
+                        shouldShieldForklift = true
+                    end
+                end
+
+                if shouldShieldForklift then
+                    hasCargo = true
+                    SetEntityNoCollisionEntity(fork, trailer, true)
+                    SetEntityNoCollisionEntity(trailer, fork, true)
+                    if truck and DoesEntityExist(truck) then
+                        SetEntityNoCollisionEntity(fork, truck, true)
+                        SetEntityNoCollisionEntity(truck, fork, true)
+                    end
                 end
             end
         end
