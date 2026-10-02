@@ -100,11 +100,14 @@ RegisterNetEvent('aurp_trucker:client:upgradeResult', function(result)
 end)
 
 -- Job iniciado: reinicia integridade
-RegisterNetEvent('aurp_trucker:client:jobStarted', function()
+local function OnJobStartedHUD()
     SimState.integrity    = 100.0
     SimState.hasActiveJob = true
     SimState.prevSpeed    = 0.0
-end)
+end
+RegisterNetEvent('aurp_trucker:client:jobStarted', OnJobStartedHUD)
+RegisterNetEvent('aurp_trucker:client:hudJobStarted', OnJobStartedHUD)
+RegisterNetEvent('aurp_trucker:client:polarixJobStarted', OnJobStartedHUD)
 
 -- Job concluído (confirmação do servidor): reseta estado e limpa lastKnownPlate
 RegisterNetEvent('aurp_trucker:client:jobCompleted', function()

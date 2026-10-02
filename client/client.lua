@@ -337,6 +337,7 @@ local serverJobs = {}
 
 -- Job aceito pelo servidor — iniciar no cliente
 RegisterNetEvent('aurp_trucker:client:jobStarted', function(job)
+    if not job or type(job) ~= 'table' then return end
     -- Mapear campos do server para o formato que StartJob espera
     local mapped = {
         id         = job.jobId or job.id,

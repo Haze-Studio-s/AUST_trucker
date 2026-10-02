@@ -2118,7 +2118,7 @@ local function StartMissionStep1(truck, trailer, forklift)
             stage = 'STEP_2_ENTER_TRUCK',
             deliveryCoords = ActiveJob.deliveryCoords
         }
-        TriggerEvent('aurp_trucker:client:jobStarted')
+        TriggerEvent('aurp_trucker:client:hudJobStarted')
         SendNUIMessage({ action = 'updateActiveJob', activeJob = lcActiveJob })
     end
 
