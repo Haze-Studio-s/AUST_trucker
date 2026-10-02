@@ -1,283 +1,1426 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AUST Trucker — Nexus OS Edition</title>
+<html style="background: transparent !important; background-color: transparent !important;">
+	<head>
+		<meta charset="UTF-8">
+		
+		<!-- Google Fonts (Padrão Nation Typography) -->
+		<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+		<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+		
+		<!-- jQuery (Local copy with CDN fallback) -->
+		<script src="js/jquery.min.js"></script>
+		<script>window.jQuery || document.write('<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js"><\/script>')</script>
 
-    <!-- Design System Nexus OS (Apple HIG & Glassmorphism) -->
-    <link rel="stylesheet" href="vendor/fa/css/all.min.css">
-    <link rel="stylesheet" href="css/nexus_theme.css">
+		<!-- Bootstrap -->
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+		<link id="css-bs-light" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" disabled>
+		<link id="css-bs-dark" rel="stylesheet" href="css/bootstrap-night.css">
+		
+		<!-- Stylesheets -->
+		<style>
+			html, body, #app, #root {
+				background: transparent !important;
+				background-color: transparent !important;
+				box-shadow: none !important;
+				filter: none !important;
+				backdrop-filter: none !important;
+				-webkit-backdrop-filter: none !important;
+				margin: 0 !important;
+				padding: 0 !important;
+				overflow: hidden !important;
+				width: 100vw !important;
+				height: 100vh !important;
+				display: flex !important;
+				align-items: center !important;
+				justify-content: center !important;
+			}
+		</style>
+		<link rel="stylesheet" href="css/style.css">
+		<link id="css-light" rel="stylesheet" href="css/light-style.css" disabled>
+		<link id="css-dark" rel="stylesheet" href="css/dark-style.css">
+		<link rel="stylesheet" href="css/admin.css">
 
-    <!-- Three.js & Gizmo 3D (Preservação de Calibração da Staff) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+		<!-- Font Awesome 6 -->
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" />
 
-    <!-- Vue 3 Framework (Offline Local) -->
-    <script src="js/vue.global.prod.js"></script>
-</head>
-<body>
-    <div id="app" style="width: 100vw; height: 100vh; position: relative; overflow: hidden;">
+		<!-- Three.js & TransformControls (Gizmo 3D estilo vp_staff_studio) -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
 
-        <!-- ==================================================================== -->
-        <!-- 1. TOAST NOTIFICATIONS (macOS / iOS Style) -->
-        <!-- ==================================================================== -->
-        <div class="nexus-toast-container" v-if="toasts.length > 0">
-            <div v-for="t in toasts" :key="t.id" class="nexus-toast">
-                <i :class="[
-                    'fas text-lg mt-0.5',
-                    t.type === 'success' ? 'fa-check-circle text-emerald-400' :
-                    t.type === 'error' ? 'fa-times-circle text-rose-400' :
-                    t.type === 'warning' ? 'fa-exclamation-triangle text-amber-400' :
-                    'fa-info-circle text-sky-400'
-                ]"></i>
-                <div style="flex: 1;">
-                    <div style="font-size: 13px; font-weight: 600; color: #ffffff;">{{ t.title }}</div>
-                    <div style="font-size: 12px; color: #cbd5e1; margin-top: 2px;">{{ t.message }}</div>
-                </div>
-            </div>
-        </div>
+		<!-- Utils JavaScript & Languages -->
+		<script src="js/utils.js" type="text/javascript"></script>
+		<script src="lang/en.js" type="text/javascript"></script>
+		<script src="lang/br.js" type="text/javascript"></script>
+	</head>
 
-        <!-- ==================================================================== -->
-        <!-- 2. IN-GAME HUD: ALERTA ADR & MATERIAIS PERIGOSOS -->
-        <!-- ==================================================================== -->
-        <div v-if="adrAlert" class="nexus-hud-card">
-            <i class="fas fa-biohazard text-amber-400 text-2xl animate-pulse"></i>
-            <div>
-                <div style="font-size: 11px; text-transform: uppercase; font-weight: 700; color: #f59e0b; letter-spacing: 0.5px;">Protocolo ADR Químico</div>
-                <div style="font-size: 13px; font-weight: 600; color: #ffffff;">Integridade do Tanque: {{ adrAlert.integrity || 100 }}%</div>
-            </div>
-        </div>
+	<body style="background: transparent !important; background-color: transparent !important; display: flex !important; justify-content: center !important; align-items: center !important; height: 100vh !important; width: 100vw !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important;">
+		<h1 style="color: #ffffff00;position: absolute;">_</h1>
+		<div class="main backgound-theme" style="display: none;">
+			<nav class="sidebar-navigation">
+				<ul id="sidebar-ul">
+					
+				</ul>
+			</nav>
+			<div class="container-pages">
+				<div class="d-flex player-info-container">
+					<div class="d-flex mr-4">
+						<h4 class="m-0 mr-1 text-primary player-info-item">LVL.</h4>
+						<h5 id="player-info-level" class="m-0 player-info-item"></h5>
+					</div>
+					<div class="d-flex mr-4">
+						<i class="fas fa-star mr-1 text-primary player-info-item"></i>
+						<h4 id="player-info-skill" class="m-0 player-info-item"></h4>
+					</div>
+					<div id="player-info-money-container" class="d-flex mr-4">
+						<i class="fas fa-coins mr-1 text-primary player-info-item"></i>
+						<h4 id="player-info-money" class="m-0 player-info-item"></h4>
+					</div>
+					<div class="custom-control custom-switch">
+						<input type="checkbox" class="custom-control-input" id="css-toggle" checked="">
+						<label class="custom-control-label" for="css-toggle"></label>
+						<i id="dark-theme-icon" class="fas fa-moon mr-1 text-primary player-info-item" for="css-toggle" style="display: none;"></i>
+						<i id="light-theme-icon" class="fas fa-sun mr-1 text-primary player-info-item" for="css-toggle"></i>
+					</div>
+				</div>
+				<div class="pages main-page" style="height: 100%;">
+					<div class="row" style="height: 100%;">
+						<div class="col-md-12" style="height: 100%;">
+							<div class="col-12 mt-3 mb-3" id="main-title-div">
+								
+							</div>
+							<div style="max-height: calc(100% - var(--main-title-height)); overflow: auto;">
+								<div class="row no-gutters">
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-money" class="text-success"></h3>
+															<span id="profile-money-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-money-check-alt text-success font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-money-earned" class="text-success"></h3>
+															<span id="profile-money-earned-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-money-check text-success font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-deliveries" class="blue"></h3>
+															<span id="profile-deliveries-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-truck-loading blue font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-distance-traveled" class="blue"></h3>
+															<span id="profile-distance-traveled-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-route blue font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								
+								<div class="row no-gutters">
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-exp-1" class="amber accent-4"></h3>
+															<span id="profile-exp-1-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-chart-line amber accent-4 font-large-2 float-right"></i>
+														</div>
+													</div>
+													<div id="profile-exp-2" class="progress mt-1 mb-0" style="height: 7px;">
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-skill-points" class="amber accent-4"></h3>
+															<span id="profile-skill-points-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-medal amber accent-4 font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-trucks" class="info"></h3>
+															<span id="profile-trucks-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-truck info font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+									<div class="col-3">
+										<div class="card card-centering">
+											<div class="card-content">
+												<div class="card-body">
+													<div class="media d-flex">
+														<div class="media-body text-left">
+															<h3 id="profile-drivers" class="info"></h3>
+															<span id="profile-drivers-span"></span>
+														</div>
+														<div class="align-self-center">
+															<i class="fas fa-user-friends info font-large-2 float-right"></i>
+														</div>
+													</div>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div id="top-truckers-title-div" class="col-12 mt-3 mb-1">
+									
+								</div>
+								<div class="mt-3">
+									<ul id="top-truckers-list" class="list list-inline">
+										
+									</ul>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="pages job-page" style="height: 100%;">
+					<div class="row" style="height: 100%;">
+						<div class="col-md-12" style="height: 100%;">
+							<div id="job-title-div" class="col-12 mt-3 mb-3">
+								
+							</div>
+							<div id="job-page-list" style="max-height: calc(100% - var(--job-title-height)); overflow: auto;">
 
-        <!-- ==================================================================== -->
-        <!-- 3. TRUCKER PANEL: MENU DO MOTORISTA (Glassmorphism macOS) -->
-        <!-- ==================================================================== -->
-        <div v-if="isDriverOpen" style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.45); backdrop-filter: blur(10px);">
-            <div class="nexus-window" style="width: 1020px; height: 680px;">
-                <!-- Header macOS Window Chrome -->
-                <div class="nexus-header">
-                    <div class="traffic-lights">
-                        <button class="tl-btn tl-close" @click="closeDriver"><i class="fas fa-times"></i></button>
-                        <button class="tl-btn tl-minimize" @click="closeDriver"><i class="fas fa-minus"></i></button>
-                        <button class="tl-btn tl-expand"><i class="fas fa-plus"></i></button>
-                    </div>
+							</div>
+							<div id="job-footer-div" class="m-1">
+								<i class="fa-regular fa-clock" style="font-size: 15px;"></i><span id="new-contracts-2" class="ml-2"></span>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="pages freight-page" style="height: 100%;">
+					<div class="row" style="height: 100%;">
+						<div class="col-md-12" style="height: 100%;">
+							<div id="freight-title-div" class="col-12 mt-3 mb-3">
 
-                    <!-- Navigation Tabs -->
-                    <div class="nexus-tab-bar">
-                        <div :class="['nexus-tab-item', activeDriverTab === 'jobs' && 'active']" @click="activeDriverTab = 'jobs'">
-                            <i class="fas fa-truck-loading"></i> Fretes Disponíveis
-                        </div>
-                        <div :class="['nexus-tab-item', activeDriverTab === 'garage' && 'active']" @click="activeDriverTab = 'garage'">
-                            <i class="fas fa-warehouse"></i> Minha Garagem
-                        </div>
-                        <div :class="['nexus-tab-item', activeDriverTab === 'progression' && 'active']" @click="activeDriverTab = 'progression'">
-                            <i class="fas fa-id-card"></i> Licenças & Perfil
-                        </div>
-                    </div>
+							</div>
+							<div id="freight-page-list" style="max-height: calc(100% - var(--freight-title-height)); overflow: auto;">
+							</div>
+							<div id="freight-footer-div" class="m-1">
+								<i class="fa-regular fa-clock" style="font-size: 15px;"></i><span id="new-contracts-1" class="ml-2"></span>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="pages party-page" style="height: 100%;">
+					<div class="lation-party-wrapper">
+						<div id="party-title-div" class="lation-party-header-bar">
+							<div>
+								<div class="lation-party-header-title"><i class="fas fa-users-gear text-emerald"></i> GRUPOS & CONVOYS</div>
+								<div class="lation-party-header-desc">Crie frotas colaborativas, compartilhe fretes e viaje em comboio com outros motoristas.</div>
+							</div>
+						</div>
 
-                    <!-- Status Player Info -->
-                    <div style="display: flex; align-items: center; gap: 14px;">
-                        <span class="nexus-badge badge-emerald">
-                            <i class="fas fa-wallet"></i> ${{ (player.money || 0).toLocaleString() }}
-                        </span>
-                        <span class="nexus-badge badge-sky">
-                            <i class="fas fa-star"></i> Nível {{ player.level || 1 }}
-                        </span>
-                    </div>
-                </div>
+						<!-- View 1: When player has NO active party (Create or Join) -->
+						<div id="party-form-container-base" style="display: none;">
+							<div class="lation-party-tabs">
+								<button type="button" class="lation-tab-btn active" id="tab-btn-create-party" onclick="switchPartyTab('create')">
+									<i class="fas fa-plus-circle"></i> Criar Novo Grupo
+								</button>
+								<button type="button" class="lation-tab-btn" id="tab-btn-join-party" onclick="switchPartyTab('join')">
+									<i class="fas fa-arrow-right-to-bracket"></i> Ingressar por Nome / Código
+								</button>
+							</div>
 
-                <!-- Window Body -->
-                <div style="flex: 1; padding: 24px; overflow-y: auto;">
-                    <!-- ABA: FRETES E CONTRATOS -->
-                    <div v-if="activeDriverTab === 'jobs'">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <div>
-                                <h2 style="font-size: 18px; font-weight: 700; color: #ffffff;">Contratos de Logística</h2>
-                                <p style="font-size: 12px; color: #94a3b8;">Escolha um frete e configure o tipo de veículo para despacho.</p>
-                            </div>
-                        </div>
+							<!-- Pane Create Party -->
+							<div id="party-tab-create" class="lation-party-form-card">
+								<form id="party-form-create" onsubmit="event.preventDefault(); submitCreateParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome da Frota / Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-shield-halved"></i>
+											<input id="party-name" name="name" type="text" maxlength="30" placeholder="Ex: TransRota 66" required>
+										</div>
+									</div>
 
-                        <!-- Grid de Fretes -->
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
-                            <div v-for="c in contracts" :key="c.contract_id" class="nexus-card" style="padding: 18px; display: flex; flex-direction: column; justify-content: space-between;">
-                                <div>
-                                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-                                        <div>
-                                            <span class="nexus-badge badge-sky">{{ c.trailer || 'Carreta Padrão' }}</span>
-                                            <h3 style="font-size: 15px; font-weight: 600; color: #ffffff; margin-top: 6px;">{{ c.contract_name || c.cargoItem || 'Carga Geral' }}</h3>
-                                        </div>
-                                        <div style="text-align: right;">
-                                            <div style="font-size: 16px; font-weight: 700; color: #10b981;">+${{ (c.reward || c.basePayment || 5000).toLocaleString() }}</div>
-                                            <div style="font-size: 11px; color: #94a3b8;">{{ (c.distance || 3.5).toFixed(1) }} km</div>
-                                        </div>
-                                    </div>
-                                    <p style="font-size: 12px; color: #94a3b8; line-height: 1.4;">
-                                        Transporte oficial da central. Suporta condução cuidadosa e empilhadeira acoplada na traseira.
-                                    </p>
-                                </div>
+									<div class="lation-form-group">
+										<label class="lation-input-label">Descrição / Lema <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-quote-left"></i>
+											<input id="party-desc" name="desc" type="text" maxlength="200" placeholder="Ex: Foco em cargas pesadas e comboios noturnos" required>
+										</div>
+									</div>
 
-                                <div style="display: flex; justify-content: flex-end; margin-top: 18px;">
-                                    <button class="nexus-btn nexus-btn-primary" @click="selectedContract = c">
-                                        <i class="fas fa-clipboard-check"></i> Aceitar Frete
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+									<div class="row">
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Senha (Opcional)</label>
+												<div class="lation-input-box">
+													<i class="fas fa-lock"></i>
+													<input id="party-password" name="password" type="password" maxlength="20" placeholder="Livre se vazio">
+												</div>
+											</div>
+										</div>
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Confirmar Senha</label>
+												<div class="lation-input-box">
+													<i class="fas fa-check-double"></i>
+													<input id="party-password-confirm" name="password-confirm" type="password" maxlength="20" placeholder="Repita a senha">
+												</div>
+											</div>
+										</div>
+									</div>
 
-                    <!-- ABA: GARAGEM DO MOTORISTA -->
-                    <div v-if="activeDriverTab === 'garage'">
-                        <h2 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">Meus Caminhões</h2>
-                        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 20px;">Gerencie sua frota própria para realizar fretes diretos sem taxas de aluguel.</p>
+									<div class="lation-form-group">
+										<label class="lation-input-label">Limite de Vagas da Frota</label>
+										<div class="lation-slots-selector">
+											<div class="lation-slot-pill" data-slots="2" onclick="selectPartySlots(2)">2 VAGAS</div>
+											<div class="lation-slot-pill active" data-slots="4" onclick="selectPartySlots(4)">4 VAGAS</div>
+											<div class="lation-slot-pill" data-slots="6" onclick="selectPartySlots(6)">6 VAGAS</div>
+										</div>
+										<input type="hidden" id="party-members" name="members" value="4">
+									</div>
 
-                        <div v-if="myTrucks.length === 0" style="text-align: center; padding: 60px 20px; color: #64748b;">
-                            <i class="fas fa-truck text-4xl mb-3"></i>
-                            <p style="font-size: 14px;">Você ainda não possui caminhões próprios cadastrados.</p>
-                            <p style="font-size: 12px; margin-top: 4px;">Utilize os caminhões da empresa no modo Trabalho Rápido!</p>
-                        </div>
-                        <div v-else style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
-                            <div v-for="trk in myTrucks" :key="trk.plate" class="nexus-card" style="padding: 16px;">
-                                <div style="font-size: 14px; font-weight: 600; color: #ffffff;">{{ trk.name || trk.model }}</div>
-                                <div style="font-size: 12px; color: #38bdf8; font-family: var(--font-mono); margin-top: 2px;">{{ trk.plate }}</div>
-                            </div>
-                        </div>
-                    </div>
+									<div id="party-create-error" class="ShowPasswordNotMatchesError text-danger font-small-2 mb-2" style="display:none;">
+										* As senhas digitadas não coincidem.
+									</div>
 
-                    <!-- ABA: LICENÇAS E PROGRESSÃO -->
-                    <div v-if="activeDriverTab === 'progression'">
-                        <h2 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">Progresso de Carreira</h2>
-                        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 20px;">Certificações obrigatórias para transporte de materiais perigosos e cargas pesadas.</p>
+									<button type="submit" id="submit-party-form" class="lation-btn lation-btn-primary btn-block">
+										<i class="fas fa-circle-check mr-2"></i> CRIAR GRUPO DE TRANSPORTE
+									</button>
+								</form>
+							</div>
 
-                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
-                            <div class="nexus-card" style="padding: 20px;">
-                                <span class="nexus-badge badge-amber"><i class="fas fa-certificate"></i> Certificação Técnica</span>
-                                <h3 style="font-size: 15px; font-weight: 600; color: #ffffff; margin-top: 8px;">ADR Specialist (Materiais Perigosos)</h3>
-                                <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Permite aceitar fretes de produtos inflamáveis, corrosivos e radioativos.</p>
-                            </div>
-                            <div class="nexus-card" style="padding: 20px;">
-                                <span class="nexus-badge badge-sky"><i class="fas fa-dolly"></i> Operador Portuário</span>
-                                <h3 style="font-size: 15px; font-weight: 600; color: #ffffff; margin-top: 8px;">Heavy Lift (Reach Stacker)</h3>
-                                <p style="font-size: 12px; color: #94a3b8; margin-top: 4px;">Habilitação para operar guindastes de contêiner e reboques industriais.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+							<!-- Pane Join Party -->
+							<div id="party-tab-join" class="lation-party-form-card" style="display: none;">
+								<form id="party-form-join" onsubmit="event.preventDefault(); submitJoinParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome ou Código do Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-hashtag"></i>
+											<input id="party-name-join" name="name" type="text" placeholder="Digite o nome ou o código (ex: TRK-8F2A)" required>
+										</div>
+									</div>
 
-        <!-- ==================================================================== -->
-        <!-- 4. MODAL DE CONFIRMAÇÃO DE FRETE (Trabalho Rápido vs Próprio) -->
-        <!-- ==================================================================== -->
-        <div v-if="selectedContract" style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10001; background: rgba(0,0,0,0.6); backdrop-filter: blur(14px);">
-            <div class="nexus-card" style="width: 520px; padding: 24px; background: rgba(22, 24, 34, 0.95); border: 1px solid rgba(255, 255, 255, 0.18);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                    <h3 style="font-size: 16px; font-weight: 700; color: #ffffff;">Configurar Despacho de Viagem</h3>
-                    <button class="tl-btn tl-close" @click="selectedContract = null"><i class="fas fa-times"></i></button>
-                </div>
+									<div class="lation-form-group">
+										<label class="lation-input-label">Senha de Acesso (se houver)</label>
+										<div class="lation-input-box">
+											<i class="fas fa-key"></i>
+											<input id="party-password-join" name="password" type="password" placeholder="Digite a senha (se aplicável)">
+										</div>
+									</div>
 
-                <div style="background: rgba(255, 255, 255, 0.04); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
-                    <div style="font-size: 14px; font-weight: 600; color: #ffffff;">{{ selectedContract.contract_name || 'Carga Selecionada' }}</div>
-                    <div style="font-size: 12px; color: #10b981; font-weight: 600; margin-top: 4px;">Recompensa: +${{ (selectedContract.reward || 5000).toLocaleString() }}</div>
-                </div>
+									<div id="party-join-error" class="text-danger font-small-2 mb-2" style="display:none;"></div>
 
-                <!-- Escolha de Veículo -->
-                <div style="margin-bottom: 16px;">
-                    <label style="font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 8px;">Modalidade de Caminhão:</label>
-                    <div style="display: flex; gap: 10px;">
-                        <button :class="['nexus-btn', !dispatchForm.useOwnedTruck ? 'nexus-btn-primary' : 'nexus-btn-secondary']" style="flex: 1;" @click="dispatchForm.useOwnedTruck = false">
-                            <i class="fas fa-building"></i> Veículo da Empresa (Trabalho Rápido)
-                        </button>
-                        <button :class="['nexus-btn', dispatchForm.useOwnedTruck ? 'nexus-btn-primary' : 'nexus-btn-secondary']" style="flex: 1;" @click="dispatchForm.useOwnedTruck = true">
-                            <i class="fas fa-truck"></i> Caminhão Próprio
-                        </button>
-                    </div>
-                </div>
+									<button type="submit" id="submit-party-form-join" class="lation-btn lation-btn-accent btn-block">
+										<i class="fas fa-arrow-right-to-bracket mr-2"></i> INGRESSAR NO GRUPO
+									</button>
+								</form>
+							</div>
+						</div>
 
-                <!-- Opção Empilhadeira Embarcada -->
-                <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: rgba(255, 255, 255, 0.03); border-radius: 8px; margin-bottom: 20px;">
-                    <div>
-                        <div style="font-size: 13px; font-weight: 600; color: #ffffff;">Empilhadeira na Traseira</div>
-                        <div style="font-size: 11px; color: #94a3b8;">Permite carregar e descarregar paletes no destino.</div>
-                    </div>
-                    <input type="checkbox" v-model="dispatchForm.withForklift" style="width: 18px; height: 18px; cursor: pointer;">
-                </div>
+						<!-- View 2: When player HAS active party (Dashboard) -->
+						<div id="party-container-members" style="display: none; height: calc(100% - 70px); overflow: auto;">
+							<!-- Dynamically populated by panel.js -->
+						</div>
+					</div>
+				</div>
+				<div class="pages skills-page" style="height: 100%;">
+					<div id="skills-title-div" class="ets2-skills-header-bar">
+						<div class="ets2-header-title">SKILLS</div>
+					</div>
 
-                <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button class="nexus-btn nexus-btn-secondary" @click="selectedContract = null">Cancelar</button>
-                    <button class="nexus-btn nexus-btn-primary" @click="confirmStartDelivery">
-                        <i class="fas fa-play"></i> Iniciar Rota
-                    </button>
-                </div>
-            </div>
-        </div>
+					<div class="ets2-skills-layout">
+						<!-- Left Column: Skill Rows -->
+						<div class="ets2-skills-list-col">
 
-        <!-- ==================================================================== -->
-        <!-- 5. TRUCKER ADMIN: MENU DA STAFF COM FERRAMENTA GIZMO 3D -->
-        <!-- ==================================================================== -->
-        <div v-if="isAdminOpen" style="position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 10000; background: rgba(0,0,0,0.5); backdrop-filter: blur(12px);">
-            <div class="nexus-window" style="width: 980px; height: 640px;">
-                <div class="nexus-header">
-                    <div class="traffic-lights">
-                        <button class="tl-btn tl-close" @click="closeAdmin"><i class="fas fa-times"></i></button>
-                        <button class="tl-btn tl-minimize" @click="closeAdmin"><i class="fas fa-minus"></i></button>
-                        <button class="tl-btn tl-expand"><i class="fas fa-plus"></i></button>
-                    </div>
+							<!-- 1. Hazardous Cargo -->
+							<div class="ets2-skill-row active" id="ets2-row-product_type" data-skill="product_type" onclick="selectEts2Skill('product_type')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-truck-ramp-box ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-product_type">Hazardous Cargo</div>
+									<div class="ets2-adr-blocks" id="ets2-blocks-product_type">
+										<div class="ets2-adr-badge" data-adr="1" title="Classe 1: Explosivos">
+											<img src="img/icons/explosive-1.png" alt="ADR 1" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="2" title="Classe 2: Gases">
+											<img src="img/icons/flamable-2.png" alt="ADR 2" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="3" title="Classe 3: Líquidos Inflamáveis">
+											<img src="img/icons/flamable-3.png" alt="ADR 3" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="4" title="Classe 4: Sólidos Inflamáveis">
+											<img src="img/icons/flamable-4.png" alt="ADR 4" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="5" title="Classe 6: Substâncias Tóxicas">
+											<img src="img/icons/toxic-6.png" alt="ADR 5" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="6" title="Classe 8: Substâncias Corrosivas">
+											<img src="img/icons/corrosive-8.png" alt="ADR 6" />
+										</div>
+									</div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-product_type" onclick="stageEts2Skill('product_type', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-product_type" onclick="stageEts2Skill('product_type', -1, event)">-</button>
+								</div>
+							</div>
 
-                    <div class="nexus-tab-bar">
-                        <div :class="['nexus-tab-item', activeAdminTab === 'offsets' && 'active']" @click="activeAdminTab = 'offsets'">
-                            <i class="fas fa-cube"></i> Calibração Gizmo 3D
-                        </div>
-                        <div :class="['nexus-tab-item', activeAdminTab === 'spawns' && 'active']" @click="activeAdminTab = 'spawns'">
-                            <i class="fas fa-map-marker-alt"></i> Spawns de Pátio
-                        </div>
-                    </div>
+							<!-- 2. Long Distance -->
+							<div class="ets2-skill-row" id="ets2-row-distance" data-skill="distance" onclick="selectEts2Skill('distance')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-route ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-distance">Long Distance</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-distance"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-distance" onclick="stageEts2Skill('distance', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-distance" onclick="stageEts2Skill('distance', -1, event)">-</button>
+								</div>
+							</div>
 
-                    <span class="nexus-badge badge-rose">
-                        <i class="fas fa-shield-alt"></i> Staff Mode
-                    </span>
-                </div>
+							<!-- 3. High Value Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-valuable" data-skill="valuable" onclick="selectEts2Skill('valuable')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-star ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-valuable">High Value Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-valuable"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-valuable" onclick="stageEts2Skill('valuable', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-valuable" onclick="stageEts2Skill('valuable', -1, event)">-</button>
+								</div>
+							</div>
 
-                <div style="flex: 1; padding: 24px; overflow-y: auto;">
-                    <div v-if="activeAdminTab === 'offsets'">
-                        <h2 style="font-size: 18px; font-weight: 700; color: #ffffff; margin-bottom: 6px;">Calibrador Tridimensional de Reboques</h2>
-                        <p style="font-size: 12px; color: #94a3b8; margin-bottom: 20px;">Selecione o modelo do reboque e ative a ferramenta Gizmo 3D (Three.js) para posicionar paletes no espaço real.</p>
+							<!-- 4. Fragile Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-fragile" data-skill="fragile" onclick="selectEts2Skill('fragile')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-wine-glass-empty ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fragile">Fragile Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fragile"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fragile" onclick="stageEts2Skill('fragile', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fragile" onclick="stageEts2Skill('fragile', -1, event)">-</button>
+								</div>
+							</div>
 
-                        <div class="nexus-card" style="padding: 20px; max-width: 500px;">
-                            <label style="font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 8px;">Modelo do Trailer:</label>
-                            <input type="text" v-model="selectedTrailerModel" placeholder="Ex: trflat, docktrailer" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-family: var(--font-mono); font-size: 13px; margin-bottom: 14px;">
+							<!-- 5. Just-In-Time Delivery -->
+							<div class="ets2-skill-row" id="ets2-row-fast" data-skill="fast" onclick="selectEts2Skill('fast')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-stopwatch ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fast">Just-In-Time Delivery</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fast"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fast" onclick="stageEts2Skill('fast', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fast" onclick="stageEts2Skill('fast', -1, event)">-</button>
+								</div>
+							</div>
 
-                            <label style="font-size: 12px; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 8px;">Índice do Slot:</label>
-                            <input type="number" v-model="selectedSlotIndex" min="1" max="12" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 13px; margin-bottom: 18px;">
+							<!-- 6. Fuel Economy -->
+							<div class="ets2-skill-row" id="ets2-row-illegal" data-skill="illegal" onclick="selectEts2Skill('illegal')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-leaf ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-illegal">Fuel Economy</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-illegal"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-illegal" onclick="stageEts2Skill('illegal', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-illegal" onclick="stageEts2Skill('illegal', -1, event)">-</button>
+								</div>
+							</div>
 
-                            <button class="nexus-btn nexus-btn-primary" style="width: 100%;" @click="startGizmoCalibration">
-                                <i class="fas fa-arrows-alt"></i> Abrir Ferramenta Gizmo 3D
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+						</div>
 
-        <!-- Container do Gizmo 3D Overlay (Three.js Canvas Transparente) -->
-        <div id="gizmo-overlay-container" style="position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999999; display: none;">
-            <canvas id="gizmo-three-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
-            <div id="gizmo-hud-bar" style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; z-index: 1000000; pointer-events: auto;">
-                <button id="btn-gizmo-confirm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                    <i class="fas fa-check"></i> Confirmar Posição (ENTER)
-                </button>
-                <button id="btn-gizmo-mode" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                    <i class="fas fa-arrows-alt"></i> Modo: Translação / Rotação (T)
-                </button>
-                <button id="btn-gizmo-cancel" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                    <i class="fas fa-times"></i> Fechar (ESC)
-                </button>
-            </div>
-        </div>
+						<!-- Right Column: Details Panel -->
+						<div class="ets2-skills-detail-col">
+							<div class="ets2-unassigned-bar">
+								<span>Unassigned skill points:</span>
+								<span id="ets2-skill-points" class="ets2-unassigned-num">0</span>
+							</div>
+							<div class="ets2-detail-card">
+								<div id="ets2-detail-title" class="ets2-detail-title">Hazardous Cargo</div>
+								<div id="ets2-detail-desc" class="ets2-detail-desc"></div>
+								<div id="ets2-detail-ranks" class="ets2-detail-ranks-list"></div>
+							</div>
+							<div class="ets2-detail-footer">
+								<button type="button" id="ets2-apply-btn" class="ets2-apply-btn" onclick="applyEts2Skills()" disabled>Apply</button>
+							</div>
+						</div>
+					</div>
+				</div>
+				<div class="pages diagnostic-page">
+					<div id="diagnostic-title-div" class="col-12 mt-3 mb-1">
+						
+					</div>
+					<div class="d-flex justify-content-around align-items-center">
+						<div>
+							<div class="card mr-0">
+								<div onclick="repairTruck('body')" class="card-content">
+									<div id="diagnostic-body" class="card-body">
 
-    </div>
+									</div>
+								</div>
+							</div>
 
-    <!-- Scripts de Controle -->
-    <script src="js/gizmo_overlay.js"></script>
-    <script src="js/nexus_app.js"></script>
-</body>
+							<div class="card mr-0">
+								<div onclick="repairTruck('engine')" class="card-content">
+									<div id="diagnostic-engine" class="card-body">
+
+									</div>
+								</div>
+							</div>
+
+							<div class="card mr-0">
+								<div onclick="repairTruck('transmission')" class="card-content">
+									<div id="diagnostic-transmission" class="card-body">
+
+									</div>
+								</div>
+							</div>
+							
+							<div class="card mr-0">
+								<div onclick="repairTruck('wheels')" class="card-content">
+									<div id="diagnostic-wheels" class="card-body">
+
+									</div>
+								</div>
+							</div>
+						</div>
+						<div class="truck-img">
+							<img id="repair-truck-img" src="" alt="Truck" style="max-width: 666px; max-height: 375px;">
+						</div>
+						<div id="diagnostic-fuel-bar" class="d-flex flex-column align-items-center">
+							
+						</div>
+					</div>
+				</div>
+				<div class="pages dealership-page">
+					<div id="dealership-title-div" class="col-12 mt-3 mb-3">
+							
+					</div>
+					<div class="container-fluid" style="max-height: calc(100% - var(--dealership-title-height)); overflow: auto;">
+						<div id="dealership-page-list" class="row">
+
+						</div>
+					</div>
+				</div>
+				<div class="pages trucks-page">
+					<div id="trucks-title-div" class="col-12 mt-3 mb-3">
+						
+					</div>
+					<ul id="trucks-page-list" class="list list-inline" style="max-height: calc(100% - var(--trucks-title-height)); overflow: auto;">
+
+					</ul>
+				</div>
+				<div class="pages recruitment-page">
+					<div id="recruitment-title-div" class="col-12 mt-3 mb-3">
+						
+					</div>
+					<div class="container-fluid">
+						<div id="recruitment-page-list" class="row" style="max-height: calc(100% - var(--recruitment-title-height)); overflow: auto;">
+							
+						</div>
+					</div>
+				</div>
+				<div class="pages drivers-page">
+					<div id="drivers-title-div" class="col-12 mt-3 mb-3">
+
+					</div>
+					<ul id="drivers-page-list" class="list list-inline" style="max-height: calc(100% - var(--drivers-title-height)); overflow: auto;">
+
+					</ul>
+				</div>
+				<div class="pages bank-page">
+					<div id="bank-title-div" class="col-12 mt-3 mb-3">
+						
+					</div>
+					<div style="max-height: calc(100% - var(--bank-title-height)); overflow: auto;">
+						<div class="d-flex">
+							<div class="card card-body" style="width: 55%;">
+								<div class="d-flex justify-content-between mx-2 my-4">
+									<div>
+										<h6 id="bank-balance-text"></h6>
+										<div class="d-flex align-items-center mt-3">
+											<i class="fas fa-coins text-primary font-large-2" aria-hidden="true"></i>
+											<h3 id="bank-money" style="font-size: 48px;" class="bank-money-title mb-0 ml-4"></h3>
+										</div>
+									</div>
+									<div class="d-flex flex-column justify-content-between" style="min-width: 200px;">
+										<button data-toggle="modal" data-target="#deposit-modal" id="deposit-money-btn" class="btn btn-outline-primary"></button>
+										<button data-toggle="modal" data-target="#withdraw-modal" id="withdraw-money-btn" class="btn btn-primary"></button>
+									</div>
+								</div>
+							</div>
+							<div id="loans-card-container" class="card card-body d-flex align-items-center" style="width: 45%;">
+								<h4 id="bank-loans-title" class="bank-loan-title" style="font-weight: 600;"></h4>
+								<p id="bank-loans-desc" style="text-align: center;margin: 9px 0px;"></p>
+								<button data-toggle="modal" data-target="#loans-modal" id="bank-loans-btn" class="btn btn-outline-primary" style="min-width: 200px;"></button>
+							</div>
+						</div>
+						<div id="loan-table-container" class="card pb-2 pt-4 px-4 w-auto mb-3" style="display: none;">
+							<h4 id="active-loans-title" class="bank-loan-title" style="font-weight: 600;"></h4>
+							<div class="loans-table-container">
+								<table class="table mb-0">
+									<thead>
+										<tr>
+											<th id="loan-value-title" style="width: 15%;"></th>
+											<th id="loan-daily-title" style="width: 20%;"></th>
+											<th id="loan-remaining-title" style="width: 20%;"></th>
+											<th id="loan-date-title" style="width: 20%;"></th>
+											<th style="width: 25%;"></th>
+										</tr>
+									</thead>
+									<tbody id="loan-table-body">
+										
+									</tbody>
+								</table>
+							</div>
+						</div>
+					</div>
+				</div>
+				
+				<!-- Modals -->
+				<div class="modal fade" id="loans-modal" aria-hidden="true">
+					<div class="modal-dialog modal-dialog-centered">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h5 class="modal-title" id="loan-modal-title"></h5>
+								<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+									<span aria-hidden="true">&times;</span>
+								</button>
+							</div>
+							<form id="form-loan" style="margin: 0;">
+								<div class="modal-body">
+									<p id="loan-modal-desc"></p>
+									<div id="loan-list-container">
+										
+									</div>
+								</div>
+								<div class="modal-footer">
+									<button id="loan-modal-cancel" type="button" class="btn btn-outline-primary" data-dismiss="modal"></button>
+									<button id="loan-modal-submit" type="submit" class="btn btn-primary"></button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+
+				<div class="modal fade" id="deposit-modal" aria-hidden="true">
+					<div class="modal-dialog modal-dialog-centered">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h5 class="modal-title" id="deposit-modal-title"></h5>
+								<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+									<span aria-hidden="true">&times;</span>
+								</button>
+							</div>
+							<form id="form-deposit-money" style="margin: 0;">
+								<div class="modal-body">
+									<div class="form-group">
+										<label id="deposit-modal-desc" for="deposit-modal-money-amount"></label>
+										<input type="number" class="form-control mb-1 mt-2" id="deposit-modal-money-amount" placeholder="" name="amount" required>
+										<small id="deposit-modal-money-available" class="text-muted" style="font-size: 12px;"></small>
+									</div>
+								</div>
+								<div class="modal-footer">
+									<button id="deposit-modal-cancel" type="button" class="btn btn-outline-primary" data-dismiss="modal"></button>
+									<button id="deposit-modal-submit" type="submit" class="btn btn-primary"></button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+
+				<div class="modal fade" id="withdraw-modal" aria-hidden="true">
+					<div class="modal-dialog modal-dialog-centered">
+						<div class="modal-content">
+							<div class="modal-header">
+								<h5 class="modal-title" id="withdraw-modal-title"></h5>
+								<button type="button" class="close" data-dismiss="modal" aria-label="Close">
+									<span aria-hidden="true">&times;</span>
+								</button>
+							</div>
+							<form id="form-withdraw-money" style="margin: 0;">
+								<div class="modal-body">
+									<div class="form-group">
+										<label id="withdraw-modal-desc" for="withdraw-modal-money-amount"></label>
+										<input type="number" class="form-control mb-1 mt-2" id="withdraw-modal-money-amount" placeholder="" name="amount" required>
+										<small id="withdraw-modal-money-available" class="text-muted" style="font-size: 12px;"></small>
+									</div>
+								</div>
+								<div class="modal-footer">
+									<button id="withdraw-modal-cancel" type="button" class="btn btn-outline-primary" data-dismiss="modal"></button>
+									<button id="withdraw-modal-submit" type="submit" class="btn btn-primary"></button>
+								</div>
+							</form>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<!-- Parcel Tracker — compatibilidade de entregas -->
+		<style>
+		  #parcel-tracker {
+		    display: none;
+		    position: fixed;
+		    top: 20%;
+		    right: 20px;
+		    width: 260px;
+		    z-index: 99999;
+		    background: rgba(18, 19, 23, 0.96);
+		    border-radius: 10px;
+		    overflow: hidden;
+		    box-shadow: 0 4px 24px rgba(0,0,0,.5);
+		    border: 1px solid rgba(16, 185, 129, 0.25);
+		    font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+		    padding: 10px;
+		    color: white;
+		  }
+		  .pt-header { display: flex; align-items: center; gap: 8px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; font-size: 13px; }
+		  #pt-list { list-style: none; padding: 0; margin: 0; }
+		  #pt-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; }
+
+		  /* --- G-METER HUD (ESTABILIDADE DA CARGA) --- */
+		  #g-meter-hud {
+		    display: none;
+		    position: fixed;
+		    bottom: 40px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 290px;
+		    z-index: 99998;
+		    background: rgba(15, 23, 42, 0.94) !important;
+		    border-radius: 12px;
+		    border: 1px solid rgba(16, 185, 129, 0.4);
+		    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65), 0 0 15px rgba(16, 185, 129, 0.15);
+		    padding: 10px 14px;
+		    font-family: 'Montserrat', 'Inter', sans-serif;
+		    color: #fff;
+		    user-select: none;
+		    pointer-events: none;
+		    flex-direction: column;
+		    gap: 6px;
+		    transition: border-color 0.2s, box-shadow 0.2s;
+		  }
+		  #g-meter-hud.gm-critical {
+		    border-color: #ef4444 !important;
+		    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.3) !important;
+		    animation: gmPulse 0.4s infinite alternate;
+		  }
+		  #g-meter-hud.gm-shake {
+		    animation: gmShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+		  }
+		  @keyframes gmPulse {
+		    from { transform: translateX(-50%) scale(1); }
+		    to { transform: translateX(-50%) scale(1.03); }
+		  }
+		  @keyframes gmShake {
+		    10%, 90% { transform: translateX(-52%); }
+		    20%, 80% { transform: translateX(-48%); }
+		    30%, 50%, 70% { transform: translateX(-53%); }
+		    40%, 60% { transform: translateX(-47%); }
+		  }
+		  .gm-header {
+		    display: flex;
+		    justify-content: space-between;
+		    align-items: center;
+		    font-size: 11px;
+		    letter-spacing: 0.5px;
+		    font-weight: 700;
+		  }
+		  .gm-title {
+		    display: flex;
+		    align-items: center;
+		    gap: 6px;
+		    color: #94a3b8;
+		  }
+		  .gm-title i {
+		    color: #10b981;
+		    font-size: 12px;
+		  }
+		  .gm-status {
+		    font-size: 10px;
+		    font-weight: 800;
+		    padding: 2px 6px;
+		    border-radius: 4px;
+		    background: rgba(16, 185, 129, 0.2);
+		    color: #10b981;
+		    text-transform: uppercase;
+		  }
+		  .gm-status.warning {
+		    background: rgba(245, 158, 11, 0.2);
+		    color: #f59e0b;
+		  }
+		  .gm-status.danger {
+		    background: rgba(239, 68, 68, 0.3);
+		    color: #ef4444;
+		  }
+		  .gm-track-container {
+		    position: relative;
+		    width: 100%;
+		    height: 12px;
+		    background: rgba(255, 255, 255, 0.08);
+		    border-radius: 6px;
+		    border: 1px solid rgba(255, 255, 255, 0.12);
+		    overflow: visible;
+		  }
+		  .gm-limit-line {
+		    position: absolute;
+		    top: -2px;
+		    bottom: -2px;
+		    width: 2px;
+		    background: #ef4444;
+		    box-shadow: 0 0 6px #ef4444;
+		    z-index: 2;
+		  }
+		  .gm-limit-line.left { left: 15%; }
+		  .gm-limit-line.right { right: 15%; }
+		  .gm-danger-area {
+		    position: absolute;
+		    top: 0;
+		    bottom: 0;
+		    width: 15%;
+		    background: rgba(239, 68, 68, 0.25);
+		  }
+		  .gm-danger-area.left { left: 0; border-radius: 6px 0 0 6px; }
+		  .gm-danger-area.right { right: 0; border-radius: 0 6px 6px 0; }
+		  .gm-center-notch {
+		    position: absolute;
+		    top: 1px;
+		    bottom: 1px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 2px;
+		    background: rgba(255, 255, 255, 0.35);
+		    z-index: 2;
+		  }
+		  .gm-indicator {
+		    position: absolute;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    width: 16px;
+		    height: 16px;
+		    border-radius: 50%;
+		    background: #10b981;
+		    border: 2px solid #ffffff;
+		    box-shadow: 0 0 10px rgba(16, 185, 129, 0.9);
+		    z-index: 5;
+		    transition: left 0.08s ease-out, background-color 0.15s, box-shadow 0.15s;
+		  }
+		  .gm-indicator.warning {
+		    background: #f59e0b;
+		    box-shadow: 0 0 12px rgba(245, 158, 11, 0.95);
+		  }
+		  .gm-indicator.danger {
+		    background: #ef4444;
+		    box-shadow: 0 0 16px rgba(239, 68, 68, 1);
+		  }
+		  .gm-labels {
+		    display: flex;
+		    justify-content: space-between;
+		    font-size: 9px;
+		    font-weight: 600;
+		    color: #64748b;
+		    margin-top: 1px;
+		  }
+		  .gm-labels .gm-danger-label {
+		    color: #ef4444;
+		  }
+		</style>
+		<div id="parcel-tracker" role="complementary" aria-label="Tracker de Entregas">
+		  <div class="pt-header">
+		    <i class="fas fa-box"></i>
+		    <span id="pt-route-label">Rota de Entrega</span>
+		  </div>
+		  <ul id="pt-list"></ul>
+		</div>
+
+		<!-- G-METER HUD: ESTABILIDADE DA CARGA -->
+		<div id="g-meter-hud" role="complementary" aria-label="Estabilidade da Carga">
+		  <div class="gm-header">
+		    <div class="gm-title">
+		      <i class="fas fa-truck-ramp-box"></i>
+		      <span>ESTABILIDADE DA CARGA</span>
+		    </div>
+		    <div class="gm-status" id="gm-status-label">ESTÁVEL</div>
+		  </div>
+		  <div class="gm-track-container">
+		    <div class="gm-danger-area left"></div>
+		    <div class="gm-danger-area right"></div>
+		    <div class="gm-limit-line left"></div>
+		    <div class="gm-limit-line right"></div>
+		    <div class="gm-center-notch"></div>
+		    <div class="gm-indicator" id="gm-indicator-dot"></div>
+		  </div>
+		  <div class="gm-labels">
+		    <span class="gm-danger-label">15% LIMITE</span>
+		    <span>CENTRO</span>
+		    <span class="gm-danger-label">85% LIMITE</span>
+		  </div>
+		</div>
+
+		<script>
+		  window.addEventListener('message', function(event) {
+		    var d = event.data;
+		    if (!d || !d.action) return;
+		    var tracker = document.getElementById('parcel-tracker');
+		    var list = document.getElementById('pt-list');
+		    if (d.action === 'parcel_open') {
+		      if (tracker) tracker.style.display = 'block';
+		      if (list) list.innerHTML = '';
+		    } else if (d.action === 'parcel_close') {
+		      if (tracker) tracker.style.display = 'none';
+		    }
+
+		    // G-METER HUD HANDLERS
+		    var gMeter = document.getElementById('g-meter-hud');
+		    var gDot = document.getElementById('gm-indicator-dot');
+		    var gStatus = document.getElementById('gm-status-label');
+
+		    if (d.action === 'gmeter_show') {
+		      if (gMeter) gMeter.style.display = 'flex';
+		    } else if (d.action === 'gmeter_hide') {
+		      if (gMeter) gMeter.style.display = 'none';
+		    } else if (d.action === 'gmeter_update') {
+		      if (gMeter && gDot) {
+		        if (gMeter.style.display !== 'flex') gMeter.style.display = 'flex';
+		        var pct = typeof d.percent === 'number' ? d.percent : 50;
+		        gDot.style.left = pct + '%';
+		        if (pct <= 15 || pct >= 85) {
+		          gDot.className = 'gm-indicator danger';
+		          gMeter.className = 'gm-critical';
+		          if (gStatus) { gStatus.innerText = 'CRÍTICO'; gStatus.className = 'gm-status danger'; }
+		        } else if (pct <= 28 || pct >= 72) {
+		          gDot.className = 'gm-indicator warning';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ALERTA'; gStatus.className = 'gm-status warning'; }
+		        } else {
+		          gDot.className = 'gm-indicator';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ESTÁVEL'; gStatus.className = 'gm-status'; }
+		        }
+		      }
+		    } else if (d.action === 'gmeter_drop') {
+		      if (gMeter) {
+		        gMeter.classList.remove('gm-shake');
+		        void gMeter.offsetWidth;
+		        gMeter.classList.add('gm-shake');
+		      }
+		    }
+		  });
+		</script>
+		<!-- ========================================== -->
+		<!-- PAINEL ADMINISTRATIVO: GESTÃO DINÂMICA      -->
+		<!-- ========================================== -->
+		<div id="admin-panel">
+			<!-- Header -->
+			<div class="admin-header">
+				<div class="admin-header-title">
+					<i class="fas fa-truck-monster"></i>
+					<h4>PAINEL ADMINISTRATIVO • GESTÃO DINÂMICA</h4>
+					<span>Admin V2.5</span>
+				</div>
+				<button class="admin-close-btn" title="Fechar (ESC)"><i class="fas fa-times"></i></button>
+			</div>
+
+			<!-- Body -->
+			<div class="admin-body">
+				<!-- Sidebar de Abas -->
+				<div class="admin-sidebar">
+					<button class="admin-tab-btn active" data-tab="routes">
+						<i class="fas fa-route"></i> Contratos & Rotas
+					</button>
+					<button class="admin-tab-btn" data-tab="spawns">
+						<i class="fas fa-map-marker-alt"></i> Spawns Dinâmicos
+					</button>
+					<button class="admin-tab-btn" data-tab="props">
+						<i class="fas fa-boxes"></i> Cargas & Props
+					</button>
+					<button class="admin-tab-btn" data-tab="offsets">
+						<i class="fas fa-truck-loading"></i> Offsets Trailer 3D
+					</button>
+					<button class="admin-tab-btn" data-tab="economy">
+						<i class="fas fa-chart-line"></i> Economia & XP
+					</button>
+					<button class="admin-tab-btn" data-tab="npcs">
+						<i class="fas fa-user-tie"></i> NPCs Despachantes
+					</button>
+				</div>
+
+				<!-- Área de Conteúdo -->
+				<div class="admin-content">
+					<!-- ABA 1: ROTAS & CONTRATOS -->
+					<div id="admin-tab-routes" class="admin-tab-pane active">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-list-ul"></i> Rotas e Contratos Dinâmicos Ativos</span>
+							</div>
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID Rota</th>
+											<th>Título da Carga</th>
+											<th>Tipo</th>
+											<th>Recompensa</th>
+											<th>Distância / Nível</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-routes-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus-circle"></i> Criar ou Editar Rota Dinâmica</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único (ID)</label>
+									<input type="text" id="route-form-id" class="admin-input" placeholder="ex: rota_paleto_oil">
+								</div>
+								<div class="admin-form-group">
+									<label>Título / Descrição da Carga</label>
+									<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
+								</div>
+								<div class="admin-form-group">
+									<label>Tipo de Contrato</label>
+									<select id="route-form-type" class="admin-select">
+										<option value="freight">Trabalho de Frete (Veículo Próprio)</option>
+										<option value="quick">Trabalho Rápido (Caminhão da Empresa)</option>
+										<option value="adr">Carga Perigosa ADR (Certificação)</option>
+										<option value="heavy">Carga Pesada / Maquinário</option>
+										<option value="carrier">Cegonha / Transporte de Veículos</option>
+									</select>
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo 3D da Carga (Prop)</label>
+									<input type="text" id="route-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+								<div class="admin-form-group">
+									<label>Pagamento Base (R$)</label>
+									<input type="number" id="route-form-payment" class="admin-input" value="2500">
+								</div>
+								<div class="admin-form-group">
+									<label>Recompensa de XP</label>
+									<input type="number" id="route-form-xp" class="admin-input" value="150">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Distância Estimada (KM)</label>
+									<input type="number" step="0.1" id="route-form-distance" class="admin-input" value="6.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Nível Mínimo Requerido</label>
+									<input type="number" id="route-form-level" class="admin-input" value="1">
+								</div>
+							</div>
+
+							<div class="admin-grid-2" style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Coleta (X, Y, Z)</label>
+										<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-pickup-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-pickup-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-pickup-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Entrega (X, Y, Z)</label>
+										<button id="btn-cap-deliv" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-deliv-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-deliv-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-deliv-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+							</div>
+
+							<div style="display: flex; justify-content: space-between; align-items: center;">
+								<div style="display:flex; gap: 20px;">
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-forklift"> Incluir Empilhadeira no Trailer
+									</label>
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-adr"> Exigir Licença ADR
+									</label>
+								</div>
+								<button id="btn-save-route" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar Rota em Tempo Real</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 2: SPAWNS DINÂMICOS -->
+					<div id="admin-tab-spawns" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-map-marked-alt"></i> Spawns de Veículos, Trailers e Cargas</span>
+							</div>
+							<div style="max-height: 240px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Nome do Ponto</th>
+											<th>Tipo</th>
+											<th>Coordenadas / Heading</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-spawns-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus"></i> Novo Ponto de Spawn</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador (ID)</label>
+									<input type="text" id="spawn-form-id" class="admin-input" placeholder="ex: spawn_truck_paleto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Ponto</label>
+									<input type="text" id="spawn-form-name" class="admin-input" placeholder="ex: Vaga de Caminhão Paleto">
+								</div>
+								<div class="admin-form-group">
+									<label>Tipo de Entidade</label>
+									<select id="spawn-form-type" class="admin-select">
+										<option value="truck">Caminhão (Truck)</option>
+										<option value="trailer">Reboque (Trailer)</option>
+										<option value="forklift">Empilhadeira (Forklift)</option>
+										<option value="handler">Container Handler (Porto)</option>
+										<option value="load_bay">Baia de Carregamento (DrawMarker 30)</option>
+										<option value="delivery_bay">Ponto de Entrega (DrawMarker 30)</option>
+									</select>
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição & Heading</button>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="spawn-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="spawn-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="spawn-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="spawn-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end;">
+								<button id="btn-save-spawn" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Gravar Ponto de Spawn</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 3: CARGAS & PROPS -->
+					<div id="admin-tab-props" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cubes"></i> Modelos 3D de Cargas Homologados</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
+								Estes modelos contam com suporte a renderização forçada de missão (LOD Máximo), detecção de colisão seletiva e ancoragem magnética por cordas.
+							</p>
+							<div id="admin-props-grid" class="admin-grid-3">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 4: OFFSETS VISUAIS 3D NO TRAILER -->
+					<div id="admin-tab-offsets" class="admin-tab-pane">
+						<div class="admin-card" style="border-left: 4px solid var(--admin-primary);">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cube"></i> Ferramenta In-Game de Calibração 3D (Gizmo 3D & Câmera Livre)</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
+								Posicione a carga em tempo real com <b>Gizmo 3D Nativo</b> e <b>Câmera Livre estilo Blender/Unreal</b>. Use <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">T</kbd> (Translação), <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">R</kbd> (Rotação), arraste os eixos com o mouse livre, e segure <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">RMB + WASD</kbd> para voar a câmera em volta do trailer. Salve sequencialmente com <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">ENTER</kbd>.
+							</p>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo do Trailer (Digite ou Escolha)</label>
+									<input type="text" id="offset-form-trailer" class="admin-input" list="trailer-models-list" placeholder="ex: trailers2 ou mod custom" value="trailers2">
+									<datalist id="trailer-models-list">
+										<option value="trailers2">trailers2 (Prancha Baixa / Flatbed)</option>
+										<option value="trailers">trailers (Baú Fechado)</option>
+										<option value="trailers3">trailers3 (Tanque / Líquidos)</option>
+										<option value="trailers4">trailers4 (Carreta Carga)</option>
+										<option value="tr2">tr2 (Reboque Pequeno)</option>
+										<option value="trflat">trflat (Trailer Prancha Curto)</option>
+										<option value="docktrailer">docktrailer (Trailer Portuário)</option>
+										<option value="freighttrailer">freighttrailer (Carreta de Trem / Pesada)</option>
+										<option value="armytrailer">armytrailer (Trailer Militar)</option>
+									</datalist>
+								</div>
+								<div class="admin-form-group">
+									<label>Slot Alvo</label>
+									<select id="offset-form-slot" class="admin-select">
+										<option value="1">Slot 1 (Frente)</option>
+										<option value="2">Slot 2 (Meio-Frente)</option>
+										<option value="3">Slot 3 (Meio-Trás)</option>
+										<option value="4">Slot 4 (Traseira)</option>
+										<option value="5">Slot 5 (Extra)</option>
+										<option value="6">Slot 6 (Extra)</option>
+									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Prop de Teste</label>
+									<input type="text" id="offset-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+							</div>
+							<div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
+								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+									<input type="checkbox" id="offset-form-isforklift"> Calibrar Posição da Empilhadeira (Forklift Tie-Down)
+								</label>
+								<button id="btn-start-calibration" class="admin-btn admin-btn-primary" style="padding: 10px 18px; font-size: 13px;">
+									<i class="fas fa-eye"></i> INICIAR CALIBRAÇÃO VISUAL 3D
+								</button>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-database"></i> Offsets Customizados Salvos no Banco</span>
+							</div>
+							<div id="admin-offsets-list">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 5: ECONOMIA & XP -->
+					<div id="admin-tab-economy" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-balance-scale"></i> Parâmetros Globais de Economia e Progressão</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
+								Alterações nesta aba são aplicadas instantaneamente no cálculo de contratos e recompensas de todos os jogadores logados.
+							</p>
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Pagamento Base por Quilômetro (R$ / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-pay" class="admin-input" value="18.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Multiplicador de XP por Quilômetro (XP / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-xp" class="admin-input" value="5.0">
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Multiplicador ADR (Cargas Perigosas)</label>
+									<input type="number" step="0.05" id="eco-form-adr-mult" class="admin-input" value="1.45">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Frágil</label>
+									<input type="number" step="0.05" id="eco-form-fragile-mult" class="admin-input" value="1.25">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Valiosa</label>
+									<input type="number" step="0.05" id="eco-form-valuable-mult" class="admin-input" value="1.35">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Penalidade por Carga Perdida / Queda (R$)</label>
+									<input type="number" id="eco-form-penalty" class="admin-input" value="500">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+								<button id="btn-save-economy" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Sincronizar Economia</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 6: NPCS DESPACHANTES -->
+					<div id="admin-tab-npcs" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-users-cog"></i> NPCs Despachantes Ativos no Mapa</span>
+							</div>
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Nome</th>
+											<th>Modelo Ped</th>
+											<th>Coordenadas</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-npcs-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-user-plus"></i> Adicionar ou Atualizar NPC</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único</label>
+									<input type="text" id="npc-form-id" class="admin-input" placeholder="ex: dispatcher_porto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Despachante</label>
+									<input type="text" id="npc-form-name" class="admin-input" placeholder="ex: Sr. Roberto (Despachante)">
+								</div>
+								<div class="admin-form-group">
+									<label>Modelo do Ped (Hash / String)</label>
+									<input type="text" id="npc-form-model" class="admin-input" value="s_m_m_trucker_01">
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<button id="btn-cap-npc" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="npc-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="npc-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="npc-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="npc-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:space-between; align-items:center;">
+								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+									<input type="checkbox" id="npc-form-target" checked> Habilitar Interação via ox_target
+								</label>
+								<button id="btn-save-npc" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Spawnar NPC</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Container do Gizmo 3D (WebGL Overlay Transparente estilo vp_staff_studio) -->
+		<div id="gizmo-overlay-container" style="position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999999; display: none;">
+			<canvas id="gizmo-three-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+			<!-- Barra Flutuante de Ação do Gizmo 3D -->
+			<div id="gizmo-hud-bar" style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; z-index: 1000000; pointer-events: auto;">
+				<button id="btn-gizmo-confirm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(16,185,129,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-check"></i> Confirmar Posição (ENTER)
+				</button>
+				<button id="btn-gizmo-mode" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(59,130,246,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-arrows-alt"></i> Modo: Setas (T)
+				</button>
+				<button id="btn-gizmo-cancel" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(239,68,68,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-times"></i> Finalizar (ESC)
+				</button>
+			</div>
+		</div>
+
+		<script src="panel.js" type="text/javascript"></script>
+		<script src="js/admin.js" type="text/javascript"></script>
+		<script src="js/gizmo_overlay.js" type="text/javascript"></script>
+	</body>
 </html>
