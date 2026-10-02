@@ -1325,7 +1325,7 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
     local truckSpawn = garageSpawns[((contractId - 1) % #garageSpawns) + 1]
     local trailerSpawn = trailerSpawns[((contractId - 1) % #trailerSpawns) + 1]
 
-    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    local rentalTrucks = { "hauler", "phantom", "packer", "phantom3" }
     local truckModel = rentalTrucks[((contractId - 1) % #rentalTrucks) + 1]
 
     local jobId = ('lc_%d_%d'):format(os.time(), math.random(1000, 9999))
@@ -1538,7 +1538,7 @@ local function StartPartyLCContract(leaderSrc, contractId, contractTypeOverride)
     -- Vagas de garagem e reboques configuradas na base
     local garageSpawns = (Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns) or { vector4(1250.55, -3162.4, 5.88, 270.00) }
     local trailerSpawns = (Config.LC_Headquarters and Config.LC_Headquarters.trailer_spawns) or { vector4(1274.21, -3186.43, 5.91, 90.00) }
-    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    local rentalTrucks = { "hauler", "phantom", "packer", "phantom3" }
     local returnCoords = (Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns and Config.LC_Headquarters.garage_spawns[1]) or vector4(1250.55, -3162.4, 5.88, 270.00)
 
     -- Geometria de Tolerância de Coordenadas de Entrega (no máximo 5 metros ao redor do destino)

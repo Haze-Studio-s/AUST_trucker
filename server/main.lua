@@ -468,7 +468,7 @@ local function StartTruckDelivery(src, contractData)
     -- 3. Busca na garagem de veículos do jogador (player_vehicles) por cavalos mecânicos
     if not selectedTruckModel then
         local validModels = {
-            'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'vetirs', 'pounder', 'pounder2', 'biff'
+            'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'pounder', 'pounder2', 'biff'
         }
         if Config.TruckRental and Config.TruckRental.trucks then
             for _, trk in ipairs(Config.TruckRental.trucks) do

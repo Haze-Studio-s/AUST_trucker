@@ -4,7 +4,7 @@
 local function BuildDefaultContracts()
     local lc_contracts = {}
     local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    local rentalTrucks = { "hauler", "phantom", "packer", "phantom3" }
     for i, load in ipairs(availableLoads) do
         local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
         local def = load.def or {0,0,0,0}
@@ -265,7 +265,7 @@ function BuildInitialDataForPlayer(source, citizenId)
         -- Montar contratos LC idênticos à referência (Quick Jobs)
         local lc_contracts = {}
         local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-        local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+        local rentalTrucks = { "hauler", "phantom", "packer", "phantom3" }
         local stats = _r.stats or {}
         local skills = _r.skills or {}
         local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
