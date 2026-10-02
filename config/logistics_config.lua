@@ -73,7 +73,7 @@ Config.LC_Jobs = {
     },
 
     truck_rental = {
-        available_trucks = { "hauler", "phantom", "packer", "phantom3" },
+        available_trucks = { "hauler", "packer", "blacktop", "brickades", "vetirs" },
         must_return_truck = true,
         rental_fee_percent = 15,
     },
@@ -141,6 +141,36 @@ Config.LC_Jobs = {
 -- Concessionária de Caminhões (Dealership)
 Config.LC_SellMultiplier = 0.70 -- 70% de retorno na venda
 Config.LC_Dealership = {
+    ['vetirs'] = {
+        name = 'Vetir Semi',
+        price = 25000,
+        engine = "10.0L Vetir I6",
+        transmission = "5-Speed",
+        hp = '380',
+        img = 'img/trucks/vetirs.png',
+        driver_bonus = 1,
+        required_level = 0
+    },
+    ['blacktop'] = {
+        name = 'Brute Blacktop',
+        price = 45000,
+        engine = "11.0L Brute I6",
+        transmission = "6-Speed",
+        hp = '420',
+        img = 'img/trucks/blacktop.png',
+        driver_bonus = 2,
+        required_level = 4
+    },
+    ['brickades'] = {
+        name = 'MTL Brickade',
+        price = 60000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '480',
+        img = 'img/trucks/brickades.png',
+        driver_bonus = 4,
+        required_level = 10
+    },
     ['hauler'] = {
         name = 'JoBuilt Hauler',
         price = 70000,
@@ -149,7 +179,27 @@ Config.LC_Dealership = {
         hp = '500',
         img = 'img/trucks/hauler.png',
         driver_bonus = 4,
-        required_level = 0
+        required_level = 12
+    },
+    ['aerocab'] = {
+        name = 'Vapid Tanker',
+        price = 90000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '565',
+        img = 'img/trucks/aerocab.png',
+        driver_bonus = 6,
+        required_level = 16
+    },
+    ['linerunner'] = {
+        name = 'HVY Linerunner',
+        price = 105000,
+        engine = "14.0L Supercharged V10",
+        transmission = "10-Speed",
+        hp = '580',
+        img = 'img/trucks/linerunner.png',
+        driver_bonus = 6,
+        required_level = 18
     },
     ['packer'] = {
         name = 'MTL Packer',
@@ -159,7 +209,7 @@ Config.LC_Dealership = {
         hp = '570',
         img = 'img/trucks/packer.png',
         driver_bonus = 6,
-        required_level = 2
+        required_level = 20
     },
     ['phantom'] = {
         name = 'JoBuilt Phantom',
@@ -169,7 +219,7 @@ Config.LC_Dealership = {
         hp = '600',
         img = 'img/trucks/phantom.png',
         driver_bonus = 8,
-        required_level = 4
+        required_level = 24
     },
     ['phantom3'] = {
         name = 'JoBuilt Phantom Custom',
@@ -179,7 +229,7 @@ Config.LC_Dealership = {
         hp = '650',
         img = 'img/trucks/phantom3.png',
         driver_bonus = 10,
-        required_level = 6
+        required_level = 30
     }
 }
 
@@ -351,16 +401,6 @@ Config.LC_Dealership = {
         driver_bonus = 4,
         required_level = 0
     },
-    ['packer'] = {
-        name = 'MTL Packer',
-        price = 110000,
-        engine = "13.0L Supercharged V8",
-        transmission = "8-Speed",
-        hp = '570',
-        img = 'img/trucks/packer.png',
-        driver_bonus = 6,
-        required_level = 2
-    },
     ['phantom'] = {
         name = 'JoBuilt Phantom',
         price = 130000,
@@ -380,6 +420,66 @@ Config.LC_Dealership = {
         img = 'img/trucks/phantom3.png',
         driver_bonus = 10,
         required_level = 5
+    },
+    ['packer'] = {
+        name = 'MTL Packer',
+        price = 110000,
+        engine = "13.0L Supercharged V8",
+        transmission = "8-Speed",
+        hp = '570',
+        img = 'img/trucks/packer.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['aerocab'] = {
+        name = 'Vapid Tanker',
+        price = 90000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '565',
+        img = 'img/trucks/aerocab.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['blacktop'] = {
+        name = 'Brute Blacktop',
+        price = 45000,
+        engine = "11.0L Brute I6",
+        transmission = "6-Speed",
+        hp = '420',
+        img = 'img/trucks/blacktop.png',
+        driver_bonus = 2,
+        required_level = 0
+    },
+    ['brickades'] = {
+        name = 'MTL Brickade',
+        price = 60000,
+        engine = "12.5L Turbocharged V8",
+        transmission = "8-Speed",
+        hp = '480',
+        img = 'img/trucks/brickades.png',
+        driver_bonus = 4,
+        required_level = 1
+    },
+    ['linerunner'] = {
+        name = 'HVY Linerunner',
+        price = 105000,
+        engine = "14.0L Supercharged V10",
+        transmission = "10-Speed",
+        hp = '580',
+        img = 'img/trucks/linerunner.png',
+        driver_bonus = 6,
+        required_level = 2
+    },
+    ['vetirs'] = {
+        name = 'Vetir Semi',
+        price = 25000,
+        engine = "10.0L Vetir I6",
+        transmission = "6-Speed",
+        hp = '380',
+        img = 'img/trucks/vetirs.png',
+        driver_bonus = 0,
+        required_level = 0
     }
 }
 

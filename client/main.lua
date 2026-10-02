@@ -605,16 +605,6 @@ local function StartCouplingWatcher()
                                             end
                                         else
                                             CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                                            -- Trava os freios de mão e congela a física do caminhão e trailer
-                                            -- para impedir alavanca e catapulta Havok enquanto a empilhadeira sobe e anda sobre a prancha
-                                            if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
-                                                SetVehicleHandbrake(JobEntities.truck, true)
-                                                FreezeEntityPosition(JobEntities.truck, true)
-                                            end
-                                            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                                                SetVehicleHandbrake(JobEntities.trailer, true)
-                                                FreezeEntityPosition(JobEntities.trailer, true)
-                                            end
                                             if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
                                                 UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
                                             end
@@ -1285,16 +1275,6 @@ function StartDeliveryRoute(deliveryCoords, jobId)
     -- Traça rota e waypoint no GPS para o destino final
     if dest then
         SetNewWaypoint(dest.x, dest.y)
-    end
-
-    -- Descongela caminhão e reboque e libera freios de mão para início da rota
-    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
-        FreezeEntityPosition(JobEntities.truck, false)
-        SetVehicleHandbrake(JobEntities.truck, false)
-    end
-    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-        FreezeEntityPosition(JobEntities.trailer, false)
-        SetVehicleHandbrake(JobEntities.trailer, false)
     end
 
     -- Orienta o jogador a entrar no caminhão com marcador e som
