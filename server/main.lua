@@ -1131,9 +1131,21 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
         })
     else
         lobby.stage = 'STEP_STRAPPING'
-        local trailerRearCoords = GetOffsetFromEntityInWorldCoords(lobby.trailer, 0.0, -5.5, 0.0)
+        local trCoords = (lobby.trailer and DoesEntityExist(lobby.trailer)) and GetEntityCoords(lobby.trailer) or nil
+        local trailerRearCoords = nil
+        if trCoords then
+            local heading = GetEntityHeading(lobby.trailer) or 0.0
+            local rad = math.rad(heading)
+            trailerRearCoords = vector3(
+                trCoords.x + (5.5 * math.sin(rad)),
+                trCoords.y - (5.5 * math.cos(rad)),
+                trCoords.z
+            )
+        end
+        local trailerNetId = (lobby.trailer and DoesEntityExist(lobby.trailer)) and NetworkGetNetworkIdFromEntity(lobby.trailer) or nil
         TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-            coords = trailerRearCoords,
+            coords = trailerRearCoords or trCoords,
+            netId = trailerNetId,
             label = "Traseira da Carreta (Travar Cintas)",
             sprite = 478,
             color = 5,
