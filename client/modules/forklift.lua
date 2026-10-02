@@ -264,6 +264,30 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
 
+    -- BLINDAGEM ANTI-CLIPPING / ANTI-PRENDIMENTO:
+    -- Anula a colisão física mútua com a empilhadeira para que os garfos possam recuar sem prender
+    local currentForklift = ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+    if currentForklift and DoesEntityExist(currentForklift) then
+        SetEntityNoCollisionEntity(palletEntity, currentForklift, false)
+        SetEntityNoCollisionEntity(currentForklift, palletEntity, false)
+
+        -- Thread de desobstrução segura: mantém sem colisão até a empilhadeira se afastar (ou timeout de 5s)
+        CreateThread(function()
+            local pEnt = palletEntity
+            local fEnt = currentForklift
+            local expire = GetGameTimer() + 5000
+            while DoesEntityExist(pEnt) and DoesEntityExist(fEnt) and GetGameTimer() < expire do
+                local dist = #(GetEntityCoords(pEnt) - GetEntityCoords(fEnt))
+                if dist > 3.5 then
+                    break
+                end
+                SetEntityNoCollisionEntity(pEnt, fEnt, false)
+                SetEntityNoCollisionEntity(fEnt, pEnt, false)
+                Wait(100)
+            end
+        end)
+    end
+
     -- Bloqueia migração de rede do OneSync para impedir rubberbanding (o motorista local governa a entidade)
     if NetworkGetEntityIsNetworked(palletEntity) then
         SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEntity), false)
