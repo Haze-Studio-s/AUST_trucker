@@ -937,6 +937,24 @@ local function StartTruckDelivery(src, contractData)
     PolarixLobbies[jobId] = lobbyData
     PlayerPolarixLobbies[citizenId] = jobId
 
+    -- StateBag Autoritativo Global de Frete (OneSync Infinity)
+    if truck and DoesEntityExist(truck) then
+        Entity(truck).state:set('activeJobData', {
+            jobId = jobId,
+            citizenId = citizenId,
+            cargoType = cargoType,
+            cargoName = lobbyData.cargoName,
+            isOwned = isOwned,
+            plate = plate,
+            stage = 'STEP_GET_TRUCK',
+            payment = basePayment,
+            xp = baseXP
+        }, true)
+    end
+    if Player(src) then
+        Player(src).state:set('activeJobId', jobId, true)
+    end
+
     local payload = {
         jobId = jobId,
         cargoType = cargoType,
@@ -1452,6 +1470,13 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         PolarixLobbies[jobId] = nil
         PlayerPolarixLobbies[citizenId] = nil
 
+        if lobby.truck and DoesEntityExist(lobby.truck) then
+            Entity(lobby.truck).state:set('activeJobData', nil, true)
+        end
+        if Player(src) then
+            Player(src).state:set('activeJobId', nil, true)
+        end
+
         TriggerClientEvent('aust_trucker:client:ClearObjective', src)
         TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
             isQuickJob = false,
@@ -1585,6 +1610,13 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
     -- Limpeza definitiva das entidades restantes (caminhão da firma)
     CleanupLobbyEntities(lobby)
 
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        Entity(lobby.truck).state:set('activeJobData', nil, true)
+    end
+    if Player(src) then
+        Player(src).state:set('activeJobId', nil, true)
+    end
+
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil
 
@@ -1612,6 +1644,13 @@ RegisterNetEvent('aurp_trucker:server:cancelDelivery', function(jobId, reason)
 
     RemoveJobKeys(src, lobby)
     CleanupLobbyEntities(lobby)
+
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        Entity(lobby.truck).state:set('activeJobData', nil, true)
+    end
+    if Player(src) then
+        Player(src).state:set('activeJobId', nil, true)
+    end
 
     PolarixLobbies[jobId] = nil
     PlayerPolarixLobbies[citizenId] = nil

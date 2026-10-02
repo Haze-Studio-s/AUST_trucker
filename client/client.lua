@@ -3453,42 +3453,29 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                 end
             end
 
-            if not truck or not DoesEntityExist(truck) then
-                if contract.truckModel and contract.truckSpawn then
-                    local truckHash = joaat(contract.truckModel)
-                    lib.requestModel(truckHash)
-                    local safeTruckCoords = GetSafeVehicleSpawnCoords(contract.truckSpawn, 4.0)
-                    truck = CreateVehicle(truckHash, safeTruckCoords.x, safeTruckCoords.y, safeTruckCoords.z, safeTruckCoords.w, true, false)
-                end
-            end
-
             if truck and DoesEntityExist(truck) then
                 SetEntityAsMissionEntity(truck, true, true)
-                SetVehicleOnGroundProperly(truck)
                 SetVehicleNeedsToBeHotwired(truck, false)
                 SetVehicleHasBeenOwnedByPlayer(truck, true)
                 SetVehicleDoorsLocked(truck, 1)
-                if contract.truckPlate then
-                    SetVehicleNumberPlateText(truck, contract.truckPlate)
-                end
-                if exports.qbx_vehiclekeys then
-                    pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end)
-                end
-                if exports.ox_fuel then
-                    pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end)
-                end
                 lcActiveJob.truck = truck
                 lcActiveJob.truckPlate = contract.truckPlate
+            else
+                print("^1[AUST_Trucker Client] AVISO: Caminhão não localizado via OneSync NetID.^7")
             end
         end
 
-        if contract.trailerModel and contract.trailerSpawn then
-            local trailerHash = joaat(contract.trailerModel)
-            lib.requestModel(trailerHash)
-            local safeTrailerCoords = GetSafeVehicleSpawnCoords(contract.trailerSpawn, 5.0)
-            trailer = CreateVehicle(trailerHash, safeTrailerCoords.x, safeTrailerCoords.y, safeTrailerCoords.z, safeTrailerCoords.w, true, false)
+        if contract.trailerNetId then
+            local timeout = 0
+            while (not trailer or not DoesEntityExist(trailer)) and timeout < 50 do
+                Wait(100)
+                trailer = NetworkGetEntityFromNetworkId(contract.trailerNetId)
+                timeout = timeout + 1
+            end
+        end
+
+        if trailer and DoesEntityExist(trailer) then
             SetEntityAsMissionEntity(trailer, true, true)
-            SetVehicleOnGroundProperly(trailer)
             lcActiveJob.trailer = trailer
         end
 

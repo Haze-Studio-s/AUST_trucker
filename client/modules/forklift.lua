@@ -526,6 +526,38 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     end)
 end
 
+function ForkliftModule.SafeDetachWithDistanceCheck(entity, attachedTo, minDistance)
+    if not entity or not DoesEntityExist(entity) then return end
+    minDistance = minDistance or 2.5
+
+    -- Desativa imediatamente colisões mútuas antes de descolar
+    if attachedTo and DoesEntityExist(attachedTo) then
+        SetEntityNoCollisionEntity(entity, attachedTo, false)
+        SetEntityNoCollisionEntity(attachedTo, entity, false)
+    end
+
+    DetachEntity(entity, true, true)
+    FreezeEntityPosition(entity, false)
+    SetEntityDynamic(entity, true)
+
+    if attachedTo and DoesEntityExist(attachedTo) then
+        CreateThread(function()
+            local e = entity
+            local a = attachedTo
+            local expire = GetGameTimer() + 4000
+            while DoesEntityExist(e) and DoesEntityExist(a) and GetGameTimer() < expire do
+                local dist = #(GetEntityCoords(e) - GetEntityCoords(a))
+                if dist >= minDistance then
+                    break
+                end
+                SetEntityNoCollisionEntity(e, a, false)
+                SetEntityNoCollisionEntity(a, e, false)
+                Wait(100)
+            end
+        end)
+    end
+end
+
 function ForkliftModule.StopOperation()
     OperationActive = false
     if TextUIShowing then
@@ -533,7 +565,8 @@ function ForkliftModule.StopOperation()
         TextUIShowing = nil
     end
     if CurrentForkliftPallet and DoesEntityExist(CurrentForkliftPallet) then
-        DetachEntity(CurrentForkliftPallet, true, true)
+        local forklift = ForkliftModule.GetPlayerForklift()
+        ForkliftModule.SafeDetachWithDistanceCheck(CurrentForkliftPallet, forklift, 2.5)
         CurrentForkliftPallet = nil
     end
     ForkliftModule.DeleteGhostProp()
