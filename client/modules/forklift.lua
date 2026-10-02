@@ -269,6 +269,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     if trBone == -1 then trBone = 0 end
 
     -- Ancoragem física estável OneSync: trava rígida na malha com matriz dinâmica de rotação
+    -- collision = false no AttachEntityToEntity desativa a física mútua palete <-> trailer
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
@@ -278,7 +279,9 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         true, true, false, false, 1, true
     )
 
-    -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
+    -- BLINDAGEM HAVOK & COLISÃO COM O JOGADOR:
+    -- Mantém colisão ativa com o jogador e o mundo (o player NÃO atravessa o palete e pode subir nele),
+    -- enquanto isola 100% o contato com o trailer e o cavalo mecânico para eliminar a catapulta Havok.
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, false)
@@ -287,6 +290,11 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetCanClimbOnEntity(palletEntity, true)
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
+    local truck = _G.JobEntities and _G.JobEntities.truck
+    if truck and DoesEntityExist(truck) then
+        SetEntityNoCollisionEntity(palletEntity, truck, false)
+        SetEntityNoCollisionEntity(truck, palletEntity, false)
+    end
 
     -- BLINDAGEM ANTI-CLIPPING / ANTI-PRENDIMENTO:
     -- Anula a colisão física mútua com a empilhadeira para que os garfos possam recuar sem prender

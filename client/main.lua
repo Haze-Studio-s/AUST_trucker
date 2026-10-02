@@ -754,7 +754,9 @@ local function ExecutePalletTie(index)
             true, true, false, false, 1, true
         )
 
-        -- 2. Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
+        -- 2. Isolamento rigoroso: Mantém colisão com o jogador ativa, anulando colisão contra trailer/truck
+        SetEntityCollision(palletEnt, true, true)
+        SetCanClimbOnEntity(palletEnt, true)
         SetEntityNoCollisionEntity(palletEnt, trailer, false)
         SetEntityNoCollisionEntity(trailer, palletEnt, false)
         local tk = JobEntities.truck
@@ -1548,24 +1550,19 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local truckSpeed = (truck and DoesEntityExist(truck)) and (GetEntitySpeed(truck) * 3.6) or 0.0
             local shouldBeInTransit = isDrivingTruck and (truckSpeed >= 3.0)
 
-            -- PILAR 5: ESTABILIDADE FÍSICA HAVOK (PARKING FREEZE)
+            -- PILAR 5: ESTABILIDADE FÍSICA HAVOK (PARKING FREEZE SEGURO)
+            -- NUNCA congelar o reboque se houver entidades físicas atreladas (evita reação de parede infinita)
             if truckSpeed < 0.5 and not isDrivingTruck then
                 if stoppedSince == 0 then stoppedSince = GetGameTimer() end
                 if GetGameTimer() - stoppedSince >= 5000 and not isParkFrozen then
                     isParkFrozen = true
                     FreezeEntityPosition(truck, true)
-                    if trailer and DoesEntityExist(trailer) then
-                        FreezeEntityPosition(trailer, true)
-                    end
                 end
             else
                 stoppedSince = 0
                 if isParkFrozen then
                     isParkFrozen = false
                     FreezeEntityPosition(truck, false)
-                    if trailer and DoesEntityExist(trailer) then
-                        FreezeEntityPosition(trailer, false)
-                    end
                 end
             end
 
@@ -1611,8 +1608,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
                     local fork = JobEntities.forklift
                     if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
-                        SetEntityCollision(fork, true, true)
-                        SetCanClimbOnEntity(fork, true)
+                        -- Mantém colisão desativada enquanto atrelado ao trailer para eliminar catapulta Havok
+                        SetEntityCollision(fork, false, false)
                         SetEntityDynamic(fork, true)
                         FreezeEntityPosition(fork, false)
                         if trailer and DoesEntityExist(trailer) then
