@@ -2751,47 +2751,64 @@ RegisterCommand('truckerfix', function()
 end, false)
 
 -- ============================================================
--- ONESYNC STATEBAGS: RECONEXÃO AUTOMÁTICA PÓS-CULLING (PILAR 1)
+-- ONESYNC STATEBAGS: RECONEXÃO AUTOMÁTICA PÓS-CULLING (PILAR 1 & 2)
 -- ============================================================
+local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
+    if not trailerEnt or not DoesEntityExist(trailerEnt) or not sData or not sData.palletNet then return end
+
+    CreateThread(function()
+        local timeout = 5000
+        local deadline = GetGameTimer() + timeout
+        local pEnt = 0
+
+        -- Aguarda o prop ser streamado localmente (elimina prop fantasma de culling)
+        while GetGameTimer() < deadline do
+            if DoesEntityExist(trailerEnt) then
+                pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
+                if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
+                    break
+                end
+            else
+                return
+            end
+            Wait(100)
+        end
+
+        if not pEnt or pEnt == 0 or not DoesEntityExist(pEnt) then return end
+
+        local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
+        if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
+        if trBone == -1 then trBone = 0 end
+
+        local off = sData.offset or vector3(0.0, 0.0, 0.35)
+        local heading = sData.heading or 0.0
+
+        -- Blindagem OneSync: solidez física sem explosão Havok mútua com a carreta
+        FreezeEntityPosition(pEnt, false)
+        SetEntityDynamic(pEnt, true)
+        SetEntityCollision(pEnt, true, true)
+        SetCanClimbOnEntity(pEnt, true)
+        SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
+        SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
+
+        if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
+            AttachEntityToEntity(
+                pEnt, trailerEnt, trBone,
+                off.x, off.y, off.z,
+                0.0, 0.0, heading,
+                true, true, false, false, 1, true
+            )
+        end
+    end)
+end
+
 AddStateBagChangeHandler('loadedSlots', nil, function(bagName, key, value, _unused, replicated)
     if not value or type(value) ~= 'table' then return end
     local trailerEnt = GetEntityFromStateBagName(bagName)
     if not trailerEnt or trailerEnt == 0 or not DoesEntityExist(trailerEnt) then return end
 
-    local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
-    if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
-    if trBone == -1 then trBone = 0 end
-
-    -- Se o reboque estiver no escopo do cliente, re-acopla paletes se descolados por culling
     for slotIndex, sData in pairs(value) do
-        if sData and sData.palletNet then
-            local pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
-            if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
-                if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
-                    local off = sData.offset or vector3(0.0, 0.0, 0.35)
-                    local heading = sData.heading or 0.0
-
-                    if NetworkGetEntityIsNetworked(pEnt) and not NetworkHasControlOfEntity(pEnt) then
-                        NetworkRequestControlOfEntity(pEnt)
-                    end
-                    if NetworkGetEntityIsNetworked(pEnt) then
-                        SetNetworkIdCanMigrate(sData.palletNet, false)
-                    end
-
-                    FreezeEntityPosition(pEnt, false)
-                    SetEntityDynamic(pEnt, true)
-                    SetEntityCollision(pEnt, false, false)
-                    SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
-                    SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
-                    AttachEntityToEntity(
-                        pEnt, trailerEnt, trBone,
-                        off.x, off.y, off.z,
-                        0.0, 0.0, heading,
-                        true, true, false, false, 1, true
-                    )
-                end
-            end
-        end
+        SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
     end
 end)
 

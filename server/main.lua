@@ -1059,7 +1059,7 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
 end)
 
 -- ETAPA 3: Acomodação do Palete na Carreta (Carga Seca)
-local function HandlePalletLoaded(src, jobId, slotIndex)
+local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
     if lobby.stage ~= 'STEP_LOAD_CARGO' and lobby.stage ~= 'STATUS_LOADING' then return end
@@ -1073,6 +1073,27 @@ local function HandlePalletLoaded(src, jobId, slotIndex)
                 FreezeEntityPosition(pObj, false)
             end
         end
+    end
+
+    -- Sincronização Autoritativa OneSync Infinity (Pilar 2: StateBags)
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        local trailerEnt = lobby.trailer
+        local pNet = palletNetId
+        if not pNet and lobby.palletNetIds and lobby.palletNetIds[slotIndex or lobby.loadedCount] then
+            pNet = lobby.palletNetIds[slotIndex or lobby.loadedCount]
+        end
+
+        local curSlots = Entity(trailerEnt).state.loadedSlots or {}
+        local sKey = tostring(slotIndex or lobby.loadedCount)
+        local off = slotOffset or { x = 0.0, y = 0.0, z = 0.35 }
+        local h = slotHeading or 0.0
+
+        curSlots[sKey] = {
+            palletNet = pNet,
+            offset = { x = off.x, y = off.y, z = off.z },
+            heading = h
+        }
+        Entity(trailerEnt).state:set('loadedSlots', curSlots, true)
     end
 
     TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
@@ -1105,12 +1126,12 @@ local function HandlePalletLoaded(src, jobId, slotIndex)
     end
 end
 
-RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex)
-    HandlePalletLoaded(source, jobId, slotIndex)
+RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex, palletNetId, slotOffset, slotHeading)
+    HandlePalletLoaded(source, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
 end)
 
-RegisterNetEvent('aurp_trucker:server:attachPalletToTrailer', function(jobId, slotIndex)
-    HandlePalletLoaded(source, jobId, slotIndex)
+RegisterNetEvent('aurp_trucker:server:attachPalletToTrailer', function(jobId, slotIndex, palletNetId, slotOffset, slotHeading)
+    HandlePalletLoaded(source, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
 end)
 
 -- =======================================================================

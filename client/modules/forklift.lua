@@ -479,8 +479,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         TextUIShowing = nil
                                     end
 
-                                    -- Notifica o servidor
-                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, loadedCount)
+                                    -- Notifica o servidor com autoridade de rede e offsets completos
+                                    local pNetId = NetworkGetEntityIsNetworked(palletEntity) and NetworkGetNetworkIdFromEntity(palletEntity) or nil
+                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, slotOffset, slotHeading)
 
                                     if onLoadedCb then
                                         onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, slotOffset, slotHeading)
