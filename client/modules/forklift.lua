@@ -240,25 +240,34 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Matriz Sólida Anti-Explosão Havok: Ancoragem na origem do trailer (bone 0) com trava rígida
+    local trBone = GetEntityBoneIndexByName(targetTrailer, "chassis")
+    if trBone == -1 then trBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
+    if trBone == -1 then trBone = 0 end
+
+    -- Ancoragem física estável OneSync: trava rígida na malha com matriz dinâmica de rotação
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     AttachEntityToEntity(
-        palletEntity, targetTrailer, 0,
+        palletEntity, targetTrailer, trBone,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, slotHeading,
-        false, false, false, false, 2, true
+        true, true, false, false, 1, true
     )
 
     -- Colisão Sólida com Player/Mundo ativa durante o carregamento + Isolamento do chassi do reboque
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, false)
+    SetEntityDynamic(palletEntity, true)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
+
+    -- Bloqueia migração de rede do OneSync para impedir rubberbanding (o motorista local governa a entidade)
+    if NetworkGetEntityIsNetworked(palletEntity) then
+        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEntity), false)
+    end
 
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
@@ -270,6 +279,21 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
             heading = slotHeading
         }
         Entity(targetTrailer).state:set('loadedSlots', curSlots, true)
+    end
+
+    -- Confirmação atômica de acoplamento (impede avançar estado se falhar)
+    Wait(60)
+    if not IsEntityAttachedToEntity(palletEntity, targetTrailer) then
+        print(("[AUST_Trucker] ERRO: Falha ao verificar IsEntityAttachedToEntity para o palete %s no trailer %s"):format(tostring(palletEntity), tostring(targetTrailer)))
+        return false
+    end
+
+    -- Remoção atômica da lista de paletes ativos para impedir recaptura imediata pela empilhadeira
+    for k, v in pairs(ActiveMissionPallets) do
+        if v == palletEntity then
+            ActiveMissionPallets[k] = nil
+            break
+        end
     end
 
     -- Deleta o holograma do slot recém-ocupado
@@ -319,6 +343,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     TargetTrailerEntity = trailer
     CurrentSlotIndex = 1
     local loadedCount = 0
+    local lastDropCooldown = 0
 
     CreateThread(function()
         -- Lock 2: Coroutine Sequencial & Yield Bloqueante antes de Instanciar o Primeiro Fantasma
@@ -360,8 +385,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
             if forklift and DoesEntityExist(forklift) then
                 if not CurrentForkliftPallet then
-                    -- Caso 1: Buscar palete no chão
-                    local targetPallet = ForkliftModule.GetNearestGroundPallet(forklift)
+                    -- Caso 1: Buscar palete no chão (com cooldown pós-entrega para evitar recaptura)
+                    local targetPallet = (GetGameTimer() > lastDropCooldown) and ForkliftModule.GetNearestGroundPallet(forklift) or nil
                     if targetPallet and DoesEntityExist(targetPallet) then
                         sleep = 0
                         if TextUIShowing ~= 'pickup' then
@@ -411,6 +436,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
                                 local ok, slotOffset, slotHeading = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
                                 if ok then
+                                    lastDropCooldown = GetGameTimer() + 1500 -- Impede recaptura por 1.5s
                                     local stowedSlot = CurrentSlotIndex
                                     CurrentForkliftPallet = nil
                                     loadedCount = loadedCount + 1

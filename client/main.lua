@@ -605,6 +605,16 @@ local function StartCouplingWatcher()
                                             end
                                         else
                                             CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                            -- Trava os freios de mão e congela a física do caminhão e trailer
+                                            -- para impedir alavanca e catapulta Havok enquanto a empilhadeira sobe e anda sobre a prancha
+                                            if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                                                SetVehicleHandbrake(JobEntities.truck, true)
+                                                FreezeEntityPosition(JobEntities.truck, true)
+                                            end
+                                            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                                                SetVehicleHandbrake(JobEntities.trailer, true)
+                                                FreezeEntityPosition(JobEntities.trailer, true)
+                                            end
                                             if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
                                                 UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
                                             end
@@ -724,15 +734,34 @@ local function ExecutePalletTie(index)
         palletData.relOffset = finalOffset
         palletData.relHeading = finalHeading
 
-        -- BLINDAGEM TRÍPLA HAVOK:
-        -- 1. Ancoragem padronizada na origem do trailer (bone 0) com trava rígida e collision = false
+        -- Garante controle autoritativo de rede antes da amarração
+        if NetworkGetEntityIsNetworked(palletEnt) and not NetworkHasControlOfEntity(palletEnt) then
+            NetworkRequestControlOfEntity(palletEnt)
+            local t = 300
+            while not NetworkHasControlOfEntity(palletEnt) and t > 0 do
+                Wait(30)
+                t = t - 30
+            end
+        end
+
+        local pNet = NetworkGetEntityIsNetworked(palletEnt) and NetworkGetNetworkIdFromEntity(palletEnt) or nil
+        if pNet then
+            SetNetworkIdCanMigrate(pNet, false)
+        end
+
+        local trBone = GetEntityBoneIndexByName(trailer, "chassis")
+        if trBone == -1 then trBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
+        if trBone == -1 then trBone = 0 end
+
+        -- BLINDAGEM TRÍPLA HAVOK & ONESYNC:
+        -- 1. Ancoragem no chassi do trailer com matriz dinâmica de rotação (p9=true, useSoftPinning=true, vertexIndex=1)
         FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, false)
+        SetEntityDynamic(palletEnt, true)
         AttachEntityToEntity(
-            palletEnt, trailer, 0,
+            palletEnt, trailer, trBone,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, finalHeading,
-            false, false, false, false, 2, true
+            true, true, false, false, 1, true
         )
 
         -- 2. Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
@@ -856,14 +885,23 @@ local function ExecuteForkliftTie(forkEntity)
 
     DetachEntity(fork, true, true)
 
-    -- Ancoragem padronizada na origem do trailer (bone 0) com trava rígida de rotação (fixedRot = true)
+    local fNet = NetworkGetEntityIsNetworked(fork) and NetworkGetNetworkIdFromEntity(fork) or nil
+    if fNet then
+        SetNetworkIdCanMigrate(fNet, false)
+    end
+
+    local trBone = GetEntityBoneIndexByName(trailer, "chassis")
+    if trBone == -1 then trBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
+    if trBone == -1 then trBone = 0 end
+
+    -- Ancoragem padronizada no chassi do trailer com matriz dinâmica de rotação
     FreezeEntityPosition(fork, false)
-    SetEntityDynamic(fork, false)
+    SetEntityDynamic(fork, true)
     AttachEntityToEntity(
-        fork, trailer, 0,
+        fork, trailer, trBone,
         forkOffset.x, forkOffset.y, forkOffset.z,
         0.0, 0.0, forkHeading,
-        false, false, false, false, 2, true
+        true, true, false, false, 1, true
     )
 
     -- Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
@@ -1249,6 +1287,16 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         SetNewWaypoint(dest.x, dest.y)
     end
 
+    -- Descongela caminhão e reboque e libera freios de mão para início da rota
+    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+        FreezeEntityPosition(JobEntities.truck, false)
+        SetVehicleHandbrake(JobEntities.truck, false)
+    end
+    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+        FreezeEntityPosition(JobEntities.trailer, false)
+        SetVehicleHandbrake(JobEntities.trailer, false)
+    end
+
     -- Orienta o jogador a entrar no caminhão com marcador e som
     if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
         UpdateMissionObjective('truck', JobEntities.truck, 'Entre no seu Caminhão')
@@ -1283,10 +1331,17 @@ function StartDeliveryRoute(deliveryCoords, jobId)
         for _, pData in ipairs(LoadedPallets or {}) do
             local pEnt = pData.entity
             if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                if NetworkGetEntityIsNetworked(pEnt) and not NetworkHasControlOfEntity(pEnt) then
+                    NetworkRequestControlOfEntity(pEnt)
+                end
+                if NetworkGetEntityIsNetworked(pEnt) then
+                    SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(pEnt), false)
+                end
                 SetEntityAsMissionEntity(pEnt, true, true)
                 SetEntityLodDist(pEnt, 0xFFFF)
                 FreezeEntityPosition(pEnt, false)
-                SetEntityDynamic(pEnt, false)
+                SetEntityDynamic(pEnt, true)
+                SetEntityCollision(pEnt, false, false)
                 SetEntityNoCollisionEntity(pEnt, trailer, false)
                 SetEntityNoCollisionEntity(trailer, pEnt, false)
                 if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
@@ -1294,13 +1349,13 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     SetEntityNoCollisionEntity(JobEntities.truck, pEnt, false)
                 end
 
-                -- Reforço imediato de ancoragem na malha do trailer (origem bone 0)
+                -- Reforço imediato de ancoragem na malha do trailer (chassis)
                 if pData.relOffset then
                     AttachEntityToEntity(
-                        pEnt, trailer, 0,
+                        pEnt, trailer, trailerBone,
                         pData.relOffset.x, pData.relOffset.y, pData.relOffset.z,
                         0.0, 0.0, pData.relHeading or 0.0,
-                        false, false, false, false, 2, true
+                        true, true, false, false, 1, true
                     )
                 end
             end
@@ -1308,10 +1363,17 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
         local fork = JobEntities.forklift
         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
+            if NetworkGetEntityIsNetworked(fork) and not NetworkHasControlOfEntity(fork) then
+                NetworkRequestControlOfEntity(fork)
+            end
+            if NetworkGetEntityIsNetworked(fork) then
+                SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(fork), false)
+            end
             SetEntityAsMissionEntity(fork, true, true)
             SetEntityLodDist(fork, 0xFFFF)
             FreezeEntityPosition(fork, false)
-            SetEntityDynamic(fork, false)
+            SetEntityDynamic(fork, true)
+            SetEntityCollision(fork, false, false)
             SetEntityNoCollisionEntity(fork, trailer, false)
             SetEntityNoCollisionEntity(trailer, fork, false)
             if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
@@ -1322,10 +1384,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer)) or vector3(0.0, -5.2, 0.35)
             local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
             AttachEntityToEntity(
-                fork, trailer, 0,
+                fork, trailer, trailerBone,
                 forkOffset.x, forkOffset.y, forkOffset.z,
                 0.0, 0.0, fHead,
-                false, false, false, false, 2, true
+                true, true, false, false, 1, true
             )
         end
 
@@ -1401,7 +1463,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         local pEnt = pData.entity
                         if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                             SetEntityCollision(pEnt, false, false)
-                            SetEntityDynamic(pEnt, false)
+                            SetEntityDynamic(pEnt, true)
                             FreezeEntityPosition(pEnt, false)
                         end
                     end
@@ -1409,7 +1471,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     local fork = JobEntities.forklift
                     if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
                         SetEntityCollision(fork, false, false)
-                        SetEntityDynamic(fork, false)
+                        SetEntityDynamic(fork, true)
                         FreezeEntityPosition(fork, false)
                     end
                 end
@@ -1423,7 +1485,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
                             SetEntityCollision(pEnt, true, true)
                             SetCanClimbOnEntity(pEnt, true)
-                            SetEntityDynamic(pEnt, false)
+                            SetEntityDynamic(pEnt, true)
                             FreezeEntityPosition(pEnt, false)
                             if trailer and DoesEntityExist(trailer) then
                                 SetEntityNoCollisionEntity(pEnt, trailer, false)
@@ -1436,7 +1498,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
                         SetEntityCollision(fork, true, true)
                         SetCanClimbOnEntity(fork, true)
-                        SetEntityDynamic(fork, false)
+                        SetEntityDynamic(fork, true)
                         FreezeEntityPosition(fork, false)
                         if trailer and DoesEntityExist(trailer) then
                             SetEntityNoCollisionEntity(fork, trailer, false)
@@ -1465,8 +1527,14 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                             local pEnt = pData.entity
                             if pEnt and DoesEntityExist(pEnt) and pData.isSecured and not pData.lost and not pData.isFallen then
                                 if not IsEntityAttachedToEntity(pEnt, tr) then
+                                    if NetworkGetEntityIsNetworked(pEnt) and not NetworkHasControlOfEntity(pEnt) then
+                                        NetworkRequestControlOfEntity(pEnt)
+                                    end
+                                    if NetworkGetEntityIsNetworked(pEnt) then
+                                        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(pEnt), false)
+                                    end
                                     FreezeEntityPosition(pEnt, false)
-                                    SetEntityDynamic(pEnt, false)
+                                    SetEntityDynamic(pEnt, true)
                                     if isCargoInTransitMode then
                                         SetEntityCollision(pEnt, false, false)
                                     else
@@ -1478,10 +1546,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
                                     local pHead = pData.relHeading or (type(off) == 'table' and off.heading) or 0.0
                                     AttachEntityToEntity(
-                                        pEnt, tr, 0,
+                                        pEnt, tr, trBone,
                                         off.x, off.y, off.z,
                                         0.0, 0.0, pHead,
-                                        false, false, false, false, 2, true
+                                        true, true, false, false, 1, true
                                     )
                                 end
                             end
@@ -1490,8 +1558,14 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                         local fork = JobEntities.forklift
                         if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer and ForkliftSecured then
                             if not IsEntityAttachedToEntity(fork, tr) then
+                                if NetworkGetEntityIsNetworked(fork) and not NetworkHasControlOfEntity(fork) then
+                                    NetworkRequestControlOfEntity(fork)
+                                end
+                                if NetworkGetEntityIsNetworked(fork) then
+                                    SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(fork), false)
+                                end
                                 FreezeEntityPosition(fork, false)
-                                SetEntityDynamic(fork, false)
+                                SetEntityDynamic(fork, true)
                                 if isCargoInTransitMode then
                                     SetEntityCollision(fork, false, false)
                                 else
@@ -1503,10 +1577,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 local forkOffset, forkHeading = (ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(tr)) or vector3(0.0, -5.2, 0.35)
                                 local fHead = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
                                 AttachEntityToEntity(
-                                    fork, tr, 0,
+                                    fork, tr, trBone,
                                     forkOffset.x, forkOffset.y, forkOffset.z,
                                     0.0, 0.0, fHead,
-                                    false, false, false, false, 2, true
+                                    true, true, false, false, 1, true
                                 )
                             end
                         end
@@ -1623,6 +1697,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 pcall(function()
                                     if NetworkGetEntityIsNetworked(palletEnt) then
                                         NetworkRequestControlOfEntity(palletEnt)
+                                        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEnt), true)
                                     end
 
                                     -- RESTAURAÇÃO TOTAL NA QUEDA: REATIVA COLISÃO E FÍSICA DINÂMICA
@@ -1713,6 +1788,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                 pcall(function()
                                     if NetworkGetEntityIsNetworked(fork) then
                                         NetworkRequestControlOfEntity(fork)
+                                        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(fork), true)
                                     end
 
                                     DetachEntity(fork, true, true)
@@ -2448,6 +2524,10 @@ AddStateBagChangeHandler('loadedSlots', nil, function(bagName, key, value, _unus
     local trailerEnt = GetEntityFromStateBagName(bagName)
     if not trailerEnt or trailerEnt == 0 or not DoesEntityExist(trailerEnt) then return end
 
+    local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
+    if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
+    if trBone == -1 then trBone = 0 end
+
     -- Se o reboque estiver no escopo do cliente, re-acopla paletes se descolados por culling
     for slotIndex, sData in pairs(value) do
         if sData and sData.palletNet then
@@ -2456,19 +2536,65 @@ AddStateBagChangeHandler('loadedSlots', nil, function(bagName, key, value, _unus
                 if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
                     local off = sData.offset or vector3(0.0, 0.0, 0.35)
                     local heading = sData.heading or 0.0
-                    SetEntityCollision(pEnt, true, true)
-                    SetCanClimbOnEntity(pEnt, true)
+
+                    if NetworkGetEntityIsNetworked(pEnt) and not NetworkHasControlOfEntity(pEnt) then
+                        NetworkRequestControlOfEntity(pEnt)
+                    end
+                    if NetworkGetEntityIsNetworked(pEnt) then
+                        SetNetworkIdCanMigrate(sData.palletNet, false)
+                    end
+
                     FreezeEntityPosition(pEnt, false)
-                    SetEntityDynamic(pEnt, false)
+                    SetEntityDynamic(pEnt, true)
+                    SetEntityCollision(pEnt, false, false)
                     SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
                     SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
                     AttachEntityToEntity(
-                        pEnt, trailerEnt, 0,
+                        pEnt, trailerEnt, trBone,
                         off.x, off.y, off.z,
                         0.0, 0.0, heading,
-                        false, false, false, false, 2, true
+                        true, true, false, false, 1, true
                     )
                 end
+            end
+        end
+    end
+end)
+
+AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _unused, replicated)
+    if not value or type(value) ~= 'table' then return end
+    local trailerEnt = GetEntityFromStateBagName(bagName)
+    if not trailerEnt or trailerEnt == 0 or not DoesEntityExist(trailerEnt) then return end
+
+    if value.forkNet then
+        local forkEnt = NetworkGetEntityFromNetworkId(value.forkNet)
+        if forkEnt and forkEnt ~= 0 and DoesEntityExist(forkEnt) then
+            if not IsEntityAttachedToEntity(forkEnt, trailerEnt) then
+                local off = value.offset or vector3(0.0, -5.2, 0.35)
+                local heading = value.heading or 0.0
+
+                local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
+                if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
+                if trBone == -1 then trBone = 0 end
+
+                if NetworkGetEntityIsNetworked(forkEnt) and not NetworkHasControlOfEntity(forkEnt) then
+                    NetworkRequestControlOfEntity(forkEnt)
+                end
+                if NetworkGetEntityIsNetworked(forkEnt) then
+                    SetNetworkIdCanMigrate(value.forkNet, false)
+                end
+
+                FreezeEntityPosition(forkEnt, false)
+                SetEntityDynamic(forkEnt, true)
+                SetEntityCollision(forkEnt, false, false)
+                SetEntityNoCollisionEntity(forkEnt, trailerEnt, false)
+                SetEntityNoCollisionEntity(trailerEnt, forkEnt, false)
+                AttachEntityToEntity(
+                    forkEnt, trailerEnt, trBone,
+                    off.x, off.y, off.z,
+                    0.0, 0.0, heading,
+                    true, true, false, false, 1, true
+                )
             end
         end
     end
