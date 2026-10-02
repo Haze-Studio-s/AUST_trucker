@@ -1080,7 +1080,7 @@ end)
 local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    if lobby.stage ~= 'STEP_LOAD_CARGO' and lobby.stage ~= 'STATUS_LOADING' then return end
+    lobby.stage = 'STATUS_LOADING'
 
     lobby.loadedCount = lobby.loadedCount + 1
     lobby.current_object = slotIndex

@@ -750,15 +750,15 @@ local function ExecutePalletTie(index)
         if trBone == -1 then trBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
         if trBone == -1 then trBone = 0 end
 
-        -- BLINDAGEM TRÍPLA HAVOK & ONESYNC:
-        -- 1. Ancoragem no chassi do trailer com matriz dinâmica de rotação (p9=true, useSoftPinning=true, vertexIndex=1)
+        -- BLINDAGEM RÍGIDA ONESYNC:
+        -- Ancoragem no chassi do trailer sem soft-pinning (elimina atraso elástico / rubberbanding)
         FreezeEntityPosition(palletEnt, false)
-        SetEntityDynamic(palletEnt, true)
+        SetEntityDynamic(palletEnt, false)
         AttachEntityToEntity(
             palletEnt, trailer, trBone,
             finalOffset.x, finalOffset.y, finalOffset.z,
             0.0, 0.0, finalHeading,
-            true, true, false, false, 1, true
+            false, false, false, false, 2, true
         )
 
         -- 2. Isolamento rigoroso: Mantém colisão com o jogador ativa, anulando colisão contra trailer/truck
@@ -893,14 +893,14 @@ local function ExecuteForkliftTie(forkEntity)
     if trBone == -1 then trBone = GetEntityBoneIndexByName(trailer, "bodyshell") end
     if trBone == -1 then trBone = 0 end
 
-    -- Ancoragem padronizada no chassi do trailer com matriz dinâmica de rotação
+    -- Ancoragem padronizada rígida no chassi do trailer sem soft-pinning
     FreezeEntityPosition(fork, false)
-    SetEntityDynamic(fork, true)
+    SetEntityDynamic(fork, false)
     AttachEntityToEntity(
         fork, trailer, trBone,
         forkOffset.x, forkOffset.y, forkOffset.z,
         0.0, 0.0, forkHeading,
-        true, true, false, false, 1, true
+        false, false, false, false, 2, true
     )
 
     -- Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
@@ -1473,13 +1473,14 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     SetEntityNoCollisionEntity(JobEntities.truck, pEnt, false)
                 end
 
-                -- Reforço imediato de ancoragem na malha do trailer (chassis)
+                -- Reforço imediato de ancoragem na malha do trailer (chassis) sem soft-pinning
                 if pData.relOffset then
+                    SetEntityDynamic(pEnt, false)
                     AttachEntityToEntity(
                         pEnt, trailer, trailerBone,
                         pData.relOffset.x, pData.relOffset.y, pData.relOffset.z,
                         0.0, 0.0, pData.relHeading or 0.0,
-                        true, true, false, false, 1, true
+                        false, false, false, false, 2, true
                     )
                 end
             end
@@ -1496,7 +1497,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             SetEntityAsMissionEntity(fork, true, true)
             SetEntityLodDist(fork, 0xFFFF)
             FreezeEntityPosition(fork, false)
-            SetEntityDynamic(fork, true)
+            SetEntityDynamic(fork, false)
             SetEntityCollision(fork, false, false)
             SetEntityNoCollisionEntity(fork, trailer, false)
             SetEntityNoCollisionEntity(trailer, fork, false)
@@ -1511,7 +1512,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 fork, trailer, trailerBone,
                 forkOffset.x, forkOffset.y, forkOffset.z,
                 0.0, 0.0, fHead,
-                true, true, false, false, 1, true
+                false, false, false, false, 2, true
             )
         end
 
@@ -1653,7 +1654,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                         SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(pEnt), false)
                                     end
                                     FreezeEntityPosition(pEnt, false)
-                                    SetEntityDynamic(pEnt, true)
+                                    SetEntityDynamic(pEnt, false)
                                     if isCargoInTransitMode then
                                         SetEntityCollision(pEnt, false, false)
                                     else
@@ -1668,7 +1669,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                         pEnt, tr, trBone,
                                         off.x, off.y, off.z,
                                         0.0, 0.0, pHead,
-                                        true, true, false, false, 1, true
+                                        false, false, false, false, 2, true
                                     )
                                 end
                             end
@@ -1684,7 +1685,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(fork), false)
                                 end
                                 FreezeEntityPosition(fork, false)
-                                SetEntityDynamic(fork, true)
+                                SetEntityDynamic(fork, false)
                                 if isCargoInTransitMode then
                                     SetEntityCollision(fork, false, false)
                                 else
@@ -1699,7 +1700,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     fork, tr, trBone,
                                     forkOffset.x, forkOffset.y, forkOffset.z,
                                     0.0, 0.0, fHead,
-                                    true, true, false, false, 1, true
+                                    false, false, false, false, 2, true
                                 )
                             end
                         end
@@ -2795,9 +2796,9 @@ local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
         local off = sData.offset or vector3(0.0, 0.0, 0.35)
         local heading = sData.heading or 0.0
 
-        -- Blindagem OneSync: solidez física sem explosão Havok mútua com a carreta
+        -- Blindagem OneSync: solidez física sem explosão Havok mútua com a carreta e sem atraso elástico
         FreezeEntityPosition(pEnt, false)
-        SetEntityDynamic(pEnt, true)
+        SetEntityDynamic(pEnt, false)
         SetEntityCollision(pEnt, true, true)
         SetCanClimbOnEntity(pEnt, true)
         SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
@@ -2808,7 +2809,7 @@ local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
                 pEnt, trailerEnt, trBone,
                 off.x, off.y, off.z,
                 0.0, 0.0, heading,
-                true, true, false, false, 1, true
+                false, false, false, false, 2, true
             )
         end
     end)
@@ -2848,7 +2849,7 @@ AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _u
                 end
 
                 FreezeEntityPosition(forkEnt, false)
-                SetEntityDynamic(forkEnt, true)
+                SetEntityDynamic(forkEnt, false)
                 SetEntityCollision(forkEnt, false, false)
                 SetEntityNoCollisionEntity(forkEnt, trailerEnt, false)
                 SetEntityNoCollisionEntity(trailerEnt, forkEnt, false)
@@ -2856,7 +2857,7 @@ AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _u
                     forkEnt, trailerEnt, trBone,
                     off.x, off.y, off.z,
                     0.0, 0.0, heading,
-                    true, true, false, false, 1, true
+                    false, false, false, false, 2, true
                 )
             end
         end

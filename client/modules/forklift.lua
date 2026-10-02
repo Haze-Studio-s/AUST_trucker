@@ -268,15 +268,15 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     if trBone == -1 then trBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
     if trBone == -1 then trBone = 0 end
 
-    -- Ancoragem física estável OneSync: trava rígida na malha com matriz dinâmica de rotação
+    -- Ancoragem física rígida OneSync: trava milimétrica na malha sem soft-pinning (elimina atraso elástico)
     -- collision = false no AttachEntityToEntity desativa a física mútua palete <-> trailer
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, true)
+    SetEntityDynamic(palletEntity, false)
     AttachEntityToEntity(
         palletEntity, targetTrailer, trBone,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, slotHeading,
-        true, true, false, false, 1, true
+        false, false, false, false, 2, true
     )
 
     -- BLINDAGEM HAVOK & COLISÃO COM O JOGADOR:
@@ -285,7 +285,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, false)
-    SetEntityDynamic(palletEntity, true)
+    SetEntityDynamic(palletEntity, false)
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
