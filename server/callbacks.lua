@@ -1542,3 +1542,12 @@ lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseTy
         message = ('Aprovado no exame! Certificado %s emitido com sucesso.'):format(cfg.name)
     }
 end)
+
+lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
+    local offsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
+    local specific = nil
+    if trailerModel and offsets then
+        specific = offsets[tostring(trailerModel):lower()] or offsets[trailerModel]
+    end
+    return { all = offsets, specific = specific }
+end)

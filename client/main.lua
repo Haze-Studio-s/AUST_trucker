@@ -365,37 +365,43 @@ end
 
 local function WaitForNetworkEntity(netId, maxTimeoutMs)
     if not netId or netId == 0 then return nil end
-    local timeout = GetGameTimer() + (maxTimeoutMs or 10000)
-    local lastLog = GetGameTimer()
-
-    print(("[AUST_Trucker DEBUG - ETAPA 5] Aguardando resolução de rede para NetID: %s..."):format(tostring(netId)))
+    local timeout = GetGameTimer() + (maxTimeoutMs or 6000)
 
     while GetGameTimer() < timeout do
-        local ok, ent = pcall(NetworkGetEntityFromNetworkId, netId)
-        if ok and ent and ent ~= 0 and DoesEntityExist(ent) then
-            print(("[AUST_Trucker DEBUG - ETAPA 5] Entidade NetID %s sincronizada! Handle: %s"):format(tostring(netId), tostring(ent)))
-            return ent
-        end
-
         if NetworkDoesNetworkIdExist(netId) then
-            local netEnt = NetworkGetEntityFromNetworkId(netId)
-            if netEnt and netEnt ~= 0 and DoesEntityExist(netEnt) then
-                print(("[AUST_Trucker DEBUG - ETAPA 5] Entidade NetID %s sincronizada via NetworkDoesNetworkIdExist! Handle: %s"):format(tostring(netId), tostring(netEnt)))
-                return netEnt
+            local okNet, ent = pcall(NetworkGetEntityFromNetworkId, netId)
+            if okNet and ent and ent ~= 0 and DoesEntityExist(ent) then
+                return ent
             end
         end
 
-        if GetGameTimer() - lastLog >= 2000 then
-            print(("[AUST_Trucker DEBUG - ETAPA 5] Aguardando streaming do NetID: %s (Restante: %d ms)"):format(tostring(netId), timeout - GetGameTimer()))
-            lastLog = GetGameTimer()
+        local okVeh, veh = pcall(NetToVeh, netId)
+        if okVeh and veh and veh ~= 0 and DoesEntityExist(veh) then
+            return veh
         end
 
-        Wait(100)
+        local okObj, obj = pcall(NetToObj, netId)
+        if okObj and obj and obj ~= 0 and DoesEntityExist(obj) then
+            return obj
+        end
+
+        local okEnt, ent = pcall(NetToEnt, netId)
+        if okEnt and ent and ent ~= 0 and DoesEntityExist(ent) then
+            return ent
+        end
+
+        Wait(50)
     end
 
-    print(("^1[AUST_Trucker DEBUG - ETAPA 5] ERRO CRÍTICO: Timeout (10s) aguardando entidade física para NetID %s!^7"):format(tostring(netId)))
+    if NetworkDoesNetworkIdExist(netId) then
+        local okNet, ent = pcall(NetworkGetEntityFromNetworkId, netId)
+        if okNet and ent and ent ~= 0 and DoesEntityExist(ent) then
+            return ent
+        end
+    end
     return nil
 end
+
 
 -- =======================================================================
 -- DESPACHANTE NPC: ACESSO EXCLUSIVO VIA TABLET NUI (ZERO COMANDOS OBSOLETOS)
@@ -461,7 +467,8 @@ local function HandleStartDeliveryNUI(data, cb)
         return
     end
 
-    local payload = data or {}
+    local raw = data or {}
+    local payload = (raw.data and type(raw.data) == 'table') and raw.data or raw
     local contractId = payload.id or payload.contract_id or payload.contractId or payload.jobId
     print(("^2[AUST_Trucker DEBUG - ETAPA 1] HandleStartDeliveryNUI disparado! ID=%s^7"):format(tostring(contractId)))
 
@@ -472,7 +479,7 @@ local function HandleStartDeliveryNUI(data, cb)
     end
 
     isStartingDeliveryLock = true
-    SetTimeout(5000, function() isStartingDeliveryLock = false end)
+    SetTimeout(4000, function() isStartingDeliveryLock = false end)
 
     TriggerServerEvent('aurp_trucker:server:startDelivery', payload)
 
@@ -2079,8 +2086,41 @@ local function OnPlayerEnteredTruck(truck)
     StartCouplingWatcher()
 end
 
+local function StartTruckEnterWatcher(truck)
+    CreateThread(function()
+        while CurrentStage == 'STEP_2_ENTER_TRUCK' and ActiveJob do
+            Wait(250)
+            local ped = cache.ped or PlayerPedId()
+            local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
+            local targetTruck = (truck and DoesEntityExist(truck)) and truck or JobEntities.truck
+            if veh ~= 0 and targetTruck and DoesEntityExist(targetTruck) and veh == targetTruck then
+                local seat = GetPedInVehicleSeat(veh, -1)
+                if seat == ped or seat == cache.ped then
+                    OnPlayerEnteredTruck(veh)
+                    break
+                end
+            end
+        end
+    end)
+end
+
 local function StartMissionStep1(truck, trailer, forklift)
     CurrentStage = 'STEP_2_ENTER_TRUCK'
+
+    -- Sincroniza ecossistema legado/NUI e HUD de telemetria
+    if ActiveJob then
+        lcActiveJob = {
+            jobId = ActiveJob.jobId,
+            truck = truck,
+            trailer = trailer,
+            cargoName = ActiveJob.cargoName,
+            payment = ActiveJob.payment,
+            stage = 'STEP_2_ENTER_TRUCK',
+            deliveryCoords = ActiveJob.deliveryCoords
+        }
+        TriggerEvent('aurp_trucker:client:jobStarted')
+        SendNUIMessage({ action = 'updateActiveJob', activeJob = lcActiveJob })
+    end
 
     -- 1. Criação do blip e rota no GPS direcionando para o caminhão
     -- 2. Ativação da seta verde flutuante (marcador chevron tipo 20) sobre o teto do caminhão
@@ -2096,7 +2136,10 @@ local function StartMissionStep1(truck, trailer, forklift)
     -- 3. Disparo da notificação sonora de 10 segundos
     SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
 
-    -- 4. Verificação imediata caso o jogador já esteja dentro do veículo
+    -- 4. Inicia watcher contínuo à prova de falhas de assento
+    StartTruckEnterWatcher(truck)
+
+    -- 5. Verificação imediata caso o jogador já esteja dentro do veículo
     local ped = cache.ped or PlayerPedId()
     local currentVeh = GetVehiclePedIsIn(ped, false)
     if currentVeh ~= 0 and truck and currentVeh == truck then
@@ -2276,24 +2319,12 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end)
         end)
 
-        -- 1. Espera ativa e segura pela existência física das entidades no cliente (Timeout 10s)
-        local truck = WaitForNetworkEntity(payload.truckNetId, 10000)
-        local trailer = WaitForNetworkEntity(payload.trailerNetId, 10000)
-        local forklift = nil
-        if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
-            forklift = WaitForNetworkEntity(payload.forkliftNetId, 10000)
-        end
-        local handler = nil
-        if payload.handlerNetId and payload.handlerNetId ~= 0 then
-            handler = WaitForNetworkEntity(payload.handlerNetId, 10000)
-        end
-        local container = nil
-        if payload.containerNetId and payload.containerNetId ~= 0 then
-            container = WaitForNetworkEntity(payload.containerNetId, 10000)
-        end
+        -- 1. Resolução dos veículos primários essenciais (Caminhão e Carreta)
+        local truck = WaitForNetworkEntity(payload.truckNetId, 7000)
+        local trailer = WaitForNetworkEntity(payload.trailerNetId, 7000)
 
         if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
-            print(("^1[AUST_Trucker DEBUG - ETAPA 5] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
+            print(("^1[AUST_Trucker DEBUG - ETAPA 1] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
                 tostring(truck), tostring(trailer)
             ))
             SendMissionNotify('Falha de Streaming', 'Não foi possível sincronizar os veículos da missão no cliente.', 'error')
@@ -2302,7 +2333,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             return
         end
 
-        print(("^2[AUST_Trucker DEBUG - ETAPA 5] Veículos sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId)))
+        print(("^2[AUST_Trucker DEBUG - ETAPA 1] Caminhão e Carreta sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId)))
 
         local playerPed = cache.ped or PlayerPedId()
         SetEntityVisible(playerPed, true)
@@ -2310,9 +2341,6 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
         JobEntities.truck = truck
         JobEntities.trailer = trailer
-        JobEntities.forklift = forklift
-        JobEntities.handler = handler
-        JobEntities.container = container
 
         if truck and DoesEntityExist(truck) then
             SetEntityVisible(truck, true)
@@ -2353,72 +2381,59 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             SetVehicleExplodesOnHighExplosionDamage(trailer, false)
             SetVehicleCanBeVisiblyDamaged(trailer, false)
             SetVehicleStrong(trailer, true)
+        end
 
-            -- Lock 1: Identificação Sequencial e Requisição Bloqueante de Offsets do Reboque
-            local tHash = GetEntityModel(trailer)
-            local tModelName = payload.trailerModel or tostring(tHash)
-            local ok, res = pcall(function()
-                return lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, tModelName)
-            end)
-
-            if ok and res and (res.specific or res.all) then
-                local data = res.specific or (res.all and (res.all[tModelName:lower()] or res.all[tHash] or res.all[tostring(tHash)]))
-                if data then
-                    if not Config.TrailerSlots[tHash] then Config.TrailerSlots[tHash] = { pallets = {}, forklift = nil } end
-                    if not Config.TrailerSlots[tModelName:lower()] then Config.TrailerSlots[tModelName:lower()] = { pallets = {}, forklift = nil } end
-                    for idx, v in pairs(data.pallets or {}) do
-                        local vec = vector3(v.x, v.y, v.z)
-                        Config.TrailerSlots[tHash].pallets[tonumber(idx)] = vec
-                        Config.TrailerSlots[tModelName:lower()].pallets[tonumber(idx)] = vec
+        -- 2. Resolução assíncrona não-bloqueante de maquinário secundário (Empilhadeira, Handler, Contêiner)
+        CreateThread(function()
+            if payload.forkliftNetId and payload.forkliftNetId ~= 0 then
+                local forklift = WaitForNetworkEntity(payload.forkliftNetId, 8000)
+                if forklift and DoesEntityExist(forklift) then
+                    JobEntities.forklift = forklift
+                    SetEntityVisible(forklift, true)
+                    ResetEntityAlpha(forklift)
+                    SetVehicleOnGroundProperly(forklift)
+                    SetEntityCollision(forklift, true, true)
+                    SetVehicleDoorsLocked(forklift, 1)
+                    SetVehicleDoorsLockedForAllPlayers(forklift, false)
+                    SetVehicleNeedsToBeHotwired(forklift, false)
+                    if exports.qbx_vehiclekeys then
+                        pcall(function() exports.qbx_vehiclekeys:GiveKeys(forklift) end)
                     end
-                    if data.forklift then
-                        local vec = vector3(data.forklift.x, data.forklift.y, data.forklift.z)
-                        Config.TrailerSlots[tHash].forklift = vec
-                        Config.TrailerSlots[tModelName:lower()].forklift = vec
-                    end
-                    print(("^2[AUST_Trucker Client] Lock 1 Sucesso: Offsets customizados injetados em memória para trailer %s (Hash %s)!^7"):format(
-                        tModelName, tostring(tHash)
-                    ))
                 end
             end
-        end
 
-        if forklift and DoesEntityExist(forklift) then
-            SetEntityVisible(forklift, true)
-            ResetEntityAlpha(forklift)
-            SetVehicleOnGroundProperly(forklift)
-            SetEntityCollision(forklift, true, true)
-            SetVehicleDoorsLocked(forklift, 1)
-            SetVehicleDoorsLockedForAllPlayers(forklift, false)
-            SetVehicleNeedsToBeHotwired(forklift, false)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(forklift) end)
+            if payload.handlerNetId and payload.handlerNetId ~= 0 then
+                local handler = WaitForNetworkEntity(payload.handlerNetId, 8000)
+                if handler and DoesEntityExist(handler) then
+                    JobEntities.handler = handler
+                    SetEntityVisible(handler, true)
+                    ResetEntityAlpha(handler)
+                    SetVehicleOnGroundProperly(handler)
+                    SetEntityCollision(handler, true, true)
+                    SetVehicleDoorsLocked(handler, 1)
+                    SetVehicleDoorsLockedForAllPlayers(handler, false)
+                    SetVehicleNeedsToBeHotwired(handler, false)
+                    if exports.qbx_vehiclekeys then
+                        pcall(function() exports.qbx_vehiclekeys:GiveKeys(handler) end)
+                    end
+                end
             end
-        end
 
-        if handler and DoesEntityExist(handler) then
-            SetEntityVisible(handler, true)
-            ResetEntityAlpha(handler)
-            SetVehicleOnGroundProperly(handler)
-            SetEntityCollision(handler, true, true)
-            SetVehicleDoorsLocked(handler, 1)
-            SetVehicleDoorsLockedForAllPlayers(handler, false)
-            SetVehicleNeedsToBeHotwired(handler, false)
-            if exports.qbx_vehiclekeys then
-                pcall(function() exports.qbx_vehiclekeys:GiveKeys(handler) end)
+            if payload.containerNetId and payload.containerNetId ~= 0 then
+                local container = WaitForNetworkEntity(payload.containerNetId, 8000)
+                if container and DoesEntityExist(container) then
+                    JobEntities.container = container
+                    SetEntityVisible(container, true)
+                    ResetEntityAlpha(container)
+                    PlaceObjectOnGroundProperly(container)
+                    SetEntityCollision(container, true, true)
+                    FreezeEntityPosition(container, true)
+                end
             end
-        end
+        end)
 
-        if container and DoesEntityExist(container) then
-            SetEntityVisible(container, true)
-            ResetEntityAlpha(container)
-            PlaceObjectOnGroundProperly(container)
-            SetEntityCollision(container, true, true)
-            FreezeEntityPosition(container, true)
-        end
-
-        -- 2. Inicialização sequencial e determinística da missão
-        StartMissionStep1(truck, trailer, forklift)
+        -- 3. Inicialização imediata, sequencial e determinística da missão (STEP_2_ENTER_TRUCK)
+        StartMissionStep1(truck, trailer, JobEntities.forklift)
     end)
 end)
 
