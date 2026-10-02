@@ -1231,6 +1231,7 @@ CreateThread(function()
         local truck = JobEntities.truck
         local hasCargo = false
 
+        -- 1. Condutor do Contrato Ativo
         if trailer and DoesEntityExist(trailer) then
             local pList = LoadedPallets or LoadedPalletData or {}
             for _, pData in ipairs(pList) do
@@ -1258,7 +1259,41 @@ CreateThread(function()
             end
         end
 
-        Wait(hasCargo and 0 or 300)
+        -- 2. Havok Shield para Clientes Espectadores (Observers próximos a qualquer reboque com carga)
+        local ped = cache.ped or PlayerPedId()
+        local pCoords = GetEntityCoords(ped)
+        local nearbyVehicles = GetGamePool('CVehicle')
+        for _, veh in ipairs(nearbyVehicles) do
+            if veh ~= trailer and DoesEntityExist(veh) and GetVehicleClass(veh) == 11 then
+                if #(pCoords - GetEntityCoords(veh)) <= 35.0 then
+                    local sBag = Entity(veh).state
+                    local lSlots = sBag and sBag.loadedSlots
+                    if lSlots and type(lSlots) == 'table' then
+                        for _, sData in pairs(lSlots) do
+                            if sData.palletNet then
+                                local pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
+                                if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
+                                    hasCargo = true
+                                    SetEntityNoCollisionEntity(pEnt, veh, true)
+                                    SetEntityNoCollisionEntity(veh, pEnt, true)
+                                end
+                            end
+                        end
+                    end
+                    local lFork = sBag and sBag.loadedForklift
+                    if lFork and lFork.forkNet then
+                        local fEnt = NetworkGetEntityFromNetworkId(lFork.forkNet)
+                        if fEnt and fEnt ~= 0 and DoesEntityExist(fEnt) then
+                            hasCargo = true
+                            SetEntityNoCollisionEntity(fEnt, veh, true)
+                            SetEntityNoCollisionEntity(veh, fEnt, true)
+                        end
+                    end
+                end
+            end
+        end
+
+        Wait(hasCargo and 0 or 250)
     end
 end)
 
@@ -2816,6 +2851,8 @@ end, false)
 local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
     if not trailerEnt or not DoesEntityExist(trailerEnt) or not sData or not sData.palletNet then return end
 
+    local isLocalDriver = (ActiveJob and ActiveJob.trailerNetId and trailerEnt and DoesEntityExist(trailerEnt) and NetworkGetEntityIsNetworked(trailerEnt) and ActiveJob.trailerNetId == NetworkGetNetworkIdFromEntity(trailerEnt))
+
     CreateThread(function()
         local timeout = 5000
         local deadline = GetGameTimer() + timeout
@@ -2836,24 +2873,37 @@ local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
 
         if not pEnt or pEnt == 0 or not DoesEntityExist(pEnt) then return end
 
-        local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
-        if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
-        if trBone == -1 then trBone = 0 end
-
         local off = sData.offset or vector3(0.0, 0.0, 0.35)
         local heading = sData.heading or 0.0
 
-        -- Blindagem OneSync: solidez física sem explosão Havok mútua com a carreta e sem atraso elástico
+        -- Decisão A1 & A2: Observer Passivo Total
+        -- O condutor local governa a autoridade; observers NUNCA requisitam controle de rede
+        if isLocalDriver then
+            if NetworkGetEntityIsNetworked(pEnt) and not NetworkHasControlOfEntity(pEnt) then
+                NetworkRequestControlOfEntity(pEnt)
+            end
+            if NetworkGetEntityIsNetworked(pEnt) then
+                SetNetworkIdCanMigrate(sData.palletNet, false)
+            end
+        end
+
+        -- Blindagem Cinemática Anti-Inércia Havok
         FreezeEntityPosition(pEnt, false)
         SetEntityDynamic(pEnt, false)
+        SetEntityHasGravity(pEnt, false)
+        SetEntityVelocity(pEnt, 0.0, 0.0, 0.0)
+
+        -- Matriz Havok Híbrida em Observers (Decisão A3):
+        -- Mantém solidez física para pedestres e anula 100% o contato com o trailer
         SetEntityCollision(pEnt, true, true)
         SetCanClimbOnEntity(pEnt, true)
         SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
         SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
 
+        -- Ancoragem padronizada no Bone 0 (Root da Entidade)
         if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
             AttachEntityToEntity(
-                pEnt, trailerEnt, trBone,
+                pEnt, trailerEnt, 0,
                 off.x, off.y, off.z,
                 0.0, 0.0, heading,
                 false, false, false, false, 2, true
@@ -2880,28 +2930,37 @@ AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _u
     if value.forkNet then
         local forkEnt = NetworkGetEntityFromNetworkId(value.forkNet)
         if forkEnt and forkEnt ~= 0 and DoesEntityExist(forkEnt) then
+            local isLocalDriver = (ActiveJob and ActiveJob.trailerNetId and trailerEnt and DoesEntityExist(trailerEnt) and NetworkGetEntityIsNetworked(trailerEnt) and ActiveJob.trailerNetId == NetworkGetNetworkIdFromEntity(trailerEnt))
+
             if not IsEntityAttachedToEntity(forkEnt, trailerEnt) then
-                local off = value.offset or vector3(0.0, -5.2, 0.35)
+                local off = value.offset or vector3(0.0, -6.6, 0.35)
                 local heading = value.heading or 0.0
 
-                local trBone = GetEntityBoneIndexByName(trailerEnt, "chassis")
-                if trBone == -1 then trBone = GetEntityBoneIndexByName(trailerEnt, "bodyshell") end
-                if trBone == -1 then trBone = 0 end
-
-                if NetworkGetEntityIsNetworked(forkEnt) and not NetworkHasControlOfEntity(forkEnt) then
-                    NetworkRequestControlOfEntity(forkEnt)
+                -- Decisão A1 & A2: Observer NUNCA solicita controle de rede da empilhadeira de outrem
+                if isLocalDriver then
+                    if NetworkGetEntityIsNetworked(forkEnt) and not NetworkHasControlOfEntity(forkEnt) then
+                        NetworkRequestControlOfEntity(forkEnt)
+                    end
+                    if NetworkGetEntityIsNetworked(forkEnt) then
+                        SetNetworkIdCanMigrate(value.forkNet, false)
+                    end
                 end
-                if NetworkGetEntityIsNetworked(forkEnt) then
-                    SetNetworkIdCanMigrate(value.forkNet, false)
-                end
 
+                -- Blindagem Cinemática Anti-Inércia
                 FreezeEntityPosition(forkEnt, false)
                 SetEntityDynamic(forkEnt, false)
-                SetEntityCollision(forkEnt, false, false)
+                SetEntityHasGravity(forkEnt, false)
+                SetEntityVelocity(forkEnt, 0.0, 0.0, 0.0)
+
+                -- Matriz Havok Híbrida (Decisão A3):
+                SetEntityCollision(forkEnt, true, true)
+                SetCanClimbOnEntity(forkEnt, true)
                 SetEntityNoCollisionEntity(forkEnt, trailerEnt, false)
                 SetEntityNoCollisionEntity(trailerEnt, forkEnt, false)
+
+                -- Ancoragem padronizada no Bone 0 (Root)
                 AttachEntityToEntity(
-                    forkEnt, trailerEnt, trBone,
+                    forkEnt, trailerEnt, 0,
                     off.x, off.y, off.z,
                     0.0, 0.0, heading,
                     false, false, false, false, 2, true

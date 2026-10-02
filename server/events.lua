@@ -178,6 +178,7 @@ RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId,
         end
         local truckEnt = NetworkGetEntityFromNetworkId(tonumber(truckNetId))
         if truckEnt and DoesEntityExist(truckEnt) then
+            if LockEntityNetworkOwner then LockEntityNetworkOwner(truckEnt, src) end
             pcall(function()
                 if exports['qbx_vehiclekeys'] then
                     exports['qbx_vehiclekeys']:GiveKeys(src, truckEnt)
@@ -187,12 +188,28 @@ RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId,
     end
     if trailerNetId and tonumber(trailerNetId) then
         VP_Trucker.PlayerJobEntities[citizenId].trailerNetId = tonumber(trailerNetId)
+        local trEnt = NetworkGetEntityFromNetworkId(tonumber(trailerNetId))
+        if trEnt and DoesEntityExist(trEnt) then
+            if LockEntityNetworkOwner then LockEntityNetworkOwner(trEnt, src) end
+        end
     end
     if forkliftNetId and tonumber(forkliftNetId) then
         VP_Trucker.PlayerJobEntities[citizenId].forkliftNetId = tonumber(forkliftNetId)
+        local fEnt = NetworkGetEntityFromNetworkId(tonumber(forkliftNetId))
+        if fEnt and DoesEntityExist(fEnt) then
+            if LockEntityNetworkOwner then LockEntityNetworkOwner(fEnt, src) end
+        end
     end
     if palletNetIds and type(palletNetIds) == 'table' then
         VP_Trucker.PlayerJobEntities[citizenId].palletNetIds = palletNetIds
+        for _, pNet in ipairs(palletNetIds) do
+            if pNet and tonumber(pNet) then
+                local pEnt = NetworkGetEntityFromNetworkId(tonumber(pNet))
+                if pEnt and DoesEntityExist(pEnt) then
+                    if LockEntityNetworkOwner then LockEntityNetworkOwner(pEnt, src) end
+                end
+            end
+        end
     end
 end)
 

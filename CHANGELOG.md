@@ -1,5 +1,16 @@
 # Changelog — AUST_trucker
 
+## [20.5.0] — 2026-10-02 — Blindagem Anti-Desync de Proximidade (OneSync Observer Shield, Lock de Propriedade de Rede Server-Side & Matriz Havok Passiva)
+
+### 🌐 Governança de Rede OneSync & Prevenção de Migração por Proximidade (A1)
+- **Lock Autoritativo Server-Side (`SetEntityOwner`):** Criado helper autoritativo `LockEntityNetworkOwner(entity, src)` no servidor (`server/main.lua`, `server/events.lua`). Todas as entidades geradas na missão (`truck`, `trailer`, `forklift`, `pallets`, `container`, `carrierCars`) têm sua titularidade de rede travada estritamente no motorista contratante no momento do spawn e reafirmada em `registerJobEntities` e `HandlePalletLoaded`.
+- **Desativação Total de Migração de Rede (`SetNetworkIdCanMigrate = false`):** O OneSync Infinity fica proibido de transferir a propriedade de rede das entidades da carga para outros jogadores (observers) que se aproximem do reboque, eliminando a disputa de pacotes físicos e a perda de autoridade do condutor.
+
+### 👥 Comportamento de Clientes Espectadores / Observers (A2 & A3)
+- **Observer Passivo Total nos StateBags:** Refatorados `AddStateBagChangeHandler('loadedSlots')` e `'loadedForklift'` em `client/main.lua`. Clientes observadores (terceiros) **nunca mais** requisitam controle de rede (`NetworkRequestControlOfEntity`) sobre a carga alheia. Apenas aplicam o anexo passivo no **Bone 0** (`AttachEntityToEntity`) mantendo cinemática rígida (`SetEntityDynamic = false`, gravidade e velocidade nulas) e `FreezeEntityPosition = false`.
+- **Havok Shield Contínuo para Observers:** A thread de anulação contínua de colisão mútua por frame (`Wait(0)`) foi estendida para inspecionar reboques com carga num raio de até 35 metros ao redor de qualquer jogador. A engine Havok de observers próximos agora executa `SetEntityNoCollisionEntity(pEnt, veh, true)` a cada tick, impedindo 100% de qualquer colisão física, empurrão ou trepidação entre a carga e o reboque no client de observadores.
+- **Matriz Havok Híbrida em Observers:** A carga mantém colisão ativa com o mundo e com o pedestre do observer (`SetEntityCollision = true`, `SetCanClimbOnEntity = true`), permitindo que terceiros subam ou inspecionem a carga fisicamente sem causar qualquer desestabilização no caminhão em movimento.
+
 ## [20.4.0] — 2026-10-02 — Padronização de Ancoragem Bone 0, Embarque Contínuo da Forklift [G] e Resolução Hierárquica Dupla
 
 ### 🚜 Sistema de Posicionamento & Ancoragem de Cargas (Bone 0 / Root)

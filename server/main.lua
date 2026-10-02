@@ -47,6 +47,24 @@ function GetCharName(src)
     return GetPlayerName(src) or ('Jogador #' .. src)
 end
 
+-- Helper OneSync: Trava autoritativa de propriedade de rede no motorista (Anti-Desync de Proximidade / Observers)
+function LockEntityNetworkOwner(entity, src)
+    if not entity or not DoesEntityExist(entity) then return end
+    pcall(function()
+        if SetEntityOwner then
+            SetEntityOwner(entity, src)
+        end
+    end)
+    pcall(function()
+        local netId = NetworkGetNetworkIdFromEntity(entity)
+        if netId and netId ~= 0 then
+            SetNetworkIdCanMigrate(netId, false)
+        end
+    end)
+end
+_G.LockEntityNetworkOwner = LockEntityNetworkOwner
+
+
 -- Carrega todas as empresas do DB para o cache em memória
 local function LoadCompanies()
     local companies = MySQL.query.await('SELECT * FROM trucker_companies') or {}
@@ -937,6 +955,30 @@ local function StartTruckDelivery(src, contractData)
     PolarixLobbies[jobId] = lobbyData
     PlayerPolarixLobbies[citizenId] = jobId
 
+    -- BLINDAGEM ONESYNC: Trava de Autoridade Server-Side no Motorista (A1)
+    -- Impede que observadores próximos roubem a propriedade de rede das entidades da carga
+    LockEntityNetworkOwner(truck, src)
+    LockEntityNetworkOwner(trailer, src)
+    if forklift and DoesEntityExist(forklift) then
+        LockEntityNetworkOwner(forklift, src)
+    end
+    if handler and DoesEntityExist(handler) then
+        LockEntityNetworkOwner(handler, src)
+    end
+    if containerObj and DoesEntityExist(containerObj) then
+        LockEntityNetworkOwner(containerObj, src)
+    end
+    if carrierCars and #carrierCars > 0 then
+        for _, car in ipairs(carrierCars) do
+            if DoesEntityExist(car) then LockEntityNetworkOwner(car, src) end
+        end
+    end
+    if pallets and #pallets > 0 then
+        for _, pObj in ipairs(pallets) do
+            if DoesEntityExist(pObj) then LockEntityNetworkOwner(pObj, src) end
+        end
+    end
+
     -- StateBag Autoritativo Global de Frete (OneSync Infinity)
     if truck and DoesEntityExist(truck) then
         Entity(truck).state:set('activeJobData', {
@@ -1112,6 +1154,13 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
             heading = h
         }
         Entity(trailerEnt).state:set('loadedSlots', curSlots, true)
+
+        if pNet then
+            local pEnt = NetworkGetEntityFromNetworkId(pNet)
+            if pEnt and DoesEntityExist(pEnt) then
+                LockEntityNetworkOwner(pEnt, src)
+            end
+        end
     end
 
     TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
