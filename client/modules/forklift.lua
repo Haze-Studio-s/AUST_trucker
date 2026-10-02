@@ -108,38 +108,51 @@ function ForkliftModule.GetCurrentSlotIndex()
     return CurrentSlotIndex
 end
 
+local function ResolveTrailerModel(trailer)
+    if not trailer then return nil end
+    if type(trailer) == 'number' then
+        if DoesEntityExist(trailer) then
+            return GetEntityModel(trailer)
+        end
+        return trailer
+    elseif type(trailer) == 'string' then
+        return tonumber(trailer) or joaat(trailer:lower())
+    end
+    return nil
+end
+
 function ForkliftModule.GetSlotOffset(trailer, slotIndex)
-    if trailer and DoesEntityExist(trailer) then
-        local tModel = GetEntityModel(trailer)
-        if Config and Config.TrailerSlots then
-            -- 1. Verificação direta por hash da entidade
-            if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].pallets then
-                local off = Config.TrailerSlots[tModel].pallets[slotIndex] or Config.TrailerSlots[tModel].pallets[tostring(slotIndex)]
+    local tModel = ResolveTrailerModel(trailer)
+    if tModel and Config and Config.TrailerSlots then
+        -- 1. Verificação direta por hash numérico ou chave string
+        local slotData = Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel)]
+        if slotData and slotData.pallets then
+            local off = slotData.pallets[slotIndex] or slotData.pallets[tostring(slotIndex)]
+            if off then
+                local h = (type(off) == 'table' and off.heading) or 0.0
+                return off, h
+            end
+        end
+        -- 2. Varredura flexível por nome de modelo ou hash
+        for modelKey, sData in pairs(Config.TrailerSlots) do
+            local numKey = tonumber(modelKey)
+            local keyHash = numKey or joaat(tostring(modelKey):lower())
+            if keyHash == tModel and sData.pallets then
+                local off = sData.pallets[slotIndex] or sData.pallets[tostring(slotIndex)]
                 if off then
                     local h = (type(off) == 'table' and off.heading) or 0.0
                     return off, h
                 end
             end
-            -- 2. Varredura flexível por nome de modelo (string) ou hash numérico
-            for modelKey, slotData in pairs(Config.TrailerSlots) do
-                local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
-                if keyHash == tModel and slotData.pallets then
-                    local off = slotData.pallets[slotIndex] or slotData.pallets[tostring(slotIndex)]
-                    if off then
-                        local h = (type(off) == 'table' and off.heading) or 0.0
-                        return off, h
-                    end
-                end
-            end
         end
-        if Config and Config.Polarix and Config.Polarix.CompatibleTrailers then
-            for modelName, tData in pairs(Config.Polarix.CompatibleTrailers) do
-                if joaat(modelName) == tModel and tData.attachOffsets then
-                    local off = tData.attachOffsets[slotIndex]
-                    if off then
-                        local h = (type(off) == 'table' and off.heading) or 0.0
-                        return off, h
-                    end
+    end
+    if Config and Config.Polarix and Config.Polarix.CompatibleTrailers and tModel then
+        for modelName, tData in pairs(Config.Polarix.CompatibleTrailers) do
+            if joaat(modelName) == tModel and tData.attachOffsets then
+                local off = tData.attachOffsets[slotIndex]
+                if off then
+                    local h = (type(off) == 'table' and off.heading) or 0.0
+                    return off, h
                 end
             end
         end
@@ -153,25 +166,30 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
 end
 
 function ForkliftModule.GetForkliftSlotOffset(trailer)
-    if trailer and DoesEntityExist(trailer) then
-        local tModel = GetEntityModel(trailer)
-        if Config and Config.TrailerSlots then
-            -- 1. Verificação direta por hash
-            if Config.TrailerSlots[tModel] and Config.TrailerSlots[tModel].forklift then
-                local off = Config.TrailerSlots[tModel].forklift
+    local tModel = ResolveTrailerModel(trailer)
+    if tModel and Config and Config.TrailerSlots then
+        -- 1. Verificação direta por hash numérico ou chave string
+        local slotData = Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel)]
+        if slotData and slotData.forklift then
+            local off = slotData.forklift
+            local h = (type(off) == 'table' and off.heading) or 0.0
+            return off, h
+        end
+        -- 2. Varredura flexível por nome ou hash numérico
+        for modelKey, sData in pairs(Config.TrailerSlots) do
+            local numKey = tonumber(modelKey)
+            local keyHash = numKey or joaat(tostring(modelKey):lower())
+            if keyHash == tModel and sData.forklift then
+                local off = sData.forklift
                 local h = (type(off) == 'table' and off.heading) or 0.0
                 return off, h
             end
-            -- 2. Varredura flexível por nome ou hash
-            for modelKey, slotData in pairs(Config.TrailerSlots) do
-                local keyHash = (type(modelKey) == 'number') and modelKey or joaat(tostring(modelKey):lower())
-                if keyHash == tModel and slotData.forklift then
-                    local off = slotData.forklift
-                    local h = (type(off) == 'table' and off.heading) or 0.0
-                    return off, h
-                end
-            end
         end
+    end
+
+    -- Fallback contextual para carretas longas comuns (trailers2, trailers)
+    if tModel == joaat('trailers2') or tModel == joaat('trailers') then
+        return { x = 0.0, y = -6.6, z = 0.35, heading = 0.0 }, 0.0
     end
     local fallback = { x = 0.0, y = -5.2, z = 0.35, heading = 0.0 }
     return fallback, 0.0
@@ -264,18 +282,14 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    local trBone = GetEntityBoneIndexByName(targetTrailer, "chassis")
-    if trBone == -1 then trBone = GetEntityBoneIndexByName(targetTrailer, "bodyshell") end
-    if trBone == -1 then trBone = 0 end
-
-    -- Ancoragem física rígida OneSync: trava milimétrica na malha sem soft-pinning (elimina atraso elástico)
-    -- collision = false no AttachEntityToEntity desativa a física mútua palete <-> trailer
+    -- Ancoragem padronizada rígida OneSync no Bone 0 (Root da Entidade) sem soft-pinning
+    -- Garante correspondência 1:1 absoluta com as coordenadas do Gizmo 3D e do Holograma Fantasma
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
     SetEntityVelocity(palletEntity, 0.0, 0.0, 0.0)
     AttachEntityToEntity(
-        palletEntity, targetTrailer, trBone,
+        palletEntity, targetTrailer, 0,
         slotOffset.x, slotOffset.y, slotOffset.z,
         0.0, 0.0, slotHeading,
         false, false, false, false, 2, true
@@ -344,6 +358,86 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     return true, slotOffset, slotHeading
 end
 
+function ForkliftModule.SnapForkliftToSlot(forkliftEntity, trailer)
+    if not forkliftEntity or not DoesEntityExist(forkliftEntity) then
+        return false
+    end
+
+    local targetTrailer = (trailer and DoesEntityExist(trailer) and trailer) or (_G.JobEntities and _G.JobEntities.trailer)
+    if not targetTrailer or not DoesEntityExist(targetTrailer) then
+        print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento da empilhadeira.")
+        return false
+    end
+
+    local forkOffset, forkHeading = ForkliftModule.GetForkliftSlotOffset(targetTrailer)
+    forkHeading = forkHeading or (type(forkOffset) == 'table' and forkOffset.heading) or 0.0
+
+    -- Se o jogador estiver na empilhadeira, desembarca ordenadamente
+    local ped = cache.ped or PlayerPedId()
+    if GetVehiclePedIsIn(ped, false) == forkliftEntity then
+        TaskLeaveVehicle(ped, forkliftEntity, 16)
+        Wait(400)
+    end
+
+    -- Controle de rede antes do acoplamento
+    local timeout = 1500
+    while not NetworkHasControlOfEntity(forkliftEntity) and timeout > 0 do
+        NetworkRequestControlOfEntity(forkliftEntity)
+        Wait(30)
+        timeout = timeout - 30
+    end
+
+    DetachEntity(forkliftEntity, true, true)
+
+    -- Ancoragem padronizada rígida OneSync no Bone 0 (Root) sem soft-pinning
+    FreezeEntityPosition(forkliftEntity, false)
+    SetEntityDynamic(forkliftEntity, false)
+    SetEntityHasGravity(forkliftEntity, false)
+    SetEntityVelocity(forkliftEntity, 0.0, 0.0, 0.0)
+    AttachEntityToEntity(
+        forkliftEntity, targetTrailer, 0,
+        forkOffset.x, forkOffset.y, forkOffset.z,
+        0.0, 0.0, forkHeading,
+        false, false, false, false, 2, true
+    )
+
+    -- Blindagem Havok & Matriz de Colisão Híbrida:
+    -- Mantém colisão ativa com o jogador para poder inspecionar/amarrar a pé
+    -- e anula atrito e contato contra o trailer e o caminhão
+    SetEntityAsMissionEntity(forkliftEntity, true, true)
+    SetEntityLodDist(forkliftEntity, 0xFFFF)
+    FreezeEntityPosition(forkliftEntity, false)
+    SetEntityDynamic(forkliftEntity, false)
+    SetEntityCollision(forkliftEntity, true, true)
+    SetCanClimbOnEntity(forkliftEntity, true)
+    SetEntityNoCollisionEntity(forkliftEntity, targetTrailer, false)
+    SetEntityNoCollisionEntity(targetTrailer, forkliftEntity, false)
+    local truck = _G.JobEntities and _G.JobEntities.truck
+    if truck and DoesEntityExist(truck) then
+        SetEntityNoCollisionEntity(forkliftEntity, truck, false)
+        SetEntityNoCollisionEntity(truck, forkliftEntity, false)
+    end
+
+    if NetworkGetEntityIsNetworked(forkliftEntity) then
+        SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(forkliftEntity), false)
+    end
+
+    if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(forkliftEntity) then
+        local fNet = NetworkGetNetworkIdFromEntity(forkliftEntity)
+        Entity(targetTrailer).state:set('loadedForklift', {
+            forkNet = fNet,
+            offset = { x = forkOffset.x, y = forkOffset.y, z = forkOffset.z },
+            heading = forkHeading
+        }, true)
+    end
+
+    _G.ForkliftLoadedOnTrailer = true
+
+    -- Deleta o holograma da empilhadeira
+    ForkliftModule.DeleteGhostProp()
+    return true, forkOffset, forkHeading
+end
+
 local function AttachPalletToForklift(forklift, pallet)
     -- 1. Garante controle de rede sobre o prop
     local timeout = 2000
@@ -386,6 +480,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     TargetTrailerEntity = trailer
     CurrentSlotIndex = 1
     local loadedCount = 0
+    local awaitingForkliftDock = false
 
     CreateThread(function()
         -- Lock 2: Coroutine Sequencial & Yield Bloqueante antes de Instanciar o Primeiro Fantasma
@@ -397,18 +492,22 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
             if ok and res and res.all then
                 for mKey, data in pairs(res.all) do
-                    local h = (type(mKey) == 'number') and mKey or joaat(tostring(mKey):lower())
+                    local numKey = tonumber(mKey)
+                    local h = numKey or joaat(tostring(mKey):lower())
                     if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
                     if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
+                    if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
                     for idx, v in pairs(data.pallets or {}) do
                         local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
                         Config.TrailerSlots[h].pallets[tonumber(idx)] = slotEntry
                         Config.TrailerSlots[mKey].pallets[tonumber(idx)] = slotEntry
+                        if numKey then Config.TrailerSlots[numKey].pallets[tonumber(idx)] = slotEntry end
                     end
                     if data.forklift then
                         local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
                         Config.TrailerSlots[h].forklift = slotEntry
                         Config.TrailerSlots[mKey].forklift = slotEntry
+                        if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
                     end
                 end
                 print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7")
@@ -426,7 +525,53 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             local forklift = ForkliftModule.GetPlayerForklift()
 
             if forklift and DoesEntityExist(forklift) then
-                if not CurrentForkliftPallet then
+                if awaitingForkliftDock then
+                    -- Caso 3: Embarque Contínuo da Empilhadeira na Traseira via [G]
+                    if trailer and DoesEntityExist(trailer) then
+                        local fCoords = GetEntityCoords(forklift)
+                        local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, fCoords.x, fCoords.y, fCoords.z)
+                        local fSlotOffset, fSlotHeading = ForkliftModule.GetForkliftSlotOffset(trailer)
+                        local targetX = (type(fSlotOffset) == 'table' and fSlotOffset.x) or 0.0
+                        local targetY = (type(fSlotOffset) == 'table' and fSlotOffset.y) or -5.5
+                        local targetZ = (type(fSlotOffset) == 'table' and fSlotOffset.z) or 0.35
+
+                        local dx = math.abs(relPos.x - targetX)
+                        local dy = math.abs(relPos.y - targetY)
+                        local dz = math.abs(relPos.z - targetZ)
+
+                        if dx <= 2.2 and dy <= 3.2 and dz <= 2.5 then
+                            sleep = 0
+                            if TextUIShowing ~= 'dock_forklift' then
+                                lib.showTextUI('[G] Embarcar Empilhadeira no Reboque', { position = 'left-center', icon = 'truck-ramp-box' })
+                                TextUIShowing = 'dock_forklift'
+                            end
+
+                            if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
+                                if TextUIShowing then
+                                    lib.hideTextUI()
+                                    TextUIShowing = nil
+                                end
+                                local ok = ForkliftModule.SnapForkliftToSlot(forklift, trailer)
+                                if ok then
+                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                    if _G.SendMissionNotify then
+                                        _G.SendMissionNotify('Central Logística', 'Empilhadeira embarcada com sucesso! Ajuste as cintas de amarração.', 'success')
+                                    end
+                                    OperationActive = false
+                                    if onAllLoadedCb then
+                                        onAllLoadedCb()
+                                    end
+                                    break
+                                end
+                            end
+                        else
+                            if TextUIShowing == 'dock_forklift' then
+                                lib.hideTextUI()
+                                TextUIShowing = nil
+                            end
+                        end
+                    end
+                elseif not CurrentForkliftPallet then
                     -- Caso 1: Buscar palete no chão
                     local targetPallet = ForkliftModule.GetNearestGroundPallet(forklift)
                     if targetPallet and DoesEntityExist(targetPallet) then
@@ -498,16 +643,29 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     end
 
                                     if loadedCount < requiredCount then
-                                        -- Spawna o holograma no próximo slot sequencial
+                                        -- Spawna o holograma no próximo slot sequencial de palete
                                         local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
                                         ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
                                     else
-                                        -- Todos os paletes carregados com sucesso
-                                        ForkliftModule.StopOperation()
-                                        if onAllLoadedCb then
-                                            onAllLoadedCb()
+                                        -- Todos os paletes estivados!
+                                        local hasForklift = (_G.ActiveJob and _G.ActiveJob.withForklift) or (_G.JobEntities and _G.JobEntities.forklift and DoesEntityExist(_G.JobEntities.forklift))
+                                        if hasForklift then
+                                            -- GATILHO IMEDIATO DO FANTASMA DA EMPILHADEIRA (Embarque Contínuo)
+                                            awaitingForkliftDock = true
+                                            ForkliftModule.SpawnForkliftGhost(trailer)
+                                            if _G.UpdateMissionObjective and _G.JobEntities and _G.JobEntities.trailer then
+                                                _G.UpdateMissionObjective('forklift_dock', _G.JobEntities.trailer, 'Embarcar Empilhadeira no Reboque [G]')
+                                            end
+                                            if _G.SendMissionNotify then
+                                                _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [G] para embarcar.', 'info')
+                                            end
+                                        else
+                                            ForkliftModule.StopOperation()
+                                            if onAllLoadedCb then
+                                                onAllLoadedCb()
+                                            end
+                                            break
                                         end
-                                        break
                                     end
                                 end
                             end

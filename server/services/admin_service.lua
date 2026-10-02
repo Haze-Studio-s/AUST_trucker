@@ -141,13 +141,15 @@ function AdminService.ReloadTrailerOffsets()
         end
     end
 
-    -- Dual-indexação por hash para compatibilidade absoluta com queries do cliente
+    -- Dual-indexação limpa em tabela desacoplada (evita mutação durante o pairs)
+    local dualMap = {}
     for model, data in pairs(offsetMap) do
+        dualMap[model] = data
         local h = joaat(model)
-        offsetMap[h] = data
-        offsetMap[tostring(h)] = data
+        dualMap[h] = data
+        dualMap[tostring(h)] = data
     end
-    AdminService.TrailerOffsets = offsetMap
+    AdminService.TrailerOffsets = dualMap
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
     if Config and Config.TrailerSlots then
@@ -159,7 +161,7 @@ function AdminService.ReloadTrailerOffsets()
             if not Config.TrailerSlots[model] then
                 Config.TrailerSlots[model] = { pallets = {}, forklift = nil }
             end
-            for idx, vec in pairs(data.pallets) do
+            for idx, vec in pairs(data.pallets or {}) do
                 local slotEntry = { x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
                 Config.TrailerSlots[hash].pallets[tonumber(idx)] = slotEntry
                 Config.TrailerSlots[model].pallets[tonumber(idx)] = slotEntry
@@ -172,7 +174,7 @@ function AdminService.ReloadTrailerOffsets()
         end
     end
 
-    return offsetMap
+    return dualMap
 end
 
 MySQL.ready(function()

@@ -1,5 +1,17 @@
 # Changelog — AUST_trucker
 
+## [20.4.0] — 2026-10-02 — Padronização de Ancoragem Bone 0, Embarque Contínuo da Forklift [G] e Resolução Hierárquica Dupla
+
+### 🚜 Sistema de Posicionamento & Ancoragem de Cargas (Bone 0 / Root)
+- **Padronização Estrita no Bone 0:** Unificada a ancoragem de paletes e empilhadeiras (`AttachEntityToEntity`) para utilizar invariavelmente o **Bone 0 (Root da Entidade)** em todas as fases do ciclo de vida: estiva (`SnapPalletToCurrentSlot`, `SnapForkliftToSlot`), amarração individual a pé (`ExecutePalletTie`, `ExecuteForkliftTie`), início de viagem rodoviária (`StartDeliveryRoute`) e laço de sincronização de trânsito (`Sync Anchor`). Elimina o deslocamento relativo causado pelo osso secundário `"chassis"`, alcançando correspondência milimétrica 1:1 com o Gizmo 3D do `truckeradmin` e os hologramas fantasmas.
+- **Resolução Hierárquica Dupla de Offsets:** O motor de resolução (`ForkliftModule.GetForkliftSlotOffset` e `GetSlotOffset`) agora normaliza e inspeciona chaves de entidade, modelos string (`"trailers2"`) e hashes numéricos (`joaat`), garantindo que os offsets salvos pelo Administrador no MySQL sobrescrevam com prioridade absoluta qualquer valor nativo ou fallback.
+- **Fallback Contextual Inteligente:** Reboques de grande porte (`trailers2`, `trailers`) possuem fallback proporcional ajustado para a traseira (`y = -6.6`), eliminando a sobreposição de carga causada pelo fallback genérico curto (`-5.2`).
+
+### 📦 Fluxo Operacional & Embarque Contínuo da Empilhadeira (Tecla [G])
+- **Gatilho Imediato do Fantasma Traseiro:** Ao estivar o último palete exigido pelo frete, o holograma do palete é finalizado e o holograma fantasma da empilhadeira surge instantaneamente na caçamba do reboque na posição exata calibrada.
+- **Embarque Direto da Cabine [G]:** O jogador pilota a empilhadeira até a traseira da carreta sobre o fantasma; ao aproximar-se da vaga, a interface exibe `[G] Embarcar Empilhadeira no Reboque`. O acionamento executa `SnapForkliftToSlot`, desembarca o condutor ordenadamente com `TaskLeaveVehicle`, acopla a empilhadeira sem soft-pinning no Bone 0 e avança o fluxo diretamente para a amarração com cintas a pé.
+- **Compatibilidade Bidirecional:** Mantido suporte ao acoplamento manual a pé via menu de contexto `ox_target` para situações em que o condutor optar por descer da máquina antes do embarque.
+
 ## [20.3.0] — 2026-10-02 — Cinemática Rígida Anti-Inércia, Zero-Desync na Arrancada & OneSync Handoff
 
 ### 🚚 Física Havok & Estabilidade de Carga (Micro-Desync Zero)

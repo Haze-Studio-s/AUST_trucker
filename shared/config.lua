@@ -518,4 +518,13 @@ Config.TrailerSlots = {
     }
 }
 
+-- Auto-registro por Hash numérico para acesso O(1) de alta performance em tempo de execução
+for modelName, data in pairs(Config.TrailerSlots) do
+    if type(modelName) == 'string' then
+        local h = joaat(modelName:lower())
+        Config.TrailerSlots[h] = data
+    end
+end
+
+
 
