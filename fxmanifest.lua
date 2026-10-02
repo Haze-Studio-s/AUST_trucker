@@ -105,6 +105,7 @@ files {
     'html/img/trailers/*',
     'html/img/trucks/*',
     'html/assets/*',
+    'html/vendor/**/*',
     'data/*.meta',
 }
 
