@@ -98,9 +98,9 @@ Arquivo alterado:
 - **Exame ADR**: servidor sorteia as perguntas; gabarito só em `server/adr_questions.lua`.
 - **`PayPending`** no login; **webhook** do Parcel lido só no servidor; **`playerDropped`** com cache `src -> citizenid`.
 - Removidos `truck_logistics:deliveredCargo`, `server/schema.lua` e `fxmanifest.lua.disabled`.
+- **Deploy**: `easingthemes/ssh-deploy` fixada no SHA do commit da release v5.1.2 (`922253577e23…`), confirmado em `git ls-remote`; mesmos inputs da v5.1.0, só troca o runtime da action de node20 para node24.
 
 ### Ainda em aberto
 
-- Pin da action `easingthemes/ssh-deploy` por SHA de commit (hoje por tag `v5.1.0`; o SHA não pôde ser obtido nesta sessão — verificar e fixar).
 - Validar in-game: CSP da NUI, fontes/ícones locais, comandos de cancelamento, calote (débito automático) e exame ADR (não testado em runtime).
 - Residuais conhecidos, sem correção: strings do backend ainda hardcoded em PT (`lang/` cobre ~20 chaves); locales `de/es/fr/ja/no/zh-cn` em `html/lang/` não são carregados; `client/client.lua` e `client/main.lua` (3k+ linhas) com lógica duplicada; tabelas duplicadas (`trucker_drivers` × `trucker_npc_drivers`, `trucker_player_progression` × `aust_trucker_stats`); reembolso do aluguel e combustível/integridade dependem de estado de entidades controladas pelo client; senha de party em memória (comparação em tempo constante + limite de tentativas, sem hash).
