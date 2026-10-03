@@ -569,13 +569,27 @@ function DB_GetCompany(companyId)
     )
 end
 
-function DB_UpdateCompanyBalance(companyId, amount)
+function DB_UpdateCompanyBalance(companyId, amount, allowNegative)
     -- amount pode ser negativo (saque) ou positivo (depósito)
     -- M-11: capturar affected rows — retorna nil em falha (empresa não encontrada ou DB error)
-    local affected = MySQL.update.await(
-        'UPDATE trucker_companies SET balance = balance + ? WHERE id = ?',
-        { amount, companyId }
-    )
+    -- Débitos são atômicos: só aplicam se balance >= valor (retorna nil caso contrário),
+    -- evitando saldo negativo por chamadas concorrentes. `allowNegative` (true) mantém o
+    -- comportamento antigo para multas/penalidades que podem deixar o saldo negativo.
+    if type(amount) ~= 'number' or amount ~= amount or amount == math.huge or amount == -math.huge then
+        return nil
+    end
+    local affected
+    if amount < 0 and not allowNegative then
+        affected = MySQL.update.await(
+            'UPDATE trucker_companies SET balance = balance - ? WHERE id = ? AND balance >= ?',
+            { -amount, companyId, -amount }
+        )
+    else
+        affected = MySQL.update.await(
+            'UPDATE trucker_companies SET balance = balance + ? WHERE id = ?',
+            { amount, companyId }
+        )
+    end
     if not affected or affected == 0 then return nil end
     return MySQL.scalar.await(
         'SELECT balance FROM trucker_companies WHERE id = ? LIMIT 1',
@@ -968,14 +982,21 @@ function DB_GetActiveCompanyLoan(companyId)
     )
 end
 
+-- Retorna o nº de linhas afetadas (0 = empréstimo não está mais 'active', ex.: já quitado
+-- por uma chamada concorrente). Chamadores devem checar e reverter efeitos colaterais.
 function DB_UpdateLoanBalance(loanId, newBalance, newStatus, nextPaymentAt)
     -- nextPaymentAt may be nil (for paid loans); FROM_UNIXTIME(NULL) = NULL in MySQL
-    MySQL.update.await(
+    return MySQL.update.await(
         [[UPDATE trucker_loans
           SET remaining_balance = ?, status = ?, next_payment_at = FROM_UNIXTIME(?)
-          WHERE id = ?]],
+          WHERE id = ? AND status = 'active']],
         { newBalance, newStatus, nextPaymentAt, loanId }
     )
+end
+
+-- Remove um empréstimo recém-criado cujo desembolso falhou (rollback)
+function DB_DeleteLoan(loanId)
+    MySQL.update.await('DELETE FROM trucker_loans WHERE id = ?', { loanId })
 end
 
 function DB_GetOverdueLoans()
@@ -1174,6 +1195,18 @@ function DB_SetIndustryOwner(industryId, ownerCitizenId, companyId, purchasePric
             purchase_price  = VALUES(purchase_price)]],
         { industryId, ownerCitizenId, companyId, purchasePrice }
     )
+end
+
+-- Reivindica atomicamente uma indústria: INSERT sem upsert. A PK (industry_id) garante que
+-- só uma empresa vence; retorna false se já existe dono (ou em erro de DB).
+function DB_TryClaimIndustry(industryId, ownerCitizenId, companyId, purchasePrice)
+    local ok, affected = pcall(MySQL.update.await,
+        [[INSERT IGNORE INTO trucker_industry_ownership
+            (industry_id, owner_citizenid, company_id, purchase_price)
+          VALUES (?, ?, ?, ?)]],
+        { industryId, ownerCitizenId, companyId, purchasePrice }
+    )
+    return ok and (affected or 0) > 0
 end
 
 -- Remove ownership (venda/abandono)
@@ -1610,6 +1643,16 @@ function DB_SetCargoFailed(jobId)
 end
 
 -- Atualiza GPS tracker de um veículo de empresa (por plate)
+-- Reivindica atomicamente a instalação do GPS: só tem sucesso (true) se o veículo
+-- pertence à empresa e ainda não tem tracker. Evita cobrança dupla em chamadas simultâneas.
+function DB_ClaimGpsTracker(plate, companyId)
+    local affected = MySQL.update.await(
+        'UPDATE trucker_company_vehicles SET has_gps_tracker = 1 WHERE plate = ? AND company_id = ? AND has_gps_tracker = 0',
+        { plate, companyId }
+    )
+    return (affected or 0) > 0
+end
+
 function DB_SetGpsTracker(plate, enabled)
     MySQL.update.await(
         'UPDATE trucker_company_vehicles SET has_gps_tracker = ? WHERE plate = ?',

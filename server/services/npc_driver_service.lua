@@ -364,7 +364,7 @@ function NpcDriverService._HandleGraveEvent(driver, npcJob, eventType)
         payload.bribeAmount = Config.NpcDrivers.graveEvents.contraband_caught.bribeAmount
         -- Efeitos imediatos
         DB_UpdateCompanyReputation(npcJob.company_id, -Config.NpcDrivers.contraband.reputationPenalty)
-        DB_UpdateCompanyBalance(npcJob.company_id, -Config.NpcDrivers.contraband.fineAmount)
+        DB_UpdateCompanyBalance(npcJob.company_id, -Config.NpcDrivers.contraband.fineAmount, true) -- multa: pode deixar saldo negativo
         if VP_Trucker.Companies[npcJob.company_id] then
             VP_Trucker.Companies[npcJob.company_id].balance =
                 (VP_Trucker.Companies[npcJob.company_id].balance or 0) - Config.NpcDrivers.contraband.fineAmount

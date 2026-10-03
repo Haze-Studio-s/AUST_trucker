@@ -1373,8 +1373,19 @@ lib.callback.register('aurp_trucker:purchaseGpsTracker', function(src, plate)
         return false, ('Saldo insuficiente. Necessário: $%d'):format(price)
     end
 
-    CompanyService.UpdateBalance(company.id, -price)
-    DB_SetGpsTracker(plate, true)
+    -- Atômico: 1) reivindica a instalação (só um chamador vence), 2) debita com
+    -- 'balance >= preço'; se o débito falhar, desfaz a reivindicação.
+    if not DB_ClaimGpsTracker(plate, company.id) then
+        return false, 'Este veículo já tem GPS tracker instalado.'
+    end
+    local newBalance = DB_UpdateCompanyBalance(company.id, -price)
+    if not newBalance then
+        DB_SetGpsTracker(plate, false)
+        return false, ('Saldo insuficiente. Necessário: $%d'):format(price)
+    end
+    if VP_Trucker.Companies[company.id] then
+        VP_Trucker.Companies[company.id].balance = newBalance
+    end
 
     return true, ('GPS Tracker instalado em %s — $%d debitados da empresa.'):format(plate, price)
 end)

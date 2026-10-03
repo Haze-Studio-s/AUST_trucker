@@ -1797,6 +1797,72 @@ end)
 local CompletingContractsLock = {}
 
 -- ========================================================
+-- PROVA DE ENTREGA (contratos LC / quick job / caminhão próprio)
+-- Os eventos finishQuickJobContract / finishOwnedTruckContract / completeLCContract são
+-- disparáveis pelo client; sem esta validação bastava iniciar um contrato e finalizá-lo
+-- de qualquer lugar, na hora. Falha fechada: sem destino resolvido, não paga.
+-- ========================================================
+local LC_DELIVERY_RADIUS      = 35.0    -- m, jogador até o ponto de entrega
+local LC_TRUCK_RADIUS         = 75.0    -- m, caminhão (quando rastreado pelo servidor) até o ponto
+local LC_MIN_SECONDS          = 20      -- piso do tempo mínimo de contrato
+local LC_MAX_SPEED_MS         = 50.0    -- m/s (~180 km/h) usado no tempo mínimo por distância
+
+local function ResolveLCDestination(row)
+    local info = ActiveLCContractData[row.id]
+    if info and info.deliveryCoords then
+        local c = info.deliveryCoords
+        if c.x and c.y and c.z then return vector3(c.x, c.y, c.z) end
+    end
+    -- Reconstrói do índice gravado no job (dest_N), igual à criação do contrato
+    local idx = tonumber(tostring(row.dest_id or ''):match('^dest_(%d+)$'))
+    local locs = Config.LC_DeliveryLocations
+    if idx and locs and locs[idx] then
+        local c = locs[idx]
+        return vector3(c.x, c.y, c.z)
+    end
+    return nil
+end
+
+-- Retorna true, ou false + motivo (texto para log; o jogador recebe mensagem genérica)
+local function ValidateLCDelivery(src, citizenId, row)
+    -- Só contratos LC (ids lc_ / lc_party_); jobs normais passam por JobService.Complete
+    if type(row.id) ~= 'string' or row.id:sub(1, 3) ~= 'lc_' then
+        return false, 'job não é contrato LC'
+    end
+
+    local dest = ResolveLCDestination(row)
+    if not dest then return false, 'destino não resolvido' end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return false, 'ped inexistente' end
+    local pDist = #(GetEntityCoords(ped) - dest)
+    if pDist > LC_DELIVERY_RADIUS then
+        return false, ('jogador a %.1fm do destino'):format(pDist)
+    end
+
+    local info = ActiveLCContractData[row.id]
+    if info and info.truckEntity and DoesEntityExist(info.truckEntity) then
+        local tDist = #(GetEntityCoords(info.truckEntity) - dest)
+        if tDist > LC_TRUCK_RADIUS then
+            return false, ('caminhão a %.1fm do destino'):format(tDist)
+        end
+    end
+
+    local elapsed = MySQL.scalar.await(
+        'SELECT TIMESTAMPDIFF(SECOND, created_at, NOW()) FROM trucker_jobs WHERE id = ? LIMIT 1',
+        { row.id }
+    )
+    elapsed = tonumber(elapsed)
+    if not elapsed then return false, 'tempo de contrato indisponível' end
+    local minSeconds = math.max(LC_MIN_SECONDS, math.floor(((tonumber(row.distance) or 0) * 1000.0) / LC_MAX_SPEED_MS))
+    if elapsed < minSeconds then
+        return false, ('concluído em %ds (mínimo %ds)'):format(elapsed, minSeconds)
+    end
+
+    return true
+end
+
+-- ========================================================
 -- CONCLUSÃO: TRABALHO RÁPIDO (QUICK JOB) COM VISTORIA DE DANOS
 -- ========================================================
 local function FinishQuickJobContract(src, jobId, damages)
@@ -1823,6 +1889,15 @@ local function FinishQuickJobContract(src, jobId, damages)
         return
     end
 
+    local proofOk, proofReason = ValidateLCDelivery(src, citizenId, row)
+    if not proofOk then
+        CompletingContractsLock[citizenId] = nil
+        print(('[AUST_Trucker Anti-Cheat] Finalização recusada para %s (src %s, job %s): %s'):format(
+            tostring(citizenId), tostring(src), tostring(row.id), proofReason or '?'))
+        TriggerClientEvent('aurp_trucker:notify', src, 'Entrega não validada. Leve a carga até o ponto de entrega.', 'error')
+        return
+    end
+
     -- Mutação atômica fail-closed
     local affected = MySQL.update.await([[
         UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'
@@ -1841,6 +1916,11 @@ local function FinishQuickJobContract(src, jobId, damages)
     local engineHealth = tonumber(damages.engineHealth) or 1000.0
     local bodyHealth = tonumber(damages.bodyHealth) or 1000.0
     local burstTires = tonumber(damages.burstTires) or 0
+    -- Valor vem do client: rejeita NaN/inf e limita a 0..10 (negativo geraria dinheiro)
+    if burstTires ~= burstTires or burstTires == math.huge or burstTires == -math.huge then burstTires = 0 end
+    burstTires = math.floor(math.max(0, math.min(10, burstTires)))
+    if engineHealth ~= engineHealth then engineHealth = 1000.0 end
+    if bodyHealth ~= bodyHealth then bodyHealth = 1000.0 end
 
     if engineHealth > 1000.0 then engineHealth = 1000.0 end
     if bodyHealth > 1000.0 then bodyHealth = 1000.0 end
@@ -1854,7 +1934,7 @@ local function FinishQuickJobContract(src, jobId, damages)
     local rawPenalty = math.floor(grossPayment * damageRatio * 0.45) + (burstTires * 150)
     -- Teto seguro de penalidade: máximo de 50% de dedução
     local maxPenalty = math.floor(grossPayment * 0.50)
-    local damageDeduction = math.min(rawPenalty, maxPenalty)
+    local damageDeduction = math.max(0, math.min(rawPenalty, maxPenalty))
 
     -- Mínimo de 10% garantido para assegurar fail-closed sem saldo nulo/negativo
     local minGuaranteed = math.floor(grossPayment * 0.10)
@@ -1879,7 +1959,7 @@ local function FinishQuickJobContract(src, jobId, damages)
     pcall(DB_UpdateAustTruckerStats, citizenId, xpResult and xpResult.xpGained or 200, 1)
 
     -- Step C: Key Removal & Vehicle Deletion on Finish
-    local contractInfo = ActiveLCContractData[jobId]
+    local contractInfo = ActiveLCContractData[row.id]
     local truckPlate = contractInfo and contractInfo.truckPlate
     if truckPlate then
         pcall(function()
@@ -1896,7 +1976,7 @@ local function FinishQuickJobContract(src, jobId, damages)
     if contractInfo and contractInfo.truckEntity and DoesEntityExist(contractInfo.truckEntity) then
         DeleteEntity(contractInfo.truckEntity)
     end
-    ActiveLCContractData[jobId] = nil
+    ActiveLCContractData[row.id] = nil
 
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
@@ -1946,6 +2026,15 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
         return
     end
 
+    local proofOk, proofReason = ValidateLCDelivery(src, citizenId, row)
+    if not proofOk then
+        CompletingContractsLock[citizenId] = nil
+        print(('[AUST_Trucker Anti-Cheat] Finalização recusada para %s (src %s, job %s): %s'):format(
+            tostring(citizenId), tostring(src), tostring(row.id), proofReason or '?'))
+        TriggerClientEvent('aurp_trucker:notify', src, 'Entrega não validada. Leve a carga até o ponto de entrega.', 'error')
+        return
+    end
+
     -- Mutação atômica fail-closed
     local affected = MySQL.update.await([[
         UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'
@@ -1983,6 +2072,7 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
     -- Logística 2.0: Persistência em aust_trucker_stats
     pcall(DB_UpdateAustTruckerStats, citizenId, xpResult and xpResult.xpGained or 250, 1)
 
+    ActiveLCContractData[row.id] = nil
     ActiveLCContracts[citizenId] = nil
     StartingJobLock[citizenId] = nil
 
@@ -2195,7 +2285,8 @@ RegisterNetEvent('aurp_trucker:loan:takePlan', function(planIndex)
         return
     end
 
-    local res = LoanService.Create(src, citizenId, nil, plan.loan_amount)
+    -- TakePlan aplica teto por nível e os termos do plano (juros/prazo); Create ignorava os dois
+    local res = LoanService.TakePlan(src, citizenId, planIndex)
     if res.success then
         TriggerClientEvent('aurp_trucker:notify', src, ('Empréstimo de $%s concedido!'):format(plan.loan_amount), 'success')
     else

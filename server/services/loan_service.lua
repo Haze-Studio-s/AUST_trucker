@@ -8,6 +8,29 @@ local INSTALLMENT_SECONDS = Config.Loans.InstallmentDays * 86400
 local PENALTY_RATE      = Config.Loans.PenaltyRate
 local CHECK_INTERVAL    = Config.Loans.CheckInterval
 
+-- Travas em memória (chave = 'p:<citizen>' | 'c:<empresa>' | 'l:<emprestimo>'): as checagens
+-- de "já tem empréstimo"/saldo e as escritas ficam separadas por awaits de DB, então sem
+-- trava chamadas simultâneas criariam vários empréstimos ou pagariam duas vezes.
+local LoanLocks = {}
+
+local function WithLoanLock(key, fn, ...)
+    if LoanLocks[key] then
+        return { success = false, reason = 'Operação em andamento, tente novamente' }
+    end
+    LoanLocks[key] = true
+    local ok, result = pcall(fn, ...)
+    LoanLocks[key] = nil
+    if not ok then
+        print(('[aurp_trucker] LoanService erro (%s): %s'):format(key, tostring(result)))
+        return { success = false, reason = 'Erro interno ao processar empréstimo' }
+    end
+    return result
+end
+
+local function IsValidNumber(n)
+    return type(n) == 'number' and n == n and n ~= math.huge and n ~= -math.huge
+end
+
 ---Creates a new loan and credits the player.
 ---@param src number  player server id
 ---@param citizenId string
@@ -15,11 +38,22 @@ local CHECK_INTERVAL    = Config.Loans.CheckInterval
 ---@param amount number
 ---@param vehiclePlate string|nil  optional collateral vehicle plate (6A)
 ---@return table  { success: boolean, loan?: table, reason?: string }
-function LoanService.Create(src, citizenId, companyId, amount, vehiclePlate)
-    -- Validate amount
+local function CreateUnlocked(src, citizenId, companyId, amount, vehiclePlate)
+    -- Validate amount (rejeita NaN/inf/não numérico vindo do client)
+    amount = tonumber(amount)
+    if not IsValidNumber(amount) then
+        return { success = false, reason = 'Valor inválido' }
+    end
+    amount = math.floor(amount)
     if amount < MIN_AMOUNT or amount > MAX_AMOUNT then
         return { success = false, reason = ('Valor fora do intervalo permitido ($%s–$%s)'):format(
             MIN_AMOUNT, MAX_AMOUNT) }
+    end
+
+    -- Teto por nível do motorista (mesma regra dos planos)
+    local info = LoanService.GetPlans(citizenId)
+    if amount > info.maxAllowed then
+        return { success = false, reason = ('Nível de motorista insuficiente: limite atual $%s'):format(info.maxAllowed) }
     end
 
     -- Check for existing active loan
@@ -51,8 +85,23 @@ function LoanService.Create(src, citizenId, companyId, amount, vehiclePlate)
         return { success = false, reason = 'Erro interno ao criar empréstimo' }
     end
 
-    -- Credit player (validated above)
-    Framework.AddMoney(Player, 'cash', amount, 'loan-disbursement')
+    -- Desembolso: empréstimo empresarial vai para o cofre da empresa; pessoal para o jogador.
+    -- Se o crédito falhar, desfaz o empréstimo (não deixa dívida sem dinheiro recebido).
+    if companyId then
+        local newCompanyBalance = DB_UpdateCompanyBalance(companyId, amount)
+        if not newCompanyBalance then
+            DB_DeleteLoan(loanId)
+            return { success = false, reason = 'Erro ao creditar a empresa' }
+        end
+        if VP_Trucker.Companies[companyId] then
+            VP_Trucker.Companies[companyId].balance = newCompanyBalance
+        end
+    else
+        if not Framework.AddMoney(Player, 'cash', amount, 'loan-disbursement') then
+            DB_DeleteLoan(loanId)
+            return { success = false, reason = 'Erro ao creditar o valor' }
+        end
+    end
 
     local loan = {
         id               = loanId,
@@ -68,6 +117,11 @@ function LoanService.Create(src, citizenId, companyId, amount, vehiclePlate)
     return { success = true, loan = loan }
 end
 
+function LoanService.Create(src, citizenId, companyId, amount, vehiclePlate)
+    local key = companyId and ('c:' .. tostring(companyId)) or ('p:' .. tostring(citizenId))
+    return WithLoanLock(key, CreateUnlocked, src, citizenId, companyId, amount, vehiclePlate)
+end
+
 ---Processes a loan payment.
 ---@param src number
 ---@param citizenId string
@@ -75,7 +129,7 @@ end
 ---@param loanId number
 ---@param amount number
 ---@return table  { success: boolean, remaining_balance?: number, status?: string, reason?: string }
-function LoanService.Pay(src, citizenId, companyId, loanId, amount)
+local function PayUnlocked(src, citizenId, companyId, loanId, amount)
     -- Fetch the active loan (filter by status='active' via the correct lookup)
     local loan
     if companyId then
@@ -155,9 +209,21 @@ function LoanService.Pay(src, citizenId, companyId, loanId, amount)
         nextPaymentAt = (loan.next_payment_at or os.time()) + INSTALLMENT_SECONDS
     end
 
-    DB_UpdateLoanBalance(loanId, newBalance, newStatus, nextPaymentAt)
+    local affected = DB_UpdateLoanBalance(loanId, newBalance, newStatus, nextPaymentAt)
+    if not affected or affected == 0 then
+        -- Empréstimo mudou/quitou entre a leitura e a escrita: devolve o que foi debitado
+        if cashPaid > 0 then Framework.AddMoney(Player, 'cash', cashPaid, 'loan-payment-refund') end
+        if bankPaid > 0 then Framework.AddMoney(Player, 'bank', bankPaid, 'loan-payment-refund') end
+        return { success = false, reason = 'Empréstimo não encontrado ou já quitado' }
+    end
 
     return { success = true, remaining_balance = newBalance, status = newStatus }
+end
+
+function LoanService.Pay(src, citizenId, companyId, loanId, amount)
+    loanId = tonumber(loanId)
+    if not loanId then return { success = false, reason = 'Empréstimo inválido' } end
+    return WithLoanLock('l:' .. loanId, PayUnlocked, src, citizenId, companyId, loanId, amount)
 end
 
 ---Checks all overdue loans and applies 15% penalty.
@@ -166,6 +232,8 @@ function LoanService.CheckOverdue()
     if not loans or #loans == 0 then return end
 
     for _, loan in ipairs(loans) do
+      -- pcall por empréstimo: uma linha ruim não pode abortar o ciclo nem matar a thread
+      local okLoan, errLoan = pcall(function()
         local newBalance    = math.ceil(loan.remaining_balance * (1 + PENALTY_RATE))
         local nextPaymentAt = os.time() + INSTALLMENT_SECONDS
 
@@ -190,6 +258,10 @@ function LoanService.CheckOverdue()
                 duration    = 8000,
             })
         end
+      end)
+      if not okLoan then
+        print(('[aurp_trucker] CheckOverdue erro no empréstimo #%s: %s'):format(tostring(loan.id), tostring(errLoan)))
+      end
     end
 end
 
@@ -218,7 +290,7 @@ function LoanService.GetPlans(citizenId)
     }
 end
 
-function LoanService.TakePlan(src, citizenId, planIndex)
+local function TakePlanUnlocked(src, citizenId, planIndex)
     local info = LoanService.GetPlans(citizenId)
     local plan = info.plans[planIndex]
     if not plan then
@@ -243,7 +315,10 @@ function LoanService.TakePlan(src, citizenId, planIndex)
         return { success = false, reason = 'Erro ao processar empréstimo no banco de dados' }
     end
 
-    Framework.AddPlayerMoney(src, 'bank', plan.loan_amount, 'Empréstimo Logística: Plano #' .. planIndex)
+    if not Framework.AddPlayerMoney(src, 'bank', plan.loan_amount, 'Empréstimo Logística: Plano #' .. planIndex) then
+        DB_DeleteLoan(loanId)
+        return { success = false, reason = 'Erro ao creditar o valor do empréstimo' }
+    end
 
     return {
         success = true,
@@ -257,11 +332,23 @@ function LoanService.TakePlan(src, citizenId, planIndex)
     }
 end
 
+function LoanService.TakePlan(src, citizenId, planIndex)
+    planIndex = tonumber(planIndex)
+    if not planIndex or planIndex ~= planIndex then
+        return { success = false, reason = 'Plano de empréstimo não encontrado' }
+    end
+    -- Mesma trava do Create pessoal: planos e empréstimos livres não podem correr juntos
+    return WithLoanLock('p:' .. tostring(citizenId), TakePlanUnlocked, src, citizenId, math.floor(planIndex))
+end
+
 -- Background thread: check overdue loans every CheckInterval seconds
 CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
         Wait(CHECK_INTERVAL * 1000)
-        LoanService.CheckOverdue()
+        local ok, err = pcall(LoanService.CheckOverdue)
+        if not ok then
+            print(('[aurp_trucker] CheckOverdue falhou: %s'):format(tostring(err)))
+        end
     end
 end)

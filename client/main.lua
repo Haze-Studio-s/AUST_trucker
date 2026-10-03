@@ -2940,13 +2940,11 @@ RegisterNUICallback('adminSaveEconomy', function(data, cb)
     if cb then cb('ok') end
 end)
 
+-- Teleporte é autorizado e executado pelo servidor (checa admin + valida coords);
+-- o client não move o ped por conta própria.
 RegisterNUICallback('adminTeleport', function(data, cb)
-    if data and data.coords then
-        local ped = cache.ped or PlayerPedId()
-        SetEntityCoords(ped, data.coords.x, data.coords.y, data.coords.z, false, false, false, false)
-        if data.coords.heading or data.coords.w then
-            SetEntityHeading(ped, data.coords.heading or data.coords.w)
-        end
+    if data and type(data.coords) == 'table' then
+        TriggerServerEvent('aurp_trucker:server:adminTeleport', data.coords)
     end
     if cb then cb('ok') end
 end)

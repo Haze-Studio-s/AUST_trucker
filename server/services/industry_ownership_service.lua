@@ -109,13 +109,22 @@ function IndustryOwnershipService.Buy(src, industryId)
         return { success = false, reason = ('Saldo insuficiente. Necessário: $%d'):format(price) }
     end
 
+    -- Atômico: 1) reivindica a indústria (PK garante um único dono), 2) debita com
+    -- 'balance >= preço'; se o débito falhar, libera a reivindicação.
+    if not DB_TryClaimIndustry(industryId, citizenId, company.id, price) then
+        return { success = false, reason = 'Esta indústria já pertence a outra empresa' }
+    end
+
     local newBalance = DB_UpdateCompanyBalance(company.id, -price)
+    if not newBalance then
+        DB_ClearIndustryOwner(industryId)
+        return { success = false, reason = ('Saldo insuficiente. Necessário: $%d'):format(price) }
+    end
     if VP_Trucker.Companies[company.id] then
         VP_Trucker.Companies[company.id].balance = newBalance
     end
 
-    -- Registrar no DB e cache
-    DB_SetIndustryOwner(industryId, citizenId, company.id, price)
+    -- Registrar no cache (DB já registrado pela reivindicação)
     VP_Trucker.IndustryOwners[industryId] = {
         industry_id     = industryId,
         owner_citizenid = citizenId,
@@ -174,7 +183,9 @@ function IndustryOwnershipService.RunOperationalCosts()
             local company = VP_Trucker.Companies[owner.company_id]
             if company and company.balance >= cost then
                 local newBalance = DB_UpdateCompanyBalance(owner.company_id, -cost)
-                VP_Trucker.Companies[owner.company_id].balance = newBalance
+                if newBalance then
+                    VP_Trucker.Companies[owner.company_id].balance = newBalance
+                end
             end
         end
     end
