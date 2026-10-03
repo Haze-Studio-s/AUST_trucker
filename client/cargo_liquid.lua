@@ -384,4 +384,10 @@ RegisterNetEvent('aurp_trucker:client:cleanupCargoLiquid', function()
     CargoLiquid.Cleanup()
 end)
 
+-- Limpeza ao parar o resource (zonas, mangueira, textUI)
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    pcall(CargoLiquid.Cleanup)
+end)
+
 return CargoLiquid

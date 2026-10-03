@@ -7,6 +7,8 @@ local NUM_INSTALLMENTS  = Config.Loans.NumInstallments
 local INSTALLMENT_SECONDS = Config.Loans.InstallmentDays * 86400
 local PENALTY_RATE      = Config.Loans.PenaltyRate
 local CHECK_INTERVAL    = Config.Loans.CheckInterval
+local AUTO_DEBIT        = Config.Loans.AutoDebit ~= false
+local MAX_MISSED        = math.max(1, tonumber(Config.Loans.MaxMissedPayments) or 3)
 
 -- Travas em memória (chave = 'p:<citizen>' | 'c:<empresa>' | 'l:<emprestimo>'): as checagens
 -- de "já tem empréstimo"/saldo e as escritas ficam separadas por awaits de DB, então sem
@@ -66,6 +68,9 @@ local function CreateUnlocked(src, citizenId, companyId, amount, vehiclePlate)
 
     if existing then
         local loanType = companyId and 'empresarial' or 'pessoal'
+        if existing.status == 'defaulted' then
+            return { success = false, reason = ('Você possui um empréstimo %s inadimplente. Quite-o antes de pedir outro'):format(loanType) }
+        end
         return { success = false, reason = ('Você já tem um empréstimo %s ativo'):format(loanType) }
     end
 
@@ -204,7 +209,8 @@ local function PayUnlocked(src, citizenId, companyId, loanId, amount)
         newStatus     = 'paid'
         nextPaymentAt = nil
     else
-        newStatus     = 'active'
+        -- Inadimplente continua 'defaulted' até quitar tudo (pagamento parcial não "limpa o nome")
+        newStatus     = (loan.status == 'defaulted') and 'defaulted' or 'active'
         -- Advance from stored next_payment_at, not os.time()
         nextPaymentAt = (loan.next_payment_at or os.time()) + INSTALLMENT_SECONDS
     end
@@ -227,6 +233,28 @@ function LoanService.Pay(src, citizenId, companyId, loanId, amount)
 end
 
 ---Checks all overdue loans and applies 15% penalty.
+-- Tenta cobrar a parcela automaticamente: cofre da empresa (débito atômico) para empréstimo
+-- empresarial; banco do jogador (se online) para pessoal. Retorna true se cobrou.
+local function TryAutoDebit(loan, amount)
+    if loan.company_id then
+        return DB_UpdateCompanyBalance(loan.company_id, -amount) ~= nil
+    end
+    local playerSrc = Framework.FindPlayerByCitizenId(loan.citizenid)
+    local Player = playerSrc and Framework.GetPlayer(playerSrc)
+    if not Player then return false end
+    if (Framework.GetMoney(Player, 'bank') or 0) < amount then return false end
+    return Framework.RemoveMoney(Player, 'bank', amount, 'loan-autodebit') and true or false
+end
+
+local function NotifyLoan(loan, title, description, kind)
+    local src = Framework.FindPlayerByCitizenId(loan.citizenid)
+    if src then
+        lib.notify(src, { title = title, description = description, type = kind or 'error', duration = 8000 })
+    end
+end
+
+---Processa empréstimos vencidos: 1) tenta débito automático da parcela; 2) sem saldo, aplica
+---multa e conta parcela perdida; 3) ao atingir MaxMissedPayments vira 'defaulted'.
 function LoanService.CheckOverdue()
     local loans = DB_GetOverdueLoans()
     if not loans or #loans == 0 then return end
@@ -234,30 +262,68 @@ function LoanService.CheckOverdue()
     for _, loan in ipairs(loans) do
       -- pcall por empréstimo: uma linha ruim não pode abortar o ciclo nem matar a thread
       local okLoan, errLoan = pcall(function()
-        local newBalance    = math.ceil(loan.remaining_balance * (1 + PENALTY_RATE))
-        local nextPaymentAt = os.time() + INSTALLMENT_SECONDS
+        -- Serializa com Pay/Create do mesmo empréstimo (evita cobrar e receber ao mesmo tempo)
+        if LoanLocks['l:' .. tostring(loan.id)] then return end
+        LoanLocks['l:' .. tostring(loan.id)] = true
+        local okInner, errInner = pcall(function()
+            local remaining     = tonumber(loan.remaining_balance) or 0
+            local nextPaymentAt = os.time() + INSTALLMENT_SECONDS
+            local missed        = tonumber(loan.missed_payments) or 0
 
-        DB_UpdateLoanBalance(loan.id, newBalance, 'active', nextPaymentAt)
+            -- 1) Débito automático da parcela
+            if AUTO_DEBIT then
+                local installment = math.min(tonumber(loan.monthly_payment) or 0, remaining)
+                if installment > 0 and TryAutoDebit(loan, installment) then
+                    local newBalance = remaining - installment
+                    local newStatus  = 'active'
+                    if newBalance <= 0 then newBalance, newStatus, nextPaymentAt = 0, 'paid', nil end
+                    local affected = DB_UpdateLoanBalance(loan.id, newBalance, newStatus, nextPaymentAt)
+                    if not affected or affected == 0 then
+                        -- Empréstimo mudou no meio (ex.: quitado): devolve o que foi cobrado
+                        if loan.company_id then
+                            DB_UpdateCompanyBalance(loan.company_id, installment)
+                        else
+                            local src = Framework.FindPlayerByCitizenId(loan.citizenid)
+                            local Player = src and Framework.GetPlayer(src)
+                            if Player then Framework.AddMoney(Player, 'bank', installment, 'loan-autodebit-refund') end
+                        end
+                        return
+                    end
+                    print(('[aurp_trucker] Loan #%d: parcela de $%d debitada automaticamente. Saldo: $%d'):format(
+                        loan.id, installment, newBalance))
+                    NotifyLoan(loan, 'Parcela Debitada',
+                        ('Parcela de $%s debitada automaticamente. Saldo devedor: $%s'):format(installment, newBalance), 'inform')
+                    return
+                end
+            end
 
-        -- Generate repo order for the defaulted loan (post-penalty balance)
-        if RepoService then
-            loan.remaining_balance = newBalance   -- pass post-penalty balance
-            RepoService.GenerateFromLoan(loan)
-        end
+            -- 2) Sem saldo: multa + parcela perdida
+            missed = missed + 1
+            local newBalance = math.ceil(remaining * (1 + PENALTY_RATE))
+            local newStatus  = (missed >= MAX_MISSED) and 'defaulted' or 'active'
+            local affected   = DB_RecordLoanMiss(loan.id, newBalance, newStatus, nextPaymentAt, missed)
+            if not affected or affected == 0 then return end  -- já não está 'active'
 
-        print(('[aurp_trucker] Loan #%d overdue — penalty applied. New balance: $%d'):format(
-            loan.id, newBalance))
+            -- Ordem de recuperação (repo) para o veículo dado em garantia (saldo pós-multa)
+            if RepoService then
+                loan.remaining_balance = newBalance
+                RepoService.GenerateFromLoan(loan)
+            end
 
-        -- Notify player if online
-        local loanPlayerSrc = Framework.FindPlayerByCitizenId(loan.citizenid)
-        if loanPlayerSrc then
-            lib.notify(loanPlayerSrc, {
-                title       = 'Empréstimo em Atraso',
-                description = ('Multa de 15%% aplicada. Novo saldo: $%s'):format(newBalance),
-                type        = 'error',
-                duration    = 8000,
-            })
-        end
+            print(('[aurp_trucker] Loan #%d vencido — multa aplicada (parcela perdida %d/%d)%s. Saldo: $%d'):format(
+                loan.id, missed, MAX_MISSED, newStatus == 'defaulted' and ' => INADIMPLENTE' or '', newBalance))
+
+            if newStatus == 'defaulted' then
+                NotifyLoan(loan, 'Empréstimo Inadimplente',
+                    ('Você perdeu %d parcelas. O empréstimo está inadimplente (saldo $%s): novos empréstimos bloqueados até a quitação total.'):format(missed, newBalance))
+            else
+                NotifyLoan(loan, 'Empréstimo em Atraso',
+                    ('Multa de %d%% aplicada (parcela perdida %d/%d). Novo saldo: $%s'):format(
+                        math.floor(PENALTY_RATE * 100), missed, MAX_MISSED, newBalance))
+            end
+        end)
+        LoanLocks['l:' .. tostring(loan.id)] = nil
+        if not okInner then error(errInner) end
       end)
       if not okLoan then
         print(('[aurp_trucker] CheckOverdue erro no empréstimo #%s: %s'):format(tostring(loan.id), tostring(errLoan)))
@@ -303,6 +369,9 @@ local function TakePlanUnlocked(src, citizenId, planIndex)
 
     local existing = DB_GetActiveLoan(citizenId)
     if existing then
+        if existing.status == 'defaulted' then
+            return { success = false, reason = 'Você possui um empréstimo inadimplente. Quite-o antes de pedir outro' }
+        end
         return { success = false, reason = 'Você já possui um empréstimo ativo' }
     end
 

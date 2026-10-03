@@ -81,16 +81,33 @@ function EconomyService.UpdatePrices()
     end
 end
 
+-- Debounce: marca sujo e recalcula no máximo uma vez a cada poucos segundos
+local pricesDirty, pricesTimerArmed = false, false
+local PRICE_DEBOUNCE_MS = 5000
+
+local function SchedulePriceUpdate()
+    pricesDirty = true
+    if pricesTimerArmed then return end
+    pricesTimerArmed = true
+    SetTimeout(PRICE_DEBOUNCE_MS, function()
+        pricesTimerArmed = false
+        if not pricesDirty then return end
+        pricesDirty = false
+        local ok, err = pcall(EconomyService.UpdatePrices)
+        if not ok then print(('[aurp_trucker] Economy debounce erro: %s'):format(tostring(err))) end
+    end)
+end
+
 function EconomyService.RecordSale(industryId, item, qty)
     -- Jogador vendeu item para indústria → stock de consumo aumenta
     DB_UpdateIndustryStock(industryId, item, 'consumption', qty)
-    EconomyService.UpdatePrices()
+    SchedulePriceUpdate()
 end
 
 function EconomyService.RecordPurchase(industryId, item, qty)
     -- Jogador comprou item da indústria → stock de produção diminui
     DB_UpdateIndustryStock(industryId, item, 'production', -qty)
-    EconomyService.UpdatePrices()
+    SchedulePriceUpdate()
 end
 
 -- Loop de atualização de preços
@@ -100,7 +117,12 @@ CreateThread(function()
 
     while true do
         Wait(Config.Economy.priceUpdateInterval)
-        EconomyService.UpdatePrices()
-        if Config.Debug then print('[aurp_trucker] Economy prices updated') end
+        pricesDirty = false
+        local ok, err = pcall(EconomyService.UpdatePrices)
+        if not ok then
+            print(('[aurp_trucker] Economy UpdatePrices erro: %s'):format(tostring(err)))
+        elseif Config.Debug then
+            print('[aurp_trucker] Economy prices updated')
+        end
     end
 end)

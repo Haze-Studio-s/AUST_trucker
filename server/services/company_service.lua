@@ -74,15 +74,24 @@ function CompanyService.GetRecruiting()
     return DB_GetRecruitingCompanies()
 end
 
--- Cria nova empresa. Retorna companyId ou nil + mensagem de erro
-function CompanyService.Create(src, name, companyType)
-    companyType = (companyType == 'repo') and 'repo' or 'logistics'
+local CreatingCompanyLock = {}
+local SellingCompanyLock = {}
 
-    local Player = Framework.GetPlayer(src)
-    if not Player then return nil, 'Jogador não encontrado' end
+-- Valida/normaliza nome: string, sem caracteres de controle, trim, 3-30 chars
+local function SanitizeCompanyName(name)
+    if type(name) ~= 'string' then return nil end
+    name = name:gsub('%c', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if #name < 3 or #name > 30 then return nil end
+    return name
+end
 
-    local citizenId = Framework.GetCitizenId(Player)
+local function NewCompanyId()
+    local t = {}
+    for i = 1, 8 do t[i] = ('%x'):format(math.random(0, 15)) end
+    return ('company_%d_%s'):format(os.time(), table.concat(t))
+end
 
+local function CreateUnlocked(src, Player, citizenId, name, companyType)
     -- Verificar se já tem empresa
     if VP_Trucker.PlayerCompanies[citizenId] then
         return nil, 'Você já faz parte de uma empresa'
@@ -98,10 +107,18 @@ function CompanyService.Create(src, name, companyType)
         return nil, 'Falha ao processar pagamento'
     end
 
-    -- Criar no DB
-    local companyId = ('company_%d_%d'):format(os.time(), math.random(1000, 9999))
-    DB_CreateCompany(companyId, citizenId, name, companyType)
-    DB_AddMember(companyId, citizenId, 'owner')
+    -- Criar no DB (estorna se falhar)
+    local companyId = NewCompanyId()
+    local ok, err = pcall(function()
+        DB_CreateCompany(companyId, citizenId, name, companyType)
+        DB_AddMember(companyId, citizenId, 'owner')
+    end)
+    if not ok then
+        print(('[aurp_trucker] CompanyService.Create erro (%s): %s - estornando'):format(tostring(citizenId), tostring(err)))
+        pcall(DB_DeleteCompany, companyId)
+        Framework.AddMoney(Player, 'cash', CREATION_COST, 'company-creation-refund')
+        return nil, 'Falha ao criar empresa. Valor estornado.'
+    end
 
     -- Atualizar cache (inclui company_type para RepoService.Accept)
     VP_Trucker.Companies[companyId] = {
@@ -117,6 +134,32 @@ function CompanyService.Create(src, name, companyType)
     VP_Trucker.PlayerCompanies[citizenId] = companyId
 
     return companyId, nil
+end
+
+-- Cria nova empresa. Retorna companyId ou nil + mensagem de erro
+function CompanyService.Create(src, name, companyType)
+    companyType = (companyType == 'repo') and 'repo' or 'logistics'
+
+    name = SanitizeCompanyName(name)
+    if not name then return nil, 'Nome inválido (3 a 30 caracteres)' end
+
+    local Player = Framework.GetPlayer(src)
+    if not Player then return nil, 'Jogador não encontrado' end
+
+    local citizenId = Framework.GetCitizenId(Player)
+
+    -- Lock por jogador: impede criação dupla concorrente
+    if CreatingCompanyLock[citizenId] then
+        return nil, 'Operação em andamento, aguarde'
+    end
+    CreatingCompanyLock[citizenId] = true
+    local ok, companyId, err = pcall(CreateUnlocked, src, Player, citizenId, name, companyType)
+    CreatingCompanyLock[citizenId] = nil
+    if not ok then
+        print('[aurp_trucker] CompanyService.Create erro: ' .. tostring(companyId))
+        return nil, 'Erro interno ao criar empresa'
+    end
+    return companyId, err
 end
 
 -- Adiciona membro à empresa
@@ -164,7 +207,12 @@ function CompanyService.Deposit(companyId, src, amount)
     if not removed then return false, 'Falha ao remover dinheiro' end
 
     local newBalance = DB_UpdateCompanyBalance(companyId, amount)
-    if newBalance and VP_Trucker.Companies[companyId] then
+    if not newBalance then
+        -- Crédito na empresa falhou: devolve o dinheiro ao jogador
+        Framework.AddMoney(Player, 'cash', amount, 'company-deposit-refund')
+        return false, 'Falha ao depositar na empresa'
+    end
+    if VP_Trucker.Companies[companyId] then
         VP_Trucker.Companies[companyId].balance = newBalance
     end
     return true, nil
@@ -249,15 +297,14 @@ function CompanyService.AddBalance(companyId, amount)
     return true, newBalance
 end
 
--- Vender empresa (owner recebe SELL_PAYOUT, empresa é deletada)
-function CompanyService.Sell(companyId, src)
+local function SellUnlocked(companyId, src)
     local company = VP_Trucker.Companies[companyId]
     if not company then return false, 'Empresa não encontrada' end
 
-    -- HARDENING: Impedir venda se houver empréstimo empresarial pendente
-    local activeLoan = DB_GetActiveCompanyLoan(companyId)
-    if activeLoan and activeLoan.remaining_balance and activeLoan.remaining_balance > 0 then
-        return false, ('A empresa possui empréstimo ativo ($%d). Quite-o antes de vender.'):format(activeLoan.remaining_balance)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return false, 'Jogador não encontrado' end
+    if Framework.GetCitizenId(Player) ~= company.owner_citizenid then
+        return false, 'Apenas o dono pode vender a empresa'
     end
 
     -- HARDENING: Verificar se há veículos da frota em uso
@@ -268,18 +315,44 @@ function CompanyService.Sell(companyId, src)
         end
     end
 
-    local Player = Framework.GetPlayer(src)
-    if not Player then return false, 'Jogador não encontrado' end
+    local members = DB_GetMembers(companyId) or {}
+
+    -- Re-checa o cache após os awaits: outra chamada pode ter vendido a empresa
+    if VP_Trucker.Companies[companyId] ~= company then
+        return false, 'Empresa não encontrada'
+    end
+
+    -- HARDENING: reivindica a venda atomicamente — o DELETE só ocorre se NÃO houver
+    -- empréstimo empresarial ativo; só quem apagou a linha recebe o pagamento.
+    local affected = DB_DeleteCompanyIfNoActiveLoan(companyId)
+    if not affected or affected < 1 then
+        return false, 'A empresa possui empréstimo ativo. Quite-o antes de vender.'
+    end
 
     -- Limpar cache de todos os membros
-    local members = DB_GetMembers(companyId) or {}
     for _, member in ipairs(members) do
         VP_Trucker.PlayerCompanies[member.citizenid] = nil
     end
-
     VP_Trucker.Companies[companyId] = nil
-    DB_DeleteCompany(companyId)
 
-    Framework.AddMoney(Player, 'cash', SELL_PAYOUT, 'company-sale')
+    if not Framework.AddMoney(Player, 'cash', SELL_PAYOUT, 'company-sale') then
+        print(('[aurp_trucker] ERRO: empresa %s vendida mas pagamento de $%d falhou para %s'):format(
+            tostring(companyId), SELL_PAYOUT, tostring(company.owner_citizenid)))
+    end
     return true, nil
+end
+
+-- Vender empresa (owner recebe SELL_PAYOUT, empresa é deletada)
+function CompanyService.Sell(companyId, src)
+    if SellingCompanyLock[companyId] then
+        return false, 'Operação em andamento, aguarde'
+    end
+    SellingCompanyLock[companyId] = true
+    local ok, res, err = pcall(SellUnlocked, companyId, src)
+    SellingCompanyLock[companyId] = nil
+    if not ok then
+        print('[aurp_trucker] CompanyService.Sell erro: ' .. tostring(res))
+        return false, 'Erro interno ao vender empresa'
+    end
+    return res, err
 end

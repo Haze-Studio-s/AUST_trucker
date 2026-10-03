@@ -80,6 +80,16 @@ ensure qbx_core      # ou qb-core ou es_extended, conforme Config.Framework
 ensure AUST_trucker
 ```
 
+**Permissões e webhook (obrigatório revisar ao atualizar para 20.7.7+):**
+```
+# Painel /truckeradmin e todas as ações admin: só a ACE dedicada (ACEs genéricas 'command'/'admin' NÃO valem mais)
+add_ace group.admin command.truckeradmin allow
+
+# Webhook do Discord das encomendas (opcional). Use `set` (NÃO `setr`): o valor não pode ir ao client
+set aurp_trucker_parcel_webhook "https://discord.com/api/webhooks/..."
+```
+Os admins de framework (QBX/QBCore `admin`/`god`, ESX `admin`/`superadmin`/`owner`) continuam reconhecidos.
+
 ---
 
 ## Configuração — config/config.lua
@@ -125,11 +135,17 @@ Config.Loans = {
     InstallmentDays = 7,       -- dias entre parcelas
     PenaltyRate     = 0.15,    -- multa por atraso 15%
     CheckInterval   = 300,     -- segundos entre verificações de atraso
+    AutoDebit         = true,  -- tenta debitar a parcela vencida (banco do jogador online / cofre da empresa)
+    MaxMissedPayments = 3,     -- parcelas perdidas seguidas até virar 'defaulted' (inadimplente)
     BankerLocation  = vector3(-2962.6, 485.6, 15.7),  -- Paleto Bay
     BankerPed       = 'ig_bankman',
     BankerHeading   = 90.0,
 }
 ```
+
+**Calote:** a cada parcela vencida o sistema tenta o débito automático. Sem saldo (ou jogador offline), aplica a
+multa (`PenaltyRate`) e conta uma parcela perdida. Ao atingir `MaxMissedPayments` o empréstimo vira `defaulted`:
+para de acumular multa, bloqueia novos empréstimos e a venda da empresa, e só sai quitando o saldo total.
 
 ### Progressão de Empresa (`Config.CompanyLevels` e `Config.CompanyXpPerDelivery`)
 
@@ -225,6 +241,9 @@ Config.NpcDrivers = {
 ```
 
 ### ADR (`Config.Adr`) — v11
+
+> O banco de perguntas **com gabarito** fica em `server/adr_questions.lua` (`AdrExamBank`, só servidor).
+> O client recebe apenas texto e opções, sorteados pelo servidor a cada tentativa.
 
 ```lua
 Config.Adr = {

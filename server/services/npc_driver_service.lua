@@ -801,16 +801,10 @@ end
 
 local HiringDriverLock = {}
 
-function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
-    if HiringDriverLock[citizenId] then
-        return false, 'Processando contratação anterior...'
-    end
-    HiringDriverLock[citizenId] = true
-
+local function _HireAgencyDriverInner(src, citizenId, driverIndex)
     local catalog = NpcDriverService.GetAgencyCatalog()
     local driver = catalog[driverIndex]
     if not driver then
-        HiringDriverLock[citizenId] = nil
         return false, 'Candidato não encontrado na agência'
     end
 
@@ -823,29 +817,48 @@ function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
     elseif lvl >= 10 then maxDrivers = 2 end
 
     if #hired >= maxDrivers then
-        HiringDriverLock[citizenId] = nil
         return false, ('Limite de motoristas atingido para seu nível (%d max)'):format(maxDrivers)
     end
 
     local balance = Framework.GetPlayerMoney(src, 'bank')
-    if balance < driver.price then
-        HiringDriverLock[citizenId] = nil
+    if (tonumber(balance) or 0) < driver.price then
         return false, 'Saldo bancário insuficiente para contratar'
     end
 
     if not Framework.RemovePlayerMoney(src, 'bank', driver.price, 'Contratação de Motorista: ' .. driver.name) then
-        HiringDriverLock[citizenId] = nil
         return false, 'Falha ao processar pagamento'
     end
 
-    local driverId = MySQL.insert.await(
-        [[INSERT INTO trucker_drivers (user_id, name, product_type, distance_skill, valuable_skill, fragile_skill, fast_skill, price, img, truck_id)
+    -- Colunas reais da tabela: distance/valuable/fragile/fast
+    local okIns, driverId = pcall(MySQL.insert.await,
+        [[INSERT INTO trucker_drivers (user_id, name, product_type, distance, valuable, fragile, fast, price, img, truck_id)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)]],
         { citizenId, driver.name, driver.product_type, driver.distance_skill, driver.valuable_skill, driver.fragile_skill, driver.fast_skill, driver.price, driver.img }
     )
 
-    HiringDriverLock[citizenId] = nil
+    if not okIns or not driverId then
+        print(('[HireAgencyDriver] ERRO insert (%s): %s - reembolsando'):format(tostring(citizenId), tostring(driverId)))
+        Framework.AddPlayerMoney(src, 'bank', driver.price, 'Reembolso: Contratação de Motorista falhou')
+        return false, 'Falha ao registrar motorista. Valor reembolsado.'
+    end
+
     return true, { driverId = driverId, name = driver.name }
+end
+
+function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
+    if HiringDriverLock[citizenId] then
+        return false, 'Processando contratação anterior...'
+    end
+    HiringDriverLock[citizenId] = true
+
+    local ok, res, data = pcall(_HireAgencyDriverInner, src, citizenId, driverIndex)
+    HiringDriverLock[citizenId] = nil  -- sempre libera o lock
+
+    if not ok then
+        print('[HireAgencyDriver] ERRO: ' .. tostring(res))
+        return false, 'Erro interno ao contratar motorista'
+    end
+    return res, data
 end
 
 function NpcDriverService.AssignTruck(src, citizenId, driverId, truckId)
@@ -891,5 +904,6 @@ end
 -- ============================================================
 
 SetInterval(function()
-    NpcDriverService.ProcessTick()
+    local ok, err = pcall(NpcDriverService.ProcessTick)
+    if not ok then print('[NpcDriverService] ERRO ProcessTick: ' .. tostring(err)) end
 end, Config.NpcDrivers.cronIntervalMinutes * 60 * 1000)

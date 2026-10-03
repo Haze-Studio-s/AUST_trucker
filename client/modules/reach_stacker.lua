@@ -66,7 +66,7 @@ local function AttachContainerToHandler(handlerVeh, container)
     end
 
     if not NetworkHasControlOfEntity(container) then
-        print(("[AUST_Trucker] Falha de controle OneSync sobre o contêiner %s"):format(tostring(container)))
+        if Config.Debug then print(("[AUST_Trucker] Falha de controle OneSync sobre o contêiner %s"):format(tostring(container))) end
         return false
     end
 

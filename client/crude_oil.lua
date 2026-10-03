@@ -169,7 +169,7 @@ CreateThread(function()
     end
 
     if Config.Debug then
-        print(('[crude_oil client] %d refinery zones registered'):format(#ActiveZones))
+        if Config.Debug then print(('[crude_oil client] %d refinery zones registered'):format(#ActiveZones)) end
     end
 end)
 

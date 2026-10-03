@@ -261,8 +261,8 @@ window.addEventListener("message", async function (event) {
                 const loan = config.loans.plans[loan_id];
                 loan_list += `
 					<div class="form-check mb-2">
-						<input class="form-check-input" type="radio" name="loan-radio" id="loan-${loan_id}" value="${loan_id}" ${checkedAttribute}>
-						<label class="form-check-label" for="loan-${loan_id}">
+						<input class="form-check-input" type="radio" name="loan-radio" id="loan-${Utils.safeId(loan_id)}" value="${Utils.safeId(loan_id)}" ${checkedAttribute}>
+						<label class="form-check-label" for="loan-${Utils.safeId(loan_id)}">
 							<span style="font-weight: 600;">${Utils.currencyFormat(loan.loan_amount)}</span> ${Utils.translate("bank_page_loan_modal_item").format(Utils.numberFormat(loan.interest_rate),Utils.numberFormat(loan.repayment_days))}
 						</label>
 					</div>
@@ -476,7 +476,7 @@ window.addEventListener("message", async function (event) {
                 <li class="d-flex justify-content-between card-theme">
                     <div class="d-flex flex-row align-items-center"><i class="fas ${icon}"></i>
                         <div class="ml-2">
-                            <h6 class="mb-0">${top_users.name || "Motorista"} ${top_users.firstname ?? ""}</h6>
+                            <h6 class="mb-0">${Utils.escapeHtml(top_users.name || "Motorista")} ${Utils.escapeHtml(top_users.firstname ?? "")}</h6>
                             <div class="d-flex flex-row mt-1 text-black-50 date-time">
                                 <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("top_trucker_distance_traveled").format(Utils.numberFormat(top_users.traveled_distance || 0, 2))}</span></div>
                                 <div class="ml-3"><i class="fas fa-chart-line"></i><span class="ml-2">${Utils.translate("top_trucker_exp").format(Utils.numberFormat(top_users.exp || 0))}</span></div>
@@ -546,11 +546,11 @@ window.addEventListener("message", async function (event) {
             }
 
             if (config.dealership && config.dealership[contract.truck]) {
-                icon = `<img src="${config.dealership[contract.truck].img}" class="img-width" alt="${config.dealership[contract.truck].img}">`;
+                icon = `<img src="${Utils.escapeHtml(config.dealership[contract.truck].img)}" class="img-width" alt="${Utils.escapeHtml(config.dealership[contract.truck].img)}">`;
             } else {
                 icon = `<img src="img/trucks/hauler.png" class="img-width" alt="truck">`;
             }
-            icon += `<img src="img/trailers/${contract.trailer}.png" class="img-width" alt="${contract.trailer}">`;
+            icon += `<img src="img/trailers/${Utils.escapeHtml(contract.trailer)}.png" class="img-width" alt="${Utils.escapeHtml(contract.trailer)}">`;
 
             let partystart_btn = "";
             let button = "";
@@ -594,7 +594,7 @@ window.addEventListener("message", async function (event) {
                 <li class="d-flex justify-content-between card-theme"${border}>
                     <div class="d-flex flex-row align-items-center">${icon}
                         <div class="ml-2">
-                            <h6 class="mb-0 d-flex align-items-center flex-wrap">${contract.contract_name} ${lockTag}</h6>
+                            <h6 class="mb-0 d-flex align-items-center flex-wrap">${Utils.escapeHtml(contract.contract_name)} ${lockTag}</h6>
                             <div class="d-flex flex-row mt-1 text-black-50 date-time">
                                 <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("contract_page_distance").format(Utils.numberFormat(contract.distance, 2))}</span></div>
                                 <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}${bonusBadge}</span></div>
@@ -649,7 +649,7 @@ window.addEventListener("message", async function (event) {
         list_item = ``;
         const sorted_dealership = Utils.sortElement(config.dealership, ["required_level", "price"]);
         for (const truck of sorted_dealership) {
-            let truckIdentifier = truck.id || truck.name || "";
+            let truckIdentifier = Utils.escapeHtml(truck.id || truck.name || "");
             let button_html = `<div class="mx-3 mt-3 mb-2"><button data-model="${truckIdentifier}" data-name="${truckIdentifier}" type="button" class="btn btn-primary btn-block buy-truck-btn"><small>${Utils.translate("dealership_page_buy_button")}</small></button></div> <small class="d-flex justify-content-center text-muted">${Utils.translate("dealership_page_bottom_text")}</small>`;
             let dealership_locked_background = "";
             if (config.player_level < truck.required_level) {
@@ -658,10 +658,10 @@ window.addEventListener("message", async function (event) {
             }
             list_item += `
 				<div class="card ${dealership_locked_background}">
-					<img src="${truck.img}" class="card-img-top" width="100%">
+					<img src="${Utils.escapeHtml(truck.img)}" class="card-img-top" width="100%">
 					<div class="card-body pt-0 px-0">
 						<div class="d-flex flex-row justify-content-between mb-0 mt-3 px-3"> <span class="text-muted">${Utils.translate("dealership_page_truck")}</span>
-							<h6>${truck.name}</h6>
+							<h6>${Utils.escapeHtml(truck.name)}</h6>
 						</div>
 						<hr class="mt-2 mx-3">
 						<div class="d-flex flex-row justify-content-between px-3 pb-4">
@@ -814,7 +814,7 @@ window.addEventListener("message", async function (event) {
 				`);
 
                 $("#repair-truck-btn").empty();
-                $("#repair-truck-btn").append(`<button onclick="repairTruck(${truck.truck_id})" type="button" class="btn btn-primary btn-block waves-effect waves-light">${Utils.translate("diagnostic_page_repair")}</button>`);
+                $("#repair-truck-btn").append(`<button onclick="repairTruck(${Number(truck.truck_id) || 0})" type="button" class="btn btn-primary btn-block waves-effect waves-light">${Utils.translate("diagnostic_page_repair")}</button>`);
 
                 let refuel_btn = ``;
                 if (truck.fuel < 98) {
@@ -842,9 +842,9 @@ window.addEventListener("message", async function (event) {
             }
             list_item += `
 				<li class="d-flex justify-content-between card-theme">
-					<div class="d-flex flex-row align-items-center"><img src="${truckInfo.img}" class="img-width" alt="Truck-Image">
+					<div class="d-flex flex-row align-items-center"><img src="${Utils.escapeHtml(truckInfo.img)}" class="img-width" alt="Truck-Image">
 						<div class="ml-2">
-							<h6 class="mb-0">${truckInfo.name}</h6>
+							<h6 class="mb-0">${Utils.escapeHtml(truckInfo.name)}</h6>
 							<div class="d-flex flex-row mt-1 text-black-50 date-time">
 								<div>
 									<i class="fas fa-truck-field"></i><span class="ml-2">${Utils.translate("trucks_page_chassi")}: ${truck.body}%</span>
@@ -896,9 +896,9 @@ window.addEventListener("message", async function (event) {
 					<div class="card user-card">
 						<div class="card-block">
 							<div class="user-image">
-								<img src="${driver.img || 'img/avatar/avatar1.png'}" class="img-radius" alt="User-Profile-Image">
+								<img src="${Utils.escapeHtml(driver.img || 'img/avatar/avatar1.png')}" class="img-radius" alt="User-Profile-Image">
 							</div>
-							<h6 class="mt-4 mb-2">${driver.name || "Candidato"}</h6>
+							<h6 class="mt-4 mb-2">${Utils.escapeHtml(driver.name || "Candidato")}</h6>
 							<p class="text-muted">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price || 1000))}</p>
 							<hr>
 							<p class="text-muted m-0">${Utils.translate("drivers_page_product_type")}</p>
@@ -951,9 +951,9 @@ window.addEventListener("message", async function (event) {
                 $("#drivers-page-list").append(`
 					<li class="d-flex justify-content-between card-theme">
 						<div class="d-flex flex-row align-items-center">
-							<img src="${driver.img || 'img/avatar/avatar1.png'}" class="img-radius img-width" alt="User-Profile-Image">
+							<img src="${Utils.escapeHtml(driver.img || 'img/avatar/avatar1.png')}" class="img-radius img-width" alt="User-Profile-Image">
 							<div class="ml-2">
-								<h6 class="mb-0">${driver.name || "Motorista"}</h6>
+								<h6 class="mb-0">${Utils.escapeHtml(driver.name || "Motorista")}</h6>
 								<div class="d-flex flex-row mt-1 text-black-50 date-time">
 									<div>
 										<i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("drivers_page_hiring_price").format(Utils.currencyFormat(driver.price || 1000))}</span>
@@ -1014,7 +1014,7 @@ window.addEventListener("message", async function (event) {
                         <td>${Utils.currencyFormat(loan.day_cost || 0)}</td>
                         <td class="text-danger">${Utils.currencyFormat(loan.remaining_amount || 0)}</td>
                         <td>${Utils.timeConverter((loan.timer || 0)+((config.loans.payment_interval_hours || 24)*3600))}</td>
-                        <td><button class="btn btn-outline-primary" style="min-width: 200px;" onclick="payLoan(${loan.id},${loan.remaining_amount})" >${Utils.translate("bank_page_loan_pay")}</button></td>
+                        <td><button class="btn btn-outline-primary" style="min-width: 200px;" onclick="payLoan(${Number(loan.id) || 0},${Number(loan.remaining_amount) || 0})" >${Utils.translate("bank_page_loan_pay")}</button></td>
                     </tr>
                 `);
                 $("#loan-table-container").css("display", "");
@@ -1076,7 +1076,7 @@ function getDriverAvailableTrucksHTML(myTrucks, driver, config) {
             html += `<option selected="selected">${config.dealership[truck.truck_name].name} (+${config.dealership[truck.truck_name].driver_bonus}%)</option>`;
         } else {
             if (truck.driver == null) {
-                html += `<option truck_id="${truck.truck_id}" driver_id="${driver.driver_id}">${config.dealership[truck.truck_name].name} (+${config.dealership[truck.truck_name].driver_bonus}%)</option>`;
+                html += `<option truck_id="${Utils.safeId(truck.truck_id)}" driver_id="${Utils.safeId(driver.driver_id)}">${config.dealership[truck.truck_name].name} (+${config.dealership[truck.truck_name].driver_bonus}%)</option>`;
             }
         }
     }
@@ -1518,10 +1518,10 @@ function renderLationParty(party, members) {
                 <div class="lation-party-name-box">
                     <i class="fas fa-shield-halved text-emerald font-large-1"></i>
                     <div>
-                        <div class="lation-party-name">${party.name || 'Frota de Logística'}</div>
+                        <div class="lation-party-name">${Utils.escapeHtml(party.name || 'Frota de Logística')}</div>
                         <div class="d-flex align-items-center gap-2 mt-1">
-                            <span class="lation-code-badge" onclick="copyPartyCode('${codeStr}')" title="Clique para copiar código">
-                                <i class="fas fa-hashtag mr-1"></i> CÓDIGO: #${codeStr} <i class="fas fa-copy ml-1"></i>
+                            <span class="lation-code-badge" onclick="copyPartyCode('${Utils.safeId(codeStr)}')" title="Clique para copiar código">
+                                <i class="fas fa-hashtag mr-1"></i> CÓDIGO: #${Utils.safeId(codeStr)} <i class="fas fa-copy ml-1"></i>
                             </span>
                             <span class="lation-status-pill ml-2">
                                 <i class="fas fa-circle-dot mr-1 text-emerald"></i> ATIVO
@@ -1536,7 +1536,7 @@ function renderLationParty(party, members) {
                     ${quitBtnStr}
                 </div>
             </div>
-            <p class="lation-party-desc">${party.description || 'Transporte e Logística Colaborativa'}</p>
+            <p class="lation-party-desc">${Utils.escapeHtml(party.description || 'Transporte e Logística Colaborativa')}</p>
         </div>
     `;
 
@@ -1578,7 +1578,7 @@ function renderLationParty(party, members) {
 
         let kickBtn = "";
         if (isOwner && !memberIsLeader) {
-            kickBtn = `<button class="lation-btn-kick" onclick="kickParty('${member.user_id || member.citizenid}')" title="Expulsar"><i class="fas fa-user-xmark mr-1"></i> Expulsar</button>`;
+            kickBtn = `<button class="lation-btn-kick" onclick="kickParty('${Utils.safeId(member.user_id || member.citizenid)}')" title="Expulsar"><i class="fas fa-user-xmark mr-1"></i> Expulsar</button>`;
         }
 
         let deliveries = member.finished_deliveries != null ? member.finished_deliveries : 0;
@@ -1592,7 +1592,7 @@ function renderLationParty(party, members) {
                         <span class="${onlineDotClass}"></span>
                     </div>
                     <div class="lation-member-info">
-                        <div class="lation-member-name" title="${member.name}">${member.name}</div>
+                        <div class="lation-member-name" title="${Utils.escapeHtml(member.name)}">${Utils.escapeHtml(member.name)}</div>
                         ${roleBadge}
                     </div>
                 </div>

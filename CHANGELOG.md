@@ -1,5 +1,33 @@
 # Changelog — AUST_trucker
 
+## [20.7.9] — 2026-10-03 — Residuais da auditoria
+
+### Correções
+- Locales `de/es/fr/ja/no/zh-cn` da NUI: adicionadas as 7 chaves de bloqueio de contrato que faltavam (agora 167/167 chaves em todos os idiomas).
+- Reembolso da caução do aluguel usa o pior estado (lataria/motor) amostrado pelo servidor durante o aluguel, em vez de só a saúde no momento da devolução.
+- `AUDIT_REPORT.md`: residuais reavaliados (locales já eram carregados sob demanda; demais itens documentados com o motivo de não serem correções pontuais).
+
+## [20.7.8] — 2026-10-03 — Itens menores da auditoria
+
+### Segurança / correções
+- Calote de empréstimos: débito automático da parcela, parcelas perdidas e status `defaulted` (`Config.Loans.AutoDebit`/`MaxMissedPayments`); inadimplente bloqueia novos empréstimos e a venda da empresa.
+- Bônus `parkedManually` (+5%) calculado no servidor (`VerifyParkedInBay`); removido do payload de `completeJob`.
+- Exame ADR: perguntas sorteadas pelo servidor e exibidas pelo client; gabarito movido para `server/adr_questions.lua` (só servidor).
+- `ContractService.PayPending` roda no login (QBCore/QBox e ESX) para pagamentos pendentes de quem estava offline.
+- Webhook do Discord das encomendas lido só no servidor (`aurp_trucker_parcel_webhook`); URL removida do config compartilhado.
+- `playerDropped`: cache `src -> citizenid` (`Framework.GetCitizenIdBySource`) para a limpeza de cargo/forklift/cooldowns não ser pulada quando o framework já removeu o jogador.
+- Removidos o evento morto `truck_logistics:deliveredCargo`, `server/schema.lua` (stub) e `fxmanifest.lua.disabled` (desatualizado).
+
+## [20.7.7] — 2026-10-03 — Security hardening
+
+### Segurança
+- Dinheiro: exploits de pagamento/preço corrigidos; débito atômico da empresa; `Framework.AddMoney/RemoveMoney/HasMoney` rejeitam valores não numéricos, NaN, infinitos e negativos (antes `RemoveMoney` negativo creditava no ESX).
+- Entrega LC exige prova de entrega validada no servidor; empréstimos (loans) endurecidos; dano de veículo lido no servidor.
+- Admin: `adminTeleport` executado e validado no servidor; `IsPlayerAdmin` exige a ACE dedicada `command.truckeradmin` (ACEs genéricas `command`/`admin` não bastam; apenas o console `src == 0` é implícito); todos os handlers admin validam tipo/intervalo/tamanho, gravam só campos sanitizados e registram log; `GetActiveContracts` não escreve mais no banco; bloqueio ADR usa os tipos de certificado reais; `ReloadTrailerOffsets` remove offsets apagados de `Config.TrailerSlots`.
+- NUI: escape de HTML (XSS) em `panel.js`/`admin.js`; bibliotecas (Bootstrap, three.js, TransformControls, Font Awesome) e fontes agora locais em `html/vendor/` (sem CDN); CSP adicionada; removida imagem de terceiros.
+- Client: prints de debug sob `Config.Debug`; comandos de debug restritos/encaminhados ao servidor; limpeza de blips/entidades/targets em `onResourceStop`.
+- Deploy: workflow com `permissions: contents: read`, `environment: production`, action fixada em tag, caminhos entre aspas e EXCLUDE de ferramentas de desenvolvimento.
+
 ## [20.6.2] — 2026-10-03 — Correção no Alvo da Empilhadeira, Unificação de Colisão Híbrida e Normalização de Offsets do TruckerAdmin
 ## [Unreleased] — 2026-09-28 — Sync do repo VP local (só servidor + docs)
 

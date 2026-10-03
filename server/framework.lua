@@ -7,6 +7,11 @@ Framework = {}
 
 local fw = Config.Framework or 'qbx'
 
+-- Valida montante monetário: número finito e não negativo (rejeita NaN/inf/negativos)
+local function IsValidAmount(amount)
+    return type(amount) == 'number' and amount == amount and amount ~= math.huge and amount ~= -math.huge and amount >= 0
+end
+
 -- ============================================================
 -- QBX / QBCore
 -- ============================================================
@@ -61,7 +66,7 @@ if fw == 'qbx' or fw == 'qbcore' then
     Framework.AddMoney = function(player, account, amount, reason)
         if type(player) == 'number' then player = Framework.GetPlayer(player) end
         if not player then return false end
-        if type(amount) ~= 'number' or amount ~= amount or amount < 0 or amount == math.huge then return false end
+        if not IsValidAmount(amount) then return false end
         account = (account == 'cash') and 'cash' or 'bank'
         local ok
         if fw == 'qbx' then
@@ -76,6 +81,7 @@ if fw == 'qbx' or fw == 'qbcore' then
     Framework.RemoveMoney = function(player, account, amount, reason)
         if type(player) == 'number' then player = Framework.GetPlayer(player) end
         if not player then return false end
+        if not IsValidAmount(amount) then return false end
         account = (account == 'cash') and 'cash' or 'bank'
         if fw == 'qbx' then
             return exports.qbx_core:RemoveMoney(player.PlayerData.source, account, amount, reason or '')
@@ -96,6 +102,7 @@ if fw == 'qbx' or fw == 'qbcore' then
     end
 
     Framework.HasMoney = function(player, account, amount)
+        if not IsValidAmount(amount) then return false end
         return Framework.GetMoney(player, account) >= amount
     end
 
@@ -168,7 +175,7 @@ elseif fw == 'esx' then
     -- Retorna true se o dinheiro foi creditado, false caso contrário.
     Framework.AddMoney = function(player, account, amount, reason)
         if not player then return false end
-        if type(amount) ~= 'number' or amount ~= amount or amount < 0 or amount == math.huge then return false end
+        if not IsValidAmount(amount) then return false end
         if account == 'cash' then
             player.addAccountMoney('money', amount)
         else
@@ -179,6 +186,7 @@ elseif fw == 'esx' then
 
     Framework.RemoveMoney = function(player, account, amount, reason)
         if not player then return false end
+        if not IsValidAmount(amount) then return false end
         local have = Framework.GetMoney(player, account)
         if have < amount then return false end
         if account == 'cash' then
@@ -197,6 +205,7 @@ elseif fw == 'esx' then
     end
 
     Framework.HasMoney = function(player, account, amount)
+        if not IsValidAmount(amount) then return false end
         return Framework.GetMoney(player, account) >= amount
     end
 
@@ -239,6 +248,33 @@ Framework.RemovePlayerMoney = function(src, account, amount, reason)
     local player = (type(src) == 'table') and src or Framework.GetPlayer(src)
     if not player then return false end
     return Framework.RemoveMoney(player, account, amount, reason)
+end
+
+-- Cache src -> citizenid: em playerDropped o framework pode já ter removido o jogador, e o
+-- Framework.GetPlayer(src) volta nil (a limpeza de cargo/forklift/cooldowns seria pulada).
+-- Preenchido sempre que GetPlayer(src) acha o jogador; limpo 10s após o drop (depois dos handlers).
+do
+    local cidBySrc = {}
+    local rawGetPlayer = Framework.GetPlayer
+
+    Framework.GetPlayer = function(src)
+        local player = rawGetPlayer(src)
+        if player and type(src) == 'number' then
+            local ok, cid = pcall(Framework.GetCitizenId, player)
+            if ok and cid then cidBySrc[src] = cid end
+        end
+        return player
+    end
+
+    -- citizenid conhecido para este src (mesmo depois de o framework remover o jogador)
+    Framework.GetCitizenIdBySource = function(src)
+        return cidBySrc[tonumber(src)]
+    end
+
+    AddEventHandler('playerDropped', function()
+        local src = source
+        SetTimeout(10000, function() cidBySrc[src] = nil end)
+    end)
 end
 
 if Config.Debug then

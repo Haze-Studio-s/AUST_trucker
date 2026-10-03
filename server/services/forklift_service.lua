@@ -29,13 +29,18 @@ function ForkliftService.Rent(citizenId, src, locationId, mode, expected)
             end
         end
 
+        -- Token do aluguel (identidade da tabela): um aluguel novo do mesmo jogador/local
+        -- nunca deve ser cancelado pelo timer de um aluguel anterior
+        local rentalToken = VP_Trucker.ForkliftRentals[citizenId]
         CreateThread(function()
             Wait(timeLimit * 1000)
             local rental = VP_Trucker.ForkliftRentals[citizenId]
             -- Cancelar somente se ainda for a mesma missão ativa
-            if rental and rental.locationId == locationId and rental.mode == 'tradepoint' then
+            if rental and rental == rentalToken and rental.locationId == locationId and rental.mode == 'tradepoint' then
                 VP_Trucker.ForkliftRentals[citizenId] = nil
-                VP_Trucker.TradePointActive[locationId] = nil
+                if VP_Trucker.TradePointActive[locationId] == citizenId then
+                    VP_Trucker.TradePointActive[locationId] = nil
+                end
                 -- Re-resolver src: jogador pode ter reconectado ou desconectado durante o timer
                 local resolvedSrc = Framework.FindPlayerByCitizenId(citizenId)
                 if resolvedSrc then

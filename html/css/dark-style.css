@@ -3,7 +3,7 @@
    Dark Theme & Glassmorphism Design System
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
+/* Fontes carregadas localmente via vendor/fonts/fonts.css (index.html) */
 
 :root {
     /* Lation Modern UI (Emerald Edition) Official Palette */

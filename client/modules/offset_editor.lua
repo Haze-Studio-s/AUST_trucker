@@ -54,7 +54,7 @@ local function SpawnCalibGhost(trailer, isForklift, propModel, offsetVec, headin
     end
 
     if not ghost or ghost == 0 or not DoesEntityExist(ghost) then
-        print("[AUST_Trucker] Falha crítica ao spawnar entidade fantasma para calibração.")
+        if Config.Debug then print("[AUST_Trucker] Falha crítica ao spawnar entidade fantasma para calibração.") end
         return nil
     end
 
@@ -737,9 +737,9 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
         })
     end
 
-    print(("^2[AUST_Trucker Client] Offset do reboque %s (%s) sincronizado em tempo real!^7"):format(
+    if Config.Debug then print(("^2[AUST_Trucker Client] Offset do reboque %s (%s) sincronizado em tempo real!^7"):format(
         trailerModel, isForklift and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))
-    ))
+    )) end
 end)
 
 RegisterNetEvent('aurp_trucker:client:adminSyncProps', function(propsList)
@@ -747,7 +747,7 @@ RegisterNetEvent('aurp_trucker:client:adminSyncProps', function(propsList)
         action = 'admin_update_props',
         props = propsList
     })
-    print(("^2[AUST_Trucker Client] Props homologados sincronizados em tempo real! (%d props)^7"):format(type(propsList) == 'table' and #propsList or 0))
+    if Config.Debug then print(("^2[AUST_Trucker Client] Props homologados sincronizados em tempo real! (%d props)^7"):format(type(propsList) == 'table' and #propsList or 0)) end
 end)
 
 RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
@@ -1169,3 +1169,43 @@ function OffsetEditor.StopPreview()
     SetNuiFocus(true, true)
     lib.notify({ title = 'Preview Finalizado', description = 'Ambiente de teste encerrado com sucesso.', type = 'info' })
 end
+
+-- Limpeza ao parar o resource: entidades fantasma, trailer de calibração, NPCs/blips admin, câmera e foco NUI
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+
+    local function delEnt(ent)
+        if ent and DoesEntityExist(ent) then DeleteEntity(ent) end
+    end
+
+    delEnt(CalibGhost); CalibGhost = nil
+    for _, g in ipairs(SavedGhosts) do delEnt(g) end
+    SavedGhosts = {}
+    delEnt(CalibTrailer); CalibTrailer = nil
+    delEnt(SpawnGhostEnt); SpawnGhostEnt = nil
+    for _, e in ipairs(ActivePreviewEntities) do delEnt(e) end
+    ActivePreviewEntities = {}
+
+    for _, data in pairs(DynamicAdminPeds) do
+        if data.ped and DoesEntityExist(data.ped) then
+            pcall(function() exports.ox_target:removeLocalEntity(data.ped) end)
+            DeleteEntity(data.ped)
+        end
+        if data.blip and DoesBlipExist(data.blip) then RemoveBlip(data.blip) end
+    end
+    DynamicAdminPeds = {}
+
+    if ActiveCalibCam and DoesCamExist(ActiveCalibCam) then DestroyCam(ActiveCalibCam, false) end
+    ActiveCalibCam = nil
+    if IsCalibrating or IsCalibratingSpawn or IsPreviewActive then
+        RenderScriptCams(false, false, 0, true, true)
+        SetNuiFocus(false, false)
+        SetNuiFocusKeepInput(false)
+        local ped = PlayerPedId()
+        FreezeEntityPosition(ped, false)
+        SetEntityCollision(ped, true, true)
+        SetEntityVisible(ped, true, false)
+        SetPlayerControl(PlayerId(), true, 0)
+    end
+    IsCalibrating, IsCalibratingSpawn, IsPreviewActive = false, false, false
+end)

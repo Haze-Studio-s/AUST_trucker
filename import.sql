@@ -1,3 +1,16 @@
+-- ###########################################################################
+-- #  ATENÇÃO — ARQUIVO DESTRUTIVO / DESATUALIZADO                           #
+-- #                                                                         #
+-- #  Este script executa DROP TABLE em TODAS as tabelas do aurp_trucker     #
+-- #  (empresas, empréstimos, jobs, frota, progressão...) e APAGA OS DADOS.  #
+-- #  NUNCA execute em um banco em produção / com dados de jogadores.        #
+-- #                                                                         #
+-- #  Ele está DESATUALIZADO em relação ao server/database.lua, que cria     #
+-- #  tabelas e aplica migrations automaticamente ao iniciar o resource      #
+-- #  (colunas novas, ENUMs, índices, trucker_pending_payouts, etc.).        #
+-- #  Em servidores existentes NÃO use este arquivo: deixe o resource migrar.#
+-- ###########################################################################
+
 -- aurp_trucker — import.sql
 -- Arquivo de referência para instalação manual / reset do banco.
 --

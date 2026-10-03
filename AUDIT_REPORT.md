@@ -16,7 +16,7 @@ validações server-side, superfícies de exploit em eventos/callbacks, seguran�
   - validação de posição no destino com fail-closed para coords (0,0,0)
 - **SQL**: uso consistente de queries parametrizadas (`?`) com `oxmysql`.
 - **Proteções anti-exploit em eventos**: sanitização de `amount/qty`, whitelists (ex.: `vehicleType`), updates atômicos (ex.: status de veículo).
-- **NUI (React)**: comunicação via `SendNUIMessage` + `fetch` NUI; o front não injeta HTML arbitrário (menor risco de XSS comparado a `innerHTML`).
+- **NUI (jQuery/Bootstrap, não React)**: `html/index.html` carrega `panel.js`/`js/admin.js` (UI jQuery) e comunica via `SendNUIMessage` + `fetch` NUI. O front monta HTML por template string, portanto o escape (`Utils.escapeHtml`/`safeId`) é obrigatório (corrigido em 2026-10-03; ver seção abaixo).
 - **Cleanup**: a maioria dos scripts client já remove blips/targets/zones no `onResourceStop` e em unload.
 
 ---
@@ -77,3 +77,37 @@ Arquivo alterado:
 - **Economia**: pagamentos calculados server-side (inclusive combustível via `lastFuel`)
 - **Cleanup**: `onResourceStop` presente nas áreas críticas (targets/blips/zones/peds)
 
+---
+
+## Rodada de auditoria 2026-10-03
+
+### Corrigido nesta rodada (branch de hardening, versão 20.7.7)
+
+- **Dinheiro**: exploits de pagamento/preço, débito atômico da empresa, prova de entrega LC validada no servidor, empréstimos (loans) endurecidos, dano de veículo lido no servidor.
+- **Framework**: `AddMoney`/`RemoveMoney`/`HasMoney` rejeitam NaN, infinito, não numérico e negativos (antes `RemoveMoney` negativo creditava no ESX).
+- **Admin**: `adminTeleport` server-side; `IsPlayerAdmin` exige a ACE `command.truckeradmin` (ACEs genéricas removidas; nil não é mais admin, só `src == 0`); handlers admin com whitelist/clamp/limite de tamanho, somente campos sanitizados em memória, log de toda escrita; `GetActiveContracts` sem escrita no banco; bloqueio ADR mapeado para os tipos reais de `trucker_adr_certs`; `ReloadTrailerOffsets` reconstrói `Config.TrailerSlots` (remove offsets apagados).
+- **NUI**: XSS (`panel.js`, `js/admin.js`); dependências (Bootstrap 4.6.2, three.js r128, TransformControls, Font Awesome 6.2.0, fontes) agora locais em `html/vendor/` (obtidas do registro npm; o proxy bloqueou jsdelivr/cdnjs) e CSP conservadora; removido fallback `document.write` e imagem de terceiros.
+- **Client**: prints de debug sob `Config.Debug`; `clearjob`/`canceljob` passam pelos eventos de cancelamento do servidor; `checkactivejob`/`checktrailer`/`cleartrailer` só com `Config.Debug`; `onResourceStop` adicionado em parcel_delivery, cargo_liquid, zones, convoy, car_carrier, offset_editor.
+- **CI/CD**: `deploy.yml` com `permissions: contents: read`, `environment: production`, action fixada em tag, caminhos entre aspas, `find` global removido e EXCLUDE de ferramentas de desenvolvimento.
+- **Higiene**: removidos scratch_*.js, Thumbs.db, `.server.pid`, `config/helper_functions.ccs.js` (sem referências); `.gitignore` ampliado; versão alinhada (README/CHANGELOG/fxmanifest); `client/modules/*.lua` fora de `files{}` (não expor código-fonte).
+
+### Corrigido depois (versão 20.7.8)
+
+- **Calote de empréstimos**: débito automático, parcelas perdidas e status `defaulted` (bloqueia novos empréstimos/venda da empresa).
+- **`parkedManually`**: verificado no servidor (`VerifyParkedInBay`); removido do payload do client.
+- **Exame ADR**: servidor sorteia as perguntas; gabarito só em `server/adr_questions.lua`.
+- **`PayPending`** no login; **webhook** do Parcel lido só no servidor; **`playerDropped`** com cache `src -> citizenid`.
+- Removidos `truck_logistics:deliveredCargo`, `server/schema.lua` e `fxmanifest.lua.disabled`.
+- **Locales da NUI**: `html/lang/*.js` já são carregados sob demanda por `Utils.loadLanguageFile` (a nota anterior de que `de/es/fr/ja/no/zh-cn` não eram carregados estava errada); faltavam 7 chaves `contract_locked_*`/`contract_page_button_locked` nesses 6 idiomas, agora traduzidas.
+- **Reembolso do aluguel**: o servidor amostra a saúde do caminhão a cada 3 s e usa o pior valor visto (o client não consegue mais "curar" o veículo logo antes de devolver).
+- **Deploy**: `easingthemes/ssh-deploy` fixada no SHA do commit da release v5.1.2 (`922253577e23…`), confirmado em `git ls-remote`; mesmos inputs da v5.1.0, só troca o runtime da action de node20 para node24.
+
+### Ainda em aberto
+
+- Validar in-game: CSP da NUI, fontes/ícones locais, comandos de cancelamento, calote (débito automático) e exame ADR (não testado em runtime).
+- Residuais conhecidos, sem correção (exigem refatoração/teste in-game que não cabe em correção pontual):
+  - Strings do backend hardcoded em PT (`lang/` cobre ~20 chaves): migrar tudo para `_U()` é uma passada de i18n de centenas de textos.
+  - `client/client.lua` e `client/main.lua` (3k+ linhas) com lógica duplicada: consolidar sem teste em runtime arrisca regressões no fluxo de entrega.
+  - Tabelas paralelas (`trucker_drivers` × `trucker_npc_drivers`, `trucker_player_progression` × `aust_trucker_stats`): atendem a features diferentes que coexistem; unificar exige migração de dados.
+  - Combustível/integridade e saúde do veículo são estado de entidades cujo dono é o client; o servidor só limita (clamp, "só diminui", pior valor amostrado). Fechar de vez exige rastrear o dano no servidor ao longo do contrato.
+  - Senha de party fica em texto puro apenas na memória do servidor (não é persistida nem enviada ao client; comparação em tempo constante + limite de tentativas), então hash não muda o risco real.

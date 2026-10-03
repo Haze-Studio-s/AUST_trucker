@@ -286,3 +286,12 @@ CreateThread(function()
         ::continue::
     end
 end)
+
+-- Limpeza ao parar o resource: remove blips dos membros do comboio
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    for _, blip in pairs(ConvoyState.memberBlips or {}) do
+        if DoesBlipExist(blip) then RemoveBlip(blip) end
+    end
+    ConvoyState.memberBlips = {}
+end)
