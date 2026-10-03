@@ -37,7 +37,7 @@ local function SpawnIndustryNPC(industryId, industry)
     })
 
     if Config.Debug then
-        print('[AURP_TRUCKER] NPC spawned at:', industry.name)
+        if Config.Debug then print('[AURP_TRUCKER] NPC spawned at:', industry.name) end
     end
 end
 
@@ -156,8 +156,6 @@ function OpenBuyMenu(industryId, product)
         return
     end
 
-    local totalPrice = amount * product.price
-
     TriggerServerEvent('aurp_trucker:buyFromIndustry', industryId, product.item, amount)
 end
 
@@ -182,8 +180,6 @@ function OpenSellMenu(industryId, item)
         return
     end
 
-    local totalPrice = amount * item.price
-
     TriggerServerEvent('aurp_trucker:sellToIndustry', industryId, item.item, amount)
 end
 
@@ -196,7 +192,7 @@ CreateThread(function()
     end
 
     if Config.Debug then
-        print('[AURP_TRUCKER] All industry NPCs spawned')
+        if Config.Debug then print('[AURP_TRUCKER] All industry NPCs spawned') end
     end
 end)
 

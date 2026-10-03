@@ -103,14 +103,29 @@ function IndustryService.BuyFrom(src, industryId, item, qty)
     local removed = Framework.RemoveMoney(Player, 'cash', totalPrice, 'industry-purchase')
     if not removed then return false, 'Falha ao processar pagamento' end
 
-    -- Adicionar item; em falha, estornar o pagamento
+    -- Reservar stock atomicamente (evita compras simultâneas esgotarem além do estoque)
+    local reserved = MySQL.update.await(
+        "UPDATE trucker_industry_state SET current_stock = current_stock - ? WHERE industry_id = ? AND item = ? AND entry_type = 'production' AND current_stock >= ?",
+        { qty, industryId, item, qty }
+    )
+    if not reserved or reserved == 0 then
+        Framework.AddMoney(Player, 'cash', totalPrice, 'industry-purchase-refund')
+        return false, 'Stock insuficiente'
+    end
+
+    -- Adicionar item; em falha, estornar o pagamento e devolver o stock
     local ok = exports.ox_inventory:AddItem(src, item, qty)
     if not ok then
         Framework.AddMoney(Player, 'cash', totalPrice, 'industry-purchase-refund')
+        MySQL.update.await(
+            "UPDATE trucker_industry_state SET current_stock = current_stock + ? WHERE industry_id = ? AND item = ? AND entry_type = 'production'",
+            { qty, industryId, item }
+        )
         return false, 'Inventário cheio'
     end
 
-    EconomyService.RecordPurchase(industryId, item, qty)
+    -- Stock já decrementado atomicamente acima; RecordPurchase apenas dispara reprecificação
+    EconomyService.RecordPurchase(industryId, item, 0)
     -- Lucro da venda vai para a empresa dona (se houver)
     IndustryOwnershipService.OnSale(industryId, totalPrice)
     return true, nil
@@ -219,7 +234,8 @@ CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
         Wait(Config.Economy.primaryProductionInterval)
-        IndustryService.RunProductionCycle(true)  -- primárias
+        local ok, err = pcall(IndustryService.RunProductionCycle, true)  -- primárias
+        if not ok then print(('[aurp_trucker] RunProductionCycle(primárias) erro: %s'):format(tostring(err))) end
     end
 end)
 
@@ -227,7 +243,8 @@ CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
         Wait(Config.Economy.secondaryProductionInterval)
-        IndustryService.RunProductionCycle(false)  -- secundárias
+        local ok, err = pcall(IndustryService.RunProductionCycle, false)  -- secundárias
+        if not ok then print(('[aurp_trucker] RunProductionCycle(secundárias) erro: %s'):format(tostring(err))) end
     end
 end)
 
@@ -236,6 +253,7 @@ CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
         Wait(300000)  -- 5 minutos
-        IndustryService.RunNpcFailsafe()
+        local ok, err = pcall(IndustryService.RunNpcFailsafe)
+        if not ok then print(('[aurp_trucker] RunNpcFailsafe erro: %s'):format(tostring(err))) end
     end
 end)

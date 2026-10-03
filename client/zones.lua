@@ -383,4 +383,10 @@ function Zones.SetupDeliveryPoint(coords, jobId, onUnload)
     })
 end
 
+-- Limpeza ao parar o resource (points, objetivos/blips, targets de trailer)
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    pcall(Zones.Cleanup)
+end)
+
 return Zones

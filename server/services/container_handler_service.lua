@@ -16,6 +16,11 @@ end
 --         ou { success = false, reason }
 -- ============================================================
 
+-- Anti-abuso: tempo mínimo entre Start e Complete e cooldown entre jobs
+local MIN_JOB_SECONDS     = 20
+local COOLDOWN_SECONDS    = 10
+local LastCompletedAt     = {}  -- [citizenId] = os.time()
+
 function ContainerHandlerService.Start(citizenId, src)
     if not Config.ContainerHandler or not Config.ContainerHandler.Enabled then
         return { success = false, reason = 'Sistema de Handler desativado' }
@@ -23,6 +28,11 @@ function ContainerHandlerService.Start(citizenId, src)
 
     if VP_Trucker.ContainerJobs[citizenId] then
         return { success = false, reason = 'Você já tem uma missão de contêiner ativa' }
+    end
+
+    local lastDone = LastCompletedAt[citizenId]
+    if lastDone and (os.time() - lastDone) < COOLDOWN_SECONDS then
+        return { success = false, reason = 'Aguarde alguns segundos antes de iniciar outra missão' }
     end
 
     local locs  = Config.ContainerHandler.ContainerLocations
@@ -69,9 +79,18 @@ function ContainerHandlerService.Complete(citizenId, src, coords)
         return { success = false, reason = 'Sem missão de contêiner ativa' }
     end
 
+    -- Tempo mínimo server-side desde o Start
+    if (os.time() - (job.startedAt or 0)) < MIN_JOB_SECONDS then
+        return { success = false, reason = 'Entrega rápida demais' }
+    end
+
     -- Validação 1: proximidade do jogador ao slot registrado pelo SERVER
     -- (usamos as coords do job, não as enviadas pelo client, para evitar spoofing)
-    local playerPos = GetEntityCoords(GetPlayerPed(src))
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then
+        return { success = false, reason = 'Estado do jogador inválido' }
+    end
+    local playerPos = GetEntityCoords(ped)
     local slotPos   = vector3(job.deliverySlot.x, job.deliverySlot.y, job.deliverySlot.z)
     local dist      = #(playerPos - slotPos)
 
@@ -81,6 +100,10 @@ function ContainerHandlerService.Complete(citizenId, src, coords)
         end
         return { success = false, reason = 'Muito longe do slot de entrega (' .. math.floor(dist) .. 'm)' }
     end
+
+    -- Consumir o job ANTES de qualquer await/pagamento (chamadas concorrentes não pagam duas vezes)
+    VP_Trucker.ContainerJobs[citizenId] = nil
+    LastCompletedAt[citizenId] = os.time()
 
     -- Calcular pagamento com cadeia completa: base × skill × company
     local cfg         = Config.ContainerHandler
@@ -121,9 +144,6 @@ function ContainerHandlerService.Complete(citizenId, src, coords)
     if company then
         pcall(CompanyService.AddXP, company.id, math.floor(finalPayment / 10))
     end
-
-    -- Limpar job
-    VP_Trucker.ContainerJobs[citizenId] = nil
 
     if Config.Debug then
         print(('[aurp_trucker] ContainerHandler.Complete: %s pagamento=$%d (base=%d skill=%.2f company=%.2f)'):format(

@@ -171,7 +171,11 @@ function CargoTrackingService.CompleteTheft(plate, thiefPlate, thiefCitizenId, t
     end
 
     -- Falha o job original
-    DB_SetCargoFailed(cargo.jobId)
+    -- pcall: falha no DB (ex.: ENUM sem 'failed') não pode abortar a transferência de posse
+    local okF, errF = pcall(DB_SetCargoFailed, cargo.jobId)
+    if not okF then
+        print(('[aurp_trucker] CompleteTheft: DB_SetCargoFailed falhou (job %s): %s'):format(tostring(cargo.jobId), tostring(errF)))
+    end
 
     -- Notifica o dono
     local ownerSrc = GetSrcByCitizenId(cargo.citizenId)
@@ -180,7 +184,8 @@ function CargoTrackingService.CompleteTheft(plate, thiefPlate, thiefCitizenId, t
     end
 
     -- Busca dados do job para montar entrada do ladrão
-    local job = DB_GetJobById(cargo.jobId)
+    local okJ, job = pcall(DB_GetJobById, cargo.jobId)
+    if not okJ then job = nil end
     local result = {
         jobId       = cargo.jobId,
         destId      = job and job.dest_id or nil,
@@ -201,6 +206,8 @@ function CargoTrackingService.CompleteTheft(plate, thiefPlate, thiefCitizenId, t
         vulnerableSince = nil,
         theftBy         = nil,
         theftStartedAt  = nil,
+        stolenAt        = os.time(),  -- referência de tempo server-side para JobService.CompleteTheft
+        destId          = result.destId,
     }
 
     return result

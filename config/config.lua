@@ -878,6 +878,12 @@ Config.Loans = {
     NumInstallments  = 4,          -- número de parcelas
     InstallmentDays  = 7,          -- dias entre parcelas
     PenaltyRate      = 0.15,       -- multa por atraso (15%)
+    -- Calote: a cada parcela vencida o sistema tenta debitar a parcela automaticamente
+    -- (banco do jogador / cofre da empresa). Sem saldo => multa + parcela perdida.
+    -- Ao atingir MaxMissedPayments consecutivas o empréstimo vira 'defaulted': para de
+    -- acumular multa, bloqueia novos empréstimos/venda da empresa e só sai quitando tudo.
+    AutoDebit         = true,
+    MaxMissedPayments = 3,
     CheckInterval    = 300,        -- segundos entre verificações de atraso
     BankerLocation   = vector3(-2962.6, 485.6, 15.7),  -- Paleto Bay bank
     BankerPed        = 'ig_bankman',
@@ -1250,77 +1256,7 @@ Config.Adr = {
         environmental    = 'Perigosas ao Meio Ambiente',
     },
 
-    Questions = {
-        flammable_liquid = {
-            { q = 'Qual equipamento é obrigatório ao transportar líquidos inflamáveis?',
-              options = {'Extintor', 'Picareta', 'Capacete', 'Luvas de Latex'},
-              answer = 1 },
-            { q = 'A velocidade máxima recomendada com carga inflamável em rodovias é:',
-              options = {'110 km/h', '90 km/h', '70 km/h', '50 km/h'},
-              answer = 2 },
-            { q = 'Em caso de vazamento de líquido inflamável, a primeira ação é:',
-              options = {'Acender luz de emergência', 'Isolar a área e ligar para emergências', 'Tentar tampar com pano', 'Continuar viagem'},
-              answer = 2 },
-            { q = 'O painel de segurança laranja em veículos ADR identifica:',
-              options = {'Carga frágil', 'Carga perigosa', 'Carga refrigerada', 'Carga viva'},
-              answer = 2 },
-        },
-        flammable_gas = {
-            { q = 'Cilindros de gás devem ser transportados:',
-              options = {'Deitados sem fixação', 'Em pé e fixados', 'Empilhados horizontalmente', 'Com a válvula para baixo'},
-              answer = 2 },
-            { q = 'Gases inflamáveis pertencem à classe ADR:',
-              options = {'Classe 1', 'Classe 2', 'Classe 3', 'Classe 4'},
-              answer = 2 },
-            { q = 'O risco principal no transporte de gás GLP é:',
-              options = {'Explosão por ignição', 'Contaminação de água', 'Dano à camada de ozônio', 'Radiação'},
-              answer = 1 },
-        },
-        toxic = {
-            { q = 'Substâncias tóxicas exigem qual EPI mínimo ao manusear?',
-              options = {'Apenas luvas', 'Máscara, luvas e óculos', 'Apenas óculos', 'Nenhum'},
-              answer = 2 },
-            { q = 'Em caso de contato de produto tóxico com a pele, deve-se:',
-              options = {'Esfregar com areia', 'Lavar com água corrente por 15 min', 'Cobrir com pano', 'Aguardar secar'},
-              answer = 2 },
-            { q = 'O símbolo de caveira com ossos cruzados indica:',
-              options = {'Explosivo', 'Radioativo', 'Tóxico', 'Corrosivo'},
-              answer = 3 },
-        },
-        corrosive = {
-            { q = 'Substâncias corrosivas podem destruir:',
-              options = {'Apenas metais', 'Apenas plástico', 'Tecidos vivos e materiais', 'Apenas madeira'},
-              answer = 3 },
-            { q = 'O pH de um ácido forte corrosivo é aproximadamente:',
-              options = {'7', '9', '1', '14'},
-              answer = 3 },
-            { q = 'Contêineres de corrosivos devem ser feitos de:',
-              options = {'Alumínio puro', 'Material resistente ao produto', 'Vidro sempre', 'Madeira tratada'},
-              answer = 2 },
-        },
-        explosive = {
-            { q = 'A distância mínima de segurança ao estacionar veículo com explosivos próximo a edifícios é:',
-              options = {'5 metros', '10 metros', '50 metros', 'Não há restrição'},
-              answer = 3 },
-            { q = 'Explosivos devem ser transportados longe de:',
-              options = {'Carga seca', 'Fontes de calor e ignição', 'Carga refrigerada', 'Produtos alimentícios'},
-              answer = 2 },
-            { q = 'O detonador e o explosivo principal devem ser transportados:',
-              options = {'Juntos para facilitar', 'Em compartimentos separados', 'Na cabine do motorista', 'Não há regra'},
-              answer = 2 },
-        },
-        environmental = {
-            { q = 'Fertilizantes em excesso no ambiente causam principalmente:',
-              options = {'Eutrofização de rios', 'Aumento da temperatura', 'Redução da chuva ácida', 'Melhora do solo'},
-              answer = 1 },
-            { q = 'O símbolo de peixe morto e árvore indica:',
-              options = {'Produto venenoso', 'Perigoso ao meio ambiente', 'Produto radioativo', 'Inflamável'},
-              answer = 2 },
-            { q = 'Em caso de derramamento de produto perigoso ao meio ambiente, deve-se:',
-              options = {'Lavar com mangueira', 'Conter e acionar equipe especializada', 'Cobrir com terra', 'Deixar evaporar'},
-              answer = 2 },
-        },
-    },
+    -- Banco de perguntas (com gabarito) movido para server/adr_questions.lua (AdrExamBank, só servidor)
 }
 
 -- ================================================
@@ -1831,7 +1767,10 @@ Config.ShopStock = {
         -- Webhook opcional (Discord) para log de entregas
         Webhook = {
             Enabled       = false,
-            URL           = '',
+            -- SEGURANÇA: este arquivo é shared (visível/baixável por clientes). Nunca cole a URL aqui;
+            -- defina no server.cfg:  set aurp_trucker_parcel_webhook "https://discord.com/api/webhooks/..."
+            -- (usar `set`, NÃO `setr`). No client o valor é sempre '' (só o servidor envia o webhook).
+            URL           = IsDuplicityVersion() and GetConvar('aurp_trucker_parcel_webhook', '') or '',
             CommunityName = 'AURP Trucker — Entregas',
             Color         = {
                 Start    = 3066993,   -- verde

@@ -54,9 +54,29 @@ function ProgressionService.GetSkillPoints(citizenId)
     return (stats and tonumber(stats.skill_points)) or 0
 end
 
+-- Trava por cidadão: level-up é leitura-modificação-escrita separada por awaits de DB.
+-- Chamadas concorrentes aguardam (máx ~5s) e então executam em série.
+local ProgLocks = {}
+
+local function WithProgLock(citizenId, fn, ...)
+    local waited = 0
+    while ProgLocks[citizenId] and waited < 5000 do
+        Wait(10)
+        waited = waited + 10
+    end
+    ProgLocks[citizenId] = true
+    local ok, res = pcall(fn, ...)
+    ProgLocks[citizenId] = nil
+    if not ok then
+        print(('[aurp_trucker] ProgressionService erro (%s): %s'):format(tostring(citizenId), tostring(res)))
+        return nil
+    end
+    return res
+end
+
 -- Concede XP ao jogador, processa level-ups atômicos, notifica o cliente
 -- Returns: { xpGained, newLevel, levelsGained, totalXP, totalSkillPoints }
-function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier, distance, expMultiplier)
+local function GrantXPUnlocked(src, citizenId, basePayment, timeMultiplier, distance, expMultiplier)
     local xpGained = CalcXP(basePayment, timeMultiplier, distance, expMultiplier)
     local row = DB_AddXP(citizenId, xpGained)
     if not row then return { xpGained = xpGained, levelsGained = 0, newLevel = 1 } end
@@ -89,9 +109,14 @@ function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier,
     }
 end
 
+function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier, distance, expMultiplier)
+    return WithProgLock(citizenId, GrantXPUnlocked, src, citizenId, basePayment, timeMultiplier, distance, expMultiplier)
+        or { xpGained = 0, levelsGained = 0, newLevel = 1 }
+end
+
 -- Concede XP direto/exato ao jogador (usado em fretes Polarix / Quick Jobs com valor pré-calculado)
 -- Returns: { xpGained, newLevel, levelsGained, totalXP, totalSkillPoints }
-function ProgressionService.AddDirectXP(src, citizenId, exactXP)
+local function AddDirectXPUnlocked(src, citizenId, exactXP)
     local xpGained = math.max(0, math.floor(tonumber(exactXP) or 0))
     if xpGained <= 0 then return { xpGained = 0, levelsGained = 0, newLevel = 1 } end
 
@@ -125,6 +150,10 @@ function ProgressionService.AddDirectXP(src, citizenId, exactXP)
         totalXP          = updatedStats and updatedStats.xp or row.xp,
         totalSkillPoints = updatedStats and updatedStats.skill_points or row.skill_points,
     }
+end
+function ProgressionService.AddDirectXP(src, citizenId, exactXP)
+    return WithProgLock(citizenId, AddDirectXPUnlocked, src, citizenId, exactXP)
+        or { xpGained = 0, levelsGained = 0, newLevel = 1 }
 end
 ProgressionService.AddXP = ProgressionService.AddDirectXP
 
@@ -282,7 +311,7 @@ end
 
 -- Compra um nível de skill gastando 1 skill point
 -- Retorna: true | false, motivo (string)
-function ProgressionService.PurchaseSkill(src, citizenId, skillType)
+local function PurchaseSkillUnlocked(src, citizenId, skillType)
     local validTypes = {
         distance = true,
         valuable = true,
@@ -314,8 +343,27 @@ function ProgressionService.PurchaseSkill(src, citizenId, skillType)
         return false, 'Sem skill points disponíveis'
     end
 
-    DB_UpsertSkill(citizenId, skillType, currentLevel + 1)
+    local okUp, errUp = pcall(DB_UpsertSkill, citizenId, skillType, currentLevel + 1)
+    if not okUp then
+        -- Estorna o ponto gasto para não perder o skill point
+        print(('[aurp_trucker] PurchaseSkill falha ao gravar skill (%s): %s'):format(tostring(citizenId), tostring(errUp)))
+        pcall(function()
+            MySQL.update.await('UPDATE trucker_player_progression SET skill_points = skill_points + 1 WHERE citizenid = ?', { citizenId })
+        end)
+        return false, 'Erro ao aplicar skill'
+    end
     return true
+end
+
+function ProgressionService.PurchaseSkill(src, citizenId, skillType)
+    local lockResult = {}
+    local ran = WithProgLock(citizenId, function()
+        local ok, reason = PurchaseSkillUnlocked(src, citizenId, skillType)
+        lockResult.ok, lockResult.reason = ok, reason
+        return true
+    end)
+    if not ran then return false, 'Erro ao processar compra' end
+    return lockResult.ok, lockResult.reason
 end
 
 -- Alias de compatibilidade com aurp_trucker:server:upgradeSkill

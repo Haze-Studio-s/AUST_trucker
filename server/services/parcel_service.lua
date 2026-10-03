@@ -372,14 +372,17 @@ end)
 CreateThread(function()
     while true do
         Wait(300000) -- verifica a cada 5 min
-        local now = os.time()
-        for cid, state in pairs(ParcelState) do
-            if state.startTime and (now - state.startTime) > 1800 then
-                ParcelState[cid]       = nil
-                ActiveWorkers[cid]     = nil
-                NextStopCooldowns[cid] = nil
-                if Config.Debug then print('[ParcelService] State orfao limpo: ' .. cid) end
+        local ok, err = pcall(function()
+            local now = os.time()
+            for cid, state in pairs(ParcelState) do
+                if state.startTime and (now - state.startTime) > 1800 then
+                    ParcelState[cid]       = nil
+                    ActiveWorkers[cid]     = nil
+                    NextStopCooldowns[cid] = nil
+                    if Config.Debug then print('[ParcelService] State orfao limpo: ' .. cid) end
+                end
             end
-        end
+        end)
+        if not ok then print('[ParcelService] ERRO no loop de limpeza: ' .. tostring(err)) end
     end
 end)

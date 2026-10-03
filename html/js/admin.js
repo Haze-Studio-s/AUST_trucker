@@ -400,12 +400,12 @@
       tr.innerHTML = `
         <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
         <td>${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
-        <td><span class="admin-badge ${badgeClass}">${jobType.toUpperCase()}</span></td>
-        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary)">(${xp} XP)</span></td>
+        <td><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
+        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary)">(${escapeHtml(xp)} XP)</span></td>
         <td>${Number(dist).toFixed(1)} km (Lvl ${r.req_skill || r.required_level || 1})</td>
         <td>
-          <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${k}" title="Editar Rota"><i class="fas fa-edit"></i></button>
-          <button class="admin-btn admin-btn-danger btn-del-route" data-id="${k}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
+          <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
+          <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -589,8 +589,8 @@
             X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0} H:${coords.heading ? Number(coords.heading).toFixed(0) : 0}°
           </div>
           <div style="display:flex; gap:6px;">
-            <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${coords.x}" data-y="${coords.y}" data-z="${coords.z}" data-h="${coords.heading}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
-            <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${s.key || s.id || s.spawn_id}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
+            <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
+            <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${escapeHtml(s.key || s.id || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
           </div>
         `;
 
@@ -750,7 +750,7 @@
       card.innerHTML = `
         <div class="admin-card-header" style="margin-bottom: 4px;">
           <strong style="color:var(--admin-primary); font-size:13px;"><i class="fas fa-cube"></i> ${escapeHtml(p.label || p.prop_model)}</strong>
-          <span class="admin-badge ${badgeClass}">${cat.toUpperCase()}</span>
+          <span class="admin-badge ${badgeClass}">${escapeHtml(cat.toUpperCase())}</span>
         </div>
         <div style="font-size:11px; color:var(--admin-text-muted); font-family:monospace;">
           Modelo: <span style="color:#fff;">${escapeHtml(p.prop_model)}</span> | Offset Z: ${Number(p.offset_z || 0).toFixed(2)}
@@ -880,7 +880,7 @@
                   </span>
                   <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
                 </div>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${s.data && s.data.id ? s.data.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(model)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
               </div>
             `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
           </div>
@@ -891,7 +891,7 @@
                 ${item.forklift.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(item.forklift.label)}"</span>` : ''}
                 <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;"><i class="fas fa-truck-ramp-box"></i> ${escapeHtml(item.forklift.prop_model || 'forklift')}</span>
                 <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${item.forklift && item.forklift.id ? item.forklift.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(item.forklift && item.forklift.id ? item.forklift.id : '')}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
               </div>
             ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
           </div>
@@ -1009,16 +1009,16 @@
           tr.innerHTML = `
             <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
             <td>${escapeHtml(r.name || r.title || 'Carga')}</td>
-            <td><span class="admin-badge ${badgeClass}">${jobType.toUpperCase()}</span></td>
+            <td><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
             <td>${Number(dist).toFixed(1)} km</td>
             <td>
-              <input type="number" class="admin-inline-input eco-route-pay" data-id="${k}" value="${payment}">
+              <input type="number" class="admin-inline-input eco-route-pay" data-id="${escapeHtml(k)}" value="${escapeHtml(payment)}">
             </td>
             <td>
-              <input type="number" class="admin-inline-input eco-route-xp" data-id="${k}" value="${xp}">
+              <input type="number" class="admin-inline-input eco-route-xp" data-id="${escapeHtml(k)}" value="${escapeHtml(xp)}">
             </td>
             <td>
-              <button class="admin-btn admin-btn-primary btn-save-route-eco" data-id="${k}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-save"></i> Salvar</button>
+              <button class="admin-btn admin-btn-primary btn-save-route-eco" data-id="${escapeHtml(k)}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-save"></i> Salvar</button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -1099,8 +1099,8 @@
           X: ${coords.x ? Number(coords.x).toFixed(1) : 0}, Y: ${coords.y ? Number(coords.y).toFixed(1) : 0}, Z: ${coords.z ? Number(coords.z).toFixed(1) : 0}
         </td>
         <td>
-          <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${coords.x}" data-y="${coords.y}" data-z="${coords.z}" data-h="${coords.heading}" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
-          <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${k}" title="Remover"><i class="fas fa-trash"></i></button>
+          <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
+          <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -1192,7 +1192,7 @@
   }
 
   function escapeHtml(string) {
-    if (!string) return '';
+    if (string === null || string === undefined || string === false) return '';
     return String(string)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')

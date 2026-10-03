@@ -232,7 +232,8 @@ CreateThread(function()
     -- Loop de verificação de estoque baixo
     while true do
         Wait(Config.ShopStock.CheckInterval or 300000) -- 5 min
-        pcall(ShopStockService.CheckAndCreateContracts)
+        local ok, err = pcall(ShopStockService.CheckAndCreateContracts)
+        if not ok then print('[aurp_trucker] ShopStockService CheckAndCreateContracts erro: ' .. tostring(err)) end
     end
 end)
 
@@ -243,6 +244,7 @@ CreateThread(function()
 
     while true do
         Wait(900000) -- 15 min
-        pcall(ShopStockService.NpcAutoResupply)
+        local ok, err = pcall(ShopStockService.NpcAutoResupply)
+        if not ok then print('[aurp_trucker] ShopStockService NpcAutoResupply erro: ' .. tostring(err)) end
     end
 end)

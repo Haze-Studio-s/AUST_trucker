@@ -223,5 +223,13 @@ function CarCarrierModule.StopLoadingOperation()
     CarCarrierModule.RemoveRamp()
 end
 
+-- Limpeza ao parar o resource (rampa e textUI)
+AddEventHandler('onResourceStop', function(resourceName)
+    if GetCurrentResourceName() ~= resourceName then return end
+    OperationActive = false
+    pcall(lib.hideTextUI)
+    CarCarrierModule.RemoveRamp()
+end)
+
 _G.CarCarrierModule = CarCarrierModule
 return CarCarrierModule

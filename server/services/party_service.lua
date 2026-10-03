@@ -14,6 +14,31 @@ local function NewUUID()
     return s
 end
 
+-- Helper: remove caracteres de controle, trim e limita tamanho. Retorna nil se vazio/ inválido.
+local function SanitizeText(v, maxLen)
+    if v == nil then return nil end
+    if type(v) ~= 'string' and type(v) ~= 'number' then return nil end
+    v = tostring(v):gsub('%c', ''):gsub('^%s+', ''):gsub('%s+$', '')
+    if #v > maxLen then v = v:sub(1, maxLen) end
+    if v == '' then return nil end
+    return v
+end
+
+-- Comparação de strings em tempo constante (evita timing attack na senha)
+local function ConstantTimeEquals(a, b)
+    a, b = tostring(a or ''), tostring(b or '')
+    local diff = #a ~ #b
+    local len = math.max(#a, #b)
+    for i = 1, len do
+        diff = diff | ((a:byte(i) or 0) ~ (b:byte(i) or 0))
+    end
+    return diff == 0
+end
+
+-- Rate limit de tentativas de senha por jogador: 5 falhas => bloqueio de 60s
+local JoinAttempts = {} -- [cid] = { count, lockedUntil }
+local MAX_JOIN_FAILS, JOIN_LOCK_SECONDS = 5, 60
+
 -- Helper: broadcast partyUpdate para todos os membros online
 local function BroadcastPartyUpdate(partyId)
     local party = VP_Trucker.Parties[partyId]
@@ -77,9 +102,10 @@ function PartyService.Create(src, data)
     local partyId = NewUUID()
     local partyCode = string.upper(string.sub(partyId, 1, 6))
 
-    local partyName = (data and data.name and tostring(data.name):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.name):gsub("^%s*(.-)%s*$", "%1") or ('Frota #' .. partyCode)
-    local partyDesc = (data and data.desc and tostring(data.desc):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.desc):gsub("^%s*(.-)%s*$", "%1") or 'Transporte e Logística em Comboio'
-    local partyPass = (data and data.pass and tostring(data.pass):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.pass):gsub("^%s*(.-)%s*$", "%1") or nil
+    if type(data) ~= 'table' then data = nil end
+    local partyName = SanitizeText(data and data.name, 30) or ('Frota #' .. partyCode)
+    local partyDesc = SanitizeText(data and data.desc, 120) or 'Transporte e Logística em Comboio'
+    local partyPass = SanitizeText(data and data.pass, 32)
 
     pcall(DB_CreateParty, partyId, cid, maxSize)
 
@@ -111,18 +137,19 @@ function PartyService.Join(src, nameOrCode, pass)
         return false, 'Você já participa de um grupo. Saia do grupo atual antes de entrar em outro.'
     end
 
-    if not nameOrCode or tostring(nameOrCode):gsub("^%s*(.-)%s*$", "%1") == "" then
+    local cleanSearchRaw = SanitizeText(nameOrCode, 64)
+    if not cleanSearchRaw then
         return false, 'Informe o nome ou código do grupo.'
     end
 
-    local cleanSearch = tostring(nameOrCode):gsub("^%s*(.-)%s*$", "%1"):upper()
+    local cleanSearch = cleanSearchRaw:upper()
 
     local foundPartyId, foundParty = nil, nil
     for pid, p in pairs(VP_Trucker.Parties) do
         if p.status ~= 'disbanded' then
             local pCode = (p.code or string.upper(string.sub(pid, 1, 6))):upper()
             local pName = (p.name or ""):upper()
-            if pCode == cleanSearch or pName == cleanSearch or pid == nameOrCode then
+            if pCode == cleanSearch or pName == cleanSearch or pid == cleanSearchRaw then
                 foundPartyId = pid
                 foundParty = p
                 break
@@ -143,10 +170,22 @@ function PartyService.Join(src, nameOrCode, pass)
 
     -- Validar senha se houver
     if foundParty.pass and foundParty.pass ~= "" then
-        local inputPass = pass and tostring(pass):gsub("^%s*(.-)%s*$", "%1") or ""
-        if inputPass ~= tostring(foundParty.pass) then
+        local att = JoinAttempts[cid]
+        if att and att.lockedUntil and os.time() < att.lockedUntil then
+            return false, 'Muitas tentativas incorretas. Aguarde antes de tentar novamente.'
+        end
+        local inputPass = SanitizeText(pass, 32) or ""
+        if not ConstantTimeEquals(inputPass, foundParty.pass) then
+            att = att or { count = 0 }
+            att.count = att.count + 1
+            if att.count >= MAX_JOIN_FAILS then
+                att.lockedUntil = os.time() + JOIN_LOCK_SECONDS
+                att.count = 0
+            end
+            JoinAttempts[cid] = att
             return false, 'Senha incorreta para entrar neste grupo.'
         end
+        JoinAttempts[cid] = nil
     end
 
     foundParty.members[cid] = { src = src, joined_at = os.time(), finished_deliveries = 0 }

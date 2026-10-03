@@ -1,5 +1,15 @@
 # Changelog — AUST_trucker
 
+## [20.7.7] — 2026-10-03 — Security hardening
+
+### Segurança
+- Dinheiro: exploits de pagamento/preço corrigidos; débito atômico da empresa; `Framework.AddMoney/RemoveMoney/HasMoney` rejeitam valores não numéricos, NaN, infinitos e negativos (antes `RemoveMoney` negativo creditava no ESX).
+- Entrega LC exige prova de entrega validada no servidor; empréstimos (loans) endurecidos; dano de veículo lido no servidor.
+- Admin: `adminTeleport` executado e validado no servidor; `IsPlayerAdmin` exige a ACE dedicada `command.truckeradmin` (ACEs genéricas `command`/`admin` não bastam; apenas o console `src == 0` é implícito); todos os handlers admin validam tipo/intervalo/tamanho, gravam só campos sanitizados e registram log; `GetActiveContracts` não escreve mais no banco; bloqueio ADR usa os tipos de certificado reais; `ReloadTrailerOffsets` remove offsets apagados de `Config.TrailerSlots`.
+- NUI: escape de HTML (XSS) em `panel.js`/`admin.js`; bibliotecas (Bootstrap, three.js, TransformControls, Font Awesome) e fontes agora locais em `html/vendor/` (sem CDN); CSP adicionada; removida imagem de terceiros.
+- Client: prints de debug sob `Config.Debug`; comandos de debug restritos/encaminhados ao servidor; limpeza de blips/entidades/targets em `onResourceStop`.
+- Deploy: workflow com `permissions: contents: read`, `environment: production`, action fixada em tag, caminhos entre aspas e EXCLUDE de ferramentas de desenvolvimento.
+
 ## [20.6.2] — 2026-10-03 — Correção no Alvo da Empilhadeira, Unificação de Colisão Híbrida e Normalização de Offsets do TruckerAdmin
 ## [Unreleased] — 2026-09-28 — Sync do repo VP local (só servidor + docs)
 

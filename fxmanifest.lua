@@ -56,6 +56,7 @@ server_scripts {
     'server/services/admin_service.lua',       -- Painel Administrativo e Gestão de Rotas Dinâmicas
     'server/exports.lua',
     'server/exports_shop.lua',   -- v16: exports estoque lojas
+    'server/adr_questions.lua',   -- banco de perguntas ADR (gabarito só no servidor)
     'server/callbacks.lua',
     'server/events.lua',
 }
@@ -92,12 +93,12 @@ client_scripts {
 ui_page 'html/index.html'
 
 files {
-    'client/modules/*.lua',
     'html/index.html',
     'html/style.css',
     'html/panel.js',
     'html/css/*',
     'html/js/*',
+    'html/vendor/**',
     'html/lang/*',
     'html/img/*',
     'html/img/avatar/*',

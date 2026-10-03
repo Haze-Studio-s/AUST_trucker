@@ -12,6 +12,25 @@ const defaultTranslations = {
     "confirmation_modal_loan_payoff": { br: "Você tem certeza de que deseja pagar o saldo total de {0}?", en: "Are you sure you want to pay the entire balance of {0}?", es: "¿Estás seguro de que deseas pagar el saldo total de {0}?" }
 };
 
+// Escapa texto para interpolação segura em HTML (conteúdo e atributos entre aspas).
+// Use em TODO valor vindo de jogador/banco antes de montar HTML com .html()/.append().
+Utils.escapeHtml = function (value) {
+    if (value === null || value === undefined || value === false) return "";
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+};
+
+// Identificadores usados em atributos/handlers inline (onclick="fn('<id>')"): só [A-Za-z0-9_-].
+// escapeHtml NÃO basta aqui: o navegador decodifica &#39; antes de executar o JS do onclick.
+Utils.safeId = function (value) {
+    if (value === null || value === undefined) return "";
+    return String(value).replace(/[^\w-]/g, "");
+};
+
 Utils.translate = function (key) {
     if (!key || typeof key !== "string") return key;
     let curLocale = locale || "br";
@@ -287,7 +306,7 @@ const exampleConfig = {
     title: 'Custom Modal Title',
     body: 'Custom Modal Body Text',
     bodyHtml: '<p>Custom Modal Body Text that accept HTML</p>',
-    bodyImage: "https://shuffle.dev/randomizer/saas/bootstrap-pstls/1.0.0/static_elements/footer/10_awz.jpg",
+    bodyImage: "",
     footerText: "Custom Footer Text",
     buttons: [
         { text: Utils.translate('confirmation_modal_cancel_button'), class: 'btn btn-outline-primary', dismiss: true },

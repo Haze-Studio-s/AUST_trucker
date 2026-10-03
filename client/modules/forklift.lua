@@ -317,13 +317,13 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- BLINDAGEM ESTRITA: Forçar estritamente o reboque (trailer) e JAMAIS a empilhadeira
     local targetTrailer = (trailer and DoesEntityExist(trailer) and trailer) or (_G.JobEntities and _G.JobEntities.trailer)
     if not targetTrailer or not DoesEntityExist(targetTrailer) then
-        print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento do palete.")
+        if Config.Debug then print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento do palete.") end
         return false
     end
 
     -- Garante que o alvo não seja a própria empilhadeira
     if _G.JobEntities and targetTrailer == _G.JobEntities.forklift then
-        print("[AUST_Trucker] ERRO: Alvo de estiva detectado como empilhadeira! Abortando attach errôneo.")
+        if Config.Debug then print("[AUST_Trucker] ERRO: Alvo de estiva detectado como empilhadeira! Abortando attach errôneo.") end
         return false
     end
 
@@ -442,7 +442,7 @@ function ForkliftModule.SnapForkliftToSlot(forkliftEntity, trailer)
 
     local targetTrailer = (trailer and DoesEntityExist(trailer) and trailer) or (_G.JobEntities and _G.JobEntities.trailer)
     if not targetTrailer or not DoesEntityExist(targetTrailer) then
-        print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento da empilhadeira.")
+        if Config.Debug then print("[AUST_Trucker] ERRO: Trailer não encontrado para acoplamento da empilhadeira.") end
         return false
     end
 
@@ -525,7 +525,7 @@ local function AttachPalletToForklift(forklift, pallet)
     end
 
     if not NetworkHasControlOfEntity(pallet) then
-        print(("[AUST_Trucker] Falha ao obter controle de rede do palete %s"):format(tostring(pallet)))
+        if Config.Debug then print(("[AUST_Trucker] Falha ao obter controle de rede do palete %s"):format(tostring(pallet))) end
         return false
     end
 
@@ -587,7 +587,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
                 end
-                print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7")
+                if Config.Debug then print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7") end
             end
 
             -- Yield defensivo para garantia de propagação atômica em memória

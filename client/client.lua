@@ -215,7 +215,7 @@ local function SpawnTrailer(model, coords)
 
     if not HasModelLoaded(modelHash) then
         if Config.Debug then
-            print("^1[AURP_TRUCKER ERROR]^7 Falha ao carregar modelo: " .. model)
+            if Config.Debug then print("^1[AURP_TRUCKER ERROR]^7 Falha ao carregar modelo: " .. model) end
         end
         return nil
     end
@@ -273,14 +273,14 @@ end
 local function GetTrailerType(trailer)
     if not trailer or not DoesEntityExist(trailer) then
         if Config.Debug then
-            print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Trailer inválido ou não existe")
+            if Config.Debug then print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Trailer inválido ou não existe") end
         end
         return nil
     end
 
     local trailerModel = GetEntityModel(trailer)
     if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 DEBUG GetTrailerType: Modelo do trailer = " .. tostring(trailerModel))
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 DEBUG GetTrailerType: Modelo do trailer = " .. tostring(trailerModel)) end
     end
 
     local modelHashes = {
@@ -291,10 +291,10 @@ local function GetTrailerType(trailer)
 
     local detectedType = modelHashes[trailerModel]
     if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 DEBUG GetTrailerType: Tipo detectado = " .. tostring(detectedType))
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 DEBUG GetTrailerType: Tipo detectado = " .. tostring(detectedType)) end
         if not detectedType then
-            print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Modelo não reconhecido! Hash = " .. tostring(trailerModel))
-            print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Hash esperados: tanker=" .. GetHashKey('tanker') .. ", trailers=" .. GetHashKey('trailers') .. ", trailers2=" .. GetHashKey('trailers2'))
+            if Config.Debug then print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Modelo não reconhecido! Hash = " .. tostring(trailerModel)) end
+            if Config.Debug then print("^1[AURP_TRUCKER]^7 DEBUG GetTrailerType: Hash esperados: tanker=" .. GetHashKey('tanker') .. ", trailers=" .. GetHashKey('trailers') .. ", trailers2=" .. GetHashKey('trailers2')) end
         end
     end
 
@@ -593,7 +593,7 @@ RegisterNUICallback('post', function(body, cb)
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
         local contractType = data and (data.contract_type or data.contractType or data.type)
         local isParty = data and (data.party == true or data.isParty == true)
-        print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI %s acionado! ID=%s, type=%s, party=%s^7"):format(tostring(event), tostring(contractId), tostring(contractType), tostring(isParty)))
+        if Config.Debug then print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI %s acionado! ID=%s, type=%s, party=%s^7"):format(tostring(event), tostring(contractId), tostring(contractType), tostring(isParty))) end
         SetNuiFocus(false, false)
         CloseJobBoard()
         if lcActiveJob then
@@ -601,18 +601,18 @@ RegisterNUICallback('post', function(body, cb)
             if not isAlive then
                 lcActiveJob = nil
             else
-                print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7")
+                if Config.Debug then print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7") end
                 lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
                 return cb(200)
             end
         end
         if isStartingJob then
-            print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7")
+            if Config.Debug then print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7") end
             return cb(200)
         end
         isStartingJob = true
         SetTimeout(4000, function() isStartingJob = false end)
-        print("^2[AUST_Trucker DEBUG - ETAPA 1] Enviando TriggerServerEvent 'aurp_trucker:server:startDelivery'...^7")
+        if Config.Debug then print("^2[AUST_Trucker DEBUG - ETAPA 1] Enviando TriggerServerEvent 'aurp_trucker:server:startDelivery'...^7") end
         TriggerServerEvent('aurp_trucker:server:startDelivery', {
             id = contractId,
             contractId = contractId,
@@ -628,9 +628,8 @@ RegisterNUICallback('post', function(body, cb)
     if event == "cancelContract" or event == "cancelJob" then
         SetNuiFocus(false, false)
         CloseJobBoard()
-        print("^3[AUST_Trucker Client] cancelContract/cancelJob NUI Callback invoked^7")
-        ExecuteCommand('canceljob')
-        TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+        if Config.Debug then print("^3[AUST_Trucker Client] cancelContract/cancelJob NUI Callback invoked^7") end
+        ExecuteCommand('canceljob') -- clearjob já dispara o cancelamento no servidor
         cb(200)
         return
     end
@@ -799,7 +798,7 @@ local function HandleDirectStartContract(data, cb)
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
     local contractType = data and (data.contract_type or data.contractType or data.type)
     local isParty = data and (data.party == true or data.isParty == true)
-    print(("^2[AUST_Trucker Client] NUI Direct Start received: ID=%s, Type=%s, Party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
+    if Config.Debug then print(("^2[AUST_Trucker Client] NUI Direct Start received: ID=%s, Type=%s, Party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty))) end
     if lcActiveJob then
         local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
         if not isAlive then
@@ -1128,12 +1127,12 @@ end)
 
 function StartJob(job)
     if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 DEBUG StartJob: Iniciando job " .. job.cargo .. " (ID: " .. job.id .. ")")
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 DEBUG StartJob: Iniciando job " .. job.cargo .. " (ID: " .. job.id .. ")") end
     end
 
     if currentJob then
         if Config.Debug then
-            print("^1[AURP_TRUCKER]^7 DEBUG StartJob: FALHA - Já possui trabalho ativo")
+            if Config.Debug then print("^1[AURP_TRUCKER]^7 DEBUG StartJob: FALHA - Já possui trabalho ativo") end
         end
         lib.notify({ title = 'Erro', description = 'Você já possui um trabalho ativo', type = 'error' })
         return false
@@ -1267,8 +1266,8 @@ function StartJob(job)
     })
 
     if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 Trabalho iniciado: " .. job.cargo)
-        print("^2[AURP_TRUCKER]^7 DEBUG StartJob: SUCESSO - currentJob definido, activeJob definido, blip criado")
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 Trabalho iniciado: " .. job.cargo) end
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 DEBUG StartJob: SUCESSO - currentJob definido, activeJob definido, blip criado") end
     end
 
     return true
@@ -1345,7 +1344,7 @@ local function _CompleteLoading()
     )
 
     if Config.Debug then
-        print('^2[AURP_TRUCKER]^7 Carga carregada: ' .. currentJob.cargo)
+        if Config.Debug then print('^2[AURP_TRUCKER]^7 Carga carregada: ' .. currentJob.cargo) end
     end
 end
 
@@ -1579,7 +1578,7 @@ function CompleteJob()
     end
 
     if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 Trabalho completado: $" .. finalPayment)
+        if Config.Debug then print("^2[AURP_TRUCKER]^7 Trabalho completado: $" .. finalPayment) end
     end
 end
 
@@ -1627,7 +1626,7 @@ function SpawnPlayerTrailer(model)
         )
 
         if Config.Debug then
-            print("^2[AURP_TRUCKER]^7 Trailer spawned: " .. model)
+            if Config.Debug then print("^2[AURP_TRUCKER]^7 Trailer spawned: " .. model) end
         end
     else
         ShowNotification(
@@ -2187,18 +2186,23 @@ RegisterCommand('canceljob', function()
 end, false)
 
 
+-- Comandos de debug (somente com Config.Debug): não alteram estado de job no servidor
+if Config.Debug then
 RegisterCommand('checkactivejob', function()
     if activeJob then
         print("^2[AURP_TRUCKER]^7 Trabalho Ativo:")
-        print("^2[AURP_TRUCKER]^7 Cargo: " .. activeJob.cargo)
-        print("^2[AURP_TRUCKER]^7 Empresa: " .. activeJob.company)
-        print("^2[AURP_TRUCKER]^7 Estágio: " .. activeJob.stage)
-        print("^2[AURP_TRUCKER]^7 Pagamento: $" .. activeJob.payment)
+        print("^2[AURP_TRUCKER]^7 Cargo: " .. tostring(activeJob.cargo))
+        print("^2[AURP_TRUCKER]^7 Empresa: " .. tostring(activeJob.company))
+        print("^2[AURP_TRUCKER]^7 Estágio: " .. tostring(activeJob.stage))
+        print("^2[AURP_TRUCKER]^7 Pagamento: $" .. tostring(activeJob.payment))
     else
         print("^1[AURP_TRUCKER]^7 Nenhum trabalho ativo")
     end
 end, false)
+end
 
+-- cleartrailer/checktrailer: apenas debug (deletam/inspecionam entidades sem passar pelo servidor)
+if Config.Debug then
 RegisterCommand('cleartrailer', function()
     if currentTrailer and DoesEntityExist(currentTrailer) then
         DeleteEntity(currentTrailer)
@@ -2248,10 +2252,15 @@ RegisterCommand('checktrailer', function()
         )
     end
 end, false)
+end
 
 RegisterCommand('clearjob', function()
-    CleanupLCContract()
+    -- Cancelamento passa pelo servidor (caminhos oficiais de cancelar/abandonar); depois limpa o estado local
     TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+    if currentJob or activeJob then
+        TriggerServerEvent('aurp_trucker:abandonJob')
+    end
+    CleanupLCContract()
 
     if currentJob or activeJob or lcActiveJob then
         if jobProgress.pickupBlip then
@@ -3272,8 +3281,6 @@ local function StartDeliveryRoute()
                         end
                         SetWaypointOff()
 
-                        TriggerServerEvent("truck_logistics:deliveredCargo")
-
                         if not isQuickJob then
                             -- ========================================================
                             -- CAMINHÃO PRÓPRIO (OWNED TRUCK / FRETE)
@@ -3431,7 +3438,7 @@ local function StartDeliveryRoute()
 end
 
 RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
-    print(("^2[AUST_Trucker Client] aurp_trucker:client:startLCContract received for job: %s^7"):format(tostring(contract and contract.jobId)))
+    if Config.Debug then print(("^2[AUST_Trucker Client] aurp_trucker:client:startLCContract received for job: %s^7"):format(tostring(contract and contract.jobId))) end
     if not contract or lcActiveJob then return end
     isStartingJob = true
     lcActiveJob = contract
@@ -3462,7 +3469,7 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                 lcActiveJob.truck = truck
                 lcActiveJob.truckPlate = contract.truckPlate
             else
-                print("^1[AUST_Trucker Client] AVISO: Caminhão não localizado via OneSync NetID.^7")
+                if Config.Debug then print("^1[AUST_Trucker Client] AVISO: Caminhão não localizado via OneSync NetID.^7") end
             end
         end
 

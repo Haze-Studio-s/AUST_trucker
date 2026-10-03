@@ -4,21 +4,21 @@
 local examinerPed = nil
 
 local function DoAdrExam(adrType)
-    local bank = Config.Adr.Questions[adrType]
-    if not bank or #bank < 3 then
-        lib.notify({ title = 'ADR', description = 'Banco de questões insuficiente', type = 'error' })
+    -- As perguntas são sorteadas pelo SERVIDOR (uso único); o client só as exibe e devolve as respostas
+    local issued = lib.callback.await('aurp_trucker:getAdrExamQuestions', false, adrType)
+    if not issued or not issued.success or type(issued.questions) ~= 'table' or #issued.questions < 3 then
+        if issued and issued.reason == 'retry_cooldown' then
+            local mins = math.ceil((issued.remainingSeconds or 1800) / 60)
+            lib.notify({ title = 'ADR', description = ('Aguarde %d min antes de tentar novamente'):format(mins), type = 'error', duration = 8000 })
+        else
+            lib.notify({ title = 'ADR', description = (issued and issued.reason) or 'Não foi possível iniciar o exame', type = 'error' })
+        end
         return
     end
 
-    -- Pick 3 random unique questions
     local picked = {}
-    local usedIdx = {}
-    while #picked < 3 do
-        local idx = math.random(1, #bank)
-        if not usedIdx[idx] then
-            usedIdx[idx] = true
-            table.insert(picked, { qIdx = idx, q = bank[idx] })
-        end
+    for _, sq in ipairs(issued.questions) do
+        table.insert(picked, { qIdx = sq.qIdx, q = { q = sq.q, options = sq.options } })
     end
 
     -- Build lib.inputDialog rows

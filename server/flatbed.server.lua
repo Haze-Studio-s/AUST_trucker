@@ -12,6 +12,41 @@ local function netEntityExists(netId)
     return e ~= 0 and DoesEntityExist(e)
 end
 
+-- Rate limit por jogador/ação (ms)
+local lastFlatbedCall = {} -- [src] = { [action] = GetGameTimer() }
+local function flatbedRateLimited(src, action, minMs)
+    local now = GetGameTimer()
+    lastFlatbedCall[src] = lastFlatbedCall[src] or {}
+    local last = lastFlatbedCall[src][action]
+    if last and (now - last) < (minMs or 1000) then return true end
+    lastFlatbedCall[src][action] = now
+    return false
+end
+
+AddEventHandler('playerDropped', function()
+    lastFlatbedCall[source] = nil
+end)
+
+-- Valida pedido de Lower/Raise: netId numérico, entidade é um flatbed, solicitante a <= 15m
+-- e (se houver motorista) o motorista é o próprio solicitante. Retorna a entidade ou nil.
+local function validateBedOperator(src, flatbedNetId)
+    flatbedNetId = tonumber(flatbedNetId)
+    if not flatbedNetId or not netEntityExists(flatbedNetId) then return nil end
+    local flatbedVehicle = NetworkGetEntityFromNetworkId(flatbedNetId)
+    if not DoesEntityExist(flatbedVehicle) or GetEntityType(flatbedVehicle) ~= 2 then return nil end
+    if GetEntityModel(flatbedVehicle) ~= FLATBED_MODEL then return nil end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return nil end
+    if #(GetEntityCoords(ped) - GetEntityCoords(flatbedVehicle)) > 15.0 then return nil end
+
+    -- Ocupação: se outro jogador dirige o flatbed, apenas ele pode operar a cama
+    local driver = GetPedInVehicleSeat(flatbedVehicle, -1)
+    if driver and driver ~= 0 and driver ~= ped and IsPedAPlayer(driver) then return nil end
+
+    return flatbedVehicle, flatbedNetId
+end
+
 -- Cria bed prop ao detectar flatbed3 no mundo
 AddEventHandler('entityCreated', function(entity)
     if not DoesEntityExist(entity) then return end
@@ -131,24 +166,28 @@ end)
 RegisterNetEvent('aurp_trucker:flatbed:LowerFlatbed')
 AddEventHandler('aurp_trucker:flatbed:LowerFlatbed', function(flatbedNetId)
     -- C-10: Validar origem
-    if not Framework.GetPlayer(source) then return end
-    local flatbedVehicle = NetworkGetEntityFromNetworkId(flatbedNetId)
-    if not DoesEntityExist(flatbedVehicle) then return end
+    local src = source
+    if not Framework.GetPlayer(src) then return end
+    if flatbedRateLimited(src, 'lower', 1000) then return end
+    local flatbedVehicle, netId = validateBedOperator(src, flatbedNetId)
+    if not flatbedVehicle then return end
     local owner = NetworkGetEntityOwner(flatbedVehicle)
-    if owner ~= -1 then
-        TriggerClientEvent('aurp_trucker:flatbed:LowerFlatbedClient', owner, flatbedNetId)
+    if owner and owner ~= -1 then
+        TriggerClientEvent('aurp_trucker:flatbed:LowerFlatbedClient', owner, netId)
     end
 end)
 
 RegisterNetEvent('aurp_trucker:flatbed:RaiseFlatbed')
 AddEventHandler('aurp_trucker:flatbed:RaiseFlatbed', function(flatbedNetId)
     -- C-10: Validar origem
-    if not Framework.GetPlayer(source) then return end
-    local flatbedVehicle = NetworkGetEntityFromNetworkId(flatbedNetId)
-    if not DoesEntityExist(flatbedVehicle) then return end
+    local src = source
+    if not Framework.GetPlayer(src) then return end
+    if flatbedRateLimited(src, 'raise', 1000) then return end
+    local flatbedVehicle, netId = validateBedOperator(src, flatbedNetId)
+    if not flatbedVehicle then return end
     local owner = NetworkGetEntityOwner(flatbedVehicle)
-    if owner ~= -1 then
-        TriggerClientEvent('aurp_trucker:flatbed:RaiseFlatbedClient', owner, flatbedNetId)
+    if owner and owner ~= -1 then
+        TriggerClientEvent('aurp_trucker:flatbed:RaiseFlatbedClient', owner, netId)
     end
 end)
 
@@ -156,6 +195,7 @@ RegisterNetEvent('aurp_trucker:flatbed:AttachVehicle')
 AddEventHandler('aurp_trucker:flatbed:AttachVehicle', function(flatbedNetId, vehicleToAttachNetId)
     local src = source
     if not Framework.GetPlayer(src) then return end
+    if flatbedRateLimited(src, 'attach', 1000) then return end
     flatbedNetId = tonumber(flatbedNetId)
     vehicleToAttachNetId = tonumber(vehicleToAttachNetId)
     if not flatbedNetId or not vehicleToAttachNetId then return end
@@ -165,6 +205,15 @@ AddEventHandler('aurp_trucker:flatbed:AttachVehicle', function(flatbedNetId, veh
     local attachEntity   = NetworkGetEntityFromNetworkId(vehicleToAttachNetId)
     if not DoesEntityExist(flatbedVehicle) or not DoesEntityExist(attachEntity) then return end
     if GetEntityType(flatbedVehicle) ~= 2 or GetEntityType(attachEntity) ~= 2 then return end
+    if GetEntityModel(flatbedVehicle) ~= FLATBED_MODEL then return end
+
+    -- Ocupação: o veículo a acoplar não pode ter motorista player diferente do solicitante,
+    -- e o flatbed só pode ser operado pelo seu motorista (se houver)
+    local reqPed = GetPlayerPed(src)
+    local attachDriver = GetPedInVehicleSeat(attachEntity, -1)
+    if attachDriver and attachDriver ~= 0 and attachDriver ~= reqPed and IsPedAPlayer(attachDriver) then return end
+    local flatDriver = GetPedInVehicleSeat(flatbedVehicle, -1)
+    if flatDriver and flatDriver ~= 0 and flatDriver ~= reqPed and IsPedAPlayer(flatDriver) then return end
 
     -- Impedir auto-acoplamento (veículo acoplado a si mesmo)
     if flatbedNetId == vehicleToAttachNetId or flatbedVehicle == attachEntity then return end
@@ -173,9 +222,9 @@ AddEventHandler('aurp_trucker:flatbed:AttachVehicle', function(flatbedNetId, veh
     local currentAttached = Entity(flatbedVehicle).state.attachedVehicle
     if currentAttached and tonumber(currentAttached) ~= -1 then return end
 
-    -- Validar proximidade física do solicitante até o flatbed (máx 20m)
+    -- Validar proximidade física do solicitante até o flatbed (máx 15m)
     local ped = GetPlayerPed(src)
-    if not DoesEntityExist(ped) or #(GetEntityCoords(ped) - GetEntityCoords(flatbedVehicle)) > 20.0 then
+    if not DoesEntityExist(ped) or #(GetEntityCoords(ped) - GetEntityCoords(flatbedVehicle)) > 15.0 then
         return
     end
 
@@ -195,6 +244,7 @@ RegisterNetEvent('aurp_trucker:flatbed:DetachVehicle')
 AddEventHandler('aurp_trucker:flatbed:DetachVehicle', function(flatbedNetId, vehicleToAttachNetId)
     local src = source
     if not Framework.GetPlayer(src) then return end
+    if flatbedRateLimited(src, 'detach', 1000) then return end
     flatbedNetId = tonumber(flatbedNetId)
     vehicleToAttachNetId = tonumber(vehicleToAttachNetId)
     if not flatbedNetId or not vehicleToAttachNetId then return end
@@ -203,6 +253,7 @@ AddEventHandler('aurp_trucker:flatbed:DetachVehicle', function(flatbedNetId, veh
     local flatbedVehicle = NetworkGetEntityFromNetworkId(flatbedNetId)
     local attachEntity   = NetworkGetEntityFromNetworkId(vehicleToAttachNetId)
     if not DoesEntityExist(flatbedVehicle) or not DoesEntityExist(attachEntity) then return end
+    if GetEntityModel(flatbedVehicle) ~= FLATBED_MODEL then return end
 
     -- Validar proximidade física do solicitante até o flatbed
     local ped = GetPlayerPed(src)

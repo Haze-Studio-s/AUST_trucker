@@ -58,16 +58,19 @@ end
 -- ============================================================
 
 -- payload = { fuel, fatigue, vehicleWasMoving, plate }
-function TruckSimulationService.OnSync(src, payload)
+function TruckSimulationService.OnSync(src, payload, force)
     local state = SimState[src]
     if not state then return end
+    if type(payload) ~= 'table' then return end
 
     local now      = GetGameTimer()
+    -- Rate limit: mínimo ~1s entre syncs por jogador (evita flood de UPDATEs)
+    if not force and state.lastSyncTime and (now - state.lastSyncTime) < 1000 then return end
     local elapsed  = (now - state.lastSyncTime) / 1000.0  -- segundos
     state.lastSyncTime = now
 
     -- Validar combustível: teto e piso
-    local reportedFuel = tonumber(payload.fuel) or state.lastFuel
+    local reportedFuel = math.max(0.0, math.min(100.0, tonumber(payload.fuel) or state.lastFuel))
     local cfg          = Config.TruckSimulation.Fuel
     local maxDrop      = cfg.ConsumptionRate * cfg.LoadedMultiplier * elapsed * 1.2
     local minDrop      = cfg.ConsumptionRate * elapsed * 0.5
@@ -87,7 +90,8 @@ function TruckSimulationService.OnSync(src, payload)
     local savedFatigue = math.max(0.0, math.min(100.0, tonumber(payload.fatigue) or state.lastFatigue))
 
     -- Persistir
-    local plate = payload.plate or state.currentPlate
+    -- Placa vem apenas do estado server-side (nunca do payload do client)
+    local plate = state.currentPlate
     if plate then DB_SetVehicleFuel(plate, savedFuel) end
 
     local Player = Framework.GetPlayer(src)
@@ -98,12 +102,12 @@ function TruckSimulationService.OnSync(src, payload)
     state.vehicleWasMoving = payload.vehicleWasMoving or false
     -- audit C-01: rastrear integridade server-side (clamp 0-100; nil = sem job ativo)
     if payload.integrity ~= nil then
-        local reportedIntegrity = tonumber(payload.integrity) or 100
+        local reportedIntegrity = math.max(0, math.min(100, tonumber(payload.integrity) or 100))
         -- Integridade só pode diminuir (nunca aumenta durante viagem)
         local current = state.lastIntegrity or 100
         state.lastIntegrity = math.max(0, math.min(current, reportedIntegrity))
     end
-    if payload.coords then
+    if type(payload.coords) == 'table' then
         local c = payload.coords
         state.coords = vector3(
             tonumber(c.x) or 0,
@@ -119,7 +123,7 @@ end
 
 function TruckSimulationService.OnVehicleDestroyed(src, payload)
     -- Força sync do estado atual; job será marcado como failed pelo JobService
-    TruckSimulationService.OnSync(src, payload)
+    TruckSimulationService.OnSync(src, payload, true)
 end
 
 function TruckSimulationService.OnPlayerDropped(src)
@@ -273,19 +277,22 @@ end
 Citizen.CreateThread(function()
     while true do
         Wait(600000)  -- a cada 10 minutos
-        local connected = {}
-        for _, src in ipairs(GetPlayers()) do
-            connected[tonumber(src)] = true
-        end
-        local pruned = 0
-        for src in pairs(SimState) do
-            if not connected[src] then
-                SimState[src] = nil
-                pruned = pruned + 1
+        local ok, err = pcall(function()
+            local connected = {}
+            for _, src in ipairs(GetPlayers()) do
+                connected[tonumber(src)] = true
             end
-        end
-        if pruned > 0 and Config.Debug then
-            print(('[aurp_trucker] SimState pruning: %d entradas órfãs removidas'):format(pruned))
-        end
+            local pruned = 0
+            for src in pairs(SimState) do
+                if not connected[src] then
+                    SimState[src] = nil
+                    pruned = pruned + 1
+                end
+            end
+            if pruned > 0 and Config.Debug then
+                print(('[aurp_trucker] SimState pruning: %d entradas órfãs removidas'):format(pruned))
+            end
+        end)
+        if not ok then print(('[aurp_trucker] SimState pruning erro: %s'):format(tostring(err))) end
     end
 end)
