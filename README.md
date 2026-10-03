@@ -1,6 +1,6 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.7.8-blue)
+![Version](https://img.shields.io/badge/version-20.7.9-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 

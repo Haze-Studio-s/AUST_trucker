@@ -74,10 +74,14 @@ end
 local function validEntity(e) return e and e ~= 0 and DoesEntityExist(e) end
 
 -- Estorno proporcional ao pior entre lataria e motor (1000 = intacto), lido no servidor.
-local function computeRefund(entity, deposit)
+-- `worstSeen`: pior saúde amostrada pelo servidor durante o aluguel (ver sampler abaixo). O dono da
+-- entidade é o client, que poderia "curar" o veículo logo antes da devolução; usar o pior valor
+-- observado impede que o reparo de última hora apague o dano já registrado.
+local function computeRefund(entity, deposit, worstSeen)
     if not validEntity(entity) then return 0, deposit end
     local worst = math.max(0.0, math.min(1000.0, math.min(GetVehicleBodyHealth(entity) or 0.0,
                                                           GetVehicleEngineHealth(entity) or 0.0)))
+    if tonumber(worstSeen) then worst = math.min(worst, math.max(0.0, tonumber(worstSeen))) end
     local penalty = 0
     if worst < (cfg().damageThreshold or 950.0) then
         penalty = math.min(deposit, math.floor(deposit * (1000.0 - worst) / 1000.0 + 0.5))
@@ -276,7 +280,7 @@ lib.callback.register('aurp_trucker:rental:returnTruck', function(source, _paylo
     Busy[citizenId] = true
     PendingLock[citizenId] = true
     local ok, result = pcall(function()
-        local refund, penalty = computeRefund(entity, rental.deposit)
+        local refund, penalty = computeRefund(entity, rental.deposit, rental.worstSeen)
         -- Grava o crédito ANTES de apagar a linha: se algo falhar depois, é pago no próximo login
         local okUpd = pcall(MySQL.update.await,
             'UPDATE trucker_rentals SET refund_due = ? WHERE citizenid = ?', { refund, citizenId })
@@ -325,7 +329,7 @@ function TruckRentalService.OnPlayerDropped(citizenId)
     Active[citizenId] = nil
     local entity = rentalEntity(rental)
     unbindNet(rental.netId, citizenId)
-    local refund = computeRefund(entity, rental.deposit)
+    local refund = computeRefund(entity, rental.deposit, rental.worstSeen)
     -- caminhão nunca apareceu no mundo (spawn do client falhou) → caução integral
     if not entity and not rental.netId then refund = rental.deposit end
     if entity then DeleteEntity(entity) end
@@ -347,4 +351,23 @@ end
 
 AddEventHandler('playerDropped', function()
     LastCall[source] = nil
+end)
+
+-- Sampler: registra o pior estado (lataria/motor) de cada caminhão alugado a cada 3 s. Só diminui.
+CreateThread(function()
+    while true do
+        Wait(3000)
+        local ok, err = pcall(function()
+            for _, rental in pairs(Active) do
+                local e = rentalEntity(rental)
+                if validEntity(e) then
+                    local h = math.min(GetVehicleBodyHealth(e) or 1000.0, GetVehicleEngineHealth(e) or 1000.0)
+                    if h == h and (not rental.worstSeen or h < rental.worstSeen) then
+                        rental.worstSeen = math.max(0.0, h)
+                    end
+                end
+            end
+        end)
+        if not ok then print(('[AUST_trucker] rental sampler erro: %s'):format(tostring(err))) end
+    end
 end)

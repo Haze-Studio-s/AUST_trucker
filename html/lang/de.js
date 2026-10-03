@@ -285,4 +285,11 @@ Lang["de"] = {
 	str_invalid_value: "Ungültiger Wert",
 	str_more_than: "Muss größer oder gleich {0} sein",
 	str_less_than: "Muss kleiner oder gleich {0} sein",
+	contract_page_button_locked: "Gesperrt",
+	contract_locked_adr: "Erfordert ADR-Zertifikat Klasse {0}",
+	contract_locked_distance: "Entfernung überschreitet Ihr Fähigkeitslimit ({0} km)",
+	contract_locked_fragile: "Erfordert Fähigkeit Zerbrechliche Fracht (Stufe 1)",
+	contract_locked_valuable: "Erfordert Fähigkeit Wertvolle Fracht (Stufe 1)",
+	contract_locked_fast: "Erfordert Fähigkeit Eilzustellung (Stufe 1)",
+	contract_locked_illegal: "Erfordert Spezialisierung auf illegale Fracht",
 };

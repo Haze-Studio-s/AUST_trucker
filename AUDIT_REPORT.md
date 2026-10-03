@@ -98,9 +98,16 @@ Arquivo alterado:
 - **Exame ADR**: servidor sorteia as perguntas; gabarito só em `server/adr_questions.lua`.
 - **`PayPending`** no login; **webhook** do Parcel lido só no servidor; **`playerDropped`** com cache `src -> citizenid`.
 - Removidos `truck_logistics:deliveredCargo`, `server/schema.lua` e `fxmanifest.lua.disabled`.
+- **Locales da NUI**: `html/lang/*.js` já são carregados sob demanda por `Utils.loadLanguageFile` (a nota anterior de que `de/es/fr/ja/no/zh-cn` não eram carregados estava errada); faltavam 7 chaves `contract_locked_*`/`contract_page_button_locked` nesses 6 idiomas, agora traduzidas.
+- **Reembolso do aluguel**: o servidor amostra a saúde do caminhão a cada 3 s e usa o pior valor visto (o client não consegue mais "curar" o veículo logo antes de devolver).
 - **Deploy**: `easingthemes/ssh-deploy` fixada no SHA do commit da release v5.1.2 (`922253577e23…`), confirmado em `git ls-remote`; mesmos inputs da v5.1.0, só troca o runtime da action de node20 para node24.
 
 ### Ainda em aberto
 
 - Validar in-game: CSP da NUI, fontes/ícones locais, comandos de cancelamento, calote (débito automático) e exame ADR (não testado em runtime).
-- Residuais conhecidos, sem correção: strings do backend ainda hardcoded em PT (`lang/` cobre ~20 chaves); locales `de/es/fr/ja/no/zh-cn` em `html/lang/` não são carregados; `client/client.lua` e `client/main.lua` (3k+ linhas) com lógica duplicada; tabelas duplicadas (`trucker_drivers` × `trucker_npc_drivers`, `trucker_player_progression` × `aust_trucker_stats`); reembolso do aluguel e combustível/integridade dependem de estado de entidades controladas pelo client; senha de party em memória (comparação em tempo constante + limite de tentativas, sem hash).
+- Residuais conhecidos, sem correção (exigem refatoração/teste in-game que não cabe em correção pontual):
+  - Strings do backend hardcoded em PT (`lang/` cobre ~20 chaves): migrar tudo para `_U()` é uma passada de i18n de centenas de textos.
+  - `client/client.lua` e `client/main.lua` (3k+ linhas) com lógica duplicada: consolidar sem teste em runtime arrisca regressões no fluxo de entrega.
+  - Tabelas paralelas (`trucker_drivers` × `trucker_npc_drivers`, `trucker_player_progression` × `aust_trucker_stats`): atendem a features diferentes que coexistem; unificar exige migração de dados.
+  - Combustível/integridade e saúde do veículo são estado de entidades cujo dono é o client; o servidor só limita (clamp, "só diminui", pior valor amostrado). Fechar de vez exige rastrear o dano no servidor ao longo do contrato.
+  - Senha de party fica em texto puro apenas na memória do servidor (não é persistida nem enviada ao client; comparação em tempo constante + limite de tentativas), então hash não muda o risco real.
