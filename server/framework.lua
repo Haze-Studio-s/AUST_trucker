@@ -250,6 +250,33 @@ Framework.RemovePlayerMoney = function(src, account, amount, reason)
     return Framework.RemoveMoney(player, account, amount, reason)
 end
 
+-- Cache src -> citizenid: em playerDropped o framework pode já ter removido o jogador, e o
+-- Framework.GetPlayer(src) volta nil (a limpeza de cargo/forklift/cooldowns seria pulada).
+-- Preenchido sempre que GetPlayer(src) acha o jogador; limpo 10s após o drop (depois dos handlers).
+do
+    local cidBySrc = {}
+    local rawGetPlayer = Framework.GetPlayer
+
+    Framework.GetPlayer = function(src)
+        local player = rawGetPlayer(src)
+        if player and type(src) == 'number' then
+            local ok, cid = pcall(Framework.GetCitizenId, player)
+            if ok and cid then cidBySrc[src] = cid end
+        end
+        return player
+    end
+
+    -- citizenid conhecido para este src (mesmo depois de o framework remover o jogador)
+    Framework.GetCitizenIdBySource = function(src)
+        return cidBySrc[tonumber(src)]
+    end
+
+    AddEventHandler('playerDropped', function()
+        local src = source
+        SetTimeout(10000, function() cidBySrc[src] = nil end)
+    end)
+end
+
 if Config.Debug then
     print(('[aurp_trucker] Framework: %s'):format(fw))
 end

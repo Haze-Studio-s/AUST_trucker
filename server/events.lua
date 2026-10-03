@@ -379,9 +379,9 @@ end)
 -- ============================================================
 AddEventHandler('playerDropped', function(reason)
     local src = source
+    -- O framework pode já ter removido o jogador: cai no cache src -> citizenid
     local Player = Framework.GetPlayer(src)
-    if not Player then return end
-    local citizenId = Framework.GetCitizenId(Player)
+    local citizenId = (Player and Framework.GetCitizenId(Player)) or Framework.GetCitizenIdBySource(src)
     if not citizenId then return end
 
     if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
@@ -1208,7 +1208,7 @@ AddEventHandler('playerDropped', function()
     local src = source
     -- Capturar citizenid ANTES de src ficar stale
     local Player = Framework.GetPlayer(src)
-    local citizenid = Player and Framework.GetCitizenId(Player)
+    local citizenid = (Player and Framework.GetCitizenId(Player)) or Framework.GetCitizenIdBySource(src)
     if citizenid then
         ForkliftService.OnPlayerDropped(citizenid)
         AntiCheatService.CleanupPlayer(citizenid)  -- v15: limpar cooldowns

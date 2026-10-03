@@ -1,5 +1,16 @@
 # Changelog — AUST_trucker
 
+## [20.7.8] — 2026-10-03 — Itens menores da auditoria
+
+### Segurança / correções
+- Calote de empréstimos: débito automático da parcela, parcelas perdidas e status `defaulted` (`Config.Loans.AutoDebit`/`MaxMissedPayments`); inadimplente bloqueia novos empréstimos e a venda da empresa.
+- Bônus `parkedManually` (+5%) calculado no servidor (`VerifyParkedInBay`); removido do payload de `completeJob`.
+- Exame ADR: perguntas sorteadas pelo servidor e exibidas pelo client; gabarito movido para `server/adr_questions.lua` (só servidor).
+- `ContractService.PayPending` roda no login (QBCore/QBox e ESX) para pagamentos pendentes de quem estava offline.
+- Webhook do Discord das encomendas lido só no servidor (`aurp_trucker_parcel_webhook`); URL removida do config compartilhado.
+- `playerDropped`: cache `src -> citizenid` (`Framework.GetCitizenIdBySource`) para a limpeza de cargo/forklift/cooldowns não ser pulada quando o framework já removeu o jogador.
+- Removidos o evento morto `truck_logistics:deliveredCargo`, `server/schema.lua` (stub) e `fxmanifest.lua.disabled` (desatualizado).
+
 ## [20.7.7] — 2026-10-03 — Security hardening
 
 ### Segurança

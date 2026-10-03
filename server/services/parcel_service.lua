@@ -36,7 +36,11 @@ end
 
 local function SendParcelWebhook(title, description, color, citizenId, playerName)
     local cfg = Config.ParcelDelivery.Webhook
-    if not cfg or not cfg.Enabled or not cfg.URL or cfg.URL == '' then return end
+    if not cfg or not cfg.Enabled then return end
+    -- URL SOMENTE do convar do servidor (server.cfg: set aurp_trucker_parcel_webhook "...");
+    -- o config é shared e nunca deve conter a URL
+    local url = GetConvar('aurp_trucker_parcel_webhook', '')
+    if url == '' then return end
 
     local fields = {}
     if citizenId then
@@ -55,7 +59,7 @@ local function SendParcelWebhook(title, description, color, citizenId, playerNam
         }},
     })
 
-    PerformHttpRequest(cfg.URL, function() end, 'POST', payload, { ['Content-Type'] = 'application/json' })
+    PerformHttpRequest(url, function() end, 'POST', payload, { ['Content-Type'] = 'application/json' })
 end
 
 -- =====================

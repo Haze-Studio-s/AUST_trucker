@@ -1769,8 +1769,7 @@ Config.ShopStock = {
             Enabled       = false,
             -- SEGURANÇA: este arquivo é shared (visível/baixável por clientes). Nunca cole a URL aqui;
             -- defina no server.cfg:  set aurp_trucker_parcel_webhook "https://discord.com/api/webhooks/..."
-            -- (usar `set`, NÃO `setr`). No client o valor é sempre '' (só o servidor envia o webhook).
-            URL           = IsDuplicityVersion() and GetConvar('aurp_trucker_parcel_webhook', '') or '',
+            -- (usar `set`, NÃO `setr`). Só server/services/parcel_service.lua lê o convar.
             CommunityName = 'AURP Trucker — Entregas',
             Color         = {
                 Start    = 3066993,   -- verde

@@ -91,11 +91,16 @@ Arquivo alterado:
 - **CI/CD**: `deploy.yml` com `permissions: contents: read`, `environment: production`, action fixada em tag, caminhos entre aspas, `find` global removido e EXCLUDE de ferramentas de desenvolvimento.
 - **Higiene**: removidos scratch_*.js, Thumbs.db, `.server.pid`, `config/helper_functions.ccs.js` (sem referências); `.gitignore` ampliado; versão alinhada (README/CHANGELOG/fxmanifest); `client/modules/*.lua` fora de `files{}` (não expor código-fonte).
 
+### Corrigido depois (versão 20.7.8)
+
+- **Calote de empréstimos**: débito automático, parcelas perdidas e status `defaulted` (bloqueia novos empréstimos/venda da empresa).
+- **`parkedManually`**: verificado no servidor (`VerifyParkedInBay`); removido do payload do client.
+- **Exame ADR**: servidor sorteia as perguntas; gabarito só em `server/adr_questions.lua`.
+- **`PayPending`** no login; **webhook** do Parcel lido só no servidor; **`playerDropped`** com cache `src -> citizenid`.
+- Removidos `truck_logistics:deliveredCargo`, `server/schema.lua` e `fxmanifest.lua.disabled`.
+
 ### Ainda em aberto
 
-- Regra de consequência para **inadimplência de empréstimo** (loan default).
-- Confiança no **`parkedManually` de caminhões próprios** (informado pelo cliente).
-- Itens médios/baixos residuais; webhook do Parcel agora vem de convar (`aurp_trucker_parcel_webhook`), mas o ideal é migrar o envio para um arquivo server-only.
-- Pin da action `easingthemes/ssh-deploy` por SHA de commit (hoje por tag `v5.1.0`; verificar).
-- Validar in-game: CSP da NUI, fontes/ícones locais e comandos de cancelamento (não testado em runtime).
-- `server/schema.lua` (stub sem uso) e `fxmanifest.lua.disabled` continuam no repositório (decisão do mantenedor).
+- Pin da action `easingthemes/ssh-deploy` por SHA de commit (hoje por tag `v5.1.0`; o SHA não pôde ser obtido nesta sessão — verificar e fixar).
+- Validar in-game: CSP da NUI, fontes/ícones locais, comandos de cancelamento, calote (débito automático) e exame ADR (não testado em runtime).
+- Residuais conhecidos, sem correção: strings do backend ainda hardcoded em PT (`lang/` cobre ~20 chaves); locales `de/es/fr/ja/no/zh-cn` em `html/lang/` não são carregados; `client/client.lua` e `client/main.lua` (3k+ linhas) com lógica duplicada; tabelas duplicadas (`trucker_drivers` × `trucker_npc_drivers`, `trucker_player_progression` × `aust_trucker_stats`); reembolso do aluguel e combustível/integridade dependem de estado de entidades controladas pelo client; senha de party em memória (comparação em tempo constante + limite de tentativas, sem hash).
