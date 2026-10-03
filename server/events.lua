@@ -2258,16 +2258,44 @@ local function ResolveLCDestination(row)
     local info = ActiveLCContractData[row.id]
     if info and info.deliveryCoords then
         local c = info.deliveryCoords
-        if c.x and c.y and c.z then return vector3(c.x, c.y, c.z) end
+        if c.x and c.y and c.z then return vector3(c.x, c.y, c.z), tonumber(c.w) end
     end
     -- Reconstrói do índice gravado no job (dest_N), igual à criação do contrato
     local idx = tonumber(tostring(row.dest_id or ''):match('^dest_(%d+)$'))
     local locs = Config.LC_DeliveryLocations
     if idx and locs and locs[idx] then
         local c = locs[idx]
-        return vector3(c.x, c.y, c.z)
+        return vector3(c.x, c.y, c.z), tonumber(c.w)
     end
     return nil
+end
+
+-- Bônus de estacionamento manual (+5%): verificado NO SERVIDOR. O client só dispara o fim do
+-- contrato; a flag `parkedManually` que ele manda é ignorada (antes era sempre `true`).
+-- Mesmos critérios do marcador da vaga no client: veículo na baía, alinhado ao heading da vaga
+-- e praticamente parado.
+local PARK_MAX_DIST    = 6.0    -- m do centro da baía (client exige 4 m do ped)
+local PARK_MAX_HEADING = 15.0   -- graus de diferença para o heading da vaga (client exige 10)
+local PARK_MAX_SPEED   = 3.0    -- m/s
+
+local function VerifyParkedInBay(src, row)
+    local dest, heading = ResolveLCDestination(row)
+    if not dest or not heading then return false end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return false end
+    local veh = GetVehiclePedIsIn(ped, false)
+    if not veh or veh == 0 then
+        local info = ActiveLCContractData[row.id]
+        veh = info and info.truckEntity
+    end
+    if not veh or veh == 0 or not DoesEntityExist(veh) then return false end
+
+    if #(GetEntityCoords(veh) - dest) > PARK_MAX_DIST then return false end
+    local diff = math.abs((GetEntityHeading(veh) - heading + 180.0) % 360.0 - 180.0)
+    if diff > PARK_MAX_HEADING then return false end
+    if (GetEntitySpeed(veh) or 0.0) > PARK_MAX_SPEED then return false end
+    return true
 end
 
 -- Retorna true, ou false + motivo (texto para log; o jogador recebe mensagem genérica)
@@ -2519,7 +2547,9 @@ local function FinishOwnedTruckContract(src, jobId, parkedManually)
     local payment = row.base_payment or 2500
     local dist = row.distance or 2.5
 
-    -- Bônus de 5% por alinhamento e estacionamento manual na vaga
+    -- Bônus de 5% por alinhamento e estacionamento manual na vaga (verificado no servidor;
+    -- o argumento do client é ignorado)
+    parkedManually = VerifyParkedInBay(src, row)
     if parkedManually then
         payment = math.floor(payment * 1.05)
     end

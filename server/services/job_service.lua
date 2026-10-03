@@ -454,11 +454,9 @@ function JobService.Complete(src, payload)
     )
     local payment = math.floor(activeJob.base_payment * skillBonus.paymentMult * timeMult * companyMult * integrityMult)
 
-    -- Bônus de estacionamento manual do caminhoneiro (+45 XP, +5% pagamento)
-    local parkedBonus = payload and payload.parkedManually
-    if parkedBonus then
-        payment = math.floor(payment * 1.05)
-    end
+    -- Bônus de estacionamento manual: removido deste fluxo. `payload.parkedManually` vem do
+    -- client e o servidor não tem como verificá-lo aqui; o bônus agora existe só nos contratos
+    -- LC (events.lua, VerifyParkedInBay), onde a vaga é conhecida pelo servidor.
 
     -- Reivindicar o job (atômico) imediatamente antes de pagar; 0 linhas = outra chamada já pagou
     if not ClaimJob() then return false end
@@ -470,13 +468,6 @@ function JobService.Complete(src, payload)
     local function Safe(label, fn)
         local okS, errS = pcall(fn)
         if not okS then print(('[aurp_trucker] Complete erro em %s: %s'):format(label, tostring(errS))) end
-    end
-
-    if parkedBonus then
-        Safe('parkedBonus', function()
-            ProgressionService.GrantXP(src, citizenId, 450, 1.0, 0)
-            TriggerClientEvent('aurp_trucker:notify', src, 'Bônus de manobra: Estacionamento perfeito manual (+5% $ e +45 XP)!', 'success')
-        end)
     end
 
     -- Desgaste de frota própria: truck derivado server-side (ignora payload.truckId)
