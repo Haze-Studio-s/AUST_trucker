@@ -1252,7 +1252,7 @@ local AdrExamSets = {}                      -- [citizenid_adrType] = { qIdxs = {
 local AdrExamBusy = {}                      -- [citizenid_adrType] = true durante a avaliação
 
 -- Sorteia (server-side) as perguntas do exame e as guarda por jogador/tipo.
--- Retorna as perguntas SEM o gabarito. O client atual sorteia localmente (compatível: ver submit).
+-- Retorna as perguntas SEM o gabarito; o submit só aceita o conjunto emitido aqui (uso único).
 lib.callback.register('aurp_trucker:getAdrExamQuestions', function(source, adrType)
     local Player = Framework.GetPlayer(source)
     if not Player then return { success = false } end
@@ -1263,6 +1263,15 @@ lib.callback.register('aurp_trucker:getAdrExamQuestions', function(source, adrTy
     local bank = Config.Adr.Questions[adrType]
     if type(bank) ~= 'table' or #bank < ADR_EXAM_QUESTIONS then
         return { success = false, reason = 'Banco de questões insuficiente' }
+    end
+
+    -- Falha cedo (sem sortear) se o jogador não pode prestar o exame agora
+    local cooldown = VP_Trucker.AdrExamCooldowns[citizenId .. '_' .. adrType]
+    if cooldown and os.time() < cooldown then
+        return { success = false, reason = 'retry_cooldown', remainingSeconds = cooldown - os.time() }
+    end
+    if AdrService.HasCert(citizenId, adrType) then
+        return { success = false, reason = 'Você já possui esta certificação' }
     end
 
     local idxs, used = {}, {}
@@ -1318,16 +1327,18 @@ lib.callback.register('aurp_trucker:submitAdrExam', function(source, data)
         submitted[#submitted + 1] = { qIdx = qIdx, answer = ans }
     end
 
-    -- Se o servidor sorteou o conjunto (getAdrExamQuestions), só ele é aceito (uso único)
+    -- O conjunto de perguntas é SEMPRE o sorteado pelo servidor (getAdrExamQuestions), uso único:
+    -- sem conjunto emitido (ou expirado) não há exame, e o client não escolhe as perguntas.
     local issued = AdrExamSets[key]
-    if issued then
-        if (os.time() - issued.at) > ADR_EXAM_SET_TTL then
-            AdrExamSets[key] = nil
-            return { success = false, reason = 'Exame expirado' }
-        end
-        for _, qi in ipairs(issued.qIdxs) do
-            if not seen[qi] then return { success = false, reason = 'Exame inválido' } end
-        end
+    if not issued then
+        return { success = false, reason = 'Exame não iniciado. Fale com o examinador novamente.' }
+    end
+    if (os.time() - issued.at) > ADR_EXAM_SET_TTL then
+        AdrExamSets[key] = nil
+        return { success = false, reason = 'Exame expirado' }
+    end
+    for _, qi in ipairs(issued.qIdxs) do
+        if not seen[qi] then return { success = false, reason = 'Exame inválido' } end
     end
 
     AdrExamBusy[key] = true
