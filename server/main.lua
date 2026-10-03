@@ -806,16 +806,21 @@ local function StartTruckDelivery(src, contractData)
         local palletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
-        -- Resolução autoritativa do modelo de prop:
-        -- 1. Offset do Trailer (aust_trucker_trailer_offsets.prop_model específico do slot)
-        -- 2. Rota Customizada (contractData.cargoModel / customRoute.cargo_model)
-        -- 3. Configuração Polarix Padrão (Config.Polarix.PalletModels)
         local function ResolveCargoPropHash(slotIdx)
             local tOffsets = nil
-            if AdminService and AdminService.TrailerOffsets then
-                tOffsets = AdminService.TrailerOffsets[requestedTrailer]
-                    or AdminService.TrailerOffsets[trailerModel]
-                    or AdminService.TrailerOffsets[tostring(requestedTrailer):lower()]
+            local reqKey = tostring(requestedTrailer or ''):lower()
+            if AdminService then
+                if AdminService.TrailerOffsets then
+                    tOffsets = AdminService.TrailerOffsets[reqKey]
+                        or AdminService.TrailerOffsets[requestedTrailer]
+                        or AdminService.TrailerOffsets[trailerModel]
+                end
+                if (not tOffsets or not tOffsets.pallets or next(tOffsets.pallets) == nil) and AdminService.ReloadTrailerOffsets then
+                    local freshOffsets = AdminService.ReloadTrailerOffsets()
+                    if freshOffsets then
+                        tOffsets = freshOffsets[reqKey] or freshOffsets[requestedTrailer]
+                    end
+                end
             end
             local slotData = tOffsets and tOffsets.pallets and (tOffsets.pallets[slotIdx] or tOffsets.pallets[tostring(slotIdx)])
             local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)

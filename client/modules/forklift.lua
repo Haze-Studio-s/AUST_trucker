@@ -220,6 +220,11 @@ function ForkliftModule.GetForkliftSlotOffset(trailer)
 end
 
 function ForkliftModule.GetGhostModelForSlot(trailer, slotIndex)
+    -- 1. Se a empilhadeira já estiver transportando um palete, o fantasma reflete 1:1 essa carga
+    if CurrentForkliftPallet and DoesEntityExist(CurrentForkliftPallet) then
+        return GetEntityModel(CurrentForkliftPallet)
+    end
+    -- 2. Se os garfos estiverem vazios, projeta o prop configurado no banco para este slot
     local slotOff, _ = ForkliftModule.GetSlotOffset(trailer, slotIndex)
     if slotOff and slotOff.prop_model and slotOff.prop_model ~= '' then
         return slotOff.prop_model
@@ -360,8 +365,9 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityLodDist(palletEntity, 0xFFFF)
     FreezeEntityPosition(palletEntity, true)
     SetEntityDynamic(palletEntity, false)
-    SetEntityCollision(palletEntity, true, true)
-    SetCanClimbOnEntity(palletEntity, true)
+    SetEntityHasGravity(palletEntity, false)
+    SetEntityCollision(palletEntity, false, false)
+    SetCanClimbOnEntity(palletEntity, false)
 
     -- Drenagem de velocidades residuais para estancar impulsos Havok acumulados
     if targetTrailer and DoesEntityExist(targetTrailer) then
@@ -383,31 +389,25 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         SetEntityNoCollisionEntity(truck, palletEntity, false)
     end
 
-    -- BLINDAGEM ANTI-CLIPPING / ANTI-CATAPULTA FORKLIFT:
-    -- Desativa colisão mútua por frame (Wait(0)) entre o palete, a empilhadeira e a carreta
-    -- até os garfos recuarem completamente (distância > 3.8m ou timeout de 4 segundos)
+    -- BLINDAGEM ANTI-CLIPPING FORKLIFT (Decisão A1 do Usuário):
+    -- NUNCA desligar a colisão entre currentForklift e targetTrailer!
+    -- A empilhadeira opera sobre a prancha metálica da carreta e precisa manter suporte físico sólido.
+    -- Desativa-se temporariamente apenas o contato entre os garfos da empilhadeira e o palete.
     if currentForklift and DoesEntityExist(currentForklift) then
         SetEntityNoCollisionEntity(palletEntity, currentForklift, false)
         SetEntityNoCollisionEntity(currentForklift, palletEntity, false)
-        SetEntityNoCollisionEntity(currentForklift, targetTrailer, false)
-        SetEntityNoCollisionEntity(targetTrailer, currentForklift, false)
 
         CreateThread(function()
             local pEnt = palletEntity
             local fEnt = currentForklift
-            local tEnt = targetTrailer
             local expire = GetGameTimer() + 4000
             while DoesEntityExist(pEnt) and DoesEntityExist(fEnt) and GetGameTimer() < expire do
                 local dist = #(GetEntityCoords(pEnt) - GetEntityCoords(fEnt))
-                if dist > 3.8 then
+                if dist > 3.5 then
                     break
                 end
                 SetEntityNoCollisionEntity(pEnt, fEnt, true)
                 SetEntityNoCollisionEntity(fEnt, pEnt, true)
-                if DoesEntityExist(tEnt) then
-                    SetEntityNoCollisionEntity(fEnt, tEnt, true)
-                    SetEntityNoCollisionEntity(tEnt, fEnt, true)
-                end
                 Wait(0)
             end
         end)
@@ -705,6 +705,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
                                     PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
 
+                                    -- Reatividade Dinâmica 1:1: O holograma no reboque assume imediatamente o modelo do palete erguido nos garfos
+                                    local carriedModel = GetEntityModel(targetPallet)
+                                    local curSlotOff, curSlotHead = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                    ForkliftModule.SpawnGhostProp(trailer, carriedModel, curSlotOff, curSlotHead)
+
                                     if onLoadedCb then
                                         onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
                                     end
@@ -738,11 +743,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         if not palletEntity or not DoesEntityExist(palletEntity) then
                             CurrentForkliftPallet = nil
                         else
-                            -- Assegura que o holograma fantasma esteja ativo para o slot atual com o modelo do banco
-                            if not CurrentGhostEntity or not DoesEntityExist(CurrentGhostEntity) then
+                            -- Reatividade Dinâmica 1:1: Garante que o holograma coincida perfeitamente com a carga nos garfos
+                            local carriedModel = GetEntityModel(palletEntity)
+                            local curGhostModel = CurrentGhostEntity and DoesEntityExist(CurrentGhostEntity) and GetEntityModel(CurrentGhostEntity) or nil
+                            local carriedU = carriedModel & 0xFFFFFFFF
+                            local ghostU = curGhostModel and (curGhostModel & 0xFFFFFFFF) or nil
+
+                            if not CurrentGhostEntity or not DoesEntityExist(CurrentGhostEntity) or (ghostU ~= carriedU) then
                                 local curSlotOff, curSlotHead = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                local expectedModel = ForkliftModule.GetGhostModelForSlot(trailer, CurrentSlotIndex)
-                                ForkliftModule.SpawnGhostProp(trailer, expectedModel, curSlotOff, curSlotHead)
+                                ForkliftModule.SpawnGhostProp(trailer, carriedModel, curSlotOff, curSlotHead)
                             end
 
                             local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
