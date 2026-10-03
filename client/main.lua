@@ -198,6 +198,10 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
         offsetZ = 2.0
         sprite = 543
         hasRoute = false
+    elseif objType == 'forklift_dock' then
+        offsetZ = 1.6
+        sprite = 543
+        hasRoute = false
     elseif objType == 'pallet' then
         offsetZ = 1.2
         sprite = 478
@@ -2298,14 +2302,25 @@ lib.onCache('vehicle', function(veh)
                         relHeading = finalH
                     })
 
-                    -- Pallet acomodado: seta volta a apontar para o próximo pallet
-                    local nextP = GetNextAvailablePallet()
-                    if nextP then
-                        UpdateMissionObjective('pallet', nextP, 'Próximo Pallet de Carga')
+                    if loaded < total then
+                        -- Pallet acomodado: seta volta a apontar para o próximo pallet
+                        local nextP = GetNextAvailablePallet()
+                        if nextP then
+                            UpdateMissionObjective('pallet', nextP, ('Próximo Pallet de Carga (%d/%d)'):format(loaded + 1, total))
+                        end
+                    else
+                        -- ÚLTIMO PALETE ACOMODADO: O jogador deve IMEDIATAMENTE adicionar a forklift no trailer
+                        local hasFork = (ActiveJob and ActiveJob.withForklift) or (JobEntities.forklift and DoesEntityExist(JobEntities.forklift))
+                        if hasFork and JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                            local fOffset = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(JobEntities.trailer) or { x = 0.0, y = -6.0, z = 0.35 }
+                            local dockWorldPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, fOffset.x or 0.0, fOffset.y or -6.0, (fOffset.z or 0.35) + 0.6)
+                            UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [G]')
+                            SendMissionNotify('Central Logística', 'Último palete estivado! Posicione a empilhadeira na traseira da carreta sobre o holograma e aperte [G] para embarcar.', 'info')
+                        end
                     end
                 end
             end, function()
-                -- Todos os pallets carregados! Prossegue diretamente para a etapa de amarração com cintas
+                -- Empilhadeira embarcada (ou paletes finalizados sem empilhadeira): inicia a lógica das cordas
                 ForkliftModule.StopOperation()
                 SetupRopesStage()
             end)

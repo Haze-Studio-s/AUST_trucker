@@ -653,8 +653,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             -- GATILHO IMEDIATO DO FANTASMA DA EMPILHADEIRA (Embarque Contínuo)
                                             awaitingForkliftDock = true
                                             ForkliftModule.SpawnForkliftGhost(trailer)
-                                            if _G.UpdateMissionObjective and _G.JobEntities and _G.JobEntities.trailer then
-                                                _G.UpdateMissionObjective('forklift_dock', _G.JobEntities.trailer, 'Embarcar Empilhadeira no Reboque [G]')
+                                            if _G.UpdateMissionObjective and trailer and DoesEntityExist(trailer) then
+                                                local fOff = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or { x = 0.0, y = -6.0, z = 0.35 }
+                                                local dockWorldPos = GetOffsetFromEntityInWorldCoords(trailer, fOff.x or 0.0, fOff.y or -6.0, (fOff.z or 0.35) + 0.6)
+                                                _G.UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [G]')
                                             end
                                             if _G.SendMissionNotify then
                                                 _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [G] para embarcar.', 'info')
