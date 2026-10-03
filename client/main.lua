@@ -954,6 +954,150 @@ local function ExecuteForkliftTie(forkEntity)
     end
 end
 
+-- =======================================================================
+-- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS 3D (DRAWLINE) & INTERAÇÃO [E]
+-- =======================================================================
+
+local function DrawText3D(x, y, z, text)
+    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
+    if onScreen then
+        SetTextScale(0.35, 0.35)
+        SetTextFont(4)
+        SetTextProportional(1)
+        SetTextColour(255, 255, 255, 215)
+        SetTextEntry("STRING")
+        SetTextCentre(1)
+        AddTextComponentString(text)
+        DrawText(_x, _y)
+        local factor = (string.len(text)) / 370
+        DrawRect(_x, _y + 0.0125, 0.015 + factor, 0.03, 0, 0, 0, 140)
+    end
+end
+
+local function DrawThickStrapLine(p1, p2, r, g, b, a, offY)
+    DrawLine(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, r, g, b, a)
+    local dy = offY or 0.012
+    DrawLine(p1.x, p1.y + dy, p1.z, p2.x, p2.y + dy, p2.z, r, g, b, a)
+    DrawLine(p1.x, p1.y - dy, p1.z, p2.x, p2.y - dy, p2.z, r, g, b, a)
+end
+
+local function DrawPalletStraps(trailer, pEnt, isTied)
+    if not trailer or not DoesEntityExist(trailer) or not pEnt or not DoesEntityExist(pEnt) then return end
+    local minDim, maxDim = GetModelDimensions(GetEntityModel(pEnt))
+    local topZ = (maxDim and maxDim.z) or 1.1
+    local halfX = math.max(0.42, (maxDim and maxDim.x and (maxDim.x * 0.95)) or 0.5)
+    local pCoords = GetEntityCoords(pEnt)
+    local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+
+    -- Configuração de cor da fita: amarrada = firmeza total; pendente = translúcido vibrante
+    local r, g, b, a = 220, 20, 20, 255
+    if not isTied then
+        r, g, b, a = 255, 60, 60, 190
+    end
+
+    -- Cinta 1: Paralela Frontal (+0.28m no eixo Y local do palete)
+    local lRail1 = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + 0.28, relPos.z - 0.15)
+    local rRail1 = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + 0.28, relPos.z - 0.15)
+    local topL1 = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, 0.28, topZ)
+    local topR1 = GetOffsetFromEntityInWorldCoords(pEnt, halfX, 0.28, topZ)
+
+    DrawThickStrapLine(lRail1, topL1, r, g, b, a)
+    DrawThickStrapLine(topL1, topR1, r, g, b, a)
+    DrawThickStrapLine(topR1, rRail1, r, g, b, a)
+
+    -- Cinta 2: Paralela Traseira (-0.28m no eixo Y local do palete)
+    local lRail2 = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y - 0.28, relPos.z - 0.15)
+    local rRail2 = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y - 0.28, relPos.z - 0.15)
+    local topL2 = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, -0.28, topZ)
+    local topR2 = GetOffsetFromEntityInWorldCoords(pEnt, halfX, -0.28, topZ)
+
+    DrawThickStrapLine(lRail2, topL2, r, g, b, a)
+    DrawThickStrapLine(topL2, topR2, r, g, b, a)
+    DrawThickStrapLine(topR2, rRail2, r, g, b, a)
+end
+
+CreateThread(function()
+    while true do
+        local sleep = 500
+        local trailer = JobEntities.trailer
+        local pList = LoadedPallets or LoadedPalletData or {}
+
+        if trailer and DoesEntityExist(trailer) and #pList > 0 then
+            local ped = cache.ped or PlayerPedId()
+            local pCoords = GetEntityCoords(ped)
+            local trCoords = GetEntityCoords(trailer)
+            local distTrailer = #(pCoords - trCoords)
+
+            -- Renderização ativa sempre que o jogador estiver até 25m do reboque
+            if distTrailer <= 25.0 then
+                sleep = 0
+                local isPedInVeh = IsPedInAnyVehicle(ped, false)
+                local closestUntiedIdx = nil
+                local closestUntiedDist = 999.0
+                local isNearForkliftTie = false
+
+                for idx, pData in ipairs(pList) do
+                    local pEnt = pData.entity
+                    if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                        local isTied = (pData.isSecured == true)
+                        DrawPalletStraps(trailer, pEnt, isTied)
+
+                        -- Se o palete ainda não foi amarrado, renderiza o texto 3D interativo
+                        if not isTied then
+                            local palletPos = GetEntityCoords(pEnt)
+                            local distPallet = #(pCoords - palletPos)
+                            local textCoords = vector3(palletPos.x, palletPos.y, palletPos.z + 0.65)
+
+                            if distPallet <= 2.5 and not isPedInVeh then
+                                DrawText3D(textCoords.x, textCoords.y, textCoords.z, "~g~[E]~s~ Amarrar")
+                                if distPallet < closestUntiedDist then
+                                    closestUntiedDist = distPallet
+                                    closestUntiedIdx = idx
+                                end
+                            elseif distPallet <= 6.0 then
+                                DrawText3D(textCoords.x, textCoords.y, textCoords.z, "~r~Amarrar~s~")
+                            end
+                        end
+                    end
+                end
+
+                -- Verificação da empilhadeira embarcada na caçamba
+                local fork = JobEntities.forklift
+                if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer and not ForkliftSecured then
+                    local fCoords = GetEntityCoords(fork)
+                    local distFork = #(pCoords - fCoords)
+                    local fTextCoords = vector3(fCoords.x, fCoords.y, fCoords.z + 0.8)
+                    if distFork <= 3.0 and not isPedInVeh then
+                        DrawText3D(fTextCoords.x, fTextCoords.y, fTextCoords.z, "~g~[E]~s~ Travar Catracas da Empilhadeira")
+                        isNearForkliftTie = true
+                    elseif distFork <= 7.0 then
+                        DrawText3D(fTextCoords.x, fTextCoords.y, fTextCoords.z, "~y~Travar Empilhadeira~s~")
+                    end
+                end
+
+                -- Captura de interação por tecla [E] (Control 38)
+                if not isPedInVeh and IsControlJustPressed(0, 38) then
+                    if isNearForkliftTie then
+                        if hasRopes or HasRopes then
+                            ExecuteForkliftTie(fork)
+                        else
+                            SendMissionNotify('Central Logística', 'Pegue as cintas na caixa lateral do caminhão primeiro!', 'error')
+                        end
+                    elseif closestUntiedIdx then
+                        if hasRopes or HasRopes then
+                            ExecutePalletTie(closestUntiedIdx)
+                        else
+                            SendMissionNotify('Central Logística', 'Pegue as cintas na caixa lateral do caminhão primeiro!', 'error')
+                        end
+                    end
+                end
+            end
+        end
+
+        Wait(sleep)
+    end
+end)
+
 local function SetupForkliftTieTarget()
     if ActiveStrappingZoneId then
         pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)

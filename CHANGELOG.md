@@ -1,5 +1,25 @@
 # Changelog — AUST_trucker
 
+## [20.6.0] — 2026-10-02 — Sistema Visual de Amarração de Carga (Cintas 3D DrawLine, Texto 3D Interativo e Encadeamento Imediato da Forklift)
+
+### 🪢 Cintas Visuais 3D Realistas (`DrawLine` & Vetores Dinâmicos)
+- **Cintas Duplas Paralelas por Palete:** Implementado renderizador vetorial contínuo que calcula em tempo real os pontos de fixação da carga (`GetOffsetFromEntityInWorldCoords`). Cada palete recebe duas cintas completas (frontal e traseira) partindo das longarinas laterais da carreta (`-1.25m` e `+1.25m`), subindo pelas laterais do palete e cruzando o topo.
+- **Espessura de Fita Têxtil:** Renderização de linhas com micro-offsets paralelos ($\Delta = 0.012\text{m}$) simulando a textura e a largura de cintas de amarração catraca reais.
+- **Diferenciação Visual de Estado:**
+  - **Pendente:** Vermelho vibrante translúcido (`255, 60, 60, 190`).
+  - **Amarrado:** Vermelho sólido esticado com alta firmeza (`220, 20, 20, 255`).
+- **Persistência em Trânsito:** As fitas vermelhas permanecem esticadas e acompanham a carga durante toda a viagem rodoviária na estrada enquanto o jogador estiver a até 25 metros do reboque (thread entra em repouso com `Wait(500)` a distâncias maiores, garantindo 0.00ms no Resmon).
+
+### 🏷️ Texto 3D Interativo & Amarração Direta com [E] (`DrawText3D`)
+- **Texto Dinâmico por Proximidade:** Renderiza o texto flutuante `~r~Amarrar~s~` a até 6.0 metros de cada palete pendente; ao aproximar-se a pé a menos de 2.5 metros, o texto transiciona para `~g~[E]~s~ Amarrar`.
+- **Ação Direta por Tecla [E]:** Pressionar **[E]** (`Control 38`) inicia a amarração imediatamente com minigame de perícia e animação de ajuste da catraca, sem necessidade de navegar no menu de contexto do `ox_target` (suporte ao `ox_target` mantido de forma complementar).
+- **Suporte à Empilhadeira:** Exibe texto 3D dedicado `~g~[E]~s~ Travar Catracas da Empilhadeira` quando próximo da empilhadeira embarcada na caçamba.
+
+### 🚜 Encadeamento Imediato de Carga & Correção de Setas
+- **Gatilho Imediato da Forklift no Último Palete:** Ao estivar o último palete exigido pelo frete (`loaded == total`), a busca por novos paletes no pátio é imediatamente cancelada. O holograma e a seta de objetivo (`forklift_dock`) passam instantaneamente para a traseira da carreta.
+- **Eliminação de Seta Residual:** Removido o disparo de evento legado do servidor (`aust_trucker:client:SetObjective`) que recriava indevidamente marcadores sobre a empilhadeira após a colocação de cada palete.
+- **Transição Fluida para as Cordas:** O embarque da empilhadeira com **[G]** avança automaticamente para a etapa de coleta de cintas na caixa lateral do caminhão (`STEP_6_GET_ROPES`).
+
 ## [20.5.0] — 2026-10-02 — Blindagem Anti-Desync de Proximidade (OneSync Observer Shield, Lock de Propriedade de Rede Server-Side & Matriz Havok Passiva)
 
 ### 🌐 Governança de Rede OneSync & Prevenção de Migração por Proximidade (A1)
