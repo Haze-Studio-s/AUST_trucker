@@ -1188,6 +1188,18 @@ function DB_SetIndustryOwner(industryId, ownerCitizenId, companyId, purchasePric
     )
 end
 
+-- Reivindica atomicamente uma indústria: INSERT sem upsert. A PK (industry_id) garante que
+-- só uma empresa vence; retorna false se já existe dono (ou em erro de DB).
+function DB_TryClaimIndustry(industryId, ownerCitizenId, companyId, purchasePrice)
+    local ok, affected = pcall(MySQL.update.await,
+        [[INSERT IGNORE INTO trucker_industry_ownership
+            (industry_id, owner_citizenid, company_id, purchase_price)
+          VALUES (?, ?, ?, ?)]],
+        { industryId, ownerCitizenId, companyId, purchasePrice }
+    )
+    return ok and (affected or 0) > 0
+end
+
 -- Remove ownership (venda/abandono)
 function DB_ClearIndustryOwner(industryId)
     MySQL.query.await(
@@ -1622,6 +1634,16 @@ function DB_SetCargoFailed(jobId)
 end
 
 -- Atualiza GPS tracker de um veículo de empresa (por plate)
+-- Reivindica atomicamente a instalação do GPS: só tem sucesso (true) se o veículo
+-- pertence à empresa e ainda não tem tracker. Evita cobrança dupla em chamadas simultâneas.
+function DB_ClaimGpsTracker(plate, companyId)
+    local affected = MySQL.update.await(
+        'UPDATE trucker_company_vehicles SET has_gps_tracker = 1 WHERE plate = ? AND company_id = ? AND has_gps_tracker = 0',
+        { plate, companyId }
+    )
+    return (affected or 0) > 0
+end
+
 function DB_SetGpsTracker(plate, enabled)
     MySQL.update.await(
         'UPDATE trucker_company_vehicles SET has_gps_tracker = ? WHERE plate = ?',

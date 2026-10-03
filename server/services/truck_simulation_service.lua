@@ -174,7 +174,7 @@ function TruckSimulationService.SetLastFuel(src, fuelLevel)
 end
 
 -- Compra upgrade — retorna { success, reason }
-function TruckSimulationService.PurchaseUpgrade(src, upgradeKey)
+local function PurchaseUpgradeUnlocked(src, upgradeKey)
     local Player = Framework.GetPlayer(src)
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
 
@@ -227,6 +227,29 @@ function TruckSimulationService.PurchaseUpgrade(src, upgradeKey)
     end
 
     return { success = true }
+end
+
+-- Trava por empresa: a checagem "já comprado" e a gravação do upgrade ficam separadas por
+-- awaits de DB; sem a trava, compras simultâneas cobrariam duas vezes / perderiam uma chave.
+local UpgradeLocks = {}
+
+function TruckSimulationService.PurchaseUpgrade(src, upgradeKey)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+    local company = CompanyService.GetByMember(Framework.GetCitizenId(Player))
+    if not company then return { success = false, reason = 'Sem empresa' } end
+
+    if UpgradeLocks[company.id] then
+        return { success = false, reason = 'Compra em andamento, tente novamente' }
+    end
+    UpgradeLocks[company.id] = true
+    local ok, result = pcall(PurchaseUpgradeUnlocked, src, upgradeKey)
+    UpgradeLocks[company.id] = nil
+    if not ok then
+        print(('[aurp_trucker] PurchaseUpgrade erro: %s'):format(tostring(result)))
+        return { success = false, reason = 'Erro ao processar compra' }
+    end
+    return result
 end
 
 -- Retorna estado de sim de um jogador (para exports)
