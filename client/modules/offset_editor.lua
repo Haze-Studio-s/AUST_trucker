@@ -8,6 +8,8 @@ local IsCalibrating = false
 local CalibTrailer = nil
 local CalibGhost = nil
 local SavedGhosts = {}
+local SavedSlotOffsets = {}
+local LastSavedSlotIndex = nil
 local CurrentOffsets = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local CalibParams = { trailerModel = 'trailers2', slotIndex = 1, isForklift = false, propModel = 'hei_prop_carrier_cargo_04b' }
 local CurrentGizmoMode = 'translate' -- 'translate' | 'rotate'
@@ -113,12 +115,72 @@ RegisterNUICallback('confirmGizmoSlot', function(data, cb)
     if cb then cb({ ok = true }) end
 end)
 
+RegisterNUICallback('copyGizmoSlot', function(data, cb)
+    if IsCalibrating then
+        OffsetEditor.CopyPreviousSlot()
+    end
+    if cb then cb({ ok = true }) end
+end)
+
 RegisterNUICallback('cancelGizmo', function(data, cb)
     if IsCalibrating then
         OffsetEditor.CancelCalibration()
     end
     if cb then cb({ ok = true }) end
 end)
+
+-- ============================================================
+-- CÓPIA DE ALTURA E ROTAÇÃO DE PROPS JÁ SALVOS
+-- ============================================================
+
+function OffsetEditor.CopyPreviousSlot()
+    if not IsCalibrating or not CalibTrailer or not DoesEntityExist(CalibTrailer) or not CalibGhost or not DoesEntityExist(CalibGhost) then
+        return
+    end
+
+    local refSlot = nil
+    if CalibParams.slotIndex and CalibParams.slotIndex > 1 and SavedSlotOffsets[CalibParams.slotIndex - 1] then
+        refSlot = CalibParams.slotIndex - 1
+    elseif LastSavedSlotIndex and SavedSlotOffsets[LastSavedSlotIndex] then
+        refSlot = LastSavedSlotIndex
+    end
+
+    if not refSlot or not SavedSlotOffsets[refSlot] then
+        lib.notify({
+            title = 'Cópia Indisponível',
+            description = 'Nenhum slot anterior salvo nesta sessão para copiar a altura e rotação.',
+            type = 'error',
+            duration = 3500
+        })
+        return
+    end
+
+    local src = SavedSlotOffsets[refSlot]
+    CurrentOffsets.z = src.z
+    CurrentOffsets.heading = src.heading
+
+    local worldPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z)
+    SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+    local tHeading = GetEntityHeading(CalibTrailer)
+    SetEntityHeading(CalibGhost, (tHeading + CurrentOffsets.heading) % 360.0)
+
+    local gWorldRot = GetEntityRotation(CalibGhost, 2)
+    SendNUIMessage({
+        action = 'setGizmoEntity',
+        data = {
+            position = { x = worldPos.x, y = worldPos.y, z = worldPos.z },
+            rotation = { x = gWorldRot.x, y = gWorldRot.y, z = gWorldRot.z }
+        }
+    })
+
+    PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+    lib.notify({
+        title = 'Offset Clonado!',
+        description = ('Altura (Z: %.3f) e Rotação (%.1f°) copiadas do Slot %d.'):format(src.z, src.heading, refSlot),
+        type = 'info',
+        duration = 3000
+    })
+end
 
 -- ============================================================
 -- CONFIRMAÇÃO E PROGRESSÃO CONTÍNUA DE SLOTS
@@ -138,6 +200,15 @@ function OffsetEditor.ConfirmCurrentSlot()
         heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
     })
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+    -- Grava no cache de sessão para cópia e herança
+    SavedSlotOffsets[CalibParams.slotIndex] = {
+        x = tonumber(string.format("%.3f", CurrentOffsets.x)),
+        y = tonumber(string.format("%.3f", CurrentOffsets.y)),
+        z = tonumber(string.format("%.3f", CurrentOffsets.z)),
+        heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
+    }
+    LastSavedSlotIndex = CalibParams.slotIndex
 
     -- 2. Determina o limite de slots de palete
     local maxPallets = 6
@@ -173,8 +244,14 @@ function OffsetEditor.ConfirmCurrentSlot()
             else
                 nextHeading = (type(nextVec) == 'table' and nextVec.heading) or 0.0
             end
-            CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = nextVec.z, heading = nextHeading }
-            SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, nextVec, nextHeading)
+
+            -- HERANÇA AUTOMÁTICA INTELIGENTE: herda Z e Heading do slot anterior
+            local inheritOffset = SavedSlotOffsets[prevSlot]
+            local targetZ = (inheritOffset and inheritOffset.z) or nextVec.z
+            local targetHeading = (inheritOffset and inheritOffset.heading) or nextHeading
+
+            CurrentOffsets = { x = nextVec.x, y = nextVec.y, z = targetZ, heading = targetHeading }
+            SpawnCalibGhost(CalibTrailer, false, CalibParams.propModel, vector3(nextVec.x, nextVec.y, targetZ), targetHeading)
 
             -- Reposiciona o Gizmo Three.js no novo fantasma
             local nextGhostPos = GetEntityCoords(CalibGhost)
@@ -259,6 +336,8 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         end
     end
     SavedGhosts = {}
+    SavedSlotOffsets = {}
+    LastSavedSlotIndex = nil
 
     trailerModel = (trailerModel or 'trailers2'):lower()
     slotIndex = tonumber(slotIndex) or 1
@@ -289,6 +368,17 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
     -- Verifica se já há um trailer próximo ou spawna um para visualização
     local tHash = joaat(trailerModel)
     lib.requestModel(tHash, 5000)
+
+    -- Carrega slots já conhecidos do trailer para memória de cópia rápida
+    if Config.TrailerSlots and Config.TrailerSlots[tHash] and Config.TrailerSlots[tHash].pallets then
+        for sIdx, sVec in pairs(Config.TrailerSlots[tHash].pallets) do
+            if type(sVec) == 'vector3' then
+                SavedSlotOffsets[sIdx] = { x = sVec.x, y = sVec.y, z = sVec.z, heading = 0.0 }
+            elseif type(sVec) == 'table' then
+                SavedSlotOffsets[sIdx] = { x = sVec.x or 0.0, y = sVec.y or 0.0, z = sVec.z or 0.0, heading = sVec.heading or 0.0 }
+            end
+        end
+    end
 
     local trailer = GetClosestVehicle(pCoords.x, pCoords.y, pCoords.z, 20.0, tHash, 70)
     local createdTrailer = false
@@ -488,6 +578,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~\n' ..
                 '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
                 '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
+                '~y~[C ou Botão]~w~ Copiar Altura (Z) e Rotação do Anterior\n' ..
                 '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
                 '~g~[ENTER ou Botão] Salvar & Próximo Slot~s~  |  ~r~[ESC] Finalizar~s~'):format(
                 modeStatus,
@@ -507,7 +598,12 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
 
-            -- 7. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) ESTRITAMENTE VIA TECLADO ENTER
+            -- 7. COPIAR ALTURA E ROTAÇÃO DO SLOT ANTERIOR VIA TECLA [C]
+            if IsDisabledControlJustPressed(0, 26) or IsControlJustPressed(0, 26) then
+                OffsetEditor.CopyPreviousSlot()
+            end
+
+            -- 8. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) ESTRITAMENTE VIA TECLADO ENTER
             -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar no Gizmo
             local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
                 and not IsDisabledControlPressed(0, 24)
@@ -519,7 +615,7 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 OffsetEditor.ConfirmCurrentSlot()
             end
 
-            -- 8. CANCELAMENTO OU FINALIZAÇÃO ANTECIPADA COM BACKSPACE / ESC
+            -- 9. CANCELAMENTO OU FINALIZAÇÃO ANTECIPADA COM BACKSPACE / ESC
             if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
                 OffsetEditor.CancelCalibration()
                 break

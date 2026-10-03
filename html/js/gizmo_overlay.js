@@ -18,6 +18,7 @@
     const canvas = document.getElementById('gizmo-three-canvas');
     const btnConfirm = document.getElementById('btn-gizmo-confirm');
     const btnMode = document.getElementById('btn-gizmo-mode');
+    const btnCopy = document.getElementById('btn-gizmo-copy');
     const btnCancel = document.getElementById('btn-gizmo-cancel');
 
     function sendCallback(endpoint, data = {}) {
@@ -43,6 +44,12 @@
                 setGizmoMode(newMode);
             };
         }
+        if (btnCopy) {
+            btnCopy.onclick = function (e) {
+                e.stopPropagation();
+                sendCallback('copyGizmoSlot');
+            };
+        }
         if (btnCancel) {
             btnCancel.onclick = function (e) {
                 e.stopPropagation();
@@ -62,6 +69,9 @@
                 setGizmoMode('translate');
             } else if (e.key === 'r' || e.key === 'R') {
                 setGizmoMode('rotate');
+            } else if (e.key === 'c' || e.key === 'C') {
+                e.preventDefault();
+                sendCallback('copyGizmoSlot');
             }
         });
     }
