@@ -716,38 +716,35 @@ local function StartTruckDelivery(src, contractData)
     local carrierCars = {}
     local carrierVehicleNetIds = {}
     local pallets = {}
+    local palletNetIds = {}
     local withForklift = (contractData.withForklift ~= false)
     local maxAllowedPallets = withForklift and 6 or 7
     local reqPallets = math.min(maxAllowedPallets, math.max(4, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
-        if withForklift then
-            local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
+        local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
-            for idx, coord in ipairs(forkliftSpawns) do
-                if IsSpawnPointClear(coord, 3.5, { [truck] = true, [trailer] = true }) then
-                    forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
-                    local waitTimer = GetGameTimer()
-                    while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-                    if DoesEntityExist(forklift) then
-                        chosenForkliftCoord = coord
-                        print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s"):format(
-                            idx, tostring(NetworkGetNetworkIdFromEntity(forklift))
-                        ))
-                        break
-                    end
-                end
-            end
-
-            if not forklift or not DoesEntityExist(forklift) then
-                local fallbackCoord = forkliftSpawns[1]
-                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
+        for idx, coord in ipairs(forkliftSpawns) do
+            if IsSpawnPointClear(coord, 3.5, { [truck] = true, [trailer] = true }) then
+                forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-                if DoesEntityExist(forklift) then chosenForkliftCoord = fallbackCoord end
+                if DoesEntityExist(forklift) then
+                    chosenForkliftCoord = coord
+                    print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s (Embarque rodoviário: %s)"):format(
+                        idx, tostring(NetworkGetNetworkIdFromEntity(forklift)), tostring(withForklift)
+                    ))
+                    break
+                end
             end
-        else
-            print(("[AUST_Trucker] Frete configurado sem empilhadeira embarcada por escolha do motorista."))
+        end
+
+        if not forklift or not DoesEntityExist(forklift) then
+            local fallbackCoord = forkliftSpawns[1]
+            forklift = CreateVehicle(joaat(Config.Polarix.Forklift.VehicleModel or 'forklift'), fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
+            local waitTimer = GetGameTimer()
+            while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+            if DoesEntityExist(forklift) then chosenForkliftCoord = fallbackCoord end
         end
 
         if forklift and DoesEntityExist(forklift) then
@@ -1334,7 +1331,13 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         end
     end
     if lobby.forklift and DoesEntityExist(lobby.forklift) then
-        FreezeEntityPosition(lobby.forklift, false)
+        if lobby.withForklift == false then
+            DeleteEntity(lobby.forklift)
+            lobby.forklift = nil
+            print(("[AUST_Trucker] Empilhadeira de pátio removida para o frete sem embarque %s."):format(tostring(jobId)))
+        else
+            FreezeEntityPosition(lobby.forklift, false)
+        end
     end
 
     print(("[AUST_Trucker] Frete %s pronto para trânsito (Player %s). Destino: %s"):format(

@@ -2506,25 +2506,30 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
     -- Runtime Synchronization: Sobrescreve os offsets em memória com os dados mais recentes do banco
     if payload and payload.trailerOffsets then
-        for mKey, data in pairs(payload.trailerOffsets) do
-            local numKey = tonumber(mKey)
-            local h = numKey or joaat(tostring(mKey):lower())
-            if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
-            if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
-            if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
-            for idx, v in pairs(data.pallets or {}) do
-                local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
-                Config.TrailerSlots[h].pallets[tonumber(idx)] = slotEntry
-                Config.TrailerSlots[mKey].pallets[tonumber(idx)] = slotEntry
-                if numKey then Config.TrailerSlots[numKey].pallets[tonumber(idx)] = slotEntry end
+        pcall(function()
+            for mKey, data in pairs(payload.trailerOffsets) do
+                local numKey = tonumber(mKey)
+                local h = numKey or joaat(tostring(mKey):lower())
+                if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
+                if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
+                if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
+                for idx, v in pairs(data.pallets or {}) do
+                    local sIdx = tonumber(idx)
+                    if sIdx and v then
+                        local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                        Config.TrailerSlots[h].pallets[sIdx] = slotEntry
+                        Config.TrailerSlots[mKey].pallets[sIdx] = slotEntry
+                        if numKey then Config.TrailerSlots[numKey].pallets[sIdx] = slotEntry end
+                    end
+                end
+                if data.forklift then
+                    local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                    Config.TrailerSlots[h].forklift = slotEntry
+                    Config.TrailerSlots[mKey].forklift = slotEntry
+                    if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
+                end
             end
-            if data.forklift then
-                local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
-                Config.TrailerSlots[h].forklift = slotEntry
-                Config.TrailerSlots[mKey].forklift = slotEntry
-                if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
-            end
-        end
+        end)
     end
 
     CreateThread(function()
@@ -2545,9 +2550,9 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end)
         end)
 
-        -- 1. Resolução dos veículos primários essenciais (Caminhão e Carreta)
-        local truck = WaitForNetworkEntity(payload.truckNetId, 7000)
-        local trailer = WaitForNetworkEntity(payload.trailerNetId, 7000)
+        -- 1. Resolução dos veículos primários essenciais (Caminhão e Carreta) com tolerância OneSync
+        local truck = WaitForNetworkEntity(payload.truckNetId, 12000)
+        local trailer = WaitForNetworkEntity(payload.trailerNetId, 12000)
 
         if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
             print(("^1[AUST_Trucker DEBUG - ETAPA 1] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
