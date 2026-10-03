@@ -2696,18 +2696,30 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
     CleanupCurrentJob()
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
+    local feeNotice = (summary.unloadingFee and summary.unloadingFee > 0)
+        and ('\nTaxa Descarregamento Doca: -$%d (sem empilhadeira)'):format(summary.unloadingFee)
+        or ''
+
     if summary.isQuickJob and summary.repairCost and summary.repairCost > 0 then
-        SendMissionNotify('Central Logística', ('Caminhão devolvido com avarias!\nCusto de Reparo: -$%d\nPagamento Final: $%d creditado no banco\nXP Ganho: +%d'):format(
+        SendMissionNotify('Central Logística', ('Caminhão devolvido com avarias!\nCusto de Reparo: -$%d%s\nPagamento Final: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.repairCost,
+            feeNotice,
             summary.payment or 0,
             summary.xp or 0
         ), 'warning')
     elseif summary.lostPallets and summary.lostPallets > 0 then
-        SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
+        SendMissionNotify('Central Logística', ('Entrega concluída com penalidade por carga perdida (%d paletes perdidos).%s\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.lostPallets,
+            feeNotice,
             summary.payment or 0,
             summary.xp or 0
         ), 'warning')
+    elseif summary.unloadingFee and summary.unloadingFee > 0 then
+        SendMissionNotify('Central Logística', ('Entrega concluída!\nServiço de descarregamento na doca: -$%d\nPagamento Líquido: $%d creditado no banco\nXP Ganho: +%d'):format(
+            summary.unloadingFee,
+            summary.payment or 0,
+            summary.xp or 0
+        ), 'inform')
     else
         SendMissionNotify('Central Logística', ('Entrega concluída com sucesso!\nPagamento: $%d creditado no banco\nXP Ganho: +%d'):format(
             summary.payment or 0,

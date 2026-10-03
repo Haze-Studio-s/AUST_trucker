@@ -1533,6 +1533,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         TriggerClientEvent('aurp_trucker:client:polarixJobFinished', src, {
             isQuickJob = false,
             payment = payment,
+            unloadingFee = unloadingFee,
             xp = xp,
             lostPallets = lostCount,
             deliveredPallets = deliveredCount,
@@ -1546,6 +1547,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         lobby.stage = 'STATUS_RETURNING_TO_BASE'
         lobby.retainedPayment = payment
         lobby.retainedXP = xp
+        lobby.unloadingFee = unloadingFee
         lobby.lostPallets = lostCount
         lobby.deliveredPallets = deliveredCount
 
@@ -1688,6 +1690,7 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         payment = finalPayment,
         originalPayment = payment,
         repairCost = repairCost,
+        unloadingFee = lobby.unloadingFee or 0,
         xp = xp,
         lostPallets = lobby.lostPallets or 0,
         deliveredPallets = lobby.deliveredPallets or 0,
