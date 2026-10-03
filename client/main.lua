@@ -143,6 +143,9 @@ local function ClearObjectiveMarkers(keepSecondary)
             RemoveBlip(SecondaryObjectiveBlip)
             SecondaryObjectiveBlip = nil
         end
+        if Zones and Zones.ClearObjective then
+            pcall(Zones.ClearObjective)
+        end
     end
 end
 

@@ -1167,41 +1167,10 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
     TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount, lobby.requiredCount)
 
     if lobby.loadedCount < lobby.requiredCount then
-        local forkNetId = (lobby.forklift and DoesEntityExist(lobby.forklift)) and NetworkGetNetworkIdFromEntity(lobby.forklift) or 0
-        local forkCoords = (lobby.forklift and DoesEntityExist(lobby.forklift)) and GetEntityCoords(lobby.forklift) or nil
-        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-            netId = forkNetId,
-            coords = forkCoords,
-            label = "Empilhadeira de Carga",
-            sprite = 543,
-            color = 5,
-            offsetZ = 2.5,
-            notify = ("Palete acomodado com sucesso! (%d/%d). Continue o carregamento."):format(lobby.loadedCount, lobby.requiredCount)
-        })
+        TriggerClientEvent('aurp_trucker:notify', src, 'Central Logística', ("Palete acomodado com sucesso! (%d/%d). Continue o carregamento."):format(lobby.loadedCount, lobby.requiredCount), 'info')
     else
         lobby.stage = 'STEP_STRAPPING'
-        local trCoords = (lobby.trailer and DoesEntityExist(lobby.trailer)) and GetEntityCoords(lobby.trailer) or nil
-        local trailerRearCoords = nil
-        if trCoords then
-            local heading = GetEntityHeading(lobby.trailer) or 0.0
-            local rad = math.rad(heading)
-            trailerRearCoords = vector3(
-                trCoords.x + (5.5 * math.sin(rad)),
-                trCoords.y - (5.5 * math.cos(rad)),
-                trCoords.z
-            )
-        end
-        local trailerNetId = (lobby.trailer and DoesEntityExist(lobby.trailer)) and NetworkGetNetworkIdFromEntity(lobby.trailer) or nil
-        TriggerClientEvent('aust_trucker:client:SetObjective', src, {
-            coords = trailerRearCoords or trCoords,
-            netId = trailerNetId,
-            label = "Traseira da Carreta (Travar Cintas)",
-            sprite = 478,
-            color = 5,
-            offsetZ = 1.5,
-            notify = "Carregamento concluído! Trave as cintas e assine o romaneio na traseira da carreta."
-        })
-        TriggerClientEvent('aurp_trucker:client:startStrappingStage', src, jobId)
+        TriggerClientEvent('aurp_trucker:notify', src, 'Central Logística', 'Todos os paletes foram estivados com sucesso!', 'success')
     end
 end
 
