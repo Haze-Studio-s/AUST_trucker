@@ -439,6 +439,7 @@ local function StartTruckDelivery(src, contractData)
             contractData.truckModel = contractData.truckModel or customRoute.truck_model
             contractData.cargoType = contractData.cargoType or customRoute.type
             contractData.cargoName = contractData.cargoName or customRoute.cargo_name
+            contractData.cargoModel = contractData.cargoModel or contractData.cargo_model or customRoute.cargo_model
             contractData.distance = contractData.distance or customRoute.distance
             contractData.payment = contractData.payment or customRoute.base_payment
             contractData.xp = contractData.xp or customRoute.base_xp
@@ -800,14 +801,35 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, forkliftPlate)
         end
 
-        -- Spawn de Paletes Pré-Gerados (Polarix)
+        -- Spawn de Paletes Pré-Gerados (Polarix com Suporte a Props Customizados do Admin)
         local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
         local palletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
+        -- Resolução autoritativa do modelo de prop:
+        -- 1. Offset do Trailer (aust_trucker_trailer_offsets.prop_model específico do slot)
+        -- 2. Rota Customizada (contractData.cargoModel / customRoute.cargo_model)
+        -- 3. Configuração Polarix Padrão (Config.Polarix.PalletModels)
+        local function ResolveCargoPropHash(slotIdx)
+            local tOffsets = nil
+            if AdminService and AdminService.TrailerOffsets then
+                tOffsets = AdminService.TrailerOffsets[requestedTrailer]
+                    or AdminService.TrailerOffsets[trailerModel]
+                    or AdminService.TrailerOffsets[tostring(requestedTrailer):lower()]
+            end
+            local slotData = tOffsets and tOffsets.pallets and (tOffsets.pallets[slotIdx] or tOffsets.pallets[tostring(slotIdx)])
+            local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)
+                or contractData.cargoModel
+                or contractData.cargo_model
+                or Config.Polarix.PalletModels[((slotIdx - 1) % #Config.Polarix.PalletModels) + 1]
+                or Config.Polarix.DefaultPalletModel
+            return joaat(candidate)
+        end
+
         for _, coord in ipairs(palletSpawns) do
             if #pallets >= reqPallets then break end
-            local pModel = joaat(Config.Polarix.PalletModels[(#pallets % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+            local slotTargetIdx = #pallets + 1
+            local pModel = ResolveCargoPropHash(slotTargetIdx)
             local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.1, true, true, false)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
@@ -832,7 +854,7 @@ local function StartTruckDelivery(src, contractData)
                 local row = math.floor((i - 1) / 3)
                 local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
 
-                local pModel = joaat(Config.Polarix.PalletModels[(i % #Config.Polarix.PalletModels) + 1] or Config.Polarix.DefaultPalletModel)
+                local pModel = ResolveCargoPropHash(i)
                 local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.1, true, true, false)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
@@ -974,6 +996,7 @@ local function StartTruckDelivery(src, contractData)
         loadedCount = 0,
         requiredCount = reqPallets,
         cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or (cargoType == 'heavy' and 'Contêiner Marítimo' or (cargoType == 'adr' and 'Compostos Químicos ADR' or (cargoType == 'vehicle_carrier' and 'Cegonha de Veículos Esportivos' or 'Paletes Industriais')))),
+        cargoModel = contractData.cargoModel or contractData.cargo_model or 'hei_prop_carrier_cargo_04b',
         cargoIntegrity = 100,
         payment = basePayment,
         xp = baseXP,
@@ -1053,6 +1076,7 @@ local function StartTruckDelivery(src, contractData)
         palletNetIds = palletNetIds,
         withForklift = withForklift,
         cargoName = lobbyData.cargoName,
+        cargoModel = lobbyData.cargoModel,
         requiredCount = reqPallets,
         loadedCount = 0,
         deliveryCoords = destCoords,

@@ -551,7 +551,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             end
 
             local firstOffset, firstHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-            ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset, firstHeading)
+            local ghostModel = (firstOffset and firstOffset.prop_model and firstOffset.prop_model ~= '' and firstOffset.prop_model)
+                or (_G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model))
+                or 'hei_prop_carrier_cargo_04b'
+            ForkliftModule.SpawnGhostProp(trailer, ghostModel, firstOffset, firstHeading)
         end
 
         while OperationActive do
@@ -757,7 +760,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             if loadedCount < requiredCount then
                                                 -- Spawna o holograma no próximo slot sequencial
                                                 local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                                ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
+                                                local nextGhostModel = (nextOffset and nextOffset.prop_model and nextOffset.prop_model ~= '' and nextOffset.prop_model)
+                                                    or (_G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model))
+                                                    or 'hei_prop_carrier_cargo_04b'
+                                                ForkliftModule.SpawnGhostProp(trailer, nextGhostModel, nextOffset, nextHeading)
                                             else
                                                 -- Todos os paletes estivados!
                                                 local hasForklift = false

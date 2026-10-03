@@ -448,6 +448,7 @@ local TABLES = {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `trailer_model` VARCHAR(50) NOT NULL,
         `label` VARCHAR(100) DEFAULT NULL,
+        `prop_model` VARCHAR(100) DEFAULT NULL,
         `slot_index` INT NOT NULL,
         `offset_x` FLOAT NOT NULL DEFAULT 0.0,
         `offset_y` FLOAT NOT NULL DEFAULT 0.0,
@@ -527,8 +528,9 @@ local MIGRATIONS = {
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fragile_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fast_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `illegal_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
-    -- admin overhaul: offsets label and spawns folder_name
+    -- admin overhaul: offsets label, prop_model and spawns folder_name
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_model` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
 }
 

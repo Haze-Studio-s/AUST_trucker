@@ -2466,14 +2466,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 for idx, v in pairs(data.pallets or {}) do
                     local sIdx = tonumber(idx)
                     if sIdx and v then
-                        local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                        local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
                         Config.TrailerSlots[h].pallets[sIdx] = slotEntry
                         Config.TrailerSlots[mKey].pallets[sIdx] = slotEntry
                         if numKey then Config.TrailerSlots[numKey].pallets[sIdx] = slotEntry end
                     end
                 end
                 if data.forklift then
-                    local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                    local slotEntry = { id = data.forklift.id, label = data.forklift.label, prop_model = data.forklift.prop_model or 'forklift', x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
                     Config.TrailerSlots[h].forklift = slotEntry
                     Config.TrailerSlots[mKey].forklift = slotEntry
                     if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
@@ -2900,7 +2900,7 @@ end)
 
 RegisterNUICallback('adminStartOffsetCalibration', function(data, cb)
     if data and data.trailerModel then
-        OffsetEditor.StartCalibration(data.trailerModel, data.slotIndex or 1, data.isForklift or false, data.propModel)
+        OffsetEditor.StartCalibration(data.trailerModel, data.slotIndex or 1, data.isForklift or false, data.propModel, data.label)
     end
     if cb then cb('ok') end
 end)

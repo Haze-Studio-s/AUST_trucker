@@ -194,6 +194,8 @@ function OffsetEditor.ConfirmCurrentSlot()
         trailerModel = CalibParams.trailerModel,
         slotIndex = CalibParams.slotIndex,
         isForklift = CalibParams.isForklift,
+        propModel = CalibParams.propModel,
+        label = CalibParams.label,
         x = tonumber(string.format("%.3f", CurrentOffsets.x)),
         y = tonumber(string.format("%.3f", CurrentOffsets.y)),
         z = tonumber(string.format("%.3f", CurrentOffsets.z)),
@@ -230,9 +232,22 @@ function OffsetEditor.ConfirmCurrentSlot()
         if CalibParams.slotIndex < maxPallets then
             local prevSlot = CalibParams.slotIndex
             CalibParams.slotIndex = CalibParams.slotIndex + 1
+
+            -- Auto-sugere label para o próximo slot mantendo coerência
+            if CalibParams.label and CalibParams.label ~= '' then
+                local basePrefix = CalibParams.label:match("^(.-)%s*%d+$")
+                if basePrefix and basePrefix ~= '' then
+                    CalibParams.label = ("%s %d"):format(basePrefix, CalibParams.slotIndex)
+                else
+                    CalibParams.label = ("Slot %d"):format(CalibParams.slotIndex)
+                end
+            else
+                CalibParams.label = ("Slot %d"):format(CalibParams.slotIndex)
+            end
+
             lib.notify({
                 title = 'Slot Salvo no Banco!',
-                description = ('Slot %d registrado com sucesso. Avançando para o Slot %d.'):format(prevSlot, CalibParams.slotIndex),
+                description = ('Slot %d salvo. Calibrando Slot %d (%s).'):format(prevSlot, CalibParams.slotIndex, CalibParams.propModel or 'Padrão'),
                 type = 'success',
                 duration = 3500
             })
@@ -323,7 +338,7 @@ end
 -- FERRAMENTA VISUAL IN-GAME DE OFFSETS (FREECAM & 3D GIZMO)
 -- ============================================================
 
-function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel)
+function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel, label)
     if IsCalibrating then return end
     IsCalibrating = true
     IsGizmoCursorActive = false
@@ -348,7 +363,8 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         trailerModel = trailerModel,
         slotIndex = slotIndex,
         isForklift = isForklift,
-        propModel = propModel
+        propModel = propModel,
+        label = label or (isForklift and 'Empilhadeira Traseira' or ('Slot ' .. tostring(slotIndex)))
     }
 
     -- Minimiza o menu administrativo principal
@@ -692,6 +708,8 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
 
     local keys = { trailerModel, hash, u, s, tostring(hash), tostring(u), tostring(s) }
     local slotEntry = {
+        label = (type(offsetVec) == 'table' and offsetVec.label) or nil,
+        prop_model = (type(offsetVec) == 'table' and offsetVec.prop_model) or nil,
         x = tonumber(offsetVec.x) or 0.0,
         y = tonumber(offsetVec.y) or 0.0,
         z = tonumber(offsetVec.z) or 0.0,

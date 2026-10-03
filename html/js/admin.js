@@ -718,6 +718,11 @@
 
     const list = normalizeProps(adminData.homologatedProps || []);
 
+    const offsetDatalist = document.getElementById('offset-props-datalist');
+    if (offsetDatalist) {
+      offsetDatalist.innerHTML = list.map(p => `<option value="${escapeHtml(p.prop_model)}">${escapeHtml(p.name || p.prop_model)} (${escapeHtml(p.category || 'dry')})</option>`).join('');
+    }
+
     if (list.length === 0) {
       grid.innerHTML = `
         <div style="grid-column: 1/-1; text-align: center; color: var(--admin-text-muted); padding: 40px; font-size: 13px;">
@@ -866,21 +871,28 @@
           <div style="margin-bottom: 8px;"><strong>Slots de Paletes Calibrados:</strong></div>
           <div style="display:flex; flex-direction:column; gap:6px; margin-bottom: 10px;">
             ${palletSlots.length > 0 ? palletSlots.map(s => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:4px;">
-                <span>
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:6px 12px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                   <strong style="color:var(--admin-primary)">Slot ${s.slot}</strong> 
-                  ${s.data.label ? `<span style="color:#fff;">(${escapeHtml(s.data.label)})</span>` : ''}
-                  <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;"> [X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
-                </span>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${s.data && s.data.id ? s.data.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:2px 7px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                  ${s.data.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(s.data.label)}"</span>` : ''}
+                  <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;" title="Prop Homologado / Carga">
+                    <i class="fas fa-box"></i> ${escapeHtml(s.data.prop_model || 'Padrão')}
+                  </span>
+                  <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
+                </div>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${s.data && s.data.id ? s.data.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
               </div>
             `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
           </div>
           <div>
             <strong>Empilhadeira Traseira:</strong> 
             ${item.forklift ? `
-              <span style="color:var(--admin-primary)">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
-              <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${item.forklift && item.forklift.id ? item.forklift.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:2px 7px; font-size:10px; margin-left:8px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+              <div style="display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05); margin-left:8px;">
+                ${item.forklift.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(item.forklift.label)}"</span>` : ''}
+                <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;"><i class="fas fa-truck-ramp-box"></i> ${escapeHtml(item.forklift.prop_model || 'forklift')}</span>
+                <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${item.forklift && item.forklift.id ? item.forklift.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+              </div>
             ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
           </div>
         </div>

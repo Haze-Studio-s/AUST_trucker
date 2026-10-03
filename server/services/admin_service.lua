@@ -245,6 +245,7 @@ function AdminService.ReloadTrailerOffsets()
         local vecData = {
             id = o.id,
             label = o.label or nil,
+            prop_model = o.prop_model or nil,
             x = tonumber(o.offset_x) or 0.0,
             y = tonumber(o.offset_y) or 0.0,
             z = tonumber(o.offset_z) or 0.0,
@@ -289,11 +290,11 @@ function AdminService.ReloadTrailerOffsets()
                     Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
                 end
                 for idx, vec in pairs(data.pallets or {}) do
-                    local slotEntry = { id = vec.id, label = vec.label, x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
+                    local slotEntry = { id = vec.id, label = vec.label, prop_model = vec.prop_model, x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
                     Config.TrailerSlots[k].pallets[tonumber(idx)] = slotEntry
                 end
                 if data.forklift then
-                    local slotEntry = { id = data.forklift.id, label = data.forklift.label, x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                    local slotEntry = { id = data.forklift.id, label = data.forklift.label, prop_model = data.forklift.prop_model or 'forklift', x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
                     Config.TrailerSlots[k].forklift = slotEntry
                 end
             end
@@ -486,25 +487,34 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local slotIndex = tonumber(data.slotIndex) or 1
     local isForklift = data.isForklift and 1 or 0
     local label = data.label and tostring(data.label) or nil
+    local propModel = data.propModel and tostring(data.propModel):lower() or (isForklift == 1 and 'forklift' or nil)
     local ox, oy, oz = tonumber(data.x) or 0.0, tonumber(data.y) or 0.0, tonumber(data.z) or 0.0
     local heading = tonumber(data.heading) or 0.0
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_trailer_offsets
-        (trailer_model, label, slot_index, offset_x, offset_y, offset_z, heading, is_forklift)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-        label = VALUES(label), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
+        label = VALUES(label), prop_model = VALUES(prop_model), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
         heading = VALUES(heading)
     ]], {
-        trailerModel, label, slotIndex, ox, oy, oz, heading, isForklift
+        trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift
     })
 
     -- Recarrega e normaliza dados frescos do banco
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
 
     -- Notifica todos os clientes para sincronizar os novos offsets e atualizar a interface NUI
-    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, vector3(ox, oy, oz), heading, cleanOffsets or updatedOffsets)
+    local offsetPayload = {
+        label = label,
+        prop_model = propModel,
+        x = ox,
+        y = oy,
+        z = oz,
+        heading = heading
+    }
+    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, offsetPayload, heading, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {
         title = 'Offset Calibrado',
         description = ('Offset do %s (%s) gravado no banco e ativo em tempo real!'):format(trailerModel, isForklift == 1 and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))),
