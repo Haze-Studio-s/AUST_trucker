@@ -239,6 +239,7 @@ function AdminService.ReloadTrailerOffsets()
         dualMap[tostring(s)] = data
     end
     AdminService.TrailerOffsets = dualMap
+    AdminService.CleanTrailerOffsets = offsetMap
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
     if Config and Config.TrailerSlots then
@@ -253,18 +254,18 @@ function AdminService.ReloadTrailerOffsets()
                     Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
                 end
                 for idx, vec in pairs(data.pallets or {}) do
-                    local slotEntry = { x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
+                    local slotEntry = { id = vec.id, label = vec.label, x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
                     Config.TrailerSlots[k].pallets[tonumber(idx)] = slotEntry
                 end
                 if data.forklift then
-                    local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                    local slotEntry = { id = data.forklift.id, label = data.forklift.label, x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
                     Config.TrailerSlots[k].forklift = slotEntry
                 end
             end
         end
     end
 
-    return dualMap
+    return dualMap, offsetMap
 end
 
 MySQL.ready(function()
@@ -291,15 +292,15 @@ RegisterCommand('truckeradmin', function(source, args)
     end
 
     -- Consulta viva do banco para garantir que o menu sempre abra com dados frescos
-    local currentOffsets = AdminService.ReloadTrailerOffsets()
+    local currentOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
     local currentProps = AdminService.ReloadHomologatedProps()
 
     local payload = {
         customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
-        trailerOffsets = currentOffsets,
-        offsets = currentOffsets,
+        trailerOffsets = cleanOffsets or currentOffsets,
+        offsets = cleanOffsets or currentOffsets,
         homologatedProps = currentProps,
         props = currentProps,
         npcs = AdminService.NPCs,
@@ -312,14 +313,14 @@ end, false)
 
 lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     if not AdminService.IsPlayerAdmin(source) then return nil end
-    local currentOffsets = AdminService.ReloadTrailerOffsets()
+    local currentOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
     local currentProps = AdminService.ReloadHomologatedProps()
     return {
         customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
-        trailerOffsets = currentOffsets,
-        offsets = currentOffsets,
+        trailerOffsets = cleanOffsets or currentOffsets,
+        offsets = cleanOffsets or currentOffsets,
         homologatedProps = currentProps,
         props = currentProps,
         npcs = AdminService.NPCs,
@@ -465,10 +466,10 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     })
 
     -- Recarrega e normaliza dados frescos do banco
-    local updatedOffsets = AdminService.ReloadTrailerOffsets()
+    local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
 
     -- Notifica todos os clientes para sincronizar os novos offsets e atualizar a interface NUI
-    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, vector3(ox, oy, oz), heading, updatedOffsets)
+    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, vector3(ox, oy, oz), heading, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {
         title = 'Offset Calibrado',
         description = ('Offset do %s (%s) gravado no banco e ativo em tempo real!'):format(trailerModel, isForklift == 1 and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))),
@@ -476,22 +477,45 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     })
 end)
 
-RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(trailerModel, slotIndex, isForklift)
+RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOrModel, maybeSlot, maybeFork)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not trailerModel then return end
+    if not AdminService.IsPlayerAdmin(src) or not dataOrModel then return end
 
-    trailerModel = tostring(trailerModel):lower()
-    slotIndex = tonumber(slotIndex) or 1
-    local isFork = (isForklift == true or isForklift == 1 or isForklift == '1') and 1 or 0
+    local id, trailerModel, slotIndex, isForklift
+    if type(dataOrModel) == 'table' then
+        id = tonumber(dataOrModel.id)
+        trailerModel = dataOrModel.trailerModel
+        slotIndex = tonumber(dataOrModel.slotIndex)
+        isForklift = dataOrModel.isForklift
+    else
+        trailerModel = dataOrModel
+        slotIndex = tonumber(maybeSlot)
+        isForklift = maybeFork
+    end
 
-    MySQL.query.await([[
-        DELETE FROM aust_trucker_trailer_offsets 
-        WHERE LOWER(trailer_model) = ? AND slot_index = ? AND is_forklift = ?
-    ]], { trailerModel, slotIndex, isFork })
+    local rowsAffected = 0
+    if id and id > 0 then
+        local res = MySQL.query.await('DELETE FROM aust_trucker_trailer_offsets WHERE id = ?', { id })
+        rowsAffected = (res and res.affectedRows) or 1
+    end
 
-    local updated = AdminService.ReloadTrailerOffsets()
-    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isFork == 1, vector3(0, 0, 0), 0.0, updated)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Offset do slot %s (%s) excluído com sucesso.'):format(tostring(slotIndex), trailerModel), type = 'info' })
+    if not rowsAffected or rowsAffected == 0 then
+        if trailerModel then
+            local modelStr = tostring(trailerModel):lower()
+            local h = joaat(modelStr)
+            local u = tostring(h & 0xFFFFFFFF)
+            local isFork = (isForklift == true or isForklift == 1 or isForklift == '1') and 1 or 0
+            MySQL.query.await([[
+                DELETE FROM aust_trucker_trailer_offsets 
+                WHERE (LOWER(trailer_model) = ? OR LOWER(trailer_model) = ? OR LOWER(trailer_model) = ?) 
+                  AND slot_index = ? AND is_forklift = ?
+            ]], { modelStr, tostring(h), u, slotIndex or 1, isFork })
+        end
+    end
+
+    local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
+    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel or '', slotIndex or 1, isForklift == true, vector3(0, 0, 0), 0.0, cleanOffsets or updatedOffsets)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Offset do trailer %s excluído com sucesso.'):format(tostring(trailerModel or id or '')), type = 'info' })
 end)
 
 -- 4. HOMOLOGAÇÃO DE CARGAS & PROPS

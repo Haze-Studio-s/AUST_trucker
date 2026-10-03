@@ -779,7 +779,11 @@
     listContainer.innerHTML = '';
 
     const offsets = adminData.trailerOffsets || {};
-    const keys = Object.keys(offsets);
+    let keys = Object.keys(offsets);
+    const textKeys = keys.filter(k => isNaN(Number(k)));
+    if (textKeys.length > 0) {
+      keys = textKeys;
+    }
 
     if (keys.length === 0) {
       listContainer.innerHTML = `<p style="color:var(--admin-text-muted); font-size:12px;">Nenhum offset customizado salvo em banco ainda.</p>`;
@@ -818,7 +822,7 @@
                   ${s.data.label ? `<span style="color:#fff;">(${escapeHtml(s.data.label)})</span>` : ''}
                   <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;"> [X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
                 </span>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:2px 7px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${s.data && s.data.id ? s.data.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:2px 7px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
               </div>
             `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
           </div>
@@ -826,7 +830,7 @@
             <strong>Empilhadeira Traseira:</strong> 
             ${item.forklift ? `
               <span style="color:var(--admin-primary)">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
-              <button class="admin-btn admin-btn-danger btn-del-offset" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:2px 7px; font-size:10px; margin-left:8px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+              <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${item.forklift && item.forklift.id ? item.forklift.id : ''}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:2px 7px; font-size:10px; margin-left:8px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
             ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
           </div>
         </div>
@@ -850,6 +854,7 @@
         const trailer = this.getAttribute('data-trailer');
         const slot = parseInt(this.getAttribute('data-slot'));
         const isFork = this.getAttribute('data-fork') === '1';
+        const offsetId = parseInt(this.getAttribute('data-id')) || null;
         const targetDesc = isFork ? 'Empilhadeira Traseira' : `Slot ${slot}`;
 
         showConfirmModal(
@@ -857,18 +862,29 @@
           `Deseja realmente remover o offset do trailer "${trailer}" (${targetDesc})?`,
           () => {
             postNUI('adminDeleteTrailerOffset', {
+              id: offsetId,
               trailerModel: trailer,
               slotIndex: slot,
               isForklift: isFork
             });
-            if (adminData.trailerOffsets[trailer]) {
-              if (isFork) {
-                adminData.trailerOffsets[trailer].forklift = null;
-              } else if (adminData.trailerOffsets[trailer].pallets) {
-                delete adminData.trailerOffsets[trailer].pallets[slot];
-                delete adminData.trailerOffsets[trailer].pallets[String(slot)];
+            Object.keys(adminData.trailerOffsets).forEach(k => {
+              const trData = adminData.trailerOffsets[k];
+              if (trData && (k === trailer || String(k).toLowerCase() === String(trailer).toLowerCase())) {
+                if (isFork) {
+                  trData.forklift = null;
+                } else if (trData.pallets) {
+                  delete trData.pallets[slot];
+                  delete trData.pallets[String(slot)];
+                  if (offsetId) {
+                    Object.keys(trData.pallets).forEach(pk => {
+                      if (trData.pallets[pk] && trData.pallets[pk].id === offsetId) {
+                        delete trData.pallets[pk];
+                      }
+                    });
+                  }
+                }
               }
-            }
+            });
             renderOffsetsTab();
             showAdminToast(`Offset do trailer ${trailer} removido com sucesso.`);
           }
