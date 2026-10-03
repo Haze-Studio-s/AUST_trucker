@@ -436,6 +436,7 @@ local TABLES = {
         `id` VARCHAR(50) PRIMARY KEY,
         `name` VARCHAR(100) NOT NULL,
         `spawn_type` ENUM('truck', 'trailer', 'forklift', 'handler', 'loading_bay', 'delivery') NOT NULL,
+        `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
         `coords` JSON NOT NULL,
         `heading` FLOAT NOT NULL DEFAULT 0.0,
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -445,6 +446,7 @@ local TABLES = {
     [[CREATE TABLE IF NOT EXISTS `aust_trucker_trailer_offsets` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `trailer_model` VARCHAR(50) NOT NULL,
+        `label` VARCHAR(100) DEFAULT NULL,
         `slot_index` INT NOT NULL,
         `offset_x` FLOAT NOT NULL DEFAULT 0.0,
         `offset_y` FLOAT NOT NULL DEFAULT 0.0,
@@ -453,6 +455,19 @@ local TABLES = {
         `is_forklift` TINYINT(1) NOT NULL DEFAULT 0,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY `uq_trailer_slot` (`trailer_model`, `slot_index`, `is_forklift`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Props de Cargas Homologados
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_homologated_props` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `model_hash` VARCHAR(100) NOT NULL UNIQUE,
+        `name` VARCHAR(100) NOT NULL,
+        `cargo_category` ENUM('dry', 'fragile', 'valuable', 'adr', 'heavy') NOT NULL DEFAULT 'dry',
+        `offset_x` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_y` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_z` FLOAT NOT NULL DEFAULT 0.0,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
     -- Módulo Administrativo: NPCs Despachantes Dinâmicos
@@ -510,6 +525,9 @@ local MIGRATIONS = {
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fragile_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fast_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `illegal_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    -- admin overhaul: offsets label and spawns folder_name
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
 }
 
 ---Garante que todas as tabelas e migrations existam. Chamado dentro de MySQL.ready (main.lua).

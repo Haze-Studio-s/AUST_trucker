@@ -2932,6 +2932,46 @@ RegisterNUICallback('adminTeleport', function(data, cb)
     if cb then cb('ok') end
 end)
 
+RegisterNUICallback('adminDeleteTrailerOffset', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteTrailerOffset', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminSaveHomologatedProp', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveHomologatedProp', data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminDeleteHomologatedProp', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteHomologatedProp', data and data.prop_model)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminMoveSpawnFolder', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminMoveSpawnFolder', data and data.spawn_id, data and data.folder_name)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminDeleteSpawnFolder', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteSpawnFolder', data and data.folder_name)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminStartSpawnGizmo', function(data, cb)
+    OffsetEditor.StartSpawnCalibration(data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminStartPreview', function(data, cb)
+    OffsetEditor.StartPreview(data and data.spawns)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminStopPreview', function(_, cb)
+    OffsetEditor.StopPreview()
+    if cb then cb('ok') end
+end)
+
 -- ============================================================
 -- NUI HARD ESCAPE & PREVENÇÃO DE DEADLOCK (PILAR 6)
 -- ============================================================

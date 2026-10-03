@@ -1029,9 +1029,21 @@
 					<!-- ABA 1: ROTAS & CONTRATOS -->
 					<div id="admin-tab-routes" class="admin-tab-pane active">
 						<div class="admin-card">
-							<div class="admin-card-header">
-								<span class="admin-card-title"><i class="fas fa-list-ul"></i> Rotas e Contratos Dinâmicos Ativos</span>
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-list-ul"></i> Contratos e Rotas Ativas</span>
+								<input type="text" id="routes-search-input" class="admin-input" placeholder="Buscar rota por nome ou ID..." style="max-width: 260px; padding: 6px 12px; font-size:12px;">
 							</div>
+							
+							<!-- Barra de Filtros por Categoria -->
+							<div class="admin-filter-bar" id="routes-filter-bar">
+								<button class="admin-filter-btn active" data-filter="all"><i class="fas fa-layer-group"></i> Todas as Cargas</button>
+								<button class="admin-filter-btn" data-filter="freight"><i class="fas fa-truck"></i> Frete Próprio</button>
+								<button class="admin-filter-btn" data-filter="quick"><i class="fas fa-shipping-fast"></i> Trabalho Rápido</button>
+								<button class="admin-filter-btn" data-filter="adr"><i class="fas fa-biohazard"></i> Perigosa ADR</button>
+								<button class="admin-filter-btn" data-filter="heavy"><i class="fas fa-weight-hanging"></i> Pesada / Contêiner</button>
+								<button class="admin-filter-btn" data-filter="carrier"><i class="fas fa-car"></i> Cegonha de Carros</button>
+							</div>
+
 							<div style="max-height: 220px; overflow-y: auto;">
 								<table class="admin-table">
 									<thead>
@@ -1141,27 +1153,21 @@
 						</div>
 					</div>
 
-					<!-- ABA 2: SPAWNS DINÂMICOS -->
+					<!-- ABA 2: SPAWNS DINÂMICOS (PASTAS & PREVIEW) -->
 					<div id="admin-tab-spawns" class="admin-tab-pane">
 						<div class="admin-card">
-							<div class="admin-card-header">
-								<span class="admin-card-title"><i class="fas fa-map-marked-alt"></i> Spawns de Veículos, Trailers e Cargas</span>
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-folder-open"></i> Gerenciador de Spawns (Pastas & Drag-and-Drop)</span>
+								<div style="display:flex; gap: 8px;">
+									<button id="btn-new-spawn-folder" class="admin-btn admin-btn-outline" style="padding: 5px 12px; font-size: 11px;"><i class="fas fa-folder-plus"></i> + Nova Pasta</button>
+									<button id="btn-preview-spawns" class="admin-btn admin-btn-primary" style="padding: 5px 12px; font-size: 11px;"><i class="fas fa-eye"></i> Teste / Preview da Área</button>
+								</div>
 							</div>
-							<div style="max-height: 240px; overflow-y: auto;">
-								<table class="admin-table">
-									<thead>
-										<tr>
-											<th>ID</th>
-											<th>Nome do Ponto</th>
-											<th>Tipo</th>
-											<th>Coordenadas / Heading</th>
-											<th>Ações</th>
-										</tr>
-									</thead>
-									<tbody id="admin-spawns-tbody">
-										<!-- Populado via admin.js -->
-									</tbody>
-								</table>
+							<p style="font-size:11px; color:var(--admin-text-muted); margin: 0 0 12px 0;">
+								Arraste e solte os pontos de spawn entre as pastas para categorizar as baias e pátios logísticos.
+							</p>
+							<div id="admin-spawns-folders-container" class="admin-folders-container">
+								<!-- Pastas e Spawns gerados via admin.js -->
 							</div>
 						</div>
 
@@ -1179,22 +1185,39 @@
 									<input type="text" id="spawn-form-name" class="admin-input" placeholder="ex: Vaga de Caminhão Paleto">
 								</div>
 								<div class="admin-form-group">
+									<label>Pasta / Categoria</label>
+									<select id="spawn-form-folder" class="admin-select">
+										<option value="Geral">Geral</option>
+									</select>
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
 									<label>Tipo de Entidade</label>
 									<select id="spawn-form-type" class="admin-select">
 										<option value="truck">Caminhão (Truck)</option>
 										<option value="trailer">Reboque (Trailer)</option>
 										<option value="forklift">Empilhadeira (Forklift)</option>
+										<option value="pallet">Palete de Carga (Pallet)</option>
 										<option value="handler">Container Handler (Porto)</option>
-										<option value="load_bay">Baia de Carregamento (DrawMarker 30)</option>
-										<option value="delivery_bay">Ponto de Entrega (DrawMarker 30)</option>
+										<option value="load_bay">Baia de Carregamento (DrawMarker)</option>
+										<option value="delivery_bay">Ponto de Entrega (DrawMarker)</option>
 									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Modelo Específico (Opcional)</label>
+									<input type="text" id="spawn-form-model" class="admin-input" placeholder="ex: hauler, trailers2, forklift...">
 								</div>
 							</div>
 
 							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
 								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
 									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
-									<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição & Heading</button>
+									<div style="display:flex; gap: 8px;">
+										<button id="btn-gizmo-spawn" class="admin-btn admin-btn-primary" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-cube"></i> Coords (Gizmo 3D)</button>
+										<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Posição Atual</button>
+									</div>
 								</div>
 								<div style="display:flex; gap: 8px;">
 									<input type="number" step="0.01" id="spawn-form-x" class="admin-input" placeholder="X">
@@ -1210,15 +1233,50 @@
 						</div>
 					</div>
 
-					<!-- ABA 3: CARGAS & PROPS -->
+					<!-- ABA 3: CARGAS & PROPS (HOMOLOGAÇÃO) -->
 					<div id="admin-tab-props" class="admin-tab-pane">
 						<div class="admin-card">
 							<div class="admin-card-header">
-								<span class="admin-card-title"><i class="fas fa-cubes"></i> Modelos 3D de Cargas Homologados</span>
+								<span class="admin-card-title"><i class="fas fa-stamp"></i> Homologação de Cargas & Props</span>
 							</div>
-							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
-								Estes modelos contam com suporte a renderização forçada de missão (LOD Máximo), detecção de colisão seletiva e ancoragem magnética por cordas.
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
+								Registre novos modelos 3D homologados pelo servidor. O sistema valida automaticamente dimensões, LOD e amarração de cordas.
 							</p>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo do Prop (Spawn Name)</label>
+									<input type="text" id="prop-form-model" class="admin-input" placeholder="ex: prop_boxpile_07d">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome / Label de Exibição</label>
+									<input type="text" id="prop-form-label" class="admin-input" placeholder="ex: Caixas de Carga Seca">
+								</div>
+								<div class="admin-form-group">
+									<label>Categoria de Transporte</label>
+									<select id="prop-form-category" class="admin-select">
+										<option value="dry">Carga Seca Padrão</option>
+										<option value="fragile">Carga Frágil (Sensível)</option>
+										<option value="valuable">Carga Valiosa (Alto Valor)</option>
+										<option value="adr">Carga Perigosa (ADR)</option>
+										<option value="heavy">Carga Pesada / Contêiner</option>
+									</select>
+								</div>
+							</div>
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Offset Z de Apoio (Altura Base)</label>
+									<input type="number" step="0.01" id="prop-form-offsetz" class="admin-input" value="0.0">
+								</div>
+								<div class="admin-form-group" style="display:flex; align-items:flex-end;">
+									<button id="btn-save-homologated-prop" class="admin-btn admin-btn-primary" style="width:100%; height:40px;"><i class="fas fa-check-circle"></i> Homologar e Atrelar Carga</button>
+								</div>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cubes"></i> Props Homologados Ativos</span>
+							</div>
 							<div id="admin-props-grid" class="admin-grid-3">
 								<!-- Populado via admin.js -->
 							</div>
@@ -1229,15 +1287,15 @@
 					<div id="admin-tab-offsets" class="admin-tab-pane">
 						<div class="admin-card" style="border-left: 4px solid var(--admin-primary);">
 							<div class="admin-card-header">
-								<span class="admin-card-title"><i class="fas fa-cube"></i> Ferramenta In-Game de Calibração 3D (Gizmo 3D & Câmera Livre)</span>
+								<span class="admin-card-title"><i class="fas fa-cube"></i> Calibração Visual 3D (Gizmo 3D & Nomenclatura)</span>
 							</div>
 							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
-								Posicione a carga em tempo real com <b>Gizmo 3D Nativo</b> e <b>Câmera Livre estilo Blender/Unreal</b>. Use <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">T</kbd> (Translação), <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">R</kbd> (Rotação), arraste os eixos com o mouse livre, e segure <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">RMB + WASD</kbd> para voar a câmera em volta do trailer. Salve sequencialmente com <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">ENTER</kbd>.
+								Posicione a carga em tempo real com <b>Gizmo 3D Nativo</b> e <b>Câmera Livre</b>. Use <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">T</kbd> (Translação), <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">R</kbd> (Rotação), arraste os eixos com mouse livre, e salve com <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">ENTER</kbd>.
 							</p>
 							<div class="admin-grid-3">
 								<div class="admin-form-group">
-									<label>Modelo do Trailer (Digite ou Escolha)</label>
-									<input type="text" id="offset-form-trailer" class="admin-input" list="trailer-models-list" placeholder="ex: trailers2 ou mod custom" value="trailers2">
+									<label>Modelo do Trailer</label>
+									<input type="text" id="offset-form-trailer" class="admin-input" list="trailer-models-list" placeholder="ex: trailers2" value="trailers2">
 									<datalist id="trailer-models-list">
 										<option value="trailers2">trailers2 (Prancha Baixa / Flatbed)</option>
 										<option value="trailers">trailers (Baú Fechado)</option>
@@ -1262,17 +1320,23 @@
 									</select>
 								</div>
 								<div class="admin-form-group">
+									<label>Nomenclatura / Nome do Slot</label>
+									<input type="text" id="offset-form-label" class="admin-input" placeholder="ex: Palete Frente Esquerdo">
+								</div>
+							</div>
+							<div class="admin-grid-2" style="margin-top: 6px;">
+								<div class="admin-form-group">
 									<label>Prop de Teste</label>
 									<input type="text" id="offset-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
 								</div>
-							</div>
-							<div style="display:flex; justify-content:space-between; align-items:center; margin-top: 10px;">
-								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
-									<input type="checkbox" id="offset-form-isforklift"> Calibrar Posição da Empilhadeira (Forklift Tie-Down)
-								</label>
-								<button id="btn-start-calibration" class="admin-btn admin-btn-primary" style="padding: 10px 18px; font-size: 13px;">
-									<i class="fas fa-eye"></i> INICIAR CALIBRAÇÃO VISUAL 3D
-								</button>
+								<div style="display:flex; justify-content:space-between; align-items:center;">
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="offset-form-isforklift"> Empilhadeira Traseira (Tie-Down)
+									</label>
+									<button id="btn-start-calibration" class="admin-btn admin-btn-primary" style="padding: 10px 18px; font-size: 13px;">
+										<i class="fas fa-eye"></i> INICIAR CALIBRAÇÃO 3D
+									</button>
+								</div>
 							</div>
 						</div>
 
@@ -1286,15 +1350,46 @@
 						</div>
 					</div>
 
-					<!-- ABA 5: ECONOMIA & XP -->
+					<!-- ABA 5: ECONOMIA & XP (LISTAGEM GLOBAL & EDIÇÃO RÁPIDA) -->
 					<div id="admin-tab-economy" class="admin-tab-pane">
 						<div class="admin-card">
-							<div class="admin-card-header">
-								<span class="admin-card-title"><i class="fas fa-balance-scale"></i> Parâmetros Globais de Economia e Progressão</span>
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-coins"></i> Gestão Global de Recompensas das Rotas</span>
 							</div>
-							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 16px;">
-								Alterações nesta aba são aplicadas instantaneamente no cálculo de contratos e recompensas de todos os jogadores logados.
-							</p>
+							<!-- Filtro por tipo de trabalho -->
+							<div class="admin-filter-bar" id="eco-filter-bar">
+								<button class="admin-filter-btn active" data-filter="all"><i class="fas fa-layer-group"></i> Todas as Cargas</button>
+								<button class="admin-filter-btn" data-filter="freight"><i class="fas fa-truck"></i> Frete Próprio</button>
+								<button class="admin-filter-btn" data-filter="quick"><i class="fas fa-shipping-fast"></i> Trabalho Rápido</button>
+								<button class="admin-filter-btn" data-filter="adr"><i class="fas fa-biohazard"></i> Perigosa ADR</button>
+								<button class="admin-filter-btn" data-filter="heavy"><i class="fas fa-weight-hanging"></i> Pesada / Contêiner</button>
+								<button class="admin-filter-btn" data-filter="carrier"><i class="fas fa-car"></i> Cegonha</button>
+							</div>
+
+							<div style="max-height: 240px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID Rota</th>
+											<th>Nome do Contrato</th>
+											<th>Tipo</th>
+											<th>Distância</th>
+											<th>Pagamento (R$)</th>
+											<th>XP Recompensa</th>
+											<th>Ação</th>
+										</tr>
+									</thead>
+									<tbody id="admin-eco-routes-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-balance-scale"></i> Multiplicadores Globais de Economia</span>
+							</div>
 							<div class="admin-grid-2">
 								<div class="admin-form-group">
 									<label>Pagamento Base por Quilômetro (R$ / KM)</label>
@@ -1329,7 +1424,7 @@
 							</div>
 
 							<div style="display:flex; justify-content:flex-end; margin-top: 10px;">
-								<button id="btn-save-economy" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Sincronizar Economia</button>
+								<button id="btn-save-economy" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar Multiplicadores Globais</button>
 							</div>
 						</div>
 					</div>

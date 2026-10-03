@@ -11,11 +11,15 @@
     trailerOffsets: {},
     npcs: {},
     economy: {},
+    homologatedProps: [],
     defaultProps: []
   };
 
   let activeTab = 'routes';
-  let capturingTarget = null; // Guarda qual campo de coordenadas está aguardando captura
+  let routeFilter = 'all';
+  let routeSearchQuery = '';
+  let ecoFilter = 'all';
+  let draggedSpawnId = null;
 
   // Inicialização e listeners de Mensagens do FiveM
   window.addEventListener('message', function (event) {
@@ -39,6 +43,18 @@
         if (item.offsets) {
           adminData.trailerOffsets = item.offsets;
           renderOffsetsTab();
+        }
+        break;
+      case 'admin_spawn_coords_calibrated':
+        if (item.coords) {
+          const sx = document.getElementById('spawn-form-x');
+          const sy = document.getElementById('spawn-form-y');
+          const sz = document.getElementById('spawn-form-z');
+          const sh = document.getElementById('spawn-form-h');
+          if (sx) sx.value = item.coords.x;
+          if (sy) sy.value = item.coords.y;
+          if (sz) sz.value = item.coords.z;
+          if (sh) sh.value = item.coords.heading;
         }
         break;
     }
@@ -73,6 +89,7 @@
         trailerOffsets: data.trailerOffsets || data.offsets || {},
         npcs: data.npcs || {},
         economy: data.economy || {},
+        homologatedProps: data.homologatedProps || [],
         defaultProps: data.defaultProps || []
       };
     }
@@ -150,8 +167,8 @@
       if (slotSelect) slotSelect.disabled = false;
     }
 
-    // Garante refresh imediato dos cards da aba de offsets
     renderOffsetsTab();
+    renderSpawnsTab();
   }
 
   // Troca de Abas
@@ -164,7 +181,6 @@
       pane.classList.toggle('active', pane.getAttribute('id') === `admin-tab-${tabName}`);
     });
 
-    // Renderiza o conteúdo da aba selecionada
     switch (tabName) {
       case 'routes':
         renderRoutesTab();
@@ -188,7 +204,7 @@
   }
 
   // ============================================================
-  // ABA 1: ROTAS & CONTRATOS DINÂMICOS
+  // ABA 1: ROTAS & CONTRATOS (COM FILTROS E BUSCA)
   // ============================================================
   function renderRoutesTab() {
     const tbody = document.getElementById('admin-routes-tbody');
@@ -196,24 +212,52 @@
     tbody.innerHTML = '';
 
     const routes = adminData.customRoutes || {};
-    const keys = Object.keys(routes);
+    let entries = Object.keys(routes).map(k => ({ key: k, data: routes[k] }));
 
-    if (keys.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--admin-text-muted);">Nenhuma rota dinâmica cadastrada ainda. Crie uma abaixo!</td></tr>`;
+    // Filtro por tipo de trabalho
+    if (routeFilter && routeFilter !== 'all') {
+      entries = entries.filter(e => {
+        const t = (e.data.type || e.data.job_type || 'freight').toLowerCase();
+        return t === routeFilter;
+      });
+    }
+
+    // Filtro por busca textual
+    if (routeSearchQuery && routeSearchQuery.trim() !== '') {
+      const q = routeSearchQuery.toLowerCase().trim();
+      entries = entries.filter(e => {
+        const name = (e.data.name || e.data.title || '').toLowerCase();
+        const id = String(e.data.id || e.data.route_id || e.key).toLowerCase();
+        return name.includes(q) || id.includes(q);
+      });
+    }
+
+    if (entries.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--admin-text-muted);">Nenhuma rota encontrada para o filtro selecionado.</td></tr>`;
       return;
     }
 
-    keys.forEach(k => {
-      const r = routes[k];
+    entries.forEach(e => {
+      const r = e.data;
+      const k = e.key;
       const tr = document.createElement('tr');
-      const badgeClass = r.job_type === 'adr' ? 'admin-badge-adr' : (r.job_type === 'quick' ? 'admin-badge-quick' : 'admin-badge-freight');
-      
+      const jobType = (r.type || r.job_type || 'freight').toLowerCase();
+      let badgeClass = 'admin-badge-freight';
+      if (jobType === 'adr') badgeClass = 'admin-badge-adr';
+      else if (jobType === 'quick') badgeClass = 'admin-badge-quick';
+      else if (jobType === 'heavy') badgeClass = 'admin-badge-heavy';
+      else if (jobType === 'carrier') badgeClass = 'admin-badge-carrier';
+
+      const payment = r.base_payment || r.payment || 0;
+      const xp = r.base_xp || r.xp || 0;
+      const dist = r.distance || r.distance_km || 0;
+
       tr.innerHTML = `
-        <td><strong>#${escapeHtml(r.route_id || k)}</strong></td>
-        <td>${escapeHtml(r.title || 'Carga Sem Nome')}</td>
-        <td><span class="admin-badge ${badgeClass}">${(r.job_type || 'freight').toUpperCase()}</span></td>
-        <td>R$ ${Number(r.payment || 0).toLocaleString()} <span style="color:var(--admin-primary)">(${r.xp || 0} XP)</span></td>
-        <td>${r.distance_km || 0} km (Lvl ${r.required_level || 1})</td>
+        <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
+        <td>${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
+        <td><span class="admin-badge ${badgeClass}">${jobType.toUpperCase()}</span></td>
+        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary)">(${xp} XP)</span></td>
+        <td>${Number(dist).toFixed(1)} km (Lvl ${r.req_skill || r.required_level || 1})</td>
         <td>
           <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${k}" title="Editar Rota"><i class="fas fa-edit"></i></button>
           <button class="admin-btn admin-btn-danger btn-del-route" data-id="${k}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
@@ -222,7 +266,6 @@
       tbody.appendChild(tr);
     });
 
-    // Eventos dos botões da tabela
     tbody.querySelectorAll('.btn-edit-route').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
@@ -237,6 +280,7 @@
           postNUI('adminDeleteRoute', { id: id });
           delete adminData.customRoutes[id];
           renderRoutesTab();
+          renderEconomyTab();
         }
       });
     });
@@ -244,14 +288,14 @@
 
   function fillRouteForm(r) {
     if (!r) return;
-    document.getElementById('route-form-id').value = r.route_id || '';
-    document.getElementById('route-form-title').value = r.title || '';
-    document.getElementById('route-form-type').value = r.job_type || 'freight';
-    document.getElementById('route-form-prop').value = r.cargo_prop || 'hei_prop_carrier_cargo_04b';
-    document.getElementById('route-form-payment').value = r.payment || 1500;
-    document.getElementById('route-form-xp').value = r.xp || 100;
-    document.getElementById('route-form-distance').value = r.distance_km || 5.0;
-    document.getElementById('route-form-level').value = r.required_level || 1;
+    document.getElementById('route-form-id').value = r.id || r.route_id || '';
+    document.getElementById('route-form-title').value = r.name || r.title || '';
+    document.getElementById('route-form-type').value = r.type || r.job_type || 'freight';
+    document.getElementById('route-form-prop').value = r.cargo_model || r.cargo_prop || 'hei_prop_carrier_cargo_04b';
+    document.getElementById('route-form-payment').value = r.base_payment || r.payment || 2500;
+    document.getElementById('route-form-xp').value = r.base_xp || r.xp || 150;
+    document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
+    document.getElementById('route-form-level').value = r.req_skill || r.required_level || 1;
 
     const pCoords = r.pickup_coords ? (typeof r.pickup_coords === 'string' ? JSON.parse(r.pickup_coords) : r.pickup_coords) : {};
     document.getElementById('route-form-pickup-x').value = pCoords.x ? Number(pCoords.x).toFixed(2) : '';
@@ -264,13 +308,13 @@
     document.getElementById('route-form-deliv-z').value = dCoords.z ? Number(dCoords.z).toFixed(2) : '';
 
     document.getElementById('route-form-forklift').checked = (r.has_forklift == 1 || r.has_forklift === true);
-    document.getElementById('route-form-adr').checked = (r.requires_adr == 1 || r.requires_adr === true);
+    document.getElementById('route-form-adr').checked = (r.requires_adr == 1 || r.requires_adr === true || r.type === 'adr');
   }
 
   function saveRouteForm() {
     const routeId = document.getElementById('route-form-id').value.trim();
     if (!routeId) {
-      alert('Por favor, informe um identificador único para a rota (ex: rota_porto_oleo).');
+      alert('Informe um identificador único para a rota (ex: rota_porto_oleo).');
       return;
     }
 
@@ -287,13 +331,21 @@
     };
 
     const payload = {
+      id: routeId,
       route_id: routeId,
+      name: document.getElementById('route-form-title').value.trim() || 'Carga Personalizada',
       title: document.getElementById('route-form-title').value.trim() || 'Carga Personalizada',
+      type: document.getElementById('route-form-type').value,
       job_type: document.getElementById('route-form-type').value,
+      cargo_model: document.getElementById('route-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b',
       cargo_prop: document.getElementById('route-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b',
-      payment: parseInt(document.getElementById('route-form-payment').value) || 1500,
-      xp: parseInt(document.getElementById('route-form-xp').value) || 100,
+      base_payment: parseInt(document.getElementById('route-form-payment').value) || 2500,
+      payment: parseInt(document.getElementById('route-form-payment').value) || 2500,
+      base_xp: parseInt(document.getElementById('route-form-xp').value) || 150,
+      xp: parseInt(document.getElementById('route-form-xp').value) || 150,
+      distance: parseFloat(document.getElementById('route-form-distance').value) || 5.0,
       distance_km: parseFloat(document.getElementById('route-form-distance').value) || 5.0,
+      req_skill: parseInt(document.getElementById('route-form-level').value) || 1,
       required_level: parseInt(document.getElementById('route-form-level').value) || 1,
       pickup_coords: pickup,
       delivery_coords: delivery,
@@ -304,45 +356,148 @@
     postNUI('adminSaveRoute', payload);
     adminData.customRoutes[routeId] = payload;
     renderRoutesTab();
-    alert(`Rota #${routeId} salva com sucesso em tempo real!`);
+    renderEconomyTab();
+    alert(`Rota #${routeId} salva com sucesso e sincronizada em tempo real!`);
   }
 
   // ============================================================
-  // ABA 2: SPAWNS DINÂMICOS
+  // ABA 2: SPAWNS DINÂMICOS (PASTAS & DRAG-AND-DROP)
   // ============================================================
   function renderSpawnsTab() {
-    const tbody = document.getElementById('admin-spawns-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+    const container = document.getElementById('admin-spawns-folders-container');
+    const folderSelect = document.getElementById('spawn-form-folder');
+    if (!container) return;
+    container.innerHTML = '';
 
     const spawns = adminData.spawns || {};
-    const keys = Object.keys(spawns);
-
-    if (keys.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding: 24px; color: var(--admin-text-muted);">Nenhum ponto de spawn cadastrado. Capture um abaixo!</td></tr>`;
-      return;
-    }
-
-    keys.forEach(k => {
+    const spawnsList = Object.keys(spawns).map(k => {
       const s = spawns[k];
-      const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td><strong>#${escapeHtml(s.spawn_id || k)}</strong></td>
-        <td>${escapeHtml(s.spawn_name || 'Ponto')}</td>
-        <td><span class="admin-badge admin-badge-quick">${(s.spawn_type || 'all').toUpperCase()}</span></td>
-        <td style="font-family: monospace; font-size: 11px;">
-          X: ${coords.x ? Number(coords.x).toFixed(1) : 0}, Y: ${coords.y ? Number(coords.y).toFixed(1) : 0}, Z: ${coords.z ? Number(coords.z).toFixed(1) : 0}, H: ${coords.heading ? Number(coords.heading).toFixed(1) : 0}°
-        </td>
-        <td>
-          <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${coords.x}" data-y="${coords.y}" data-z="${coords.z}" data-h="${coords.heading}" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
-          <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${k}" title="Excluir"><i class="fas fa-trash"></i></button>
-        </td>
-      `;
-      tbody.appendChild(tr);
+      s.key = k;
+      s.folder_name = s.folder_name || 'Geral';
+      return s;
     });
 
-    tbody.querySelectorAll('.btn-tp-spawn').forEach(btn => {
+    // Mapeia todas as pastas existentes
+    const folders = {};
+    folders['Geral'] = [];
+
+    spawnsList.forEach(s => {
+      const fName = s.folder_name || 'Geral';
+      if (!folders[fName]) folders[fName] = [];
+      folders[fName].push(s);
+    });
+
+    // Atualiza opções no select do formulário
+    if (folderSelect) {
+      const currentSelected = folderSelect.value;
+      folderSelect.innerHTML = '';
+      Object.keys(folders).forEach(fName => {
+        const opt = document.createElement('option');
+        opt.value = fName;
+        opt.textContent = fName;
+        folderSelect.appendChild(opt);
+      });
+      if (currentSelected && folders[currentSelected]) {
+        folderSelect.value = currentSelected;
+      }
+    }
+
+    // Renderiza cada pasta como container de Drag-and-Drop
+    Object.keys(folders).forEach(folderName => {
+      const fList = folders[folderName];
+      const folderCard = document.createElement('div');
+      folderCard.className = 'admin-folder-card';
+      folderCard.setAttribute('data-folder', folderName);
+
+      const isDefault = folderName === 'Geral';
+      folderCard.innerHTML = `
+        <div class="admin-folder-header">
+          <div class="admin-folder-title">
+            <i class="fas fa-folder"></i>
+            <span>${escapeHtml(folderName)}</span>
+            <span class="admin-folder-badge">${fList.length} pontos</span>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            ${!isDefault ? `<button class="admin-btn admin-btn-danger btn-del-folder" data-folder="${escapeHtml(folderName)}" style="padding: 2px 8px; font-size:10px;" title="Excluir Pasta"><i class="fas fa-trash"></i></button>` : ''}
+          </div>
+        </div>
+        <div class="admin-folder-items" data-folder="${escapeHtml(folderName)}">
+          ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:6px; text-align:center;">Pasta vazia. Arraste pontos de spawn para cá.</div>` : ''}
+        </div>
+      `;
+
+      const itemsContainer = folderCard.querySelector('.admin-folder-items');
+
+      fList.forEach(s => {
+        const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
+        const row = document.createElement('div');
+        row.className = 'admin-spawn-row';
+        row.setAttribute('draggable', 'true');
+        row.setAttribute('data-id', s.key || s.id || s.spawn_id);
+
+        row.innerHTML = `
+          <div style="display:flex; align-items:center; gap:10px;">
+            <i class="fas fa-grip-vertical" style="color:var(--admin-text-muted); cursor:grab;"></i>
+            <strong>#${escapeHtml(s.key || s.id || s.spawn_id)}</strong>
+            <span style="color:#fff;">${escapeHtml(s.name || s.spawn_name || 'Ponto')}</span>
+            <span class="admin-badge admin-badge-quick">${escapeHtml((s.spawn_type || 'truck').toUpperCase())}</span>
+          </div>
+          <div style="font-family:monospace; font-size:11px; color:var(--admin-text-muted);">
+            X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0} H:${coords.heading ? Number(coords.heading).toFixed(0) : 0}°
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${coords.x}" data-y="${coords.y}" data-z="${coords.z}" data-h="${coords.heading}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
+            <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${s.key || s.id || s.spawn_id}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
+          </div>
+        `;
+
+        // Eventos Drag-and-Drop no item
+        row.addEventListener('dragstart', function (e) {
+          draggedSpawnId = this.getAttribute('data-id');
+          this.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', draggedSpawnId);
+        });
+
+        row.addEventListener('dragend', function () {
+          this.classList.remove('dragging');
+          draggedSpawnId = null;
+        });
+
+        itemsContainer.appendChild(row);
+      });
+
+      // Eventos Drag-and-Drop na Pasta
+      folderCard.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        folderCard.classList.add('drag-over');
+      });
+
+      folderCard.addEventListener('dragleave', function () {
+        folderCard.classList.remove('drag-over');
+      });
+
+      folderCard.addEventListener('drop', function (e) {
+        e.preventDefault();
+        folderCard.classList.remove('drag-over');
+        const targetFolder = this.getAttribute('data-folder');
+        if (draggedSpawnId && targetFolder) {
+          const spawnObj = adminData.spawns[draggedSpawnId];
+          if (spawnObj && spawnObj.folder_name !== targetFolder) {
+            spawnObj.folder_name = targetFolder;
+            postNUI('adminMoveSpawnFolder', {
+              spawn_id: draggedSpawnId,
+              folder_name: targetFolder
+            });
+            renderSpawnsTab();
+          }
+        }
+      });
+
+      container.appendChild(folderCard);
+    });
+
+    // Listeners de Teleporte
+    container.querySelectorAll('.btn-tp-spawn').forEach(btn => {
       btn.addEventListener('click', function () {
         postNUI('adminTeleport', {
           coords: {
@@ -355,12 +510,27 @@
       });
     });
 
-    tbody.querySelectorAll('.btn-del-spawn').forEach(btn => {
+    // Listeners de Exclusão de Spawn
+    container.querySelectorAll('.btn-del-spawn').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
         if (confirm(`Excluir o spawn #${id}?`)) {
           postNUI('adminDeleteSpawn', { id: id });
           delete adminData.spawns[id];
+          renderSpawnsTab();
+        }
+      });
+    });
+
+    // Listeners de Exclusão de Pasta
+    container.querySelectorAll('.btn-del-folder').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const f = this.getAttribute('data-folder');
+        if (confirm(`Excluir a pasta "${f}"? Todos os pontos contidos nela serão movidos para "Geral".`)) {
+          postNUI('adminDeleteSpawnFolder', { folder_name: f });
+          Object.values(adminData.spawns).forEach(s => {
+            if (s.folder_name === f) s.folder_name = 'Geral';
+          });
           renderSpawnsTab();
         }
       });
@@ -382,52 +552,70 @@
     };
 
     const payload = {
+      id: spawnId,
       spawn_id: spawnId,
+      name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
       spawn_name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
       spawn_type: document.getElementById('spawn-form-type').value,
+      folder_name: document.getElementById('spawn-form-folder').value || 'Geral',
       coords: coords
     };
 
     postNUI('adminSaveSpawn', payload);
     adminData.spawns[spawnId] = payload;
     renderSpawnsTab();
-    alert(`Ponto de spawn #${spawnId} cadastrado!`);
+    alert(`Ponto de spawn #${spawnId} gravado com sucesso!`);
   }
 
   // ============================================================
-  // ABA 3: CARGAS & PROPS
+  // ABA 3: CARGAS & PROPS (HOMOLOGAÇÃO & VINCULAÇÃO)
   // ============================================================
   function renderPropsTab() {
     const grid = document.getElementById('admin-props-grid');
     if (!grid) return;
     grid.innerHTML = '';
 
-    const defaultList = adminData.defaultProps && adminData.defaultProps.length > 0 ? adminData.defaultProps : [
-      'hei_prop_carrier_cargo_04b',
-      'm24_1_prop_m24_1_carrier_cargo_04a',
-      'prop_boxpile_02b',
-      'prop_boxpile_06a',
-      'prop_boxpile_07d',
-      'prop_rub_crate_01',
-      'prop_barrel_exp_01a',
-      'prop_barrel_02a',
-      'prop_wood_pallet_01'
+    const homologated = adminData.homologatedProps || [];
+    const defaultList = [
+      { prop_model: 'hei_prop_carrier_cargo_04b', label: 'Contêiner Grande Seco', category: 'dry', offset_z: 0.0 },
+      { prop_model: 'm24_1_prop_m24_1_carrier_cargo_04a', label: 'Carga Marítima M24', category: 'dry', offset_z: 0.0 },
+      { prop_model: 'prop_boxpile_02b', label: 'Pilhas de Caixas Frágeis', category: 'fragile', offset_z: 0.0 },
+      { prop_model: 'prop_boxpile_06a', label: 'Caixas de Alta Densidade', category: 'dry', offset_z: 0.0 },
+      { prop_model: 'prop_barrel_exp_01a', label: 'Barris Explosivos ADR', category: 'adr', offset_z: 0.0 },
+      { prop_model: 'prop_rub_crate_01', label: 'Carga de Valiosos Blindada', category: 'valuable', offset_z: 0.0 },
+      { prop_model: 'prop_wood_pallet_01', label: 'Palete de Madeira Padrão', category: 'dry', offset_z: 0.0 }
     ];
 
-    defaultList.forEach(prop => {
+    // Mescla padrões com os salvos do banco
+    const map = {};
+    defaultList.forEach(p => { map[p.prop_model] = p; });
+    homologated.forEach(p => { map[p.prop_model] = p; });
+
+    Object.values(map).forEach(p => {
       const card = document.createElement('div');
       card.className = 'admin-card';
       card.style.display = 'flex';
       card.style.flexDirection = 'column';
       card.style.gap = '8px';
+
+      const cat = (p.category || 'dry').toLowerCase();
+      let badgeClass = 'admin-badge-freight';
+      if (cat === 'adr') badgeClass = 'admin-badge-adr';
+      else if (cat === 'fragile') badgeClass = 'admin-badge-quick';
+      else if (cat === 'valuable') badgeClass = 'admin-badge-carrier';
+      else if (cat === 'heavy') badgeClass = 'admin-badge-heavy';
+
       card.innerHTML = `
         <div class="admin-card-header" style="margin-bottom: 4px;">
-          <strong style="color:var(--admin-primary); font-size:13px;"><i class="fas fa-cube"></i> ${escapeHtml(prop)}</strong>
-          <span class="admin-badge admin-badge-freight">Disponível</span>
+          <strong style="color:var(--admin-primary); font-size:13px;"><i class="fas fa-cube"></i> ${escapeHtml(p.label || p.prop_model)}</strong>
+          <span class="admin-badge ${badgeClass}">${cat.toUpperCase()}</span>
         </div>
-        <p style="margin:0; font-size:11px; color:var(--admin-text-muted);">Modelo 3D validado para amarração e física de slots no trailer.</p>
-        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
-          <button class="admin-btn admin-btn-outline btn-use-prop" data-prop="${prop}">Usar no Editor de Offsets</button>
+        <div style="font-size:11px; color:var(--admin-text-muted); font-family:monospace;">
+          Modelo: <span style="color:#fff;">${escapeHtml(p.prop_model)}</span> | Offset Z: ${Number(p.offset_z || 0).toFixed(2)}
+        </div>
+        <div style="display:flex; justify-content:space-between; gap:8px; margin-top:8px;">
+          <button class="admin-btn admin-btn-danger btn-del-prop" data-model="${escapeHtml(p.prop_model)}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-trash"></i></button>
+          <button class="admin-btn admin-btn-outline btn-use-prop" data-prop="${escapeHtml(p.prop_model)}" style="padding: 4px 12px; font-size:11px;">Usar no Trailer</button>
         </div>
       `;
       grid.appendChild(card);
@@ -440,10 +628,41 @@
         switchTab('offsets');
       });
     });
+
+    grid.querySelectorAll('.btn-del-prop').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const model = this.getAttribute('data-model');
+        if (confirm(`Remover a homologação do modelo "${model}"?`)) {
+          postNUI('adminDeleteHomologatedProp', { prop_model: model });
+          adminData.homologatedProps = adminData.homologatedProps.filter(p => p.prop_model !== model);
+          renderPropsTab();
+        }
+      });
+    });
+  }
+
+  function saveHomologatedProp() {
+    const model = document.getElementById('prop-form-model').value.trim();
+    if (!model) {
+      alert('Informe o modelo 3D do prop (ex: prop_boxpile_07d).');
+      return;
+    }
+
+    const payload = {
+      prop_model: model,
+      label: document.getElementById('prop-form-label').value.trim() || model,
+      category: document.getElementById('prop-form-category').value,
+      offset_z: parseFloat(document.getElementById('prop-form-offsetz').value) || 0.0
+    };
+
+    postNUI('adminSaveHomologatedProp', payload);
+    adminData.homologatedProps.push(payload);
+    renderPropsTab();
+    alert(`Modelo "${model}" homologado com sucesso! Já disponível como carga.`);
   }
 
   // ============================================================
-  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS
+  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS (COM DELETE E LABEL)
   // ============================================================
   function renderOffsetsTab() {
     const listContainer = document.getElementById('admin-offsets-list');
@@ -454,70 +673,91 @@
     const keys = Object.keys(offsets);
 
     if (keys.length === 0) {
-      listContainer.innerHTML = `<p style="color:var(--admin-text-muted); font-size:12px;">Nenhum offset customizado salvo em banco ainda. Os padrões do Config.TrailerSlots estão em vigor.</p>`;
-    } else {
-      keys.forEach(model => {
-        const item = offsets[model];
-        let palletCount = 0;
-        let slotsList = [];
-        if (item.pallets) {
-          const uniqueSlots = new Set();
-          Object.keys(item.pallets).forEach(k => {
-            const num = parseInt(k);
-            if (!isNaN(num)) uniqueSlots.add(num);
-          });
-          slotsList = Array.from(uniqueSlots).sort((a, b) => a - b);
-          palletCount = slotsList.length;
-        }
+      listContainer.innerHTML = `<p style="color:var(--admin-text-muted); font-size:12px;">Nenhum offset customizado salvo em banco ainda.</p>`;
+      return;
+    }
 
-        const forkliftInfo = item.forklift ?
-          `<span style="color:var(--admin-primary)">Mapeada (X: ${Number(item.forklift.x).toFixed(2)}, Y: ${Number(item.forklift.y).toFixed(2)}, Z: ${Number(item.forklift.z).toFixed(2)})</span>` :
-          '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>';
-
-        const card = document.createElement('div');
-        card.className = 'admin-card';
-        card.innerHTML = `
-          <div class="admin-card-header">
-            <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(model.toUpperCase())}</strong></span>
-            <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(model)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Usar Modelo</button>
-          </div>
-          <div style="font-size:12px; line-height: 1.6;">
-            <div><strong>Slots de Paletes Salvos:</strong> ${palletCount > 0 ? `<span style="color:var(--admin-primary); font-weight:600;">${palletCount} posições</span> (${slotsList.map(s => 'Slot ' + s).join(', ')})` : '<span style="color:var(--admin-text-muted)">Nenhum slot calibrado</span>'}</div>
-            <div><strong>Empilhadeira Traseira:</strong> ${forkliftInfo}</div>
-          </div>
-        `;
-        listContainer.appendChild(card);
-      });
-
-      listContainer.querySelectorAll('.btn-select-trailer').forEach(btn => {
-        btn.addEventListener('click', function () {
-          const m = this.getAttribute('data-model');
-          const input = document.getElementById('offset-form-trailer');
-          if (input) {
-            input.value = m;
-            input.focus();
+    keys.forEach(model => {
+      const item = offsets[model];
+      let palletSlots = [];
+      if (item.pallets) {
+        const seen = new Set();
+        Object.keys(item.pallets).forEach(k => {
+          const num = parseInt(k);
+          if (!isNaN(num) && !seen.has(num)) {
+            seen.add(num);
+            palletSlots.push({ slot: num, data: item.pallets[k] });
           }
         });
-      });
-    }
-  }
-
-  function setupForkliftToggle() {
-    const chkForklift = document.getElementById('offset-form-isforklift');
-    const propInput = document.getElementById('offset-form-prop');
-    const slotSelect = document.getElementById('offset-form-slot');
-    if (!chkForklift || !propInput) return;
-
-    chkForklift.addEventListener('change', () => {
-      if (chkForklift.checked) {
-        propInput.value = 'forklift';
-        propInput.disabled = true;
-        if (slotSelect) slotSelect.disabled = true;
-      } else {
-        propInput.value = 'hei_prop_carrier_cargo_04b';
-        propInput.disabled = false;
-        if (slotSelect) slotSelect.disabled = false;
+        palletSlots.sort((a, b) => a.slot - b.slot);
       }
+
+      const card = document.createElement('div');
+      card.className = 'admin-card';
+      card.innerHTML = `
+        <div class="admin-card-header">
+          <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(model.toUpperCase())}</strong></span>
+          <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(model)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Usar Modelo</button>
+        </div>
+        <div style="font-size:12px; line-height: 1.6;">
+          <div style="margin-bottom: 8px;"><strong>Slots de Paletes Calibrados:</strong></div>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-bottom: 10px;">
+            ${palletSlots.length > 0 ? palletSlots.map(s => `
+              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:4px;">
+                <span>
+                  <strong style="color:var(--admin-primary)">Slot ${s.slot}</strong> 
+                  ${s.data.label ? `<span style="color:#fff;">(${escapeHtml(s.data.label)})</span>` : ''}
+                  <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;"> [X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
+                </span>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-trailer="${escapeHtml(model)}" data-slot="${s.slot}" data-fork="0" style="padding:2px 7px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+              </div>
+            `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
+          </div>
+          <div>
+            <strong>Empilhadeira Traseira:</strong> 
+            ${item.forklift ? `
+              <span style="color:var(--admin-primary)">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
+              <button class="admin-btn admin-btn-danger btn-del-offset" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:2px 7px; font-size:10px; margin-left:8px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+            ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
+          </div>
+        </div>
+      `;
+      listContainer.appendChild(card);
+    });
+
+    listContainer.querySelectorAll('.btn-select-trailer').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const m = this.getAttribute('data-model');
+        const input = document.getElementById('offset-form-trailer');
+        if (input) {
+          input.value = m;
+          input.focus();
+        }
+      });
+    });
+
+    listContainer.querySelectorAll('.btn-del-offset').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const trailer = this.getAttribute('data-trailer');
+        const slot = parseInt(this.getAttribute('data-slot'));
+        const isFork = this.getAttribute('data-fork') === '1';
+        if (confirm(`Excluir offset do trailer "${trailer}" (${isFork ? 'Empilhadeira' : 'Slot ' + slot})?`)) {
+          postNUI('adminDeleteTrailerOffset', {
+            trailerModel: trailer,
+            slotIndex: slot,
+            isForklift: isFork
+          });
+          if (adminData.trailerOffsets[trailer]) {
+            if (isFork) {
+              adminData.trailerOffsets[trailer].forklift = null;
+            } else if (adminData.trailerOffsets[trailer].pallets) {
+              delete adminData.trailerOffsets[trailer].pallets[slot];
+              delete adminData.trailerOffsets[trailer].pallets[String(slot)];
+            }
+          }
+          renderOffsetsTab();
+        }
+      });
     });
   }
 
@@ -526,19 +766,91 @@
     const isForklift = document.getElementById('offset-form-isforklift').checked;
     const slotIndex = isForklift ? 7 : (parseInt(document.getElementById('offset-form-slot').value) || 1);
     const propModel = isForklift ? 'forklift' : (document.getElementById('offset-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b');
+    const label = document.getElementById('offset-form-label').value.trim();
 
     postNUI('adminStartOffsetCalibration', {
       trailerModel: trailerModel,
       slotIndex: slotIndex,
       isForklift: isForklift,
-      propModel: propModel
+      propModel: propModel,
+      label: label
     });
   }
 
   // ============================================================
-  // ABA 5: ECONOMIA & XP (LIVE SYNC)
+  // ABA 5: ECONOMIA & XP (LISTAGEM GLOBAL & EDIÇÃO INLINE)
   // ============================================================
   function renderEconomyTab() {
+    const tbody = document.getElementById('admin-eco-routes-tbody');
+    if (tbody) {
+      tbody.innerHTML = '';
+      const routes = adminData.customRoutes || {};
+      let entries = Object.keys(routes).map(k => ({ key: k, data: routes[k] }));
+
+      if (ecoFilter && ecoFilter !== 'all') {
+        entries = entries.filter(e => {
+          const t = (e.data.type || e.data.job_type || 'freight').toLowerCase();
+          return t === ecoFilter;
+        });
+      }
+
+      if (entries.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding: 18px; color: var(--admin-text-muted);">Nenhuma rota encontrada para este tipo.</td></tr>`;
+      } else {
+        entries.forEach(e => {
+          const r = e.data;
+          const k = e.key;
+          const tr = document.createElement('tr');
+          const jobType = (r.type || r.job_type || 'freight').toLowerCase();
+          let badgeClass = 'admin-badge-freight';
+          if (jobType === 'adr') badgeClass = 'admin-badge-adr';
+          else if (jobType === 'quick') badgeClass = 'admin-badge-quick';
+          else if (jobType === 'heavy') badgeClass = 'admin-badge-heavy';
+          else if (jobType === 'carrier') badgeClass = 'admin-badge-carrier';
+
+          const payment = r.base_payment || r.payment || 2500;
+          const xp = r.base_xp || r.xp || 150;
+          const dist = r.distance || r.distance_km || 5.0;
+
+          tr.innerHTML = `
+            <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
+            <td>${escapeHtml(r.name || r.title || 'Carga')}</td>
+            <td><span class="admin-badge ${badgeClass}">${jobType.toUpperCase()}</span></td>
+            <td>${Number(dist).toFixed(1)} km</td>
+            <td>
+              <input type="number" class="admin-inline-input eco-route-pay" data-id="${k}" value="${payment}">
+            </td>
+            <td>
+              <input type="number" class="admin-inline-input eco-route-xp" data-id="${k}" value="${xp}">
+            </td>
+            <td>
+              <button class="admin-btn admin-btn-primary btn-save-route-eco" data-id="${k}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-save"></i> Salvar</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.btn-save-route-eco').forEach(btn => {
+          btn.addEventListener('click', function () {
+            const id = this.getAttribute('data-id');
+            const row = this.closest('tr');
+            const newPay = parseInt(row.querySelector('.eco-route-pay').value) || 2500;
+            const newXp = parseInt(row.querySelector('.eco-route-xp').value) || 150;
+
+            if (adminData.customRoutes[id]) {
+              adminData.customRoutes[id].base_payment = newPay;
+              adminData.customRoutes[id].payment = newPay;
+              adminData.customRoutes[id].base_xp = newXp;
+              adminData.customRoutes[id].xp = newXp;
+
+              postNUI('adminSaveRoute', adminData.customRoutes[id]);
+              alert(`Valores da rota #${id} atualizados para R$ ${newPay.toLocaleString()} e ${newXp} XP!`);
+            }
+          });
+        });
+      }
+    }
+
     const eco = adminData.economy || {};
     if (document.getElementById('eco-form-km-pay')) {
       document.getElementById('eco-form-km-pay').value = eco.base_payment_per_km || 18.5;
@@ -562,7 +874,7 @@
 
     postNUI('adminSaveEconomy', payload);
     adminData.economy = payload;
-    alert('Configurações de Economia e XP salvas e transmitidas a todos os jogadores!');
+    alert('Multiplicadores globais atualizados e sincronizados com todos os jogadores!');
   }
 
   // ============================================================
@@ -644,7 +956,7 @@
       npc_name: document.getElementById('npc-form-name').value.trim() || 'Despachante Central',
       npc_model: document.getElementById('npc-form-model').value.trim() || 's_m_m_trucker_01',
       coords: coords,
-      enable_target: document.getElementById('npc-form-target').checked ? 1 : 0
+      enable_target: document.getElementById('npc-form-target') ? (document.getElementById('npc-form-target').checked ? 1 : 0) : 1
     };
 
     postNUI('adminSaveNPC', payload);
@@ -693,9 +1005,11 @@
       .replace(/'/g, '&#039;');
   }
 
-  // Inicialização de Eventos do DOM
+  // ============================================================
+  // INICIALIZAÇÃO DE EVENTOS DO DOM
+  // ============================================================
   document.addEventListener('DOMContentLoaded', function () {
-    // Botão de fechar do cabeçalho
+    // Fechar botão
     const closeBtn = document.querySelector('.admin-close-btn');
     if (closeBtn) {
       closeBtn.addEventListener('click', function () {
@@ -704,10 +1018,25 @@
       });
     }
 
-    // Inicializa lock do prop da empilhadeira
-    setupForkliftToggle();
+    // Toggle empilhadeira no offset
+    const chkForklift = document.getElementById('offset-form-isforklift');
+    const propInput = document.getElementById('offset-form-prop');
+    const slotSelect = document.getElementById('offset-form-slot');
+    if (chkForklift && propInput) {
+      chkForklift.addEventListener('change', () => {
+        if (chkForklift.checked) {
+          propInput.value = 'forklift';
+          propInput.disabled = true;
+          if (slotSelect) slotSelect.disabled = true;
+        } else {
+          propInput.value = 'hei_prop_carrier_cargo_04b';
+          propInput.disabled = false;
+          if (slotSelect) slotSelect.disabled = false;
+        }
+      });
+    }
 
-    // Botões de alternância de abas
+    // Alternância de abas
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.addEventListener('click', function () {
         const tab = this.getAttribute('data-tab');
@@ -715,7 +1044,42 @@
       });
     });
 
-    // Eventos de formulários
+    // Filtros por categoria na aba de rotas
+    const routesFilterBar = document.getElementById('routes-filter-bar');
+    if (routesFilterBar) {
+      routesFilterBar.querySelectorAll('.admin-filter-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+          routesFilterBar.querySelectorAll('.admin-filter-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          routeFilter = this.getAttribute('data-filter') || 'all';
+          renderRoutesTab();
+        });
+      });
+    }
+
+    // Campo de busca de rotas
+    const routesSearchInput = document.getElementById('routes-search-input');
+    if (routesSearchInput) {
+      routesSearchInput.addEventListener('input', function () {
+        routeSearchQuery = this.value || '';
+        renderRoutesTab();
+      });
+    }
+
+    // Filtros por categoria na aba de economia
+    const ecoFilterBar = document.getElementById('eco-filter-bar');
+    if (ecoFilterBar) {
+      ecoFilterBar.querySelectorAll('.admin-filter-btn').forEach(btn => {
+        btn.addEventListener('click', function () {
+          ecoFilterBar.querySelectorAll('.admin-filter-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          ecoFilter = this.getAttribute('data-filter') || 'all';
+          renderEconomyTab();
+        });
+      });
+    }
+
+    // Botões de formulário
     const btnSaveRoute = document.getElementById('btn-save-route');
     if (btnSaveRoute) btnSaveRoute.addEventListener('click', saveRouteForm);
 
@@ -725,13 +1089,68 @@
     const btnStartCalib = document.getElementById('btn-start-calibration');
     if (btnStartCalib) btnStartCalib.addEventListener('click', startCalibrationTool);
 
+    const btnSaveHomolog = document.getElementById('btn-save-homologated-prop');
+    if (btnSaveHomolog) btnSaveHomolog.addEventListener('click', saveHomologatedProp);
+
     const btnSaveEconomy = document.getElementById('btn-save-economy');
     if (btnSaveEconomy) btnSaveEconomy.addEventListener('click', saveEconomyForm);
 
     const btnSaveNPC = document.getElementById('btn-save-npc');
     if (btnSaveNPC) btnSaveNPC.addEventListener('click', saveNPCForm);
 
-    // Eventos de captura de coordenadas
+    // Botão de Nova Pasta de Spawn
+    const btnNewFolder = document.getElementById('btn-new-spawn-folder');
+    if (btnNewFolder) {
+      btnNewFolder.addEventListener('click', function () {
+        const folderName = prompt('Nome da nova pasta de spawns:');
+        if (folderName && folderName.trim() !== '') {
+          const clean = folderName.trim();
+          const folderSelect = document.getElementById('spawn-form-folder');
+          if (folderSelect) {
+            let exists = false;
+            for (let i = 0; i < folderSelect.options.length; i++) {
+              if (folderSelect.options[i].value === clean) exists = true;
+            }
+            if (!exists) {
+              const opt = document.createElement('option');
+              opt.value = clean;
+              opt.textContent = clean;
+              folderSelect.appendChild(opt);
+              folderSelect.value = clean;
+            }
+          }
+          alert(`Pasta "${clean}" criada!`);
+        }
+      });
+    }
+
+    // Botão de Gizmo para Coordenadas de Spawn
+    const btnGizmoSpawn = document.getElementById('btn-gizmo-spawn');
+    if (btnGizmoSpawn) {
+      btnGizmoSpawn.addEventListener('click', function () {
+        const sType = document.getElementById('spawn-form-type').value || 'truck';
+        const sModel = document.getElementById('spawn-form-model').value.trim() || '';
+        postNUI('adminStartSpawnGizmo', {
+          spawn_type: sType,
+          model: sModel
+        });
+      });
+    }
+
+    // Botão de Teste / Preview de Spawns da Área
+    const btnPreviewSpawns = document.getElementById('btn-preview-spawns');
+    if (btnPreviewSpawns) {
+      btnPreviewSpawns.addEventListener('click', function () {
+        const spawnsList = Object.values(adminData.spawns || {});
+        if (spawnsList.length === 0) {
+          alert('Nenhum ponto de spawn cadastrado para testar.');
+          return;
+        }
+        postNUI('adminStartPreview', { spawns: spawnsList });
+      });
+    }
+
+    // Botões de captura de coordenadas
     const btnCapPickup = document.getElementById('btn-cap-pickup');
     if (btnCapPickup) btnCapPickup.addEventListener('click', () => captureCoords('route-pickup'));
 

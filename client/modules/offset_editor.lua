@@ -681,3 +681,369 @@ RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
         end
     end
 end)
+
+-- ============================================================
+-- GIZMO 3D: CALIBRAÇÃO VISUAL DE PONTOS DE SPAWN
+-- ============================================================
+
+local IsCalibratingSpawn = false
+local SpawnGhostEnt = nil
+local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
+local ActivePreviewEntities = {}
+local IsPreviewActive = false
+
+function OffsetEditor.StartSpawnCalibration(data)
+    if IsCalibrating or IsCalibratingSpawn then return end
+    IsCalibratingSpawn = true
+
+    data = data or {}
+    local spawnType = tostring(data.spawn_type or 'truck'):lower()
+    local modelStr = data.model
+    local isVeh = true
+
+    if not modelStr or modelStr == '' then
+        if spawnType == 'truck' then modelStr = 'hauler'
+        elseif spawnType == 'trailer' then modelStr = 'trailers2'
+        elseif spawnType == 'forklift' then modelStr = 'forklift'
+        else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+    else
+        if spawnType == 'pallet' or spawnType == 'prop' then isVeh = false end
+    end
+
+    local ped = cache.ped or PlayerPedId()
+    local pCoords = GetEntityCoords(ped)
+    local pHeading = GetEntityHeading(ped)
+    local forward = GetEntityForwardVector(ped)
+    local spawnPos = pCoords + forward * 3.5
+
+    -- Minimiza o menu administrativo principal
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'admin_minimize' })
+
+    local hash = joaat(modelStr)
+    lib.requestModel(hash, 5000)
+
+    local ghost = nil
+    if isVeh then
+        ghost = CreateVehicle(hash, spawnPos.x, spawnPos.y, spawnPos.z, pHeading, false, false)
+        if ghost and DoesEntityExist(ghost) then SetVehicleDoorsLocked(ghost, 2) end
+    else
+        ghost = CreateObject(hash, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
+    end
+
+    if not ghost or not DoesEntityExist(ghost) then
+        IsCalibratingSpawn = false
+        lib.notify({ title = 'Erro', description = 'Falha ao instanciar holograma para calibração.', type = 'error' })
+        SendNUIMessage({ action = 'admin_restore' })
+        SetNuiFocus(true, true)
+        return
+    end
+
+    SetEntityAsMissionEntity(ghost, true, true)
+    SetEntityLodDist(ghost, 0xFFFF)
+    SetEntityAlpha(ghost, 190, false)
+    SetEntityCollision(ghost, false, false)
+    SetEntityInvincible(ghost, true)
+    FreezeEntityPosition(ghost, true)
+    SetEntityHeading(ghost, pHeading)
+
+    SpawnGhostEnt = ghost
+    CurrentSpawnCoords = {
+        x = tonumber(string.format("%.2f", spawnPos.x)),
+        y = tonumber(string.format("%.2f", spawnPos.y)),
+        z = tonumber(string.format("%.2f", spawnPos.z)),
+        heading = tonumber(string.format("%.1f", pHeading))
+    }
+
+    -- Câmera orbital
+    local camPos = spawnPos + vector3(-forward.x * 5.0, -forward.y * 5.0, 2.5)
+    local spawnCam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", camPos.x, camPos.y, camPos.z, -15.0, 0.0, pHeading, 60.0, true, 2)
+    SetCamActive(spawnCam, true)
+    RenderScriptCams(true, true, 500, true, true)
+
+    -- Inicia o Gizmo Three.js
+    SendNUIMessage({
+        action = 'showGizmo',
+        data = {
+            position = { x = spawnPos.x, y = spawnPos.y, z = spawnPos.z },
+            rotation = { x = 0.0, y = 0.0, z = pHeading },
+            mode = 'translate'
+        }
+    })
+
+    lib.notify({
+        title = 'Gizmo 3D (Calibração de Spawn)',
+        description = 'Segure [ALT] para liberar o mouse e ajustar.\n[T]: Mover | [R]: Girar\n[ENTER]: Confirmar Coords | [ESC]: Cancelar',
+        type = 'info',
+        duration = 8000
+    })
+
+    local camRot = vector3(-15.0, 0.0, pHeading)
+    local isAltCursor = false
+
+    CreateThread(function()
+        while IsCalibratingSpawn do
+            Wait(0)
+            DisableAllControlActions(0)
+
+            local finalCamPos = GetFinalRenderedCamCoord()
+            local finalCamRot = GetFinalRenderedCamRot(2)
+            SendNUIMessage({
+                action = 'setCameraPosition',
+                data = {
+                    position = { x = finalCamPos.x, y = finalCamPos.y, z = finalCamPos.z },
+                    rotation = { x = finalCamRot.x, y = finalCamRot.y, z = finalCamRot.z }
+                }
+            })
+
+            local isAltHeld = IsDisabledControlPressed(0, 19) or IsControlPressed(0, 19)
+            if isAltHeld then
+                if not isAltCursor then
+                    isAltCursor = true
+                    SetNuiFocus(true, true)
+                    SetNuiFocusKeepInput(true)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = true } })
+                end
+            else
+                if isAltCursor then
+                    isAltCursor = false
+                    SetNuiFocus(false, false)
+                    SetNuiFocusKeepInput(false)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = false } })
+                end
+
+                local mouseX = GetDisabledControlNormal(0, 1)
+                local mouseY = GetDisabledControlNormal(0, 2)
+                if mouseX ~= 0.0 or mouseY ~= 0.0 then
+                    camRot = vector3(
+                        math.max(-85.0, math.min(85.0, camRot.x - mouseY * 4.0)),
+                        0.0,
+                        (camRot.z - mouseX * 4.0) % 360.0
+                    )
+                    SetCamRot(spawnCam, camRot.x, camRot.y, camRot.z, 2)
+                end
+            end
+
+            -- Movimentação WASD
+            local radX, radZ = math.rad(camRot.x), math.rad(camRot.z)
+            local cosX, sinX = math.cos(radX), math.sin(radX)
+            local cosZ, sinZ = math.cos(radZ), math.sin(radZ)
+            local fwd = vector3(-sinZ * cosX, cosZ * cosX, sinX)
+            local rgt = vector3(cosZ, sinZ, 0.0)
+            local up  = vector3(0.0, 0.0, 1.0)
+            local camSpeed = IsDisabledControlPressed(0, 21) and 0.45 or 0.16
+            local cPos = GetCamCoord(spawnCam)
+            local moved = false
+
+            if IsDisabledControlPressed(0, 32) then cPos = cPos + fwd * camSpeed; moved = true end
+            if IsDisabledControlPressed(0, 33) then cPos = cPos - fwd * camSpeed; moved = true end
+            if IsDisabledControlPressed(0, 34) then cPos = cPos - rgt * camSpeed; moved = true end
+            if IsDisabledControlPressed(0, 35) then cPos = cPos + rgt * camSpeed; moved = true end
+            if IsDisabledControlPressed(0, 22) then cPos = cPos + up  * camSpeed; moved = true end
+            if IsDisabledControlPressed(0, 36) then cPos = cPos - up  * camSpeed; moved = true end
+            if moved then SetCamCoord(spawnCam, cPos.x, cPos.y, cPos.z) end
+
+            -- Alternância Modo Gizmo (T / R)
+            if IsDisabledControlJustPressed(0, 245) or IsControlJustPressed(0, 245) then
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'translate' } })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas)', type = 'info', duration = 1000 })
+            elseif IsDisabledControlJustPressed(0, 45) or IsControlJustPressed(0, 45) then
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'rotate' } })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1000 })
+            end
+
+            -- HUD
+            local hudText = string.format(
+                "~g~[GIZMO DE SPAWN 3D]~s~\n" ..
+                "X: ~y~%.2f~s~ | Y: ~y~%.2f~s~ | Z: ~y~%.2f~s~\n" ..
+                "Heading: ~y~%.1f°~s~\n\n" ..
+                "[ALT]: Liberar Cursor Gizmo\n" ..
+                "[ENTER]: Confirmar Coordenadas\n" ..
+                "[ESC]: Cancelar",
+                CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z, CurrentSpawnCoords.heading
+            )
+            SetTextFont(0)
+            SetTextScale(0.35, 0.35)
+            SetTextColour(255, 255, 255, 235)
+            SetTextDropshadow(1, 0, 0, 0, 200)
+            SetTextEdge(1, 0, 0, 0, 250)
+            SetTextDropShadow()
+            SetTextOutline()
+            SetTextEntry("STRING")
+            AddTextComponentString(hudText)
+            DrawText(0.015, 0.65)
+
+            -- Confirmar com ENTER
+            local isEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
+                and not IsDisabledControlPressed(0, 24)
+                and not IsDisabledControlJustPressed(0, 24)
+
+            if isEnter then
+                OffsetEditor.StopSpawnCalibration(spawnCam, true)
+                break
+            end
+
+            -- Cancelar com ESC / Backspace
+            if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
+                OffsetEditor.StopSpawnCalibration(spawnCam, false)
+                break
+            end
+        end
+    end)
+end
+
+function OffsetEditor.StopSpawnCalibration(cam, confirmed)
+    IsCalibratingSpawn = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'hideGizmo' })
+
+    if cam and DoesCamExist(cam) then DestroyCam(cam, false) end
+    RenderScriptCams(false, true, 500, true, true)
+
+    if SpawnGhostEnt and DoesEntityExist(SpawnGhostEnt) then
+        DeleteEntity(SpawnGhostEnt)
+        SpawnGhostEnt = nil
+    end
+
+    if confirmed then
+        lib.notify({ title = 'Coordenadas Capturadas', description = 'Coordenadas e rotação aplicadas com precisão!', type = 'success' })
+        SendNUIMessage({
+            action = 'admin_spawn_coords_calibrated',
+            coords = CurrentSpawnCoords
+        })
+    else
+        lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
+    end
+
+    SendNUIMessage({ action = 'admin_restore' })
+    SetNuiFocus(true, true)
+end
+
+RegisterNUICallback('moveGizmoSpawn', function(data, cb)
+    if not IsCalibratingSpawn or not SpawnGhostEnt or not DoesEntityExist(SpawnGhostEnt) then
+        if cb then cb({ ok = false }) end
+        return
+    end
+
+    local pos = data.position
+    local rot = data.rotation
+
+    if pos then
+        SetEntityCoordsNoOffset(SpawnGhostEnt, pos.x, pos.y, pos.z, false, false, false)
+        local h = (rot and rot.z) or CurrentSpawnCoords.heading or 0.0
+        SetEntityHeading(SpawnGhostEnt, h)
+
+        CurrentSpawnCoords = {
+            x = tonumber(string.format("%.2f", pos.x)),
+            y = tonumber(string.format("%.2f", pos.y)),
+            z = tonumber(string.format("%.2f", pos.z)),
+            heading = tonumber(string.format("%.1f", h))
+        }
+    end
+
+    if cb then cb({ ok = true }) end
+end)
+
+-- ============================================================
+-- AMBIENTE DE TESTE / PREVIEW SEGURO DE PONTOS DE SPAWN
+-- ============================================================
+
+function OffsetEditor.StartPreview(spawnsList)
+    if IsPreviewActive then
+        OffsetEditor.StopPreview()
+    end
+
+    if not spawnsList or #spawnsList == 0 then
+        lib.notify({ title = 'Preview de Spawns', description = 'Nenhum ponto de spawn disponível para visualização.', type = 'warning' })
+        return
+    end
+
+    IsPreviewActive = true
+    ActivePreviewEntities = {}
+
+    -- Minimiza NUI para o admin caminhar pelo pátio
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'admin_minimize' })
+
+    for _, s in ipairs(spawnsList) do
+        local c = s.coords
+        if c then
+            local sType = tostring(s.spawn_type or 'truck'):lower()
+            local modelStr = 'hauler'
+            local isVeh = true
+
+            if sType == 'truck' then modelStr = 'hauler'
+            elseif sType == 'trailer' then modelStr = 'trailers2'
+            elseif sType == 'forklift' then modelStr = 'forklift'
+            else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+
+            local h = joaat(modelStr)
+            lib.requestModel(h, 5000)
+
+            local ent = nil
+            if isVeh then
+                ent = CreateVehicle(h, c.x, c.y, c.z, c.heading or c.w or 0.0, false, false)
+                if ent and DoesEntityExist(ent) then SetVehicleDoorsLocked(ent, 2) end
+            else
+                ent = CreateObject(h, c.x, c.y, c.z, false, false, false)
+            end
+
+            if ent and DoesEntityExist(ent) then
+                SetEntityAsMissionEntity(ent, true, true)
+                SetEntityAlpha(ent, 185, false)
+                SetEntityCollision(ent, false, false)
+                SetEntityInvincible(ent, true)
+                FreezeEntityPosition(ent, true)
+                SetEntityHeading(ent, c.heading or c.w or 0.0)
+                table.insert(ActivePreviewEntities, ent)
+            end
+        end
+    end
+
+    lib.showTextUI('[BACKSPACE] Encerrar Teste / Preview de Spawns', {
+        position = 'top-center',
+        icon = 'eye',
+        style = {
+            borderRadius = 8,
+            backgroundColor = '#059669',
+            color = '#ffffff'
+        }
+    })
+
+    lib.notify({
+        title = 'Modo Preview Ativo',
+        description = ('Visualizando %d pontos de spawn instanciados no pátio com segurança.'):format(#ActivePreviewEntities),
+        type = 'success',
+        duration = 5000
+    })
+
+    CreateThread(function()
+        while IsPreviewActive do
+            Wait(5)
+            if IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 177) then -- Backspace / ESC
+                OffsetEditor.StopPreview()
+                break
+            end
+        end
+    end)
+end
+
+function OffsetEditor.StopPreview()
+    if not IsPreviewActive then return end
+    IsPreviewActive = false
+
+    lib.hideTextUI()
+
+    for _, ent in ipairs(ActivePreviewEntities) do
+        if ent and DoesEntityExist(ent) then
+            DeleteEntity(ent)
+        end
+    end
+    ActivePreviewEntities = {}
+
+    SendNUIMessage({ action = 'admin_restore' })
+    SetNuiFocus(true, true)
+    lib.notify({ title = 'Preview Finalizado', description = 'Ambiente de teste encerrado com sucesso.', type = 'info' })
+end

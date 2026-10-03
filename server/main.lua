@@ -426,7 +426,24 @@ local function StartTruckDelivery(src, contractData)
     if contractData.jobId or contractData.contractId or contractData.id then
         local rawId = contractData.jobId or contractData.contractId or contractData.id
         local numId = tonumber(rawId)
-        if numId and Config.LC_Jobs and Config.LC_Jobs.available_loads and Config.LC_Jobs.available_loads[numId] then
+
+        local customRoute = AdminService and AdminService.CustomRoutes and (AdminService.CustomRoutes[rawId] or (numId and AdminService.CustomRoutes[numId]))
+        if customRoute then
+            contractData.name = contractData.name or customRoute.name or customRoute.title
+            contractData.trailerModel = contractData.trailerModel or customRoute.trailer_model
+            contractData.truckModel = contractData.truckModel or customRoute.truck_model
+            contractData.cargoType = contractData.cargoType or customRoute.type
+            contractData.cargoName = contractData.cargoName or customRoute.cargo_name
+            contractData.distance = contractData.distance or customRoute.distance
+            contractData.payment = contractData.payment or customRoute.base_payment
+            contractData.xp = contractData.xp or customRoute.base_xp
+            contractData.pickupCoords = contractData.pickupCoords or customRoute.pickup_coords
+            contractData.deliveryCoords = contractData.deliveryCoords or customRoute.delivery_coords
+            contractData.level_required = contractData.level_required or customRoute.req_skill or customRoute.required_level
+            if customRoute.has_forklift ~= nil then
+                contractData.withForklift = (customRoute.has_forklift == 1 or customRoute.has_forklift == true)
+            end
+        elseif numId and Config.LC_Jobs and Config.LC_Jobs.available_loads and Config.LC_Jobs.available_loads[numId] then
             local load = Config.LC_Jobs.available_loads[numId]
             contractData.name = contractData.name or load.name
             contractData.palletCount = contractData.palletCount or 4
@@ -598,7 +615,8 @@ local function StartTruckDelivery(src, contractData)
     end
 
     -- Iteração dinâmica com verificação de área livre no servidor (OneSync)
-    local truckSpawns = wh.TruckSpawns or { wh.TruckSpawnCoords }
+    local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck')) or {}
+    local truckSpawns = (#dynamicTruckSpawns > 0 and dynamicTruckSpawns) or wh.TruckSpawns or { wh.TruckSpawnCoords }
     local truck = nil
     local chosenTruckCoord = nil
 
@@ -663,7 +681,8 @@ local function StartTruckDelivery(src, contractData)
     print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src)))
 
     -- STEP B: TRAILER SPAWN
-    local trailerSpawns = Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
+    local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer')) or {}
+    local trailerSpawns = (#dynamicTrailerSpawns > 0 and dynamicTrailerSpawns) or Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
     local trailer = nil
     local chosenTrailerCoord = nil
 
@@ -722,7 +741,8 @@ local function StartTruckDelivery(src, contractData)
     local reqPallets = math.min(maxAllowedPallets, math.max(4, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
-        local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }
+        local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift')) or {}
+        local forkliftSpawns = (#dynamicForkSpawns > 0 and dynamicForkSpawns) or wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
         for idx, coord in ipairs(forkliftSpawns) do
             if IsSpawnPointClear(coord, 3.5, { [truck] = true, [trailer] = true }) then
@@ -767,7 +787,8 @@ local function StartTruckDelivery(src, contractData)
         end
 
         -- Spawn de Paletes Pré-Gerados (Polarix)
-        local palletSpawns = wh.PalletSpawns or {}
+        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
+        local palletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
         for _, coord in ipairs(palletSpawns) do

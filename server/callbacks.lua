@@ -2,6 +2,10 @@
 -- lib.callback.register (substitui QBCore.Functions.CreateCallback)
 
 local function BuildDefaultContracts()
+    if AdminService and AdminService.GetActiveContracts then
+        local live = AdminService.GetActiveContracts()
+        if live and #live > 0 then return live end
+    end
     local lc_contracts = {}
     local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
     local rentalTrucks = { "hauler", "phantom", "packer", "hauler2", "brickades" }
@@ -262,87 +266,69 @@ function BuildInitialDataForPlayer(source, citizenId)
             end
         end
 
-        -- Montar contratos LC idênticos à referência (Quick Jobs)
+        -- Montar contratos LC idênticos à referência (Quick Jobs) com Sincronização em Tempo Real do AdminService
         local lc_contracts = {}
-        local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-        local rentalTrucks = { "hauler", "phantom", "packer", "hauler2", "brickades" }
-        local stats = _r.stats or {}
-        local skills = _r.skills or {}
-        local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
-        local playerXP = tonumber(stats and stats.xp) or 0
-        local calculatedLevel = (ProgressionService and ProgressionService.CalcLevel and ProgressionService.CalcLevel(playerXP)) or 0
-        local storedLevel = tonumber(stats and stats.level) or 0
-
-        -- Auto-heal / Sincronização retroativa de nível e skill points
-        if calculatedLevel > storedLevel then
-            local missingPoints = calculatedLevel - storedLevel
-            local newRank = math.min(6, math.ceil(calculatedLevel / 5))
-            DB_SetLevelData(citizenId, calculatedLevel, newRank, missingPoints)
-            if stats then
-                stats.level = calculatedLevel
-                stats.rank = newRank
-                stats.skill_points = (tonumber(stats.skill_points) or 0) + missingPoints
-            end
+        if AdminService and AdminService.GetActiveContracts then
+            lc_contracts = AdminService.GetActiveContracts(citizenId)
         end
 
-        local playerLevel = (stats and tonumber(stats.level)) or calculatedLevel
-        local playerSkillPoints = (stats and tonumber(stats.skill_points)) or (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or 0
+        if not lc_contracts or #lc_contracts == 0 then
+            local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
+            local rentalTrucks = { "hauler", "phantom", "packer", "hauler2", "brickades" }
+            local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
+            local originCoords = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
 
-        local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
-        local originCoords = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
+            for i, load in ipairs(availableLoads) do
+                local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
+                local def = load.def or {0,0,0,0}
+                local adr = def[1] or 0
+                local fragile = def[2] or 0
+                local valuable = def[3] or 0
+                local illegal = def[4] or 0
+                local fast = (i % 3 == 0) and 1 or 0
 
-        for i, load in ipairs(availableLoads) do
-            local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
-            local def = load.def or {0,0,0,0}
-            local adr = def[1] or 0
-            local fragile = def[2] or 0
-            local valuable = def[3] or 0
-            local illegal = def[4] or 0
-            local fast = (i % 3 == 0) and 1 or 0
+                local destIndex = ((i - 1) % #deliveryLocs) + 1
+                local dest = deliveryLocs[destIndex] or deliveryLocs[1]
+                local rawDist = #(vector3(dest.x, dest.y, dest.z) - originCoords) / 1000.0
+                local realDist = tonumber(string.format("%.2f", rawDist)) or 1.0
+                if realDist <= 0 then realDist = 1.0 end
 
-            local destIndex = ((i - 1) % #deliveryLocs) + 1
-            local dest = deliveryLocs[destIndex] or deliveryLocs[1]
-            local rawDist = #(vector3(dest.x, dest.y, dest.z) - originCoords) / 1000.0
-            local realDist = tonumber(string.format("%.2f", rawDist)) or 1.0
-            if realDist <= 0 then realDist = 1.0 end
+                local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
+                local baseReward = math.floor(realDist * rewardRate + 950)
 
-            local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
-            local baseReward = math.floor(realDist * rewardRate + 950)
+                local contractData = {
+                    contract_id   = i,
+                    contract_name = load.name,
+                    contract_type = (i % 2 == 0) and 1 or 0,
+                    distance      = realDist,
+                    reward        = baseReward,
+                    truck         = truckModel,
+                    trailer       = load.trailer,
+                    cargo_type    = adr,
+                    fragile       = fragile,
+                    valuable      = valuable,
+                    fast          = fast,
+                    illegal       = illegal,
+                    progress      = nil,
+                }
 
-            local contractData = {
-                contract_id   = i,
-                contract_name = load.name,
-                contract_type = (i % 2 == 0) and 1 or 0, -- Alterna entre Quick Jobs (0) e Freight Jobs (1)
-                distance      = realDist,
-                reward        = baseReward,
-                truck         = truckModel,
-                trailer       = load.trailer,
-                cargo_type    = adr,
-                fragile       = fragile,
-                valuable      = valuable,
-                fast          = fast,
-                illegal       = illegal,
-                progress      = nil,
-            }
+                local canAccept, lockType, lockReason = true, nil, nil
+                if ProgressionService and ProgressionService.CanPlayerAcceptContract then
+                    canAccept, lockType, lockReason = ProgressionService.CanPlayerAcceptContract(citizenId, contractData)
+                end
+                contractData.locked = not canAccept
+                contractData.lock_type = lockType
+                contractData.lock_reason = lockReason
 
-            -- Validação de Habilidades e Bloqueio de Contrato (Server-Side)
-            local canAccept, lockType, lockReason = true, nil, nil
-            if ProgressionService and ProgressionService.CanPlayerAcceptContract then
-                canAccept, lockType, lockReason = ProgressionService.CanPlayerAcceptContract(citizenId, contractData)
+                if ProgressionService and ProgressionService.CalculateContractBonuses then
+                    local bonuses = ProgressionService.CalculateContractBonuses(citizenId, contractData)
+                    contractData.reward = math.floor(baseReward * bonuses.moneyMultiplier)
+                    contractData.bonus_money_pct = bonuses.moneyBonusPct
+                    contractData.bonus_exp_pct = bonuses.expBonusPct
+                end
+
+                table.insert(lc_contracts, contractData)
             end
-            contractData.locked = not canAccept
-            contractData.lock_type = lockType
-            contractData.lock_reason = lockReason
-
-            -- Aplicação Dinâmica dos Bônus de Skills
-            if ProgressionService and ProgressionService.CalculateContractBonuses then
-                local bonuses = ProgressionService.CalculateContractBonuses(citizenId, contractData)
-                contractData.reward = math.floor(baseReward * bonuses.moneyMultiplier)
-                contractData.bonus_money_pct = bonuses.moneyBonusPct
-                contractData.bonus_exp_pct = bonuses.expBonusPct
-            end
-
-            table.insert(lc_contracts, contractData)
         end
 
         local fleetTrucks = _r.fleetTrucks or (TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId)) or {}

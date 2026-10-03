@@ -353,3 +353,135 @@
   grid-template-columns: 1fr 1fr 1fr;
   gap: 14px;
 }
+
+/* Filtros por Categoria / Tipo de Trabalho */
+.admin-filter-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.admin-filter-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--admin-text-muted);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.admin-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.admin-filter-btn.active {
+  background: var(--admin-primary);
+  color: #0b1418;
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 10px var(--admin-primary-glow);
+}
+
+/* Pastas e Drag-and-Drop (Aba Spawns) */
+.admin-folders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.admin-folder-card {
+  background: rgba(18, 26, 32, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.admin-folder-card.drag-over {
+  border: 2px dashed var(--admin-primary) !important;
+  background: rgba(16, 185, 129, 0.12) !important;
+  box-shadow: 0 0 16px var(--admin-primary-glow);
+}
+
+.admin-folder-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+}
+
+.admin-folder-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--admin-primary);
+}
+
+.admin-folder-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--admin-text-muted);
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+.admin-folder-items {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+
+.admin-spawn-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 6px;
+  cursor: grab;
+  transition: all 0.15s;
+}
+
+.admin-spawn-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.admin-spawn-row.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* Inputs Inline (Aba Economia) */
+.admin-inline-input {
+  width: 90px;
+  padding: 4px 8px;
+  background: rgba(10, 15, 20, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 12px;
+  text-align: right;
+  outline: none;
+}
+
+.admin-inline-input:focus {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 6px var(--admin-primary-glow);
+}
