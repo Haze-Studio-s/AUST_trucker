@@ -2258,10 +2258,6 @@ RegisterNetEvent('truck_logistics:makeContract', function(location, data)
     end
 end)
 
-RegisterNetEvent('truck_logistics:deliveredCargo', function()
-    -- Confirma entrega do frete no destino
-end)
-
 local CompletingContractsLock = {}
 
 -- ========================================================

@@ -3281,8 +3281,6 @@ local function StartDeliveryRoute()
                         end
                         SetWaypointOff()
 
-                        TriggerServerEvent("truck_logistics:deliveredCargo")
-
                         if not isQuickJob then
                             -- ========================================================
                             -- CAMINHÃO PRÓPRIO (OWNED TRUCK / FRETE)
