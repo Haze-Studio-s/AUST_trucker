@@ -1739,7 +1739,12 @@ function closeUI() {
 let isContractStarting = false;
 
 function updatePalletConfig(val, baseReward) {
-    let count = parseInt(val) || 4;
+    let hasForklift = $("#modal-forklift-switch").is(":checked");
+    let maxAllowed = hasForklift ? 6 : 7;
+    let count = Math.min(maxAllowed, Math.max(4, parseInt(val) || 4));
+
+    $("#modal-pallet-slider").attr("max", maxAllowed);
+    $("#modal-pallet-slider").val(count);
     $("#modal-pallet-count-badge").text(`${count} Paletes`);
     let weightKg = count * 250;
     $("#modal-pallet-weight-val").text(`${weightKg.toLocaleString('pt-BR')} kg`);
@@ -1752,6 +1757,30 @@ function updatePalletConfig(val, baseReward) {
     } else {
         $("#modal-pallet-bonus-val").text(`+${bonusPct}%`);
     }
+
+    if (!hasForklift) {
+        let feePct = 15;
+        let feeMoney = Math.floor((baseReward || 5000) * (feePct / 100));
+        $("#modal-unloading-fee-container").show();
+        $("#modal-unloading-fee-val").text(`-${feePct}% (-$${feeMoney.toLocaleString('pt-BR')})`);
+    } else {
+        $("#modal-unloading-fee-container").hide();
+    }
+}
+
+function onForkliftSwitchChange(baseReward) {
+    let hasForklift = $("#modal-forklift-switch").is(":checked");
+    let max = hasForklift ? 6 : 7;
+    let slider = $("#modal-pallet-slider");
+    let currentVal = parseInt(slider.val()) || 4;
+
+    slider.attr("max", max);
+    $("#modal-pallet-max-label").text(hasForklift ? "6 (Máx. c/ Empilhadeira)" : "7 (Capacidade Máxima)");
+    if (currentVal > max) {
+        currentVal = max;
+        slider.val(max);
+    }
+    updatePalletConfig(currentVal, baseReward);
 }
 
 function sendNuiAction(actionName, payload) {
@@ -1781,14 +1810,14 @@ function openContractConfigModal(contract_id, party, baseReward) {
                 
                 <div class="card-theme p-3 mb-3" style="border-radius: 8px; border: 1px solid rgba(16,185,129,0.3);">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <label class="mb-0 font-weight-bold text-white"><i class="fas fa-boxes-stacked mr-1 text-emerald"></i> Carga Transportada (4 a 12):</label>
+                        <label class="mb-0 font-weight-bold text-white"><i class="fas fa-boxes-stacked mr-1 text-emerald"></i> Carga Transportada:</label>
                         <span id="modal-pallet-count-badge" class="badge badge-success px-2 py-1" style="font-size: 14px; background: #10b981;">4 Paletes</span>
                     </div>
-                    <input type="range" class="custom-range" id="modal-pallet-slider" min="4" max="12" step="1" value="4" oninput="updatePalletConfig(this.value, ${baseReward})">
+                    <input type="range" class="custom-range" id="modal-pallet-slider" min="4" max="6" step="1" value="4" oninput="updatePalletConfig(this.value, ${baseReward})">
                     <div class="d-flex justify-content-between mt-1 text-muted" style="font-size: 11px;">
                         <span>4 (Mínimo)</span>
-                        <span>8 (Médio)</span>
-                        <span>12 (Capacidade Máxima)</span>
+                        <span>5 (Médio)</span>
+                        <span id="modal-pallet-max-label">6 (Máx. c/ Empilhadeira)</span>
                     </div>
                 </div>
 
@@ -1803,19 +1832,32 @@ function openContractConfigModal(contract_id, party, baseReward) {
                 <div class="d-flex justify-content-between align-items-center card-theme p-3 mb-3" style="border-radius: 8px;">
                     <div>
                         <div class="font-weight-bold text-white"><i class="fas fa-coins text-warning mr-1"></i> Bônus de Remuneração:</div>
-                        <div class="text-muted" style="font-size: 12px;">+15% por palete adicional</div>
+                        <div class="text-muted" style="font-size: 12px;">+15% por palete adicional (> 4)</div>
                     </div>
                     <div id="modal-pallet-bonus-val" class="font-weight-bold text-warning" style="font-size: 16px;">+0% ($0)</div>
                 </div>
 
+                <div id="modal-unloading-fee-container" class="card-theme p-3 mb-3" style="border-radius: 8px; border: 1px solid rgba(239,68,68,0.4); display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="font-weight-bold text-danger"><i class="fas fa-hand-holding-dollar mr-1"></i> Taxa de Descarregamento (Destino):</div>
+                            <div class="text-muted" style="font-size: 12px;">Cobrada pela doca de destino por falta de empilhadeira própria</div>
+                        </div>
+                        <div id="modal-unloading-fee-val" class="font-weight-bold text-danger" style="font-size: 16px;">-15% (-$750)</div>
+                    </div>
+                </div>
+
                 <div class="card-theme p-3" style="border-radius: 8px;">
                     <div class="custom-control custom-switch">
-                        <input type="checkbox" class="custom-control-input" id="modal-forklift-switch" checked>
+                        <input type="checkbox" class="custom-control-input" id="modal-forklift-switch" checked onchange="onForkliftSwitchChange(${baseReward})">
                         <label class="custom-control-label font-weight-bold text-white" for="modal-forklift-switch">
                             Embarcar Empilhadeira (Forklift)
                         </label>
                     </div>
-                    <small class="text-muted d-block mt-1">A empilhadeira viaja na traseira do trailer. Permite descer na rodovia e resgatar paletes que caírem.</small>
+                    <small class="text-muted d-block mt-1">
+                        <strong>Ligado:</strong> Limite de 6 paletes (espaço traseiro reservado para a empilhadeira).<br>
+                        <strong>Desligado:</strong> Capacidade de 7 paletes (taxa de 15% deduzida no destino para descarregamento terceirizado).
+                    </small>
                 </div>
             </div>
         `,
@@ -1839,8 +1881,9 @@ function openContractConfigModal(contract_id, party, baseReward) {
                 class: "btn btn-primary",
                 dismiss: true,
                 action: function() {
-                    let pCount = parseInt($("#modal-pallet-slider").val()) || 4;
                     let fLift = $("#modal-forklift-switch").is(":checked");
+                    let maxAllowed = fLift ? 6 : 7;
+                    let pCount = Math.min(maxAllowed, Math.max(4, parseInt($("#modal-pallet-slider").val()) || 4));
                     startContract(contract_id, party, pCount, fLift);
                 }
             }

@@ -23,7 +23,14 @@ Config.Polarix = {
     ContainerModel = 'prop_contr_03b_ld',
 
     PalletWeightKg = 1000,
-    MaxPalletsPerOrder = 8,
+    MaxPalletsPerOrder = 7,
+
+    -- Regras de Capacidade e Economia de Estiva
+    CargoCapacity = {
+        WithForklift = { min = 4, max = 6 },
+        WithoutForklift = { min = 4, max = 7 },
+        UnloadingFeePercent = 15, -- 15% de taxa deduzida no destino por descarregamento terceirizado sem empilhadeira
+    },
 
     -- Coordenadas de Referência do Pátio e Docas (Polarix / Buccaneer)
     Warehouse = {
