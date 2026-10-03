@@ -1440,6 +1440,17 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local payment = math.floor(basePayment * ratio)
     local xp = math.floor(baseXP * ratio)
 
+    -- Taxa de descarregamento na doca por ausência de empilhadeira própria
+    local unloadingFee = 0
+    if lobby.cargoType == 'dry' and lobby.withForklift == false then
+        local feePercent = (Config.Polarix and Config.Polarix.CargoCapacity and Config.Polarix.CargoCapacity.UnloadingFeePercent) or 15
+        unloadingFee = math.floor(payment * (feePercent / 100))
+        payment = math.max(100, payment - unloadingFee)
+        print(("[AUST_Trucker] Taxa de descarregamento de %d%% (-$%d) aplicada ao frete sem empilhadeira do jogador %s."):format(
+            feePercent, unloadingFee, tostring(src)
+        ))
+    end
+
     -- Remoção autoritativa de chaves secundárias (empilhadeira, reach stacker, carros cegonha)
     if lobby.forkliftPlate or lobby.handlerPlate or lobby.carrierCars then
         RemoveJobKeys(src, {
