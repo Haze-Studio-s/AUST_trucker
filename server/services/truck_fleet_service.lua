@@ -22,17 +22,25 @@ end
 local BuyingTruckLock = {}
 local SellingTruckLock = {}
 
--- Compra de caminhão na concessionária
-function TruckFleetService.BuyTruck(src, citizenId, truckModel)
-    if BuyingTruckLock[citizenId] then
+-- Executa fn sob lock por citizenId; SEMPRE libera o lock (pcall)
+local function WithLock(lockTable, citizenId, fn, ...)
+    if lockTable[citizenId] then
         return false, 'Transação em andamento, aguarde'
     end
-    BuyingTruckLock[citizenId] = true
+    lockTable[citizenId] = true
+    local ok, r1, r2 = pcall(fn, ...)
+    lockTable[citizenId] = nil
+    if not ok then
+        print('[TruckFleetService] ERRO: ' .. tostring(r1))
+        return false, 'Erro interno ao processar transação'
+    end
+    return r1, r2
+end
 
+local function _BuyTruck(src, citizenId, truckModel)
     local catalog = Config.LC_Dealership or {}
-    local data = catalog[truckModel]
+    local data = type(truckModel) == 'string' and catalog[truckModel] or nil
     if not data then
-        BuyingTruckLock[citizenId] = nil
         return false, 'Modelo de caminhão indisponível no catálogo'
     end
 
@@ -40,50 +48,48 @@ function TruckFleetService.BuyTruck(src, citizenId, truckModel)
     local playerStats = DB_GetPlayerStats(citizenId)
     local currentLevel = playerStats and playerStats.level or 1
     if currentLevel < (data.required_level or 0) then
-        BuyingTruckLock[citizenId] = nil
         return false, ('Nível insuficiente. Necessário nível %d'):format(data.required_level)
     end
 
     local price = data.price or 50000
     local balance = Framework.GetPlayerMoney(src, 'bank')
-    if balance < price then
-        BuyingTruckLock[citizenId] = nil
+    if (tonumber(balance) or 0) < price then
         return false, 'Saldo bancário insuficiente'
     end
 
     if not Framework.RemovePlayerMoney(src, 'bank', price, 'Compra de caminhão: ' .. data.name) then
-        BuyingTruckLock[citizenId] = nil
         return false, 'Falha ao processar pagamento bancário'
     end
 
-    local truckId = MySQL.insert.await(
+    local okIns, truckId = pcall(MySQL.insert.await,
         [[INSERT INTO trucker_trucks (user_id, truck_name, driver, body, engine, transmission, wheels, fuel, properties, garage_id)
           VALUES (?, ?, NULL, 1000, 1000, 1000, 1000, 100, '{}', 'trucker_1')]],
         { citizenId, truckModel }
     )
+    if not okIns or not truckId then
+        print(('[TruckFleetService] ERRO insert BuyTruck (%s): %s - reembolsando'):format(tostring(citizenId), tostring(truckId)))
+        Framework.AddPlayerMoney(src, 'bank', price, 'Reembolso: compra de caminhão falhou')
+        return false, 'Falha ao registrar caminhão. Valor reembolsado.'
+    end
 
-    BuyingTruckLock[citizenId] = nil
     return true, { truckId = truckId, model = truckModel, name = data.name }
 end
 
--- Venda de caminhão próprio (70% do valor)
-function TruckFleetService.SellTruck(src, citizenId, truckId)
-    if SellingTruckLock[citizenId] then
-        return false, 'Transação em andamento, aguarde'
-    end
-    SellingTruckLock[citizenId] = true
+-- Compra de caminhão na concessionária
+function TruckFleetService.BuyTruck(src, citizenId, truckModel)
+    return WithLock(BuyingTruckLock, citizenId, _BuyTruck, src, citizenId, truckModel)
+end
 
+local function _SellTruck(src, citizenId, truckId)
     local truck = MySQL.single.await(
         'SELECT * FROM trucker_trucks WHERE truck_id = ? AND user_id = ? LIMIT 1',
         { truckId, citizenId }
     )
     if not truck then
-        SellingTruckLock[citizenId] = nil
         return false, 'Caminhão não encontrado na sua frota'
     end
 
     if truck.driver and truck.driver > 0 then
-        SellingTruckLock[citizenId] = nil
         return false, 'Desaloque o motorista antes de vender este caminhão'
     end
 
@@ -95,18 +101,24 @@ function TruckFleetService.SellTruck(src, citizenId, truckId)
 
     local affected = MySQL.update.await('DELETE FROM trucker_trucks WHERE truck_id = ? AND user_id = ?', { truckId, citizenId })
     if not affected or affected == 0 then
-        SellingTruckLock[citizenId] = nil
         return false, 'Caminhão já vendido ou indisponível'
     end
 
     Framework.AddPlayerMoney(src, 'bank', refund, 'Venda de caminhão: ' .. truck.truck_name)
-    SellingTruckLock[citizenId] = nil
 
     return true, refund
 end
 
--- Reparo mecânico (desgaste por componente)
-function TruckFleetService.RepairTruck(src, citizenId, truckId, part)
+-- Venda de caminhão próprio (70% do valor)
+function TruckFleetService.SellTruck(src, citizenId, truckId)
+    return WithLock(SellingTruckLock, citizenId, _SellTruck, src, citizenId, truckId)
+end
+
+-- Componentes permitidos (whitelist para nomes de coluna dinâmicos)
+local REPAIR_COMPONENTS = { engine = true, body = true, transmission = true, wheels = true }
+local RepairingTruckLock = {}
+
+local function _RepairTruck(src, citizenId, truckId, part)
     local truck = MySQL.single.await(
         'SELECT * FROM trucker_trucks WHERE truck_id = ? AND user_id = ? LIMIT 1',
         { truckId, citizenId }
@@ -126,19 +138,25 @@ function TruckFleetService.RepairTruck(src, citizenId, truckId, part)
     local totalCost = 0
     local updates = {}
 
+    -- Componentes mecânicos: escala 0-1000
     local function calcComponent(name, currentVal)
-        local damagePercent = math.max(0, math.floor((1000 - currentVal) / 10))
+        local damagePercent = math.max(0, math.floor((1000 - (tonumber(currentVal) or 1000)) / 10))
         local cost = damagePercent * (repairPrices[name] or 30)
         return damagePercent, cost
     end
 
     if part == 'all' then
-        for _, comp in ipairs({'engine', 'body', 'transmission', 'wheels'}) do
+        for comp in pairs(REPAIR_COMPONENTS) do
             local _, cost = calcComponent(comp, truck[comp] or 1000)
             totalCost = totalCost + cost
+            updates[comp] = 1000
         end
-        updates = { engine = 1000, body = 1000, transmission = 1000, wheels = 1000 }
-    elseif repairPrices[part] then
+    elseif part == 'fuel' then
+        -- Combustível: escala 0-100 (1 ponto = 1%)
+        local missing = math.max(0, 100 - (tonumber(truck.fuel) or 100))
+        totalCost = missing * (repairPrices.fuel or 5)
+        updates.fuel = 100
+    elseif type(part) == 'string' and REPAIR_COMPONENTS[part] then
         local _, cost = calcComponent(part, truck[part] or 1000)
         totalCost = cost
         updates[part] = 1000
@@ -151,7 +169,7 @@ function TruckFleetService.RepairTruck(src, citizenId, truckId, part)
     end
 
     local balance = Framework.GetPlayerMoney(src, 'bank')
-    if balance < totalCost then
+    if (tonumber(balance) or 0) < totalCost then
         return false, ('Saldo bancário insuficiente. Custo: $%d'):format(totalCost)
     end
 
@@ -159,31 +177,46 @@ function TruckFleetService.RepairTruck(src, citizenId, truckId, part)
         return false, 'Falha ao processar pagamento de reparo'
     end
 
+    -- Nomes de coluna vêm somente da whitelist acima
     local setClauses = {}
     local params = {}
     for k, v in pairs(updates) do
-        table.insert(setClauses, string.format('%s = ?', k))
-        table.insert(params, v)
+        if REPAIR_COMPONENTS[k] or k == 'fuel' then
+            table.insert(setClauses, string.format('%s = ?', k))
+            table.insert(params, v)
+        end
     end
     table.insert(params, truckId)
     table.insert(params, citizenId)
 
     local query = string.format('UPDATE trucker_trucks SET %s WHERE truck_id = ? AND user_id = ?', table.concat(setClauses, ', '))
-    MySQL.update.await(query, params)
+    local okUpd, affected = pcall(MySQL.update.await, query, params)
+    if not okUpd or not affected or affected == 0 then
+        print(('[TruckFleetService] ERRO update RepairTruck (%s): %s - reembolsando'):format(tostring(citizenId), tostring(affected)))
+        Framework.AddPlayerMoney(src, 'bank', totalCost, 'Reembolso: reparo de frota falhou')
+        return false, 'Falha ao aplicar reparo. Valor reembolsado.'
+    end
 
     return true, { cost = totalCost, updates = updates }
 end
 
+-- Reparo mecânico (desgaste por componente)
+function TruckFleetService.RepairTruck(src, citizenId, truckId, part)
+    return WithLock(RepairingTruckLock, citizenId, _RepairTruck, src, citizenId, truckId, part)
+end
+
 -- Atualização de desgaste após viagem (server-authoritative)
+-- Colunas são UNSIGNED: converte para SIGNED antes de subtrair (evita overflow/erro)
 function TruckFleetService.ApplyTripWear(citizenId, truckId, distanceKm)
+    distanceKm = tonumber(distanceKm) or 0
     local wearFactor = math.max(1, math.floor(distanceKm * 2))
     MySQL.update.await(
         [[UPDATE trucker_trucks
-          SET engine = GREATEST(100, engine - ?),
-              body = GREATEST(100, body - ?),
-              transmission = GREATEST(100, transmission - ?),
-              wheels = GREATEST(100, wheels - ?),
-              fuel = GREATEST(5, fuel - ?)
+          SET engine = GREATEST(100, CAST(engine AS SIGNED) - ?),
+              body = GREATEST(100, CAST(body AS SIGNED) - ?),
+              transmission = GREATEST(100, CAST(transmission AS SIGNED) - ?),
+              wheels = GREATEST(100, CAST(wheels AS SIGNED) - ?),
+              fuel = GREATEST(5, CAST(fuel AS SIGNED) - ?)
           WHERE truck_id = ? AND user_id = ?]],
         { wearFactor * 3, wearFactor * 2, wearFactor * 2, wearFactor * 4, math.floor(distanceKm * 1.5), truckId, citizenId }
     )

@@ -532,7 +532,28 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_model` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    -- infraction_type: adiciona 'cargo_damage' (usado por job_service); MODIFY é idempotente
+    "ALTER TABLE `trucker_infractions` MODIFY COLUMN `infraction_type` ENUM('overload','no_manifest','expired_manifest','dangerous_cargo','illegal_seizure','cargo_damage') NOT NULL",
+    -- trucker_jobs.status: adiciona 'failed' (usado por DB_SetCargoFailed)
+    "ALTER TABLE `trucker_jobs` MODIFY COLUMN `status` ENUM('available','active','completed','expired','npc_completed','failed') DEFAULT 'available'",
+    -- índices (idempotentes: erro de chave duplicada é ignorado)
+    "ALTER TABLE `trucker_loans` ADD INDEX `idx_loans_company` (`company_id`)",
+    "ALTER TABLE `trucker_loans` ADD INDEX `idx_loans_status_next` (`status`, `next_payment_at`)",
+    "ALTER TABLE `trucker_jobs` ADD INDEX `idx_jobs_truck_plate` (`truck_plate`)",
+    "ALTER TABLE `trucker_jobs` ADD INDEX `idx_jobs_company` (`company_id`)",
+    -- impede pagamento duplicado de convoy (falha e é logado se já houver duplicatas)
+    "ALTER TABLE `trucker_convoy_payments` ADD UNIQUE INDEX `uq_cp_convoy_citizen` (`convoy_id`, `citizenid`)",
 }
+
+-- Erros esperados em migrations idempotentes (coluna/chave já existe)
+local function IsExpectedMigrationError(err)
+    local e = tostring(err or ''):lower()
+    return e:find('duplicate column', 1, true)
+        or e:find('duplicate key name', 1, true)
+        or e:find('already exists', 1, true)
+        or e:find('1060', 1, true)
+        or e:find('1061', 1, true)
+end
 
 ---Garante que todas as tabelas e migrations existam. Chamado dentro de MySQL.ready (main.lua).
 function SchemaService.EnsureTables()
@@ -543,7 +564,10 @@ function SchemaService.EnsureTables()
         end
     end
     for _, sql in ipairs(MIGRATIONS) do
-        pcall(MySQL.query.await, sql)
+        local ok, err = pcall(MySQL.query.await, sql)
+        if not ok and not IsExpectedMigrationError(err) then
+            print(('[aurp_trucker] SchemaService MIGRATION FAILED: %s | %s'):format(sql, tostring(err)))
+        end
     end
     if Config.Debug then
         print('[aurp_trucker] SchemaService: tables ensured.')
@@ -607,6 +631,18 @@ end
 function DB_DeleteCompany(companyId)
     -- CASCADE deleta members e vehicles automaticamente
     MySQL.query.await('DELETE FROM trucker_companies WHERE id = ?', { companyId })
+end
+
+-- Deleta a empresa SOMENTE se não houver empréstimo ativo com saldo (checagem atômica no SQL).
+-- Retorna linhas afetadas (0 = tem empréstimo ativo ou já deletada).
+function DB_DeleteCompanyIfNoActiveLoan(companyId)
+    return MySQL.update.await(
+        [[DELETE FROM trucker_companies
+          WHERE id = ?
+            AND NOT EXISTS (SELECT 1 FROM trucker_loans l
+                            WHERE l.company_id = ? AND l.status = 'active' AND l.remaining_balance > 0)]],
+        { companyId, companyId }
+    )
 end
 
 function DB_GetRecruitingCompanies()
@@ -750,16 +786,18 @@ function DB_GetActiveJobByPlayer(citizenId)
     )
 end
 
+-- Retorna o número de linhas afetadas (0 = job indisponível/expirado)
 function DB_AcceptJob(jobId, citizenId, companyId)
-    MySQL.update.await(
-        "UPDATE trucker_jobs SET status = 'active', assigned_citizenid = ?, company_id = ?, accepted_at = NOW() WHERE id = ? AND status = 'available'",
+    return MySQL.update.await(
+        "UPDATE trucker_jobs SET status = 'active', assigned_citizenid = ?, company_id = ?, accepted_at = NOW() WHERE id = ? AND status = 'available' AND expires_at > NOW()",
         { citizenId, companyId, jobId }
     )
 end
 
+-- Retorna o número de linhas afetadas (0 = já concluído / não estava ativo)
 function DB_CompleteJob(jobId)
-    MySQL.update.await(
-        "UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ?",
+    return MySQL.update.await(
+        "UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active'",
         { jobId }
     )
 end
@@ -793,8 +831,16 @@ end
 -- PLAYER STATS
 -- ============================================================
 
+-- Upsert com log de erro (antes o erro era engolido silenciosamente)
+local function SafeUpsertPlayerStats(citizenId)
+    local ok, err = pcall(DB_UpsertPlayerStats, citizenId)
+    if not ok then
+        print(('[aurp_trucker] ERRO DB_UpsertPlayerStats(%s): %s'):format(tostring(citizenId), tostring(err)))
+    end
+end
+
 function DB_GetPlayerStats(citizenId)
-    pcall(DB_UpsertPlayerStats, citizenId)
+    SafeUpsertPlayerStats(citizenId)
     return MySQL.single.await(
         'SELECT * FROM trucker_player_progression WHERE citizenid = ? LIMIT 1',
         { citizenId }
@@ -810,7 +856,7 @@ function DB_UpsertPlayerStats(citizenId)
 end
 
 function DB_AddPlayerStats(citizenId, earnings, distance)
-    pcall(DB_UpsertPlayerStats, citizenId)
+    SafeUpsertPlayerStats(citizenId)
     MySQL.update.await(
         [[UPDATE trucker_player_progression
           SET total_earnings = total_earnings + ?,
@@ -827,7 +873,7 @@ end
 
 -- Adiciona XP e retorna o estado atual do jogador
 function DB_AddXP(citizenId, xp)
-    pcall(DB_UpsertPlayerStats, citizenId)
+    SafeUpsertPlayerStats(citizenId)
     MySQL.update.await(
         'UPDATE trucker_player_progression SET xp = xp + ? WHERE citizenid = ?',
         { tonumber(xp) or 0, citizenId }
@@ -1377,6 +1423,22 @@ function DB_RecordConvoyPayment(convoyId, citizenid, amount, bonusMult, complete
     )
 end
 
+-- Reivindica atomicamente o pagamento de um membro (INSERT IGNORE + UNIQUE convoy_id/citizenid).
+-- Retorna true somente se este chamador inseriu o registro (pode pagar); false se já reivindicado.
+function DB_ClaimConvoyPayment(convoyId, citizenid, amount, bonusMult, completedCount, totalCount)
+    local ok, affected = pcall(MySQL.update.await,
+        [[INSERT IGNORE INTO trucker_convoy_payments
+            (convoy_id, citizenid, amount, bonus_mult, completed_count, total_count)
+          VALUES (?, ?, ?, ?, ?, ?)]],
+        { convoyId, citizenid, amount, bonusMult, completedCount, totalCount }
+    )
+    if not ok then
+        print(('[aurp_trucker] ERRO DB_ClaimConvoyPayment: %s'):format(tostring(affected)))
+        return false
+    end
+    return (tonumber(affected) or 0) > 0
+end
+
 -- Retorna os últimos pagamentos de convoy de um jogador (máx 50)
 function DB_GetConvoyHistory(citizenid, limit)
     limit = math.min(tonumber(limit) or 20, 50)
@@ -1561,7 +1623,7 @@ end
 
 function DB_UpdateCompanyReputation(companyId, delta)
     MySQL.update.await(
-        'UPDATE trucker_companies SET reputation = GREATEST(0, LEAST(100, reputation + ?)) WHERE id = ?',
+        'UPDATE trucker_companies SET reputation = GREATEST(0, LEAST(100, CAST(reputation AS SIGNED) + ?)) WHERE id = ?',
         { delta, companyId }
     )
     local row = MySQL.single.await(
@@ -1749,7 +1811,7 @@ function DB_GetAustTruckerStats(citizenId)
     ]], { citizenId })
     if not row then
         MySQL.insert.await([[
-            INSERT INTO aust_trucker_stats (citizenid, level, exp, deliveries)
+            INSERT IGNORE INTO aust_trucker_stats (citizenid, level, exp, deliveries)
             VALUES (?, 1, 0, 0)
         ]], { citizenId })
         return { citizenid = citizenId, level = 1, exp = 0, deliveries = 0 }

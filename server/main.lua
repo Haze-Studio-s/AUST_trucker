@@ -155,6 +155,66 @@ end
 local PolarixLobbies = {}
 local PlayerPolarixLobbies = {}
 
+-- Gera jobId único (evita colisão/sobrescrita de lobby ativo)
+local function NewPolarixJobId()
+    local id
+    local tries = 0
+    repeat
+        id = math.random(100000, 999999)
+        tries = tries + 1
+    until not PolarixLobbies[id] or tries > 50
+    if PolarixLobbies[id] then
+        id = tonumber(('%d%d'):format(os.time() % 100000, math.random(10, 99))) or id
+        while PolarixLobbies[id] do id = id + 1 end
+    end
+    return id
+end
+
+-- Aguarda entidade existir com timeout (padrão ~5s). Retorna true/false.
+local function WaitEntityExists(ent, timeoutMs, step)
+    local t0 = GetGameTimer()
+    local limit = timeoutMs or 5000
+    while (not ent or ent == 0 or not DoesEntityExist(ent)) and (GetGameTimer() - t0 < limit) do
+        Wait(step or 10)
+    end
+    return ent ~= nil and ent ~= 0 and DoesEntityExist(ent)
+end
+
+-- Valida número finito
+local function IsFiniteNumber(n)
+    return type(n) == 'number' and n == n and n ~= math.huge and n ~= -math.huge
+end
+
+-- Resolve o terminal de combustível pelo id (nil se inexistente)
+local function FindFuelTerminal(terminalId)
+    local cfg = Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.fuelTerminals
+    if not cfg or terminalId == nil then return nil end
+    for _, term in ipairs(cfg) do
+        if term.id == terminalId then return term end
+    end
+    return nil
+end
+
+-- Modelos de caminhão permitidos no aluguel/serviço (whitelist server-side)
+local function GetAllowedTruckModels()
+    local set = {}
+    for _, m in ipairs({ 'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'vetirs', 'pounder', 'pounder2', 'biff' }) do
+        set[m] = true
+    end
+    if Config.Truck and type(Config.Truck.model) == 'string' then set[Config.Truck.model:lower()] = true end
+    if Config.TruckRental and Config.TruckRental.trucks then
+        for _, trk in ipairs(Config.TruckRental.trucks) do
+            if type(trk.model) == 'string' then set[trk.model:lower()] = true end
+        end
+    end
+    if Config.LC_Dealership then
+        for k in pairs(Config.LC_Dealership) do
+            if type(k) == 'string' then set[k:lower()] = true end
+        end
+    end
+    return set
+end
+
 local function CleanupLobbyEntities(lobby)
     if not lobby then return end
 
@@ -390,10 +450,20 @@ local function StartTruckDelivery(src, contractData)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
-    contractData = contractData or {}
+    if type(contractData) ~= 'table' then contractData = {} end
+
+    -- SEGURANÇA: o cliente só pode indicar QUAL contrato quer (id), a placa de um veículo próprio
+    -- (validada por posse no DB) e preferências limitadas. Todo o resto vem do servidor/Config.
+    local clientIn = contractData
+    contractData = {
+        jobId = clientIn.jobId, contractId = clientIn.contractId, id = clientIn.id,
+        truckPlate = (type(clientIn.truckPlate) == 'string' and #clientIn.truckPlate <= 12) and clientIn.truckPlate or nil,
+        palletCount = tonumber(clientIn.palletCount),
+        clientNoForklift = (clientIn.withForklift == false),
+    }
 
     if ActiveSpawningPlayers[citizenId] then
-        print(("[AUST_Trucker] Spawn concorrente bloqueado para CitizenId: %s (Lock ativo)"):format(tostring(citizenId)))
+        if Config.Debug then print(("[AUST_Trucker] Spawn concorrente bloqueado para CitizenId: %s (Lock ativo)"):format(tostring(citizenId))) end
         return
     end
     ActiveSpawningPlayers[citizenId] = true
@@ -404,9 +474,11 @@ local function StartTruckDelivery(src, contractData)
         end
     end)
 
-    print(("[AUST_Trucker DEBUG - ETAPA 2] Recebida solicitação de início no Servidor! Src: %s, CitizenId: %s, ContractData: %s"):format(
-        tostring(src), tostring(citizenId), json.encode(contractData)
-    ))
+    if Config.Debug then
+        print(("[AUST_Trucker DEBUG - ETAPA 2] Recebida solicitação de início no Servidor! Src: %s, CitizenId: %s, ContractData: %s"):format(
+            tostring(src), tostring(citizenId), json.encode(contractData)
+        ))
+    end
 
     -- Auto-limpeza de lobby fantasma prévio se as entidades não existirem mais
     if PlayerPolarixLobbies[citizenId] then
@@ -417,8 +489,9 @@ local function StartTruckDelivery(src, contractData)
             (oldLobby.trailer and DoesEntityExist(oldLobby.trailer))
         )
         if not isStillAlive then
-            print(("[AUST_Trucker DEBUG] Limpando lobby anterior fantasma/abandonado para CitizenId: %s"):format(tostring(citizenId)))
-            CleanupLobbyEntities(oldJobId)
+            if Config.Debug then print(("[AUST_Trucker DEBUG] Limpando lobby anterior fantasma/abandonado para CitizenId: %s"):format(tostring(citizenId))) end
+            CleanupLobbyEntities(oldLobby)
+            PolarixLobbies[oldJobId] = nil
             PlayerPolarixLobbies[citizenId] = nil
         else
             ActiveSpawningPlayers[citizenId] = nil
@@ -427,35 +500,39 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
-    -- Se recebeu apenas jobId ou contractId numérico do tablet NUI (JobList / acceptJob)
+    -- Dados do contrato derivados SOMENTE do servidor (rota customizada do admin ou Config.LC_Jobs)
+    local srvForkliftFlag = nil
     if contractData.jobId or contractData.contractId or contractData.id then
         local rawId = contractData.jobId or contractData.contractId or contractData.id
         local numId = tonumber(rawId)
 
         local customRoute = AdminService and AdminService.CustomRoutes and (AdminService.CustomRoutes[rawId] or (numId and AdminService.CustomRoutes[numId]))
         if customRoute then
-            contractData.name = contractData.name or customRoute.name or customRoute.title
-            contractData.trailerModel = contractData.trailerModel or customRoute.trailer_model
-            contractData.truckModel = contractData.truckModel or customRoute.truck_model
-            contractData.cargoType = contractData.cargoType or customRoute.type
-            contractData.cargoName = contractData.cargoName or customRoute.cargo_name
-            contractData.cargoModel = contractData.cargoModel or contractData.cargo_model or customRoute.cargo_model
-            contractData.distance = contractData.distance or customRoute.distance
-            contractData.payment = contractData.payment or customRoute.base_payment
-            contractData.xp = contractData.xp or customRoute.base_xp
-            contractData.pickupCoords = contractData.pickupCoords or customRoute.pickup_coords
-            contractData.deliveryCoords = contractData.deliveryCoords or customRoute.delivery_coords
-            contractData.level_required = contractData.level_required or customRoute.req_skill or customRoute.required_level
+            contractData.name = customRoute.name or customRoute.title
+            contractData.trailerModel = customRoute.trailer_model
+            contractData.truckModel = customRoute.truck_model
+            contractData.cargoType = customRoute.type
+            contractData.cargoName = customRoute.cargo_name
+            contractData.cargoModel = customRoute.cargo_model
+            contractData.distance = customRoute.distance
+            contractData.payment = customRoute.base_payment
+            contractData.xp = customRoute.base_xp
+            contractData.pickupCoords = customRoute.pickup_coords
+            contractData.deliveryCoords = customRoute.delivery_coords
+            contractData.level_required = customRoute.req_skill or customRoute.required_level
             if customRoute.has_forklift ~= nil then
-                contractData.withForklift = (customRoute.has_forklift == 1 or customRoute.has_forklift == true)
+                srvForkliftFlag = (customRoute.has_forklift == 1 or customRoute.has_forklift == true)
             end
         elseif numId and Config.LC_Jobs and Config.LC_Jobs.available_loads and Config.LC_Jobs.available_loads[numId] then
             local load = Config.LC_Jobs.available_loads[numId]
-            contractData.name = contractData.name or load.name
+            contractData.name = load.name
             contractData.palletCount = contractData.palletCount or 4
-            contractData.trailerModel = contractData.trailerModel or load.trailer
+            contractData.trailerModel = load.trailer
         end
     end
+    -- withForklift: valor do servidor; o cliente só pode abrir mão da empilhadeira (sujeito à taxa de descarga)
+    contractData.withForklift = (srvForkliftFlag ~= false) and not contractData.clientNoForklift
+    if type(contractData.level_required) ~= 'number' then contractData.level_required = tonumber(contractData.level_required) end
 
     -- Consulta nível na tabela 0r_trucker
     local truckerRow = MySQL.single.await('SELECT level, xp FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
@@ -540,7 +617,16 @@ local function StartTruckDelivery(src, contractData)
 
     -- 4. Fallback: Caminhão de Serviço Padrão / Alugado
     if not selectedTruckModel then
-        selectedTruckModel = contractData.truckModel or (Config.Truck and Config.Truck.model) or 'hauler'
+        -- SEGURANÇA: modelo só vem do servidor (rota admin) e precisa estar na whitelist de modelos permitidos
+        local allowedTrucks = GetAllowedTruckModels()
+        local wanted = contractData.truckModel
+        if type(wanted) ~= 'string' or not allowedTrucks[wanted:lower()] then
+            wanted = nil
+        end
+        selectedTruckModel = wanted or (Config.Truck and Config.Truck.model) or 'hauler'
+        if type(selectedTruckModel) ~= 'string' or not allowedTrucks[selectedTruckModel:lower()] then
+            selectedTruckModel = 'hauler'
+        end
         selectedPlate = ('RENT%04d'):format(math.random(1000, 9999))
         isOwned = false
     end
@@ -549,7 +635,7 @@ local function StartTruckDelivery(src, contractData)
         selectedPlate = ('TRK%05d'):format(math.random(10000, 99999))
     end
 
-    local jobId = math.random(100000, 999999)
+    local jobId = NewPolarixJobId()
     local bucketId = 0 -- Mundo compartilhado padrão (Bucket 0)
 
     local wh = Config.Polarix.Warehouse
@@ -626,7 +712,7 @@ local function StartTruckDelivery(src, contractData)
     local truck = nil
     local chosenTruckCoord = nil
 
-    print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para caminhão (Modelo: %s, Placa: %s)..."):format(selectedTruckModel, plate))
+    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para caminhão (Modelo: %s, Placa: %s)..."):format(selectedTruckModel, plate)) end
 
     for idx, coord in ipairs(truckSpawns) do
         if IsSpawnPointClear(coord, 4.5) then
@@ -1111,9 +1197,13 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+    -- Máquina de estados: inspeção só é válida antes do carregamento começar
+    if lobby.stage ~= 'STEP_GET_TRUCK' and not (lobby.stage == 'STATUS_LOADING' and (lobby.loadedCount or 0) == 0) then return end
+    if not lobby.truck or not DoesEntityExist(lobby.truck) then return end
 
     -- Validação de proximidade autoritativa do servidor (6.0m máximo)
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pedCoords = GetEntityCoords(ped)
     local truckCoords = GetEntityCoords(lobby.truck)
     if #(pedCoords - truckCoords) > 6.0 then
@@ -1179,9 +1269,61 @@ end)
 local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    lobby.stage = 'STATUS_LOADING'
+    if lobby.cargoType ~= 'dry' then return end
 
-    lobby.loadedCount = lobby.loadedCount + 1
+    local required = lobby.requiredCount or 0
+
+    -- Recuperação de palete perdido em trânsito: apenas devolve a perda (nunca soma além do total)
+    if lobby.stage == 'STATUS_IN_TRANSIT' then
+        if (lobby.lostPallets or 0) > 0 then
+            lobby.lostPallets = lobby.lostPallets - 1
+        end
+        return
+    end
+
+    -- Máquina de estados: palete só é aceito durante o carregamento e até o total exigido
+    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if (lobby.loadedCount or 0) >= required then return end
+
+    -- Valida distância do jogador até a carreta (anti-spam remoto)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
+    if #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer)) > 40.0 then return end
+
+    -- Rate limit leve por lobby (um palete a cada 1s no mínimo)
+    local nowMs = GetGameTimer()
+    if lobby.lastPalletAt and (nowMs - lobby.lastPalletAt) < 1000 then return end
+
+    -- Slot: inteiro dentro do total e ainda não utilizado
+    slotIndex = tonumber(slotIndex)
+    if slotIndex and (slotIndex ~= slotIndex or slotIndex < 1 or slotIndex > required or slotIndex % 1 ~= 0) then return end
+    lobby.usedSlots = lobby.usedSlots or {}
+    if slotIndex and lobby.usedSlots[slotIndex] then return end
+
+    -- netId do palete: precisa ser um dos paletes gerados pelo servidor para este lobby
+    if palletNetId ~= nil then
+        local found = false
+        for _, nid in ipairs(lobby.palletNetIds or {}) do
+            if nid == palletNetId then found = true break end
+        end
+        if not found then return end
+    end
+
+    -- Offset/heading vêm do cliente: saneia e limita
+    local function clampN(v, lim, def)
+        v = tonumber(v)
+        if not IsFiniteNumber(v) then return def end
+        return math.max(-lim, math.min(lim, v))
+    end
+    if type(slotOffset) ~= 'table' then slotOffset = nil end
+    if slotOffset then
+        slotOffset = { x = clampN(slotOffset.x, 6.0, 0.0), y = clampN(slotOffset.y, 12.0, 0.0), z = clampN(slotOffset.z, 6.0, 0.35) }
+    end
+    slotHeading = clampN(slotHeading, 360.0, 0.0)
+
+    lobby.lastPalletAt = nowMs
+    if slotIndex then lobby.usedSlots[slotIndex] = true end
+    lobby.loadedCount = (lobby.loadedCount or 0) + 1
     lobby.current_object = slotIndex
 
     if lobby.pallets then
@@ -1250,29 +1392,47 @@ RegisterNetEvent('aurp_trucker:server:pickupHose', function(jobId, terminalId)
     if not lobby or lobby.src ~= src then return end
     if lobby.stage ~= 'STATUS_LOADING' then return end
 
+    if lobby.cargoType ~= 'liquid' then return end
+    if lobby.hoseConnected then return end
+
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pCoords = GetEntityCoords(ped)
 
-    -- Validação de proximidade autoritativa do terminal
-    local terminal = nil
-    if Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.fuelTerminals then
-        for _, term in ipairs(Config.CargoTypes.liquid.fuelTerminals) do
-            if term.id == terminalId then
-                terminal = term
-                break
-            end
-        end
+    -- Validação de proximidade autoritativa do terminal (terminal inexistente = rejeita)
+    local terminal = FindFuelTerminal(terminalId)
+    if not terminal or not terminal.coords then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Terminal', 'Terminal de combustível inválido.', 'error')
+        return
     end
-
-    if terminal and #(pCoords - terminal.coords) > 15.0 then
+    if #(pCoords - terminal.coords) > 15.0 then
         TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Você está muito afastado da bomba para retirar a mangueira!', 'error')
         return
     end
 
+    -- Reentrância: um prop de mangueira por lobby (evita criar um por chamada)
+    if lobby.hoseCreating then return end
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
+    end
+    lobby.hoseProp = nil
+    lobby.hoseCreating = true
+
     -- Criação OneSync autoritativa do prop de mangueira no routing bucket do jogador
     local hoseModel = joaat('prop_cs_fuel_nozle')
     local hoseObj = CreateObject(hoseModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
-    while not DoesEntityExist(hoseObj) do Wait(10) end
+    if not WaitEntityExists(hoseObj, 5000, 10) then
+        lobby.hoseCreating = nil
+        TriggerClientEvent('aurp_trucker:notify', src, 'Mangueira', 'Falha ao criar a mangueira. Tente novamente.', 'error')
+        return
+    end
+    lobby.hoseCreating = nil
+
+    -- O lobby pode ter sido encerrado durante a espera
+    if PolarixLobbies[jobId] ~= lobby then
+        DeleteEntity(hoseObj)
+        return
+    end
 
     lobby.hoseProp = hoseObj
     lobby.hoseConnected = false
@@ -1288,7 +1448,12 @@ RegisterNetEvent('aurp_trucker:server:connectHose', function(jobId)
     if not lobby or lobby.src ~= src then return end
     if lobby.stage ~= 'STATUS_LOADING' then return end
 
+    if lobby.cargoType ~= 'liquid' then return end
+    if not lobby.hoseProp or not DoesEntityExist(lobby.hoseProp) then return end
+    if not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
+
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pCoords = GetEntityCoords(ped)
     local trailerCoords = GetEntityCoords(lobby.trailer)
 
@@ -1324,6 +1489,9 @@ RegisterNetEvent('aurp_trucker:server:hoseLeak', function(jobId)
 
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+    if lobby.cargoType ~= 'liquid' or lobby.stage ~= 'STATUS_LOADING' then return end
+    -- Só existe vazamento se havia mangueira em uso (evita multa/spam sem mangueira)
+    if not lobby.hoseProp then return end
 
     if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
         DeleteEntity(lobby.hoseProp)
@@ -1332,11 +1500,7 @@ RegisterNetEvent('aurp_trucker:server:hoseLeak', function(jobId)
     lobby.hoseConnected = false
 
     local penalty = (Config.CargoTypes and Config.CargoTypes.liquid and Config.CargoTypes.liquid.leakPenalty) or 1500
-    if exports.qbx_core then
-        exports.qbx_core:RemoveMoney(src, 'bank', penalty, 'trucker-hose-leak')
-    else
-        Framework.RemoveMoney(Player, 'bank', penalty, 'trucker-hose-leak')
-    end
+    Framework.RemoveMoney(Player, 'bank', penalty, 'trucker-hose-leak')
 
     TriggerClientEvent('aurp_trucker:client:playLeakPtfx', src, jobId, penalty)
 end)
@@ -1346,8 +1510,12 @@ RegisterNetEvent('aurp_trucker:server:disconnectHose', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+    -- Máquina de estados: só finaliza o carregamento líquido com mangueira conectada
+    if lobby.cargoType ~= 'liquid' or lobby.stage ~= 'STATUS_LOADING' or not lobby.hoseConnected then return end
+    if not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
 
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pCoords = GetEntityCoords(ped)
     local trailerCoords = GetEntityCoords(lobby.trailer)
 
@@ -1375,6 +1543,21 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+
+    -- Máquina de estados: cintas só após todos os paletes (dry) ou, nos demais tipos de carga
+    -- carregados sem paletes (ADR/cegonha), durante o carregamento
+    if lobby.cargoType == 'dry' then
+        if lobby.stage ~= 'STEP_STRAPPING' or (lobby.loadedCount or 0) < (lobby.requiredCount or 1) then return end
+    elseif lobby.cargoType == 'liquid' or lobby.cargoType == 'heavy' then
+        return -- têm eventos próprios (disconnectHose / heavyContainerLoaded)
+    elseif lobby.stage ~= 'STATUS_LOADING' then
+        return
+    end
+
+    -- Proximidade da carreta
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
+    if #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer)) > 60.0 then return end
 
     -- Prevenção de Deadlock: assegura contagem e transição de estado garantida
     lobby.loadedCount = math.max(lobby.loadedCount or 0, lobby.requiredCount or 1)
@@ -1413,6 +1596,7 @@ RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
     if not lobby or lobby.src ~= src then return end
     if lobby.stage ~= 'STATUS_IN_TRANSIT' then return end
 
+    if (lobby.lostPallets or 0) >= (lobby.requiredCount or 0) then return end
     lobby.lostPallets = (lobby.lostPallets or 0) + 1
     print(("[AUST_Trucker] Palete perdido em rota para o frete %s (Player: %s)! Total de perdas: %d"):format(
         tostring(jobId), tostring(src), lobby.lostPallets
@@ -1425,6 +1609,10 @@ RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
     if lobby.cargoType ~= 'heavy' then return end
+    if lobby.stage ~= 'STATUS_LOADING' then return end
+    local hPed = GetPlayerPed(src)
+    if not hPed or hPed == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
+    if #(GetEntityCoords(hPed) - GetEntityCoords(lobby.trailer)) > 60.0 then return end
 
     lobby.stage = 'STATUS_IN_TRANSIT'
     lobby.startedTransitAt = os.time()
@@ -1464,6 +1652,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
 
     -- BLINDAGEM 1: Validação autoritativa de distância até o destino
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pedCoords = GetEntityCoords(ped)
     local dest = lobby.deliveryCoords
     if not dest then return end
@@ -1493,6 +1682,10 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         end
     end
 
+    -- CLAIM ATÔMICO: marca o lobby como "em conclusão" de forma síncrona, ANTES de qualquer await
+    -- (RemoveJobKeys/MySQL cedem a thread). Chamadas concorrentes caem no check de stage acima.
+    lobby.stage = 'STATUS_COMPLETING'
+
     -- Pagamento com cálculo de penalidade proporcional por paletes perdidos ou integridade ADR
     local basePayment = lobby.payment or 5000
     local baseXP = lobby.xp or 200
@@ -1514,9 +1707,11 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         local feePercent = (Config.Polarix and Config.Polarix.CargoCapacity and Config.Polarix.CargoCapacity.UnloadingFeePercent) or 15
         unloadingFee = math.floor(payment * (feePercent / 100))
         payment = math.max(100, payment - unloadingFee)
-        print(("[AUST_Trucker] Taxa de descarregamento de %d%% (-$%d) aplicada ao frete sem empilhadeira do jogador %s."):format(
-            feePercent, unloadingFee, tostring(src)
-        ))
+        if Config.Debug then
+            print(("[AUST_Trucker] Taxa de descarregamento de %d%% (-$%d) aplicada ao frete sem empilhadeira do jogador %s."):format(
+                feePercent, unloadingFee, tostring(src)
+            ))
+        end
     end
 
     -- Remoção autoritativa de chaves secundárias (empilhadeira, reach stacker, carros cegonha)
@@ -1535,10 +1730,11 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         -- FLUXO 1: CAMINHÃO PRÓPRIO (OWNED TRUCK)
         -- Pagamento e XP imediatos. Jogador liberado do frete no ato da entrega.
         -- =======================================================================
-        if exports.qbx_core then
-            exports.qbx_core:AddMoney(src, 'bank', payment, 'polarix-trucker-job')
-        else
-            Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
+        if not Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job') then
+            -- Pagamento falhou: devolve o lobby ao estado de trânsito para nova tentativa
+            if PolarixLobbies[jobId] == lobby then lobby.stage = 'STATUS_IN_TRANSIT' end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pagamento', 'Não foi possível creditar o pagamento. Tente novamente.', 'error')
+            return
         end
 
         local dist = lobby.distance or 3.5
@@ -1670,6 +1866,7 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
 
     -- Validação de proximidade da base de retorno
     local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return end
     local pCoords = GetEntityCoords(ped)
     local returnCoords = (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.TruckSpawnCoords)
         or vector4(1245.79, -3155.76, 4.6, 90.0)
@@ -1679,6 +1876,9 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         TriggerClientEvent('aurp_trucker:notify', src, 'Distância', 'Você precisa estar no pátio da empresa para devolver o caminhão!', 'error')
         return
     end
+
+    -- CLAIM ATÔMICO antes de qualquer await: impede pagamento duplicado por chamadas concorrentes
+    lobby.stage = 'STATUS_RETURN_COMPLETING'
 
     local payment = lobby.retainedPayment or 0
     local xp = lobby.retainedXP or 0
@@ -1710,10 +1910,10 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
 
     local finalPayment = math.max(100, payment - repairCost)
 
-    if exports.qbx_core then
-        exports.qbx_core:AddMoney(src, 'bank', finalPayment, 'polarix-quickjob-returned')
-    else
-        Framework.AddMoney(Player, 'bank', finalPayment, 'polarix-quickjob-returned')
+    if not Framework.AddMoney(Player, 'bank', finalPayment, 'polarix-quickjob-returned') then
+        if PolarixLobbies[jobId] == lobby then lobby.stage = 'STATUS_RETURNING_TO_BASE' end
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pagamento', 'Não foi possível creditar o pagamento. Tente novamente.', 'error')
+        return
     end
 
     local dist = lobby.distance or 3.5
@@ -1780,6 +1980,8 @@ RegisterNetEvent('aurp_trucker:server:cancelDelivery', function(jobId, reason)
 
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.citizenId ~= citizenId then return end
+    if lobby.stage == 'STATUS_COMPLETING' or lobby.stage == 'STATUS_RETURN_COMPLETING' then return end
+    lobby.stage = 'STATUS_CANCELLED'
 
     RemoveJobKeys(src, lobby)
     CleanupLobbyEntities(lobby)
@@ -1795,7 +1997,7 @@ RegisterNetEvent('aurp_trucker:server:cancelDelivery', function(jobId, reason)
     PlayerPolarixLobbies[citizenId] = nil
 
     TriggerClientEvent('aust_trucker:client:ClearObjective', src)
-    TriggerClientEvent('aurp_trucker:notify', src, 'Entrega Cancelada', reason or 'O contrato foi cancelado.', 'warning')
+    TriggerClientEvent('aurp_trucker:notify', src, 'Entrega Cancelada', (type(reason) == 'string' and reason:sub(1, 120)) or 'O contrato foi cancelado.', 'warning')
 end)
 
 -- Reposição de Emergência / Fallback
@@ -1803,6 +2005,11 @@ RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
+    -- Só faz sentido em carga seca durante o pátio; rate limit de 10s por lobby
+    if lobby.cargoType ~= 'dry' or (lobby.stage ~= 'STATUS_LOADING' and lobby.stage ~= 'STEP_GET_TRUCK' and lobby.stage ~= 'STEP_STRAPPING') then return end
+    local nowMs = GetGameTimer()
+    if lobby.lastRespawnAt and (nowMs - lobby.lastRespawnAt) < 10000 then return end
+    lobby.lastRespawnAt = nowMs
 
     local wh = Config.Polarix.Warehouse
     local forkliftSpawns = wh.ForkliftSpawns or { wh.ForkliftBayCoords }

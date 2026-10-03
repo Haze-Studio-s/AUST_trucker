@@ -306,7 +306,7 @@ const exampleConfig = {
     title: 'Custom Modal Title',
     body: 'Custom Modal Body Text',
     bodyHtml: '<p>Custom Modal Body Text that accept HTML</p>',
-    bodyImage: "https://shuffle.dev/randomizer/saas/bootstrap-pstls/1.0.0/static_elements/footer/10_awz.jpg",
+    bodyImage: "",
     footerText: "Custom Footer Text",
     buttons: [
         { text: Utils.translate('confirmation_modal_cancel_button'), class: 'btn btn-outline-primary', dismiss: true },

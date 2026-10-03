@@ -5,31 +5,35 @@ on:
   push:
     branches: [ "main", "master" ]
 
+# Princípio do menor privilégio para o GITHUB_TOKEN
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Exige o environment "production" (permite aprovação manual e secrets por ambiente)
+    environment: production
+    env:
+      # Pasta de resources do servidor FiveM (defina a variável de repositório FIVEM_BASE_PATH para sobrescrever)
+      FIVEM_BASE_PATH: ${{ vars.FIVEM_BASE_PATH || '/home/ubuntu/fivem/server/txData/Qbox_BA141A.base' }}
 
     steps:
     - name: Checkout do repositório
       uses: actions/checkout@v4
 
     - name: Enviar ficheiros para a VPS
-      uses: easingthemes/ssh-deploy@main
+      # TODO: verifique a tag v5.1.0 e fixe num SHA de commit completo (ex.: easingthemes/ssh-deploy@<sha> # v5.1.0)
+      uses: easingthemes/ssh-deploy@v5.1.0
       with:
         SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_KEY }}
         REMOTE_HOST: ${{ secrets.VPS_HOST }}
         REMOTE_USER: ${{ secrets.VPS_USER }}
-        TARGET: /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}
-        EXCLUDE: "/.git/, /.github/"
+        TARGET: ${{ env.FIVEM_BASE_PATH }}/resources/[mods]/${{ github.event.repository.name }}
+        EXCLUDE: "/.git/, /.github/, /.superpowers/, /html/package.json, /html/package-lock.json, /html/vite.config.ts, /html/tailwind.config.ts, /html/src/, /html/node_modules/, /scratch_*.js"
         ARGS: "-rltgoDzvO --delete"
         SCRIPT_AFTER: |
-          sed -i '/webpack_bundle/d' /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}/fxmanifest.lua 2>/dev/null || true
-          find /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources -name "fxmanifest.lua" -exec sed -i '/webpack_bundle/d' {} + 2>/dev/null || true
-          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/resources/[mods]/${{ github.event.repository.name }}/stream/flatbed3
-          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/cache/files/${{ github.event.repository.name }}
-          rm -rf /home/ubuntu/fivem/server/txData/Qbox_BA141A.base/cache/files/trucks
-
-
-
-
-
+          RES_DIR="${{ env.FIVEM_BASE_PATH }}/resources/[mods]/${{ github.event.repository.name }}"
+          sed -i '/webpack_bundle/d' "$RES_DIR/fxmanifest.lua" 2>/dev/null || true
+          rm -rf "$RES_DIR/stream/flatbed3"
+          rm -rf "${{ env.FIVEM_BASE_PATH }}/cache/files/${{ github.event.repository.name }}"

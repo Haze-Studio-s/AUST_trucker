@@ -249,6 +249,40 @@ function JobService.GetAvailable(citizenId)
     return result
 end
 
+-- Strike/trava helpers -----------------------------------------------------
+
+-- Deriva o truck_id da frota própria a partir do servidor (nunca do payload do client).
+-- Usa a placa do job (truck_plate) ou a placa rastreada em TruckSimulationService;
+-- fallback: único caminhão do jogador. Retorna nil se não for possível determinar.
+local function NormPlate(p)
+    if type(p) ~= 'string' then return nil end
+    return (p:gsub('%s+', ''):upper())
+end
+
+local function ResolveFleetTruckId(src, citizenId, activeJob)
+    local rows = MySQL.query.await(
+        'SELECT truck_id, properties FROM trucker_trucks WHERE user_id = ?', { citizenId }
+    ) or {}
+    if #rows == 0 then return nil end
+
+    local plates = {}
+    local jp = NormPlate(activeJob and activeJob.truck_plate)
+    if jp then plates[jp] = true end
+    local st = TruckSimulationService and TruckSimulationService.GetState and TruckSimulationService.GetState(src)
+    local sp = NormPlate(st and st.currentPlate)
+    if sp then plates[sp] = true end
+
+    if next(plates) then
+        for _, row in ipairs(rows) do
+            local okJ, props = pcall(json.decode, row.properties or '{}')
+            local rp = okJ and type(props) == 'table' and NormPlate(props.plate) or nil
+            if rp and plates[rp] then return row.truck_id end
+        end
+    end
+    if #rows == 1 then return rows[1].truck_id end
+    return nil
+end
+
 -- Aceita job para um jogador
 function JobService.Accept(jobId, citizenId, companyId)
     -- Gate ADR: verifica se o job exige certificação
@@ -259,7 +293,12 @@ function JobService.Accept(jobId, citizenId, companyId)
             return false
         end
     end
-    DB_AcceptJob(jobId, citizenId, companyId)
+    -- Claim atômico: só aceita se ainda disponível E não expirado
+    local affected = MySQL.update.await(
+        "UPDATE trucker_jobs SET status = 'active', assigned_citizenid = ?, company_id = ?, accepted_at = NOW() WHERE id = ? AND status = 'available' AND expires_at > NOW()",
+        { citizenId, companyId, jobId }
+    )
+    if not affected or affected == 0 then return false end
     return true
 end
 
@@ -333,8 +372,8 @@ function JobService.Complete(src, payload)
     local citizenId = Framework.GetCitizenId(Player)
     local activeJob = DB_GetActiveJobByPlayer(citizenId)
     if not activeJob then
-        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de entrega sem job ativo'):format(tostring(citizenId), tostring(src)))
-        DropPlayer(src, '[AUST_Trucker Anti-Cheat] Violação de segurança: finalização sem contrato ativo.')
+        -- Pode ser duplo clique/lag: recusa e só expulsa após strikes repetidos
+        AntiCheatService.AddStrike(src, citizenId, 'tentativa de entrega sem job ativo')
         return false
     end
 
@@ -352,12 +391,26 @@ function JobService.Complete(src, payload)
         return false
     end
 
+    -- CLAIM atômico do job ANTES de qualquer pagamento/efeito: só uma chamada vence a corrida.
+    -- Falha secundária depois disso nunca deixa o job 'active' (evita pagamentos repetidos).
+    local function ClaimJob()
+        local claimed = MySQL.update.await(
+            "UPDATE trucker_jobs SET status = 'completed', completed_at = NOW() WHERE id = ? AND status = 'active' AND assigned_citizenid = ?",
+            { activeJob.id, citizenId }
+        )
+        return claimed and claimed > 0
+    end
+
     -- Detectar se é job de convoy — delegar pagamento ao ConvoyService
+    -- (o claim acima garante que MemberComplete roda no máximo uma vez por job)
     if activeJob.convoy_id and ConvoyService then
-        DB_CompleteJob(activeJob.id)
-        DB_AddPlayerStats(citizenId, 0, activeJob.distance)
-        ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, 1.0)
-        ConvoyService.MemberComplete(src, activeJob.convoy_id, citizenId, activeJob)
+        if not ClaimJob() then return false end
+        local okC, errC = pcall(function()
+            DB_AddPlayerStats(citizenId, 0, activeJob.distance)
+            ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, 1.0)
+            ConvoyService.MemberComplete(src, activeJob.convoy_id, citizenId, activeJob)
+        end)
+        if not okC then print(('[aurp_trucker] Complete(convoy) erro pós-claim: %s'):format(tostring(errC))) end
         return true, 0
     end
 
@@ -372,6 +425,7 @@ function JobService.Complete(src, payload)
 
     -- Fase 3B: Delegar para IllegalService se job ilegal
     if activeJob.illegal_type and IllegalService then
+        if not ClaimJob() then return false end
         return IllegalService.OnComplete(src, activeJob, payload, timeMult)
     end
 
@@ -401,39 +455,64 @@ function JobService.Complete(src, payload)
     local payment = math.floor(activeJob.base_payment * skillBonus.paymentMult * timeMult * companyMult * integrityMult)
 
     -- Bônus de estacionamento manual do caminhoneiro (+45 XP, +5% pagamento)
-    if payload and payload.parkedManually then
+    local parkedBonus = payload and payload.parkedManually
+    if parkedBonus then
         payment = math.floor(payment * 1.05)
-        ProgressionService.GrantXP(src, citizenId, 450, 1.0, 0)
-        TriggerClientEvent('aurp_trucker:notify', src, 'Bônus de manobra: Estacionamento perfeito manual (+5% $ e +45 XP)!', 'success')
     end
+
+    -- Reivindicar o job (atômico) imediatamente antes de pagar; 0 linhas = outra chamada já pagou
+    if not ClaimJob() then return false end
 
     -- Pagar jogador
     Framework.AddMoney(Player, Config.General.payment.currency, payment, 'aurp-trucker-job')
 
-    -- Desgaste de frota própria (se aplicável)
-    if TruckFleetService and payload and payload.truckId then
-        TruckFleetService.ApplyTripWear(citizenId, payload.truckId, activeJob.distance)
+    -- Efeitos secundários isolados: falha aqui não pode desfazer/duplicar o pagamento
+    local function Safe(label, fn)
+        local okS, errS = pcall(fn)
+        if not okS then print(('[aurp_trucker] Complete erro em %s: %s'):format(label, tostring(errS))) end
     end
 
-    -- Atualizar DB de stats e conceder XP
-    DB_CompleteJob(activeJob.id)
-    if rawIntegrity < 30 then
-        DB_RecordInfraction(citizenId, activeJob.id, 'cargo_damage',
-            ('Carga entregue com %d%% de integridade'):format(rawIntegrity),
-            'aurp_trucker:auto')
+    if parkedBonus then
+        Safe('parkedBonus', function()
+            ProgressionService.GrantXP(src, citizenId, 450, 1.0, 0)
+            TriggerClientEvent('aurp_trucker:notify', src, 'Bônus de manobra: Estacionamento perfeito manual (+5% $ e +45 XP)!', 'success')
+        end)
     end
-    DB_AddPlayerStats(citizenId, payment, activeJob.distance)
-    ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, timeMult, activeJob.distance)
+
+    -- Desgaste de frota própria: truck derivado server-side (ignora payload.truckId)
+    if TruckFleetService then
+        Safe('ApplyTripWear', function()
+            local fleetTruckId = ResolveFleetTruckId(src, citizenId, activeJob)
+            if fleetTruckId then
+                TruckFleetService.ApplyTripWear(citizenId, fleetTruckId, tonumber(activeJob.distance) or 0)
+            end
+        end)
+    end
+
+    -- Atualizar DB de stats e conceder XP (job já marcado 'completed' pelo claim)
+    if rawIntegrity < 30 then
+        Safe('RecordInfraction', function()
+            DB_RecordInfraction(citizenId, activeJob.id, 'cargo_damage',
+                ('Carga entregue com %d%% de integridade'):format(rawIntegrity),
+                'aurp_trucker:auto')
+        end)
+    end
+    Safe('AddPlayerStats', function() DB_AddPlayerStats(citizenId, payment, activeJob.distance) end)
+    Safe('GrantXP', function()
+        ProgressionService.GrantXP(src, citizenId, activeJob.base_payment, timeMult, activeJob.distance)
+    end)
 
     -- Evento externo (vp-sala e outros recursos)
-    TriggerEvent('aurp_trucker:jobCompleted', citizenId,
-        company and company.id or nil,
-        { jobId = activeJob.id, cargo = activeJob.cargo_item },
-        payment)
+    Safe('jobCompleted', function()
+        TriggerEvent('aurp_trucker:jobCompleted', citizenId,
+            company and company.id or nil,
+            { jobId = activeJob.id, cargo = activeJob.cargo_item },
+            payment)
+    end)
 
     -- XP de empresa
     if company then
-        CompanyService.AddXP(company.id, Config.CompanyXpPerDelivery)
+        Safe('CompanyXP', function() CompanyService.AddXP(company.id, Config.CompanyXpPerDelivery) end)
     end
 
     -- Integração Logística com vp_gasstations (Abastecimento físico de combustível nos postos)
@@ -643,11 +722,37 @@ function JobService.CompleteTheft(src, cargoEntry, payload)
 
     local citizenId = Framework.GetCitizenId(Player)
 
-    -- Calcular multiplicador de tempo (mesmo critério de JobService.Complete)
-    -- v15: elapsed server-side (padrão #8) — usa theftStartedAt como referência de início
-    local elapsed = (cargoEntry.theftStartedAt and cargoEntry.theftStartedAt > 0)
-                    and math.max(0, os.time() - cargoEntry.theftStartedAt)
-                    or  (tonumber(payload.deliveryTime) or 9999)
+    -- Falha na validação: devolve a carga ao mapa (ClaimDelivery já removeu) para permitir nova tentativa
+    local function RestoreCargo()
+        local plate = payload and payload.plate
+        if type(plate) == 'string' and VP_Trucker.CargoByPlate and not VP_Trucker.CargoByPlate[plate] then
+            VP_Trucker.CargoByPlate[plate] = cargoEntry
+        end
+    end
+
+    -- Tempo SEMPRE server-side (stolenAt/theftStartedAt); nunca payload.deliveryTime. Fail-closed se ausente.
+    local startedAt = tonumber(cargoEntry.stolenAt) or tonumber(cargoEntry.theftStartedAt)
+    if not startedAt or startedAt <= 0 then
+        RestoreCargo()
+        return nil
+    end
+    local elapsed = math.max(0, os.time() - startedAt)
+
+    -- Destino vem do job no DB (nunca do client); validação de proximidade/bucket via AntiCheat
+    local jobRow = cargoEntry.jobId and DB_GetJobById(cargoEntry.jobId) or nil
+    local destId = cargoEntry.destId or (jobRow and jobRow.dest_id)
+    if not destId then
+        RestoreCargo()
+        return nil
+    end
+    local acOk, acReason = AntiCheatService.ValidateDelivery(src, citizenId,
+        { dest_id = destId, distance = 0 }, elapsed)
+    if not acOk then
+        RestoreCargo()
+        TriggerClientEvent('aurp_trucker:notify', src, acReason or 'Entrega inválida.', 'error')
+        return nil
+    end
+
     local bonus    = Config.JobGeneration.timeBonus
     local timeMult = bonus.slow.multiplier
     if elapsed <= bonus.fast.time then

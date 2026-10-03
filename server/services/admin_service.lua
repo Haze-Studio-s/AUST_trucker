@@ -23,14 +23,86 @@ AdminService.Economy = {
 }
 
 -- ============================================================
+-- VALIDAÇÃO / SANITIZAÇÃO DE ENTRADAS ADMIN
+-- ============================================================
+
+local function IsFiniteNumber(n)
+    return type(n) == 'number' and n == n and n ~= math.huge and n ~= -math.huge
+end
+
+-- Número finito dentro de [min,max]; fora do intervalo é limitado, inválido vira default
+local function ClampNum(v, min, max, default)
+    local n = tonumber(v)
+    if not IsFiniteNumber(n) then return default end
+    if n < min then return min end
+    if n > max then return max end
+    return n
+end
+
+-- String aparada e limitada ao tamanho da coluna; inválida vira default
+local function CleanStr(v, maxLen, default)
+    if type(v) ~= 'string' and type(v) ~= 'number' then return default end
+    local str = tostring(v):gsub('^%s*(.-)%s*$', '%1')
+    if str == '' then return default end
+    if #str > maxLen then str = str:sub(1, maxLen) end
+    return str
+end
+
+-- Identificador seguro (letras, números, _ e -)
+local function CleanId(v, maxLen)
+    local str = CleanStr(v, maxLen, nil)
+    if not str or str:find('[^%w_%-]') then return nil end
+    return str
+end
+
+local function CleanCoords(c)
+    if type(c) ~= 'table' then return {} end
+    local x, y, z = tonumber(c.x), tonumber(c.y), tonumber(c.z)
+    if not (IsFiniteNumber(x) and IsFiniteNumber(y) and IsFiniteNumber(z)) then return {} end
+    if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 or z < -500.0 or z > 2500.0 then return {} end
+    local out = { x = x, y = y, z = z }
+    local w = tonumber(c.w or c.heading)
+    if IsFiniteNumber(w) then out.w = w end
+    return out
+end
+
+local ROUTE_TYPES  = { quick = true, freight = true, adr = true, heavy = true, carrier = true }
+local SPAWN_TYPES  = { truck = true, trailer = true, forklift = true, handler = true, loading_bay = true, delivery = true }
+local PROP_CATS    = { dry = true, fragile = true, valuable = true, adr = true, heavy = true }
+
+-- Chaves de economia permitidas e seus intervalos [min, max]
+local ECONOMY_LIMITS = {
+    km_multiplier       = { 0.1, 10.0 },
+    xp_multiplier       = { 0.1, 10.0 },
+    adr_multiplier      = { 0.1, 10.0 },
+    fragile_bonus       = { 0.1, 10.0 },
+    valuable_bonus      = { 0.1, 10.0 },
+    adr_bonus_pct       = { 0.0, 500.0 },
+    fragile_bonus_pct   = { 0.0, 500.0 },
+    valuable_bonus_pct  = { 0.0, 500.0 },
+    base_payment_per_km = { 0.0, 1000.0 },
+    base_xp_per_km      = { 0.0, 1000.0 },
+    cargo_loss_penalty  = { 0.0, 100000.0 },
+}
+
+local MAX_BASE_PAYMENT = 500000
+local MAX_BASE_XP      = 50000
+
+local function AdminLog(src, action, detail)
+    print(('[AUST_Trucker Admin] src=%s action=%s %s'):format(tostring(src), tostring(action), detail and tostring(detail) or ''))
+end
+
+-- ============================================================
 -- VERIFICAÇÃO DE PERMISSÕES MULTI-FRAMEWORK
 -- ============================================================
 
 function AdminService.IsPlayerAdmin(src)
-    if not src or src == 0 then return true end
+    -- Apenas o console do servidor (src == 0) é implicitamente admin; nil/inválido nunca
+    if src == 0 then return true end
+    if type(src) ~= 'number' then return false end
 
-    -- 1. ACE Permissions (Nativa FiveM)
-    if IsPlayerAceAllowed(src, 'command.truckeradmin') or IsPlayerAceAllowed(src, 'command') or IsPlayerAceAllowed(src, 'admin') then
+    -- 1. ACE Permissions (Nativa FiveM) — exige a ACE dedicada (ACEs genéricas 'command'/'admin' não bastam)
+    if IsPlayerAceAllowed(src, 'command.truckeradmin') then
         return true
     end
 
@@ -222,7 +294,10 @@ function AdminService.LoadAll()
         -- 6. Carrega Economia
         local eco = MySQL.query.await('SELECT * FROM aust_trucker_economy_settings') or {}
         for _, e in ipairs(eco) do
-            AdminService.Economy[e.key_name] = tonumber(e.numeric_value)
+            local lim = ECONOMY_LIMITS[e.key_name]
+            if lim then
+                AdminService.Economy[e.key_name] = ClampNum(e.numeric_value, lim[1], lim[2], AdminService.Economy[e.key_name])
+            end
         end
 
         local totalTrailers = 0
@@ -279,6 +354,18 @@ function AdminService.ReloadTrailerOffsets()
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
     if Config and Config.TrailerSlots then
+        -- Reconstrói: restaura o estado estático original das chaves já mescladas antes (remove offsets apagados)
+        AdminService._slotBase = AdminService._slotBase or {}
+        for k, base in pairs(AdminService._slotBase) do
+            if base == false then
+                Config.TrailerSlots[k] = nil
+            else
+                local restored = { pallets = {}, forklift = base.forklift }
+                for idx, v in pairs(base.pallets or {}) do restored.pallets[idx] = v end
+                Config.TrailerSlots[k] = restored
+            end
+        end
+
         for model, data in pairs(offsetMap) do
             local h = joaat(model)
             local u = h & 0xFFFFFFFF
@@ -286,6 +373,17 @@ function AdminService.ReloadTrailerOffsets()
 
             local keys = { model, h, u, s, tostring(h), tostring(u), tostring(s) }
             for _, k in ipairs(keys) do
+                -- Guarda o estado estático original (uma única vez por chave) para permitir rebuild
+                if AdminService._slotBase[k] == nil then
+                    local orig = Config.TrailerSlots[k]
+                    if orig then
+                        local copy = { pallets = {}, forklift = orig.forklift }
+                        for idx, v in pairs(orig.pallets or {}) do copy.pallets[idx] = v end
+                        AdminService._slotBase[k] = copy
+                    else
+                        AdminService._slotBase[k] = false
+                    end
+                end
                 if not Config.TrailerSlots[k] then
                     Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
                 end
@@ -393,10 +491,6 @@ end)
 -- ============================================================
 
 -- 0. TELEPORTE (autorizado e executado no servidor)
-local function IsFiniteNumber(n)
-    return type(n) == 'number' and n == n and n ~= math.huge and n ~= -math.huge
-end
-
 RegisterNetEvent('aurp_trucker:server:adminTeleport', function(coords)
     local src = source
     -- source de evento de rede é sempre > 0; recusa qualquer outra origem
@@ -425,10 +519,30 @@ end)
 -- 1. ROTAS E CONTRATOS
 RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not routeData then return end
+    if not AdminService.IsPlayerAdmin(src) or type(routeData) ~= 'table' then return end
 
-    local routeId = routeData.id or ('route_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
-    routeData.id = routeId
+    local routeId = CleanId(routeData.id, 50) or ('route_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local rType = CleanStr(routeData.type, 20, 'quick')
+    if not ROUTE_TYPES[rType] then rType = 'quick' end
+
+    -- Somente campos sanitizados (nunca a tabela crua do cliente) vão para o banco e para a memória
+    local clean = {
+        id              = routeId,
+        name            = CleanStr(routeData.name, 100, 'Nova Rota Customizada'),
+        type            = rType,
+        cargo_model     = CleanStr(routeData.cargo_model, 100, 'hei_prop_carrier_cargo_04b'),
+        cargo_name      = CleanStr(routeData.cargo_name, 100, 'Paletes de Carga'),
+        truck_model     = CleanStr(routeData.truck_model, 50, 'hauler'),
+        trailer_model   = CleanStr(routeData.trailer_model, 50, 'trailers2'),
+        base_payment    = math.floor(ClampNum(routeData.base_payment, 0, MAX_BASE_PAYMENT, 5000)),
+        base_xp         = math.floor(ClampNum(routeData.base_xp, 0, MAX_BASE_XP, 200)),
+        req_skill       = math.floor(ClampNum(routeData.req_skill, 0, 100, 0)),
+        fragile         = routeData.fragile and 1 or 0,
+        valuable        = routeData.valuable and 1 or 0,
+        pickup_coords   = CleanCoords(routeData.pickup_coords),
+        delivery_coords = CleanCoords(routeData.delivery_coords),
+        is_active       = (routeData.is_active ~= false and routeData.is_active ~= 0) and 1 or 0,
+    }
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_custom_routes
@@ -440,34 +554,26 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
         base_xp = VALUES(base_xp), req_skill = VALUES(req_skill), fragile = VALUES(fragile), valuable = VALUES(valuable),
         pickup_coords = VALUES(pickup_coords), delivery_coords = VALUES(delivery_coords), is_active = VALUES(is_active)
     ]], {
-        routeId,
-        routeData.name or 'Nova Rota Customizada',
-        routeData.type or 'quick',
-        routeData.cargo_model or 'hei_prop_carrier_cargo_04b',
-        routeData.cargo_name or 'Paletes de Carga',
-        routeData.truck_model or 'hauler',
-        routeData.trailer_model or 'trailers2',
-        tonumber(routeData.base_payment) or 5000,
-        tonumber(routeData.base_xp) or 200,
-        tonumber(routeData.req_skill) or 0,
-        routeData.fragile and 1 or 0,
-        routeData.valuable and 1 or 0,
-        json.encode(routeData.pickup_coords or {}),
-        json.encode(routeData.delivery_coords or {}),
-        (routeData.is_active ~= false) and 1 or 0
+        clean.id, clean.name, clean.type, clean.cargo_model, clean.cargo_name, clean.truck_model, clean.trailer_model,
+        clean.base_payment, clean.base_xp, clean.req_skill, clean.fragile, clean.valuable,
+        json.encode(clean.pickup_coords), json.encode(clean.delivery_coords), clean.is_active
     })
 
-    AdminService.CustomRoutes[routeId] = routeData
+    AdminService.CustomRoutes[routeId] = clean
+    AdminLog(src, 'adminSaveRoute', routeId)
     TriggerClientEvent('aurp_trucker:client:adminSyncRoutes', -1, AdminService.CustomRoutes)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Rota salva e sincronizada em tempo real!', type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteRoute', function(routeId)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not routeId then return end
+    if not AdminService.IsPlayerAdmin(src) then return end
+    routeId = CleanId(routeId, 50)
+    if not routeId then return end
 
     MySQL.query.await('DELETE FROM aust_trucker_custom_routes WHERE id = ?', { routeId })
     AdminService.CustomRoutes[routeId] = nil
+    AdminLog(src, 'adminDeleteRoute', routeId)
     TriggerClientEvent('aurp_trucker:client:adminSyncRoutes', -1, AdminService.CustomRoutes)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Rota excluída do servidor.', type = 'info' })
 end)
@@ -475,10 +581,21 @@ end)
 -- 2. SPAWNS E BAÍAS
 RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not spawnData then return end
+    if not AdminService.IsPlayerAdmin(src) or type(spawnData) ~= 'table' then return end
 
-    local spawnId = spawnData.id or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
-    spawnData.id = spawnId
+    local spawnId = CleanId(spawnData.id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local spawnType = CleanStr(spawnData.spawn_type, 20, 'truck')
+    if not SPAWN_TYPES[spawnType] then spawnType = 'truck' end
+
+    local existing = AdminService.Spawns[spawnId]
+    local clean = {
+        id          = spawnId,
+        name        = CleanStr(spawnData.name, 100, 'Ponto de Spawn'),
+        spawn_type  = spawnType,
+        coords      = CleanCoords(spawnData.coords),
+        heading     = ClampNum(spawnData.heading, -360.0, 360.0, 0.0),
+        folder_name = (existing and existing.folder_name) or 'Geral',
+    }
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_spawns (id, name, spawn_type, coords, heading)
@@ -486,24 +603,24 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         ON DUPLICATE KEY UPDATE
         name = VALUES(name), spawn_type = VALUES(spawn_type), coords = VALUES(coords), heading = VALUES(heading)
     ]], {
-        spawnId,
-        spawnData.name or 'Ponto de Spawn',
-        spawnData.spawn_type or 'truck',
-        json.encode(spawnData.coords or {}),
-        tonumber(spawnData.heading) or 0.0
+        clean.id, clean.name, clean.spawn_type, json.encode(clean.coords), clean.heading
     })
 
-    AdminService.Spawns[spawnId] = spawnData
+    AdminService.Spawns[spawnId] = clean
+    AdminLog(src, 'adminSaveSpawn', spawnId)
     TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Ponto de spawn gravado com sucesso!', type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteSpawn', function(spawnId)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not spawnId then return end
+    if not AdminService.IsPlayerAdmin(src) then return end
+    spawnId = CleanId(spawnId, 50)
+    if not spawnId then return end
 
     MySQL.query.await('DELETE FROM aust_trucker_spawns WHERE id = ?', { spawnId })
     AdminService.Spawns[spawnId] = nil
+    AdminLog(src, 'adminDeleteSpawn', spawnId)
     TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Spawn excluído.', type = 'info' })
 end)
@@ -511,15 +628,18 @@ end)
 -- 3. MAPEAMENTO DE OFFSETS DE TRAILER (GIZMO / NUDGE TOOL)
 RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not data then return end
+    if not AdminService.IsPlayerAdmin(src) or type(data) ~= 'table' then return end
 
-    local trailerModel = data.trailerModel:lower()
-    local slotIndex = tonumber(data.slotIndex) or 1
+    local trailerModel = CleanStr(data.trailerModel, 50, nil)
+    if not trailerModel then return end
+    trailerModel = trailerModel:lower()
+    local slotIndex = math.floor(ClampNum(data.slotIndex, 1, 64, 1))
     local isForklift = data.isForklift and 1 or 0
-    local label = data.label and tostring(data.label) or nil
-    local propModel = data.propModel and tostring(data.propModel):lower() or (isForklift == 1 and 'forklift' or nil)
-    local ox, oy, oz = tonumber(data.x) or 0.0, tonumber(data.y) or 0.0, tonumber(data.z) or 0.0
-    local heading = tonumber(data.heading) or 0.0
+    local label = CleanStr(data.label, 100, nil)
+    local propModel = CleanStr(data.propModel, 100, nil)
+    propModel = propModel and propModel:lower() or (isForklift == 1 and 'forklift' or nil)
+    local ox, oy, oz = ClampNum(data.x, -50.0, 50.0, 0.0), ClampNum(data.y, -50.0, 50.0, 0.0), ClampNum(data.z, -50.0, 50.0, 0.0)
+    local heading = ClampNum(data.heading, -360.0, 360.0, 0.0)
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_trailer_offsets
@@ -531,6 +651,8 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     ]], {
         trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift
     })
+
+    AdminLog(src, 'adminSaveTrailerOffset', ('%s slot=%d fork=%d'):format(trailerModel, slotIndex, isForklift))
 
     -- Recarrega e normaliza dados frescos do banco
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
@@ -559,14 +681,17 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOr
     local id, trailerModel, slotIndex, isForklift
     if type(dataOrModel) == 'table' then
         id = tonumber(dataOrModel.id)
-        trailerModel = dataOrModel.trailerModel
+        trailerModel = CleanStr(dataOrModel.trailerModel, 50, nil)
         slotIndex = tonumber(dataOrModel.slotIndex)
         isForklift = dataOrModel.isForklift
     else
-        trailerModel = dataOrModel
+        trailerModel = CleanStr(dataOrModel, 50, nil)
         slotIndex = tonumber(maybeSlot)
         isForklift = maybeFork
     end
+    if id and not IsFiniteNumber(id) then id = nil end
+    if not id and not trailerModel then return end
+    AdminLog(src, 'adminDeleteTrailerOffset', tostring(id or trailerModel))
 
     local rowsAffected = 0
     if id and id > 0 then
@@ -596,18 +721,18 @@ end)
 -- 4. HOMOLOGAÇÃO DE CARGAS & PROPS
 RegisterNetEvent('aurp_trucker:server:adminSaveHomologatedProp', function(propData)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not propData then return end
+    if not AdminService.IsPlayerAdmin(src) or type(propData) ~= 'table' then return end
 
-    local rawModel = propData.modelHash or propData.prop_model or propData.model
-    if not rawModel or rawModel == '' then return end
-
-    local modelHash = tostring(rawModel):lower():gsub('^%s*(.-)%s*$', '%1')
-    local name = tostring(propData.name or propData.label or modelHash):gsub('^%s*(.-)%s*$', '%1')
-    local category = tostring(propData.category or propData.cargo_category or 'dry'):lower()
-    local ox = tonumber(propData.x or propData.offset_x) or 0.0
-    local oy = tonumber(propData.y or propData.offset_y) or 0.0
-    local oz = tonumber(propData.z or propData.offset_z) or 0.0
-    local heading = tonumber(propData.heading) or 0.0
+    local modelHash = CleanStr(propData.modelHash or propData.prop_model or propData.model, 100, nil)
+    if not modelHash then return end
+    modelHash = modelHash:lower()
+    local name = CleanStr(propData.name or propData.label, 100, modelHash)
+    local category = (CleanStr(propData.category or propData.cargo_category, 20, 'dry')):lower()
+    if not PROP_CATS[category] then category = 'dry' end
+    local ox = ClampNum(propData.x or propData.offset_x, -50.0, 50.0, 0.0)
+    local oy = ClampNum(propData.y or propData.offset_y, -50.0, 50.0, 0.0)
+    local oz = ClampNum(propData.z or propData.offset_z, -50.0, 50.0, 0.0)
+    local heading = ClampNum(propData.heading, -360.0, 360.0, 0.0)
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_homologated_props
@@ -618,6 +743,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveHomologatedProp', function(propDa
         offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z), heading = VALUES(heading)
     ]], { modelHash, name, category, ox, oy, oz, heading })
 
+    AdminLog(src, 'adminSaveHomologatedProp', modelHash)
     local propsList = AdminService.ReloadHomologatedProps()
     TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, propsList)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Prop Homologado', description = ('Carga "%s" (%s) homologada e salva no banco!'):format(name, modelHash), type = 'success' })
@@ -625,9 +751,11 @@ end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteHomologatedProp', function(modelHash)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not modelHash then return end
-
-    local m = tostring(modelHash):lower():gsub('^%s*(.-)%s*$', '%1')
+    if not AdminService.IsPlayerAdmin(src) then return end
+    local m = CleanStr(modelHash, 100, nil)
+    if not m then return end
+    m = m:lower()
+    AdminLog(src, 'adminDeleteHomologatedProp', m)
     MySQL.query.await('DELETE FROM aust_trucker_homologated_props WHERE LOWER(model_hash) = ?', { m })
     local propsList = AdminService.ReloadHomologatedProps()
     TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, propsList)
@@ -637,10 +765,12 @@ end)
 -- 5. PASTAS E DRAG-AND-DROP DE SPAWNS
 RegisterNetEvent('aurp_trucker:server:adminMoveSpawnFolder', function(spawnId, folderName)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not spawnId then return end
+    if not AdminService.IsPlayerAdmin(src) then return end
+    spawnId = CleanId(spawnId, 50)
+    if not spawnId then return end
 
-    folderName = tostring(folderName or 'Geral'):gsub('^%s*(.-)%s*$', '%1')
-    if folderName == '' then folderName = 'Geral' end
+    folderName = CleanStr(folderName, 100, 'Geral')
+    AdminLog(src, 'adminMoveSpawnFolder', spawnId .. ' -> ' .. folderName)
 
     MySQL.query.await('UPDATE aust_trucker_spawns SET folder_name = ? WHERE id = ?', { folderName, spawnId })
     if AdminService.Spawns[spawnId] then
@@ -651,7 +781,10 @@ end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteSpawnFolder', function(folderName)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not folderName then return end
+    if not AdminService.IsPlayerAdmin(src) then return end
+    folderName = CleanStr(folderName, 100, nil)
+    if not folderName then return end
+    AdminLog(src, 'adminDeleteSpawnFolder', folderName)
 
     MySQL.query.await("UPDATE aust_trucker_spawns SET folder_name = 'Geral' WHERE folder_name = ?", { folderName })
     for _, s in pairs(AdminService.Spawns) do
@@ -666,10 +799,19 @@ end)
 -- 6. NPCS E DESPACHANTES
 RegisterNetEvent('aurp_trucker:server:adminSaveNPC', function(npcData)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not npcData then return end
+    if not AdminService.IsPlayerAdmin(src) or type(npcData) ~= 'table' then return end
 
-    local npcId = npcData.id or ('npc_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
-    npcData.id = npcId
+    local npcId = CleanId(npcData.id, 50) or ('npc_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local clean = {
+        id          = npcId,
+        name        = CleanStr(npcData.name, 100, 'Despachante Logístico'),
+        model       = CleanStr(npcData.model, 50, 's_m_m_dockwork_01'),
+        coords      = CleanCoords(npcData.coords),
+        heading     = ClampNum(npcData.heading, -360.0, 360.0, 0.0),
+        blip_sprite = math.floor(ClampNum(npcData.blip_sprite, 0, 900, 477)),
+        blip_color  = math.floor(ClampNum(npcData.blip_color, 0, 90, 2)),
+        is_active   = (npcData.is_active ~= false and npcData.is_active ~= 0) and 1 or 0,
+    }
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_npcs (id, name, model, coords, heading, blip_sprite, blip_color, is_active)
@@ -678,27 +820,25 @@ RegisterNetEvent('aurp_trucker:server:adminSaveNPC', function(npcData)
         name = VALUES(name), model = VALUES(model), coords = VALUES(coords), heading = VALUES(heading),
         blip_sprite = VALUES(blip_sprite), blip_color = VALUES(blip_color), is_active = VALUES(is_active)
     ]], {
-        npcId,
-        npcData.name or 'Despachante Logístico',
-        npcData.model or 's_m_m_dockwork_01',
-        json.encode(npcData.coords or {}),
-        tonumber(npcData.heading) or 0.0,
-        tonumber(npcData.blip_sprite) or 477,
-        tonumber(npcData.blip_color) or 2,
-        (npcData.is_active ~= false) and 1 or 0
+        clean.id, clean.name, clean.model, json.encode(clean.coords), clean.heading,
+        clean.blip_sprite, clean.blip_color, clean.is_active
     })
 
-    AdminService.NPCs[npcId] = npcData
+    AdminService.NPCs[npcId] = clean
+    AdminLog(src, 'adminSaveNPC', npcId)
     TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', -1, AdminService.NPCs)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC despachante atualizado em tempo real!', type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteNPC', function(npcId)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not npcId then return end
+    if not AdminService.IsPlayerAdmin(src) then return end
+    npcId = CleanId(npcId, 50)
+    if not npcId then return end
 
     MySQL.query.await('DELETE FROM aust_trucker_npcs WHERE id = ?', { npcId })
     AdminService.NPCs[npcId] = nil
+    AdminLog(src, 'adminDeleteNPC', npcId)
     TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', -1, AdminService.NPCs)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC removido do mapa.', type = 'info' })
 end)
@@ -706,12 +846,15 @@ end)
 -- 7. ECONOMIA E XP (SINCRONIZAÇÃO GLOBAL)
 RegisterNetEvent('aurp_trucker:server:adminSaveEconomy', function(settings)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not settings then return end
+    if not AdminService.IsPlayerAdmin(src) or type(settings) ~= 'table' then return end
 
     for key, val in pairs(settings) do
-        local num = tonumber(val)
+        -- Whitelist de chaves conhecidas + valores limitados ao intervalo permitido
+        local lim = (type(key) == 'string' and #key <= 50) and ECONOMY_LIMITS[key] or nil
+        local num = lim and ClampNum(val, lim[1], lim[2], nil) or nil
         if num then
             AdminService.Economy[key] = num
+            AdminLog(src, 'adminSaveEconomy', ('%s=%s'):format(key, tostring(num)))
             MySQL.query.await([[
                 INSERT INTO aust_trucker_economy_settings (key_name, numeric_value)
                 VALUES (?, ?)
@@ -757,9 +900,16 @@ function AdminService.GetActiveContracts(citizenId)
             if isFragile then basePayment = math.floor(basePayment * fragileMult) end
             if isValuable then basePayment = math.floor(basePayment * valuableMult) end
 
+            -- Certificados no DB são tipos nomeados (flammable_liquid, toxic, ...). Rotas customizadas
+            -- só carregam o flag 'adr'; se a rota informar um adr_type específico, exige esse; senão, qualquer cert válida.
             local adrLocked = false
-            if isAdr and not validCerts['class_1'] and not validCerts['class_2'] and not validCerts['class_3'] then
-                adrLocked = true
+            if isAdr then
+                local needed = r.adr_type
+                if type(needed) == 'string' and Config.Adr and Config.Adr.TypeLabels and Config.Adr.TypeLabels[needed] then
+                    adrLocked = not validCerts[needed]
+                else
+                    adrLocked = next(validCerts) == nil
+                end
             end
 
             local contractData = {
@@ -808,11 +958,7 @@ function AdminService.GetActiveContracts(citizenId)
         end
     end
 
-    -- Se por qualquer motivo não houver rotas dinâmicas, fallback para seed
-    if #contracts == 0 then
-        AdminService.SeedDefaultRoutes()
-    end
-
+    -- Caminho de leitura: nunca escreve no banco (seed só ocorre no boot/LoadAll quando a tabela está vazia)
     return contracts
 end
 

@@ -15,6 +15,33 @@ for _, d in ipairs(Config.SecondaryIndustries or {}) do
     _secondaryById[d.id] = d
 end
 
+-- Strikes por cidadão: DropPlayer só após STRIKE_LIMIT violações dentro de STRIKE_WINDOW segundos
+-- (um único pedido fora de raio / sem job pode ser lag ou duplo clique)
+local STRIKE_LIMIT  = 3
+local STRIKE_WINDOW = 600
+local _strikes = {}  -- [citizenId] = { count, windowStart }
+
+-- Registra violação. Retorna true se o limite foi atingido e o jogador foi expulso.
+function AntiCheatService.AddStrike(src, citizenId, reason)
+    local key = tostring(citizenId or src)
+    local now = os.time()
+    local st = _strikes[key]
+    if not st or (now - st.windowStart) > STRIKE_WINDOW then
+        st = { count = 0, windowStart = now }
+        _strikes[key] = st
+    end
+    st.count = st.count + 1
+    print(('[AUST_Trucker Anti-Cheat] Strike %d/%d em %s (src %s): %s'):format(
+        st.count, STRIKE_LIMIT, key, tostring(src), tostring(reason)))
+    if st.count >= STRIKE_LIMIT then
+        _strikes[key] = nil
+        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): %s'):format(key, tostring(src), tostring(reason)))
+        DropPlayer(src, '[AUST_Trucker Anti-Cheat] Violação de segurança repetida: ' .. tostring(reason))
+        return true
+    end
+    return false
+end
+
 -- Verifica e aplica rate limit para uma ação.
 -- Retorna true se permitido, false se bloqueado (cooldown ativo).
 function AntiCheatService.RateLimit(citizenId, action)
@@ -106,10 +133,9 @@ function AntiCheatService.ValidateDelivery(src, citizenId, activeJob, elapsedSec
     local dist = #(pos - destVec)
     local maxRadius = (Config.AntiCheat and Config.AntiCheat.DestinationRadius) or 25.0
     if dist > maxRadius then
-        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de finalizar entrega a %.1f metros (max: %.1fm)'):format(
-            tostring(citizenId), tostring(src), dist, maxRadius))
-        DropPlayer(src, ('[AUST_Trucker Anti-Cheat] Violação de segurança: entrega acionada a %.1f metros do destino.'):format(dist))
-        return false, 'Violação de segurança detectada.'
+        AntiCheatService.AddStrike(src, citizenId,
+            ('entrega acionada a %.1f metros do destino (max: %.1fm)'):format(dist, maxRadius))
+        return false, 'Você está longe demais do destino de entrega.'
     end
 
     return true, nil
