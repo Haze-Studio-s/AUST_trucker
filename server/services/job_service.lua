@@ -436,6 +436,34 @@ function JobService.Complete(src, payload)
         CompanyService.AddXP(company.id, Config.CompanyXpPerDelivery)
     end
 
+    -- Integração Logística com vp_gasstations (Abastecimento físico de combustível nos postos)
+    if GetResourceState('vp_gasstations') == 'started' then
+        local isFuelCargo = (activeJob.trailer_model == 'tanker')
+            or (activeJob.cargo_item and (
+                activeJob.cargo_item:find('Combustível')
+                or activeJob.cargo_item:find('Gasolina')
+                or activeJob.cargo_item:find('Diesel')
+                or activeJob.cargo_item:find('Petróleo')
+            ))
+
+        if isFuelCargo then
+            local destCoords = nil
+            for _, d in ipairs(Config.SecondaryIndustries or {}) do
+                if d.id == activeJob.dest_id then
+                    destCoords = d.coords
+                    break
+                end
+            end
+
+            if destCoords then
+                local liters = (tonumber(activeJob.cargo_qty) and (activeJob.cargo_qty * 1000)) or 2500
+                pcall(function()
+                    exports['vp_gasstations']:AddFuelStock(destCoords, liters, ('Caminhoneiro (%s)'):format(citizenId))
+                end)
+            end
+        end
+    end
+
     -- GP-H05: repor slot imediatamente após conclusão para evitar lista vazia
     -- (cron de 30min não é suficiente em servidores com vários jogadores simultâneos)
     CreateThread(function()

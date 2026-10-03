@@ -343,6 +343,7 @@ local TABLES = {
         `model`       VARCHAR(50) NOT NULL,
         `deposit`     INT         NOT NULL,
         `fee`         INT         NOT NULL,
+        `refund_due`  INT         NULL DEFAULT NULL, -- estorno pendente (desconexão/restart)
         `rented_at`   DATETIME    DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
@@ -494,6 +495,7 @@ local TABLES = {
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)
 local MIGRATIONS = {
+    "ALTER TABLE trucker_rentals ADD COLUMN refund_due INT NULL DEFAULT NULL", -- aluguel: estorno pendente
     "ALTER TABLE trucker_jobs ADD COLUMN weight INT NOT NULL DEFAULT 80",
     "ALTER TABLE trucker_contracts ADD COLUMN client_id VARCHAR(50)",
     "ALTER TABLE trucker_contracts ADD COLUMN relationship_id INT",
