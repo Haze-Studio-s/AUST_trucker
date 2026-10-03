@@ -446,7 +446,7 @@ local TABLES = {
     [[CREATE TABLE IF NOT EXISTS `aust_trucker_spawns` (
         `id` VARCHAR(50) PRIMARY KEY,
         `name` VARCHAR(100) NOT NULL,
-        `spawn_type` ENUM('truck', 'trailer', 'forklift', 'handler', 'loading_bay', 'delivery') NOT NULL,
+        `spawn_type` ENUM('truck', 'trailer', 'forklift', 'pallet', 'handler', 'loading_bay', 'delivery', 'load_bay', 'delivery_bay') NOT NULL,
         `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
         `coords` JSON NOT NULL,
         `heading` FLOAT NOT NULL DEFAULT 0.0,
@@ -542,6 +542,7 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_model` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    "ALTER TABLE `aust_trucker_spawns` MODIFY COLUMN `spawn_type` ENUM('truck', 'trailer', 'forklift', 'pallet', 'handler', 'loading_bay', 'delivery', 'load_bay', 'delivery_bay') NOT NULL",
     "ALTER TABLE `trucker_repo_orders` ADD COLUMN `accepted_at` DATETIME NULL DEFAULT NULL",
     -- calote: parcelas perdidas consecutivas (ao atingir Config.Loans.MaxMissedPayments => 'defaulted')
     "ALTER TABLE `trucker_loans` ADD COLUMN `missed_payments` TINYINT UNSIGNED NOT NULL DEFAULT 0",

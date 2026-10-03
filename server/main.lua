@@ -917,7 +917,17 @@ local function StartTruckDelivery(src, contractData)
 
         -- Spawn de Paletes Pré-Gerados (Polarix com Suporte a Props Customizados do Admin)
         local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
-        local palletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
+        local rawPalletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
+        local palletSpawns = {}
+        for _, rawC in ipairs(rawPalletSpawns) do
+            local px = tonumber(rawC.x)
+            local py = tonumber(rawC.y)
+            local pz = tonumber(rawC.z)
+            if px and py and pz then
+                table.insert(palletSpawns, vector3(px, py, pz))
+            end
+        end
+
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
         local function ResolveCargoPropHash(slotIdx)
@@ -940,9 +950,26 @@ local function StartTruckDelivery(src, contractData)
             local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)
                 or contractData.cargoModel
                 or contractData.cargo_model
-                or Config.Polarix.PalletModels[((slotIdx - 1) % #Config.Polarix.PalletModels) + 1]
-                or Config.Polarix.DefaultPalletModel
-            return joaat(candidate)
+                or (Config.Polarix and Config.Polarix.PalletModels and Config.Polarix.PalletModels[((slotIdx - 1) % #Config.Polarix.PalletModels) + 1])
+                or (Config.Polarix and Config.Polarix.DefaultPalletModel)
+                or 'hei_prop_carrier_cargo_04b'
+
+            local finalHash = nil
+            if type(candidate) == 'number' then
+                finalHash = candidate
+            else
+                local asNum = tonumber(candidate)
+                if asNum then
+                    finalHash = asNum
+                else
+                    finalHash = joaat(tostring(candidate))
+                end
+            end
+
+            if not finalHash or finalHash == 0 then
+                finalHash = joaat('hei_prop_carrier_cargo_04b')
+            end
+            return finalHash
         end
 
         for _, coord in ipairs(palletSpawns) do
@@ -958,6 +985,18 @@ local function StartTruckDelivery(src, contractData)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
                 table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+            else
+                -- Fallback imediato com prop nativo padrão caso o prop customizado falhe no streaming do servidor
+                local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.1, true, true, false)
+                local fbTimer = GetGameTimer()
+                while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
+                if DoesEntityExist(fallbackObj) then
+                    FreezeEntityPosition(fallbackObj, true)
+                    SetEntityDistanceCullingRadius(fallbackObj, 0.0)
+                    ignoreEntities[fallbackObj] = true
+                    table.insert(pallets, fallbackObj)
+                    table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
+                end
             end
         end
 
@@ -983,11 +1022,24 @@ local function StartTruckDelivery(src, contractData)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                else
+                    local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.1, true, true, false)
+                    local fbTimer = GetGameTimer()
+                    while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
+                    if DoesEntityExist(fallbackObj) then
+                        FreezeEntityPosition(fallbackObj, true)
+                        SetEntityDistanceCullingRadius(fallbackObj, 0.0)
+                        ignoreEntities[fallbackObj] = true
+                        table.insert(pallets, fallbackObj)
+                        table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
+                    end
                 end
             end
         end
 
-        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] %d Paletes gerados com sucesso para o frete."):format(#pallets)) end
+        if Config.Debug or #pallets < reqPallets then
+            print(("[AUST_Trucker] %d/%d Paletes instanciados para o frete (NetIDs: %d)."):format(#pallets, reqPallets, #palletNetIds))
+        end
 
     elseif cargoType == 'heavy' then
         reqPallets = 1

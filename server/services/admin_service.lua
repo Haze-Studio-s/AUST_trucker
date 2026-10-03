@@ -67,7 +67,7 @@ local function CleanCoords(c)
 end
 
 local ROUTE_TYPES  = { quick = true, freight = true, adr = true, heavy = true, carrier = true }
-local SPAWN_TYPES  = { truck = true, trailer = true, forklift = true, handler = true, loading_bay = true, delivery = true }
+local SPAWN_TYPES  = { truck = true, trailer = true, forklift = true, pallet = true, handler = true, loading_bay = true, delivery = true, load_bay = true, delivery_bay = true }
 local PROP_CATS    = { dry = true, fragile = true, valuable = true, adr = true, heavy = true }
 
 -- Chaves de economia permitidas e seus intervalos [min, max]
