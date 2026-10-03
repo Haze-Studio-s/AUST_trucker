@@ -1093,19 +1093,49 @@ RegisterNetEvent('aurp_trucker:forklift:setNetId', function(netId)
     local citizenId = Framework.GetCitizenId(Player)
     local rental = VP_Trucker.ForkliftRentals[citizenId]
     if rental then
-        rental.forkliftNetId = tonumber(netId)
+        -- Só aceita se for um veículo do modelo de empilhadeira, perto do jogador e criado por ele
+        local ent, validNet = validateJobEntity(src, citizenId, netId, 2)
+        local fkModel = Config.Forklift and Config.Forklift.ForkliftModel
+        if ent and fkModel and GetEntityModel(ent) == joaat(fkModel) then
+            rental.forkliftNetId = validNet
+        end
     end
 end)
+
+-- Modelos de palete aceitos (Config.Forklift.PalletModel + pools)
+local function isAllowedPalletModel(hash)
+    local f = Config.Forklift or {}
+    if f.PalletModel and joaat(f.PalletModel) == hash then return true end
+    if type(f.PalletModels) == 'table' then
+        for _, pool in pairs(f.PalletModels) do
+            if type(pool) == 'table' then
+                for _, m in ipairs(pool) do
+                    if type(m) == 'string' and joaat(m) == hash then return true end
+                end
+            elseif type(pool) == 'string' and joaat(pool) == hash then
+                return true
+            end
+        end
+    end
+    return false
+end
 
 RegisterNetEvent('aurp_trucker:palletLoaded', function(netId, locationId)
     local src = source
 
+    -- Rate limit (um palete a cada 400ms no máximo)
+    if not rateLimit('palletLoaded:' .. src, 400) then return end
+
     -- Validar existência da entidade na rede
-    if not netEntityExists(netId) then return end
+    netId = tonumber(netId)
+    if not netId or not netEntityExists(netId) then return end
     local obj = NetworkGetEntityFromNetworkId(netId)
 
     -- H-07: Confirmar que é um objeto (type 3), não um ped ou veículo
     if GetEntityType(obj) ~= 3 then return end
+
+    -- Modelo precisa ser de palete configurado (client não pode mandar objeto qualquer)
+    if not isAllowedPalletModel(GetEntityModel(obj)) then return end
 
     -- Validar ownership via StateBag: client armazena tostring(GetPlayerServerId(PlayerId()))
     -- que é o mesmo que tostring(src) no server
@@ -1120,6 +1150,24 @@ RegisterNetEvent('aurp_trucker:palletLoaded', function(netId, locationId)
     local rental = VP_Trucker.ForkliftRentals[citizenId]
     if not rental then return end
 
+    -- Não conta além do esperado
+    if rental.loaded >= (rental.expected or 0) then return end
+
+    -- Proximidade: jogador perto do palete e perto do local do aluguel
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return end
+    local pCoords = GetEntityCoords(ped)
+    if #(pCoords - GetEntityCoords(obj)) > 40.0 then return end
+    local locCoords = nil
+    if rental.mode == 'tradepoint' and Config.Forklift and Config.Forklift.TradePoints then
+        for _, tp in ipairs(Config.Forklift.TradePoints) do
+            if tp.id == rental.locationId then locCoords = tp.coords break end
+        end
+    elseif Config.Industries and Config.Industries[rental.locationId] then
+        locCoords = Config.Industries[rental.locationId].coords
+    end
+    if locCoords and #(pCoords - vector3(locCoords.x, locCoords.y, locCoords.z)) > 150.0 then return end
+
     -- Seguro deletar agora
     DeleteEntity(obj)
 
@@ -1127,7 +1175,7 @@ RegisterNetEvent('aurp_trucker:palletLoaded', function(netId, locationId)
 
     -- Notificar client se todos os pallets foram carregados
     if rental.loaded >= rental.expected then
-        TriggerClientEvent('aurp_trucker:client:allPalletsLoaded', src, locationId)
+        TriggerClientEvent('aurp_trucker:client:allPalletsLoaded', src, rental.locationId)
     end
 end)
 
@@ -1195,45 +1243,106 @@ end)
 -- FASE 3B: Illegal Deliveries
 -- ============================================================
 
+-- Claim em memória: duas apreensões simultâneas da mesma placa não multam duas vezes
+local SeizingPlates = {}
+
+-- Localiza o alvo de apreensão por variações da placa (client envia a placa como no broadcast)
+local function findIllegalTarget(plate)
+    local targets = VP_Trucker.IllegalTargets or {}
+    if targets[plate] then return plate, targets[plate] end
+    local stripped = stripPlate(plate)
+    if stripped then
+        for key, t in pairs(targets) do
+            if type(key) == 'string' and key:gsub('%s+', ''):upper() == stripped:upper() then
+                return key, t
+            end
+        end
+    end
+    return nil
+end
+
 -- Cop: lacra a carga de um caminhão ilegal via ox_target
 RegisterNetEvent('aurp_trucker:seizeIllegalCargo', function(plate)
     local src = source
-    if not plate then return end
+    if type(plate) ~= 'string' or #plate > 12 or plate == '' then return end
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local jobName = Framework.GetJob(Player).name
     if jobName ~= 'police' and jobName ~= 'sasp' then return end
+    if SeizingPlates[stripPlate(plate) or plate] then return end
 
     -- C-15: Validação de proximidade server-side (ox_target tem range client-side,
     -- mas um cliente malicioso pode disparar o evento à distância arbitrária)
-    local target = VP_Trucker.IllegalTargets and VP_Trucker.IllegalTargets[plate]
-    if target and target.src then
-        local copCoords    = GetEntityCoords(GetPlayerPed(src))
-        local driverCoords = GetEntityCoords(GetPlayerPed(target.src))
-        if copCoords and driverCoords then
-            local dx   = copCoords.x - driverCoords.x
-            local dy   = copCoords.y - driverCoords.y
-            local dz   = copCoords.z - driverCoords.z
-            local dist = math.sqrt(dx*dx + dy*dy + dz*dz)
-            if dist > Config.IllegalJobs.SeizeRange then
-                TriggerClientEvent('aurp_trucker:notify', src, 'Muito longe do veículo', 'error')
-                return
+    local copPed = GetPlayerPed(src)
+    if not copPed or copPed == 0 or not DoesEntityExist(copPed) then return end
+    local copCoords = GetEntityCoords(copPed)
+
+    local key, target = findIllegalTarget(plate)
+
+    -- Placa nunca registrada pelo client: se há motorista com job ilegal ativo dirigindo
+    -- um veículo com essa placa (lida no servidor), registra o alvo agora
+    if not target and IllegalService then
+        local stripped = stripPlate(plate)
+        if stripped then
+            for _, pid in ipairs(GetPlayers()) do
+                local dSrc = tonumber(pid)
+                local dPed = dSrc and GetPlayerPed(dSrc)
+                if dSrc and dSrc ~= src and dPed and dPed ~= 0 and DoesEntityExist(dPed) then
+                    local dVeh = GetVehiclePedIsIn(dPed, false)
+                    if dVeh and dVeh ~= 0 and DoesEntityExist(dVeh) and GetPedInVehicleSeat(dVeh, -1) == dPed
+                        and (GetVehicleNumberPlateText(dVeh) or ''):gsub('%s+', ''):upper() == stripped:upper() then
+                        local dPlayer = Framework.GetPlayer(dSrc)
+                        local dCid = dPlayer and Framework.GetCitizenId(dPlayer)
+                        local dJob = dCid and DB_GetActiveJobByPlayer(dCid)
+                        if dJob and dJob.illegal_type then
+                            IllegalService.RegisterSeizureTarget(dSrc, dJob.id, plate, dJob.illegal_type)
+                            key, target = findIllegalTarget(plate)
+                        end
+                        break
+                    end
+                end
             end
         end
     end
+    if not target then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Carga não encontrada.', 'error')
+        return
+    end
 
-    if IllegalService then
-        IllegalService.Seize(src, plate)
+    local dPed = target.src and GetPlayerPed(target.src)
+    if not dPed or dPed == 0 or not DoesEntityExist(dPed) then return end
+    if #(copCoords - GetEntityCoords(dPed)) > Config.IllegalJobs.SeizeRange then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Muito longe do veículo', 'error')
+        return
+    end
+
+    -- CLAIM: trava a placa até a apreensão terminar (Seize cede a thread em chamadas ao DB)
+    local lockKey = stripPlate(plate) or plate
+    SeizingPlates[lockKey] = true
+    local okSeize, errSeize = pcall(function()
+        if IllegalService then
+            IllegalService.Seize(src, key or plate)
+        end
+    end)
+    SeizingPlates[lockKey] = nil
+    if not okSeize and Config.Debug then
+        print(('[AUST_Trucker] Erro em IllegalService.Seize: %s'):format(tostring(errSeize)))
     end
 end)
 
 -- Motorista entra no caminhão com job ilegal ativo — registra placa para apreensão
 RegisterNetEvent('aurp_trucker:illegalRegisterPlate', function(plate)
     local src = source
-    if not plate then return end
+    if type(plate) ~= 'string' or #plate > 12 or plate == '' then return end
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local cid = Framework.GetCitizenId(Player)
+    if not rateLimit('illegalRegPlate:' .. src, 1500) then return end
+
+    -- A placa precisa ser a do veículo que o jogador dirige (lida no servidor)
+    local veh, serverPlate = getDriverVehicle(src)
+    if not veh or serverPlate:upper() ~= (stripPlate(plate) or ''):upper() then return end
+
     local activeJob = DB_GetActiveJobByPlayer(cid)
     if not activeJob or not activeJob.illegal_type then return end
     if IllegalService then
