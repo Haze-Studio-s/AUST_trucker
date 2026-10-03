@@ -200,9 +200,12 @@ function TruckSimulationService.PurchaseUpgrade(src, upgradeKey)
     end
 
     -- Deduzir do saldo da empresa
-    DB_UpdateCompanyBalance(company.id, -upgrade.price)
+    local newBalance = DB_UpdateCompanyBalance(company.id, -upgrade.price)
+    if not newBalance then
+        return { success = false, reason = 'Saldo insuficiente' }
+    end
     if VP_Trucker.Companies[company.id] then
-        VP_Trucker.Companies[company.id].balance = (VP_Trucker.Companies[company.id].balance or 0) - upgrade.price
+        VP_Trucker.Companies[company.id].balance = newBalance
     end
 
     -- Salvar upgrade

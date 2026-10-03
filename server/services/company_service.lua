@@ -164,7 +164,9 @@ function CompanyService.Deposit(companyId, src, amount)
     if not removed then return false, 'Falha ao remover dinheiro' end
 
     local newBalance = DB_UpdateCompanyBalance(companyId, amount)
-    VP_Trucker.Companies[companyId].balance = newBalance or 0
+    if newBalance and VP_Trucker.Companies[companyId] then
+        VP_Trucker.Companies[companyId].balance = newBalance
+    end
     return true, nil
 end
 
@@ -187,14 +189,16 @@ function CompanyService.Withdraw(companyId, src, citizenId, amount)
     local Player = Framework.GetPlayer(src)
     if not Player then return false, 'Jogador não encontrado' end
 
-    -- #3: Debitar empresa, creditar jogador, estorno em falha
+    -- #3: Debitar empresa (atômico: só debita se balance >= amount), creditar jogador,
+    -- estorno em falha. O jogador só recebe depois de o débito ser confirmado no DB.
     local newBalance = DB_UpdateCompanyBalance(companyId, -amount)
-    VP_Trucker.Companies[companyId].balance = newBalance or 0
+    if not newBalance then return false, 'Saldo insuficiente na empresa' end
+    VP_Trucker.Companies[companyId].balance = newBalance
     local added = Framework.AddMoney(Player, 'cash', amount, 'company-withdrawal')
     if not added then
         -- Estorno: devolver à empresa
         local restored = DB_UpdateCompanyBalance(companyId, amount)
-        VP_Trucker.Companies[companyId].balance = restored or 0
+        if restored then VP_Trucker.Companies[companyId].balance = restored end
         return false, 'Falha ao creditar jogador'
     end
     return true, nil

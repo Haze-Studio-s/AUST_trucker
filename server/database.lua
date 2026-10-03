@@ -567,13 +567,27 @@ function DB_GetCompany(companyId)
     )
 end
 
-function DB_UpdateCompanyBalance(companyId, amount)
+function DB_UpdateCompanyBalance(companyId, amount, allowNegative)
     -- amount pode ser negativo (saque) ou positivo (depósito)
     -- M-11: capturar affected rows — retorna nil em falha (empresa não encontrada ou DB error)
-    local affected = MySQL.update.await(
-        'UPDATE trucker_companies SET balance = balance + ? WHERE id = ?',
-        { amount, companyId }
-    )
+    -- Débitos são atômicos: só aplicam se balance >= valor (retorna nil caso contrário),
+    -- evitando saldo negativo por chamadas concorrentes. `allowNegative` (true) mantém o
+    -- comportamento antigo para multas/penalidades que podem deixar o saldo negativo.
+    if type(amount) ~= 'number' or amount ~= amount or amount == math.huge or amount == -math.huge then
+        return nil
+    end
+    local affected
+    if amount < 0 and not allowNegative then
+        affected = MySQL.update.await(
+            'UPDATE trucker_companies SET balance = balance - ? WHERE id = ? AND balance >= ?',
+            { -amount, companyId, -amount }
+        )
+    else
+        affected = MySQL.update.await(
+            'UPDATE trucker_companies SET balance = balance + ? WHERE id = ?',
+            { amount, companyId }
+        )
+    end
     if not affected or affected == 0 then return nil end
     return MySQL.scalar.await(
         'SELECT balance FROM trucker_companies WHERE id = ? LIMIT 1',

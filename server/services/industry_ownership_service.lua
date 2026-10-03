@@ -110,6 +110,9 @@ function IndustryOwnershipService.Buy(src, industryId)
     end
 
     local newBalance = DB_UpdateCompanyBalance(company.id, -price)
+    if not newBalance then
+        return { success = false, reason = ('Saldo insuficiente. Necessário: $%d'):format(price) }
+    end
     if VP_Trucker.Companies[company.id] then
         VP_Trucker.Companies[company.id].balance = newBalance
     end
@@ -174,7 +177,9 @@ function IndustryOwnershipService.RunOperationalCosts()
             local company = VP_Trucker.Companies[owner.company_id]
             if company and company.balance >= cost then
                 local newBalance = DB_UpdateCompanyBalance(owner.company_id, -cost)
-                VP_Trucker.Companies[owner.company_id].balance = newBalance
+                if newBalance then
+                    VP_Trucker.Companies[owner.company_id].balance = newBalance
+                end
             end
         end
     end
