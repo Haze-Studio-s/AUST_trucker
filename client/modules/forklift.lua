@@ -551,9 +551,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             end
 
             local firstOffset, firstHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-            local ghostModel = (firstOffset and firstOffset.prop_model and firstOffset.prop_model ~= '' and firstOffset.prop_model)
-                or (_G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model))
-                or 'hei_prop_carrier_cargo_04b'
+            local ghostModel = nil
+            if _G.JobEntities and _G.JobEntities.pallets and _G.JobEntities.pallets[CurrentSlotIndex] and DoesEntityExist(_G.JobEntities.pallets[CurrentSlotIndex]) then
+                ghostModel = GetEntityModel(_G.JobEntities.pallets[CurrentSlotIndex])
+            elseif firstOffset and firstOffset.prop_model and firstOffset.prop_model ~= '' then
+                ghostModel = firstOffset.prop_model
+            elseif _G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model) then
+                ghostModel = _G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model
+            else
+                ghostModel = 'hei_prop_carrier_cargo_04b'
+            end
             ForkliftModule.SpawnGhostProp(trailer, ghostModel, firstOffset, firstHeading)
         end
 
@@ -654,6 +661,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
                                     PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
 
+                                    -- Sincroniza o holograma no trailer com o modelo exato do palete erguido
+                                    local carriedModel = GetEntityModel(targetPallet)
+                                    local curSlotOff, curSlotHead = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                    ForkliftModule.SpawnGhostProp(trailer, carriedModel, curSlotOff, curSlotHead)
+
                                     if onLoadedCb then
                                         onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
                                     end
@@ -687,6 +699,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         if not palletEntity or not DoesEntityExist(palletEntity) then
                             CurrentForkliftPallet = nil
                         else
+                            -- Garantia dinâmica de correspondência exata do modelo do holograma com o palete carregado
+                            local carriedModel = GetEntityModel(palletEntity)
+                            if not CurrentGhostEntity or not DoesEntityExist(CurrentGhostEntity) or GetEntityModel(CurrentGhostEntity) ~= carriedModel then
+                                local curSlotOff, curSlotHead = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                ForkliftModule.SpawnGhostProp(trailer, carriedModel, curSlotOff, curSlotHead)
+                            end
+
                             local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
                             local ghostWorldCoords = GetOffsetFromEntityInWorldCoords(trailer, slotOffset.x, slotOffset.y, slotOffset.z)
                             local pCoords = GetEntityCoords(palletEntity)
@@ -760,9 +779,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             if loadedCount < requiredCount then
                                                 -- Spawna o holograma no próximo slot sequencial
                                                 local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                                local nextGhostModel = (nextOffset and nextOffset.prop_model and nextOffset.prop_model ~= '' and nextOffset.prop_model)
-                                                    or (_G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model))
-                                                    or 'hei_prop_carrier_cargo_04b'
+                                                local nextGhostModel = nil
+                                                if _G.JobEntities and _G.JobEntities.pallets and _G.JobEntities.pallets[CurrentSlotIndex] and DoesEntityExist(_G.JobEntities.pallets[CurrentSlotIndex]) then
+                                                    nextGhostModel = GetEntityModel(_G.JobEntities.pallets[CurrentSlotIndex])
+                                                elseif nextOffset and nextOffset.prop_model and nextOffset.prop_model ~= '' then
+                                                    nextGhostModel = nextOffset.prop_model
+                                                elseif _G.ActiveJob and (_G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model) then
+                                                    nextGhostModel = _G.ActiveJob.cargoModel or _G.ActiveJob.cargo_model
+                                                else
+                                                    nextGhostModel = 'hei_prop_carrier_cargo_04b'
+                                                end
                                                 ForkliftModule.SpawnGhostProp(trailer, nextGhostModel, nextOffset, nextHeading)
                                             else
                                                 -- Todos os paletes estivados!

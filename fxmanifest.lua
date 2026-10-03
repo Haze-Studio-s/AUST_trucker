@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
-version '20.7.6'
+version '20.7.7'
 
 dependencies {
     'oxmysql',
