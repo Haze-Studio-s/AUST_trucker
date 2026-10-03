@@ -716,9 +716,9 @@ local function StartTruckDelivery(src, contractData)
     local carrierCars = {}
     local carrierVehicleNetIds = {}
     local pallets = {}
-    local palletNetIds = {}
-    local reqPallets = math.min(12, math.max(4, tonumber(contractData.palletCount) or 4))
     local withForklift = (contractData.withForklift ~= false)
+    local maxAllowedPallets = withForklift and 6 or 7
+    local reqPallets = math.min(maxAllowedPallets, math.max(4, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
         if withForklift then
