@@ -1149,14 +1149,18 @@ Config.TruckSimulation = {
     },
 
     Cargo = {
-        -- GP-M01: reduzido de 8.0 → 3.5 (variação de velocidade por tick de 500ms).
-        -- 8.0 m/s era atingido por freadas normais em semáforo.
-        -- 3.5 m/s equivale a uma queda de ~25 km/h em 500ms — colisão real.
-        ImpactThreshold  = 3.5,    -- m/s de queda de velocidade/tick (500ms) para colisão
-        ImpactDamage     = 15.0,   -- % de integridade perdida por colisão forte
-        SpeedDamageRate  = 0.005,  -- % por segundo acima do SpeedLimit
-        SpeedLimit       = 30.0,   -- m/s (~108 km/h)
-        MinPaymentRate   = 0.10,   -- pagamento mínimo (10%) se integridade = 0%
+        -- v20.6.4: Tolerância aumentada e proteção contra frenagens normais
+        -- ImpactThreshold: 10.0 m/s (~36 km/h de choque em 500ms) para colisão real
+        -- CatastrophicThreshold: 18.0 m/s (~65 km/h em 500ms) para impacto violento/muro
+        ImpactThreshold       = 10.0,   -- m/s de queda de velocidade/tick para considerar impacto
+        CatastrophicThreshold = 18.0,   -- m/s para impacto catastrófico imediato
+        ImpactDamageBase      = 4.0,    -- % base de integridade perdida por colisão
+        ImpactDamageMax       = 15.0,   -- % máxima por colisão violenta
+        ImpactDamage          = 5.0,    -- Fallback de compatibilidade
+        ImpactCooldown        = 2500,   -- ms de intervalo mínimo entre danos por impacto
+        SpeedDamageRate       = 0.002,  -- % por segundo acima do SpeedLimit
+        SpeedLimit            = 36.0,   -- m/s (~130 km/h de limite rodoviário seguro)
+        MinPaymentRate        = 0.10,   -- pagamento mínimo (10%) se integridade = 0%
     },
 }
 

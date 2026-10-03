@@ -25,6 +25,8 @@ local SimState = {
     integrity        = 100.0,
     hasActiveJob     = false,
     prevSpeed        = 0.0,
+    lastImpactTime   = 0,
+    prevBodyHealth   = 1000.0,
 
     -- Movimento (para anticheat piso)
     vehicleWasMoving = false,
@@ -101,9 +103,15 @@ end)
 
 -- Job iniciado: reinicia integridade
 local function OnJobStartedHUD()
-    SimState.integrity    = 100.0
-    SimState.hasActiveJob = true
-    SimState.prevSpeed    = 0.0
+    SimState.integrity      = 100.0
+    SimState.hasActiveJob   = true
+    SimState.prevSpeed      = 0.0
+    SimState.lastImpactTime = 0
+    if SimState.currentVehicle and DoesEntityExist(SimState.currentVehicle) then
+        SimState.prevBodyHealth = GetVehicleBodyHealth(SimState.currentVehicle)
+    else
+        SimState.prevBodyHealth = 1000.0
+    end
 end
 RegisterNetEvent('aurp_trucker:client:jobStarted', OnJobStartedHUD)
 RegisterNetEvent('aurp_trucker:client:hudJobStarted', OnJobStartedHUD)
@@ -307,21 +315,69 @@ CreateThread(function()
             SimState.prevSpeed = 0.0
             goto continue
         end
-        if not SimState.currentVehicle then goto continue end
+        local veh = SimState.currentVehicle
+        if not veh or not DoesEntityExist(veh) then goto continue end
 
-        local cfg      = Config.TruckSimulation.Cargo
-        local speed    = GetEntitySpeed(SimState.currentVehicle)
-        local prevSpd  = SimState.prevSpeed
+        local cfg     = Config.TruckSimulation.Cargo
+        local speed   = GetEntitySpeed(veh)
+        local prevSpd = SimState.prevSpeed or 0.0
         SimState.prevSpeed = speed
 
         local decel = prevSpd - speed
-        if decel > cfg.ImpactThreshold then
-            SimState.integrity = math.max(0.0, SimState.integrity - cfg.ImpactDamage)
-            lib.notify({ title = 'Carga Danificada!', description = ('Impacto detectado — Integridade: %d%%'):format(math.floor(SimState.integrity)), type = 'error', duration = 3000 })
+        local now   = GetGameTimer()
+
+        -- Checagem de impacto com tolerância calibrada e debounce
+        if decel > (cfg.ImpactThreshold or 10.0) then
+            local cooldown = cfg.ImpactCooldown or 2500
+            if (now - (SimState.lastImpactTime or 0)) >= cooldown then
+                -- 1. Detecção de frenagem intencional do jogador (S / Freio de Mão / Ré)
+                local isBraking = IsControlPressed(0, 72) or IsControlPressed(0, 76) or IsDisabledControlPressed(0, 72) or IsDisabledControlPressed(0, 76)
+
+                -- 2. Detecção física de colisão real no cavalo e na carreta
+                local hasCollided = HasEntityCollidedWithAnything(veh)
+                local hasTrailer, trailer = GetVehicleTrailerVehicle(veh)
+                if hasTrailer and DoesEntityExist(trailer) and HasEntityCollidedWithAnything(trailer) then
+                    hasCollided = true
+                end
+
+                -- 3. Detecção de deformação e dano na lataria
+                local currentBodyHealth = GetVehicleBodyHealth(veh)
+                local bodyDamage = (SimState.prevBodyHealth or 1000.0) - currentBodyHealth
+                SimState.prevBodyHealth = currentBodyHealth
+
+                local isCatastrophic = decel >= (cfg.CatastrophicThreshold or 18.0)
+                local isTrueCollision = hasCollided or (bodyDamage > 3.0) or isCatastrophic
+
+                -- Frenagem limpa sem bater em nada NUNCA causa dano
+                if not isBraking or isTrueCollision then
+                    if isTrueCollision then
+                        local baseDmg = cfg.ImpactDamageBase or 4.0
+                        local maxDmg = cfg.ImpactDamageMax or 15.0
+                        local severityRatio = math.max(1.0, decel / (cfg.ImpactThreshold or 10.0))
+                        local calculatedDamage = math.min(maxDmg, baseDmg * severityRatio)
+
+                        SimState.integrity = math.max(0.0, SimState.integrity - calculatedDamage)
+                        SimState.lastImpactTime = now
+
+                        lib.notify({
+                            title = 'Carga Danificada!',
+                            description = ('Impacto detectado — Integridade: %d%%'):format(math.floor(SimState.integrity)),
+                            type = 'error',
+                            duration = 3500
+                        })
+                    end
+                end
+            end
+        else
+            if veh and DoesEntityExist(veh) then
+                SimState.prevBodyHealth = GetVehicleBodyHealth(veh)
+            end
         end
 
-        if speed > cfg.SpeedLimit then
-            SimState.integrity = math.max(0.0, SimState.integrity - (cfg.SpeedDamageRate * 0.5))
+        -- Dano suave por velocidade excessiva acima do limite de segurança da rodovia
+        if cfg.SpeedLimit and speed > cfg.SpeedLimit then
+            local overRate = cfg.SpeedDamageRate or 0.002
+            SimState.integrity = math.max(0.0, SimState.integrity - (overRate * 0.5))
         end
 
         ::continue::

@@ -758,6 +758,7 @@ end
 -- ============================================================
 
 function DB_GetPlayerStats(citizenId)
+    pcall(DB_UpsertPlayerStats, citizenId)
     return MySQL.single.await(
         'SELECT * FROM trucker_player_progression WHERE citizenid = ? LIMIT 1',
         { citizenId }
@@ -773,13 +774,14 @@ function DB_UpsertPlayerStats(citizenId)
 end
 
 function DB_AddPlayerStats(citizenId, earnings, distance)
+    pcall(DB_UpsertPlayerStats, citizenId)
     MySQL.update.await(
         [[UPDATE trucker_player_progression
           SET total_earnings = total_earnings + ?,
               total_deliveries = total_deliveries + 1,
               total_distance = total_distance + ?
           WHERE citizenid = ?]],
-        { earnings, distance, citizenId }
+        { tonumber(earnings) or 0, tonumber(distance) or 0.0, citizenId }
     )
 end
 
@@ -789,9 +791,10 @@ end
 
 -- Adiciona XP e retorna o estado atual do jogador
 function DB_AddXP(citizenId, xp)
+    pcall(DB_UpsertPlayerStats, citizenId)
     MySQL.update.await(
         'UPDATE trucker_player_progression SET xp = xp + ? WHERE citizenid = ?',
-        { xp, citizenId }
+        { tonumber(xp) or 0, citizenId }
     )
     return MySQL.single.await(
         'SELECT xp, level, rank, skill_points FROM trucker_player_progression WHERE citizenid = ? LIMIT 1',

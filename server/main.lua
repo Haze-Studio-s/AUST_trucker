@@ -945,6 +945,7 @@ local function StartTruckDelivery(src, contractData)
         cargoIntegrity = 100,
         payment = basePayment,
         xp = baseXP,
+        distance = (chosenTruckCoord and destCoords) and (math.max(1.0, math.floor(#(vector3(destCoords.x, destCoords.y, destCoords.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) / 100.0) / 10.0)) or 3.5,
         deliveryCoords = destCoords,
         stage = 'STEP_GET_TRUCK',
         current_object = nil,
@@ -1461,7 +1462,17 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
             Framework.AddMoney(Player, 'bank', payment, 'polarix-trucker-job')
         end
 
-        -- Atualização autoritativa da tabela 0r_trucker
+        local dist = lobby.distance or 3.5
+
+        -- Persistência oficial na tabela de progressão do sistema (trucker_player_progression)
+        pcall(DB_AddPlayerStats, citizenId, payment, dist)
+        if ProgressionService and ProgressionService.AddDirectXP then
+            pcall(ProgressionService.AddDirectXP, src, citizenId, xp)
+        else
+            pcall(DB_AddXP, citizenId, xp)
+        end
+
+        -- Atualização autoritativa da tabela 0r_trucker e aust_trucker_stats para retrocompatibilidade
         pcall(function()
             MySQL.query.await([[
                 INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
@@ -1514,7 +1525,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
             xp = xp,
             lostPallets = lostCount,
             deliveredPallets = deliveredCount,
-            distance = 3.5
+            distance = dist
         })
     else
         -- =======================================================================
@@ -1619,10 +1630,20 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         Framework.AddMoney(Player, 'bank', finalPayment, 'polarix-quickjob-returned')
     end
 
+    local dist = lobby.distance or 3.5
+
+    -- Persistência oficial na tabela de progressão do sistema (trucker_player_progression)
+    pcall(DB_AddPlayerStats, citizenId, finalPayment, dist)
+    if ProgressionService and ProgressionService.AddDirectXP then
+        pcall(ProgressionService.AddDirectXP, src, citizenId, xp)
+    else
+        pcall(DB_AddXP, citizenId, xp)
+    end
+
     -- Remoção de chaves do caminhão da empresa
     RemoveJobKeys(src, lobby)
 
-    -- Atualização de estatísticas 0r_trucker
+    -- Atualização de estatísticas 0r_trucker e aust_trucker_stats para retrocompatibilidade
     pcall(function()
         MySQL.query.await([[
             INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
@@ -1658,7 +1679,8 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         repairCost = repairCost,
         xp = xp,
         lostPallets = lobby.lostPallets or 0,
-        deliveredPallets = lobby.deliveredPallets or 0
+        deliveredPallets = lobby.deliveredPallets or 0,
+        distance = dist
     })
 end)
 

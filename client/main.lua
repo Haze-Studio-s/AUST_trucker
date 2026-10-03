@@ -2714,6 +2714,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)
             summary.xp or 0
         ), 'success')
     end
+
+    TriggerEvent('aurp_trucker:client:refreshNUI')
 end)
 
 -- FLUXO TRABALHO RÁPIDO: Carga descarregada, pagamento retido, rota de retorno para devolução

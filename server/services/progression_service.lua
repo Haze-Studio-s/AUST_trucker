@@ -89,6 +89,45 @@ function ProgressionService.GrantXP(src, citizenId, basePayment, timeMultiplier,
     }
 end
 
+-- Concede XP direto/exato ao jogador (usado em fretes Polarix / Quick Jobs com valor pré-calculado)
+-- Returns: { xpGained, newLevel, levelsGained, totalXP, totalSkillPoints }
+function ProgressionService.AddDirectXP(src, citizenId, exactXP)
+    local xpGained = math.max(0, math.floor(tonumber(exactXP) or 0))
+    if xpGained <= 0 then return { xpGained = 0, levelsGained = 0, newLevel = 1 } end
+
+    pcall(DB_UpsertPlayerStats, citizenId)
+    local row = DB_AddXP(citizenId, xpGained)
+    if not row then return { xpGained = xpGained, levelsGained = 0, newLevel = 1 } end
+
+    local newLevel     = CalcLevel(row.xp)
+    local oldLevel     = tonumber(row.level) or 0
+    local levelsGained = math.max(0, newLevel - oldLevel)
+
+    if levelsGained > 0 then
+        local newRank = CalcRank(newLevel)
+        DB_SetLevelData(citizenId, newLevel, newRank, levelsGained)
+        if src and src > 0 then
+            TriggerClientEvent('aurp_trucker:client:levelUp', src, {
+                newLevel     = newLevel,
+                newRank      = newRank,
+                levelsGained = levelsGained,
+                skillPoints  = levelsGained,  -- 1 ponto por nível ganho
+            })
+        end
+    end
+
+    local updatedStats = DB_GetPlayerStats(citizenId)
+
+    return {
+        xpGained         = xpGained,
+        levelsGained     = levelsGained,
+        newLevel         = (levelsGained > 0) and newLevel or oldLevel,
+        totalXP          = updatedStats and updatedStats.xp or row.xp,
+        totalSkillPoints = updatedStats and updatedStats.skill_points or row.skill_points,
+    }
+end
+ProgressionService.AddXP = ProgressionService.AddDirectXP
+
 -- Retorna skills do jogador como mapa { [skill_type] = skill_level }
 function ProgressionService.GetSkills(citizenId)
     local rows = DB_GetSkills(citizenId) or {}
