@@ -996,7 +996,14 @@ local function StartTruckDelivery(src, contractData)
         loadedCount = 0,
         requiredCount = reqPallets,
         cargoName = contractData.name or (cargoType == 'liquid' and 'Combustível Automotivo' or (cargoType == 'heavy' and 'Contêiner Marítimo' or (cargoType == 'adr' and 'Compostos Químicos ADR' or (cargoType == 'vehicle_carrier' and 'Cegonha de Veículos Esportivos' or 'Paletes Industriais')))),
-        cargoModel = contractData.cargoModel or contractData.cargo_model or 'hei_prop_carrier_cargo_04b',
+        cargoModel = (function()
+            local cm = contractData.cargoModel or contractData.cargo_model
+            if cm and cm ~= '' then return cm end
+            local tOffsets = AdminService and AdminService.TrailerOffsets and (AdminService.TrailerOffsets[requestedTrailer] or AdminService.TrailerOffsets[trailerModel] or AdminService.TrailerOffsets[tostring(requestedTrailer):lower()])
+            local s1 = tOffsets and tOffsets.pallets and (tOffsets.pallets[1] or tOffsets.pallets['1'])
+            if s1 and s1.prop_model and s1.prop_model ~= '' then return s1.prop_model end
+            return 'hei_prop_carrier_cargo_04b'
+        end)(),
         cargoIntegrity = 100,
         payment = basePayment,
         xp = baseXP,
