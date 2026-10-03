@@ -1416,8 +1416,14 @@ RegisterNetEvent('aurp_trucker:server:adrLeakContained', function(jobId, newInte
     if not lobby or lobby.src ~= src then return end
     if lobby.cargoType ~= 'adr' then return end
 
-    lobby.cargoIntegrity = newIntegrity or 100
-    print(("[AUST_Trucker] Jogador %s conteve vazamento ADR. Integridade salva em %d%%"):format(tostring(src), lobby.cargoIntegrity))
+    -- Valor vem do client: valida tipo/faixa e só permite diminuir a integridade
+    local reported = tonumber(newIntegrity)
+    if not reported or reported ~= reported or reported == math.huge or reported == -math.huge then return end
+    reported = math.max(0, math.min(100, reported))
+    lobby.cargoIntegrity = math.min(lobby.cargoIntegrity or 100, reported)
+    if Config.Debug then
+        print(("[AUST_Trucker] Jogador %s conteve vazamento ADR. Integridade salva em %d%%"):format(tostring(src), lobby.cargoIntegrity))
+    end
 end)
 
 
@@ -1659,6 +1665,11 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         local engineHealth = tonumber(inspection.engineHealth) or 1000.0
         local bodyHealth = tonumber(inspection.bodyHealth) or 1000.0
         local burstTires = tonumber(inspection.burstTires) or 0
+        -- Valores vêm do client: rejeita NaN/inf e limita (burstTires negativo geraria dinheiro)
+        if burstTires ~= burstTires or burstTires == math.huge or burstTires == -math.huge then burstTires = 0 end
+        burstTires = math.floor(math.max(0, math.min(10, burstTires)))
+        if engineHealth ~= engineHealth then engineHealth = 1000.0 end
+        if bodyHealth ~= bodyHealth then bodyHealth = 1000.0 end
 
         -- Cálculo do custo de conserto baseado no desgaste real
         local engineDamage = math.max(0.0, 1000.0 - engineHealth)
@@ -1668,7 +1679,7 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         local bodyCost = math.floor(bodyDamage * 1.0)          -- até ~$1000 se lataria destruída
         local tireCost = burstTires * 150                      -- $150 por pneu estourado
 
-        repairCost = engineCost + bodyCost + tireCost
+        repairCost = math.max(0, engineCost + bodyCost + tireCost)
         -- Desconto limitado a no máximo 65% do pagamento retido para evitar saldo negativo
         repairCost = math.min(repairCost, math.floor(payment * 0.65))
     end

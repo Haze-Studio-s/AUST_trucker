@@ -56,15 +56,21 @@ if fw == 'qbx' or fw == 'qbcore' then
         return player and player.PlayerData.job or { name = '', label = '' }
     end
 
+    -- Retorna true se o dinheiro foi creditado, false caso contrário.
+    -- (Chamadores como CompanyService.Withdraw dependem deste retorno.)
     Framework.AddMoney = function(player, account, amount, reason)
         if type(player) == 'number' then player = Framework.GetPlayer(player) end
-        if not player then return end
+        if not player then return false end
+        if type(amount) ~= 'number' or amount ~= amount or amount < 0 or amount == math.huge then return false end
         account = (account == 'cash') and 'cash' or 'bank'
+        local ok
         if fw == 'qbx' then
-            exports.qbx_core:AddMoney(player.PlayerData.source, account, amount, reason or '')
+            ok = exports.qbx_core:AddMoney(player.PlayerData.source, account, amount, reason or '')
         else
-            player.Functions.AddMoney(account, amount, reason)
+            ok = player.Functions.AddMoney(account, amount, reason)
         end
+        -- Algumas versões não retornam valor em sucesso; só falso explícito é falha.
+        return ok ~= false
     end
 
     Framework.RemoveMoney = function(player, account, amount, reason)
@@ -159,13 +165,16 @@ elseif fw == 'esx' then
         return player and player.job or { name = '', label = '' }
     end
 
+    -- Retorna true se o dinheiro foi creditado, false caso contrário.
     Framework.AddMoney = function(player, account, amount, reason)
-        if not player then return end
+        if not player then return false end
+        if type(amount) ~= 'number' or amount ~= amount or amount < 0 or amount == math.huge then return false end
         if account == 'cash' then
             player.addAccountMoney('money', amount)
         else
             player.addAccountMoney('bank', amount)
         end
+        return true
     end
 
     Framework.RemoveMoney = function(player, account, amount, reason)

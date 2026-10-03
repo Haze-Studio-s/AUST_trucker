@@ -1841,6 +1841,11 @@ local function FinishQuickJobContract(src, jobId, damages)
     local engineHealth = tonumber(damages.engineHealth) or 1000.0
     local bodyHealth = tonumber(damages.bodyHealth) or 1000.0
     local burstTires = tonumber(damages.burstTires) or 0
+    -- Valor vem do client: rejeita NaN/inf e limita a 0..10 (negativo geraria dinheiro)
+    if burstTires ~= burstTires or burstTires == math.huge or burstTires == -math.huge then burstTires = 0 end
+    burstTires = math.floor(math.max(0, math.min(10, burstTires)))
+    if engineHealth ~= engineHealth then engineHealth = 1000.0 end
+    if bodyHealth ~= bodyHealth then bodyHealth = 1000.0 end
 
     if engineHealth > 1000.0 then engineHealth = 1000.0 end
     if bodyHealth > 1000.0 then bodyHealth = 1000.0 end
@@ -1854,7 +1859,7 @@ local function FinishQuickJobContract(src, jobId, damages)
     local rawPenalty = math.floor(grossPayment * damageRatio * 0.45) + (burstTires * 150)
     -- Teto seguro de penalidade: máximo de 50% de dedução
     local maxPenalty = math.floor(grossPayment * 0.50)
-    local damageDeduction = math.min(rawPenalty, maxPenalty)
+    local damageDeduction = math.max(0, math.min(rawPenalty, maxPenalty))
 
     -- Mínimo de 10% garantido para assegurar fail-closed sem saldo nulo/negativo
     local minGuaranteed = math.floor(grossPayment * 0.10)
