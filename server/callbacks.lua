@@ -2,9 +2,13 @@
 -- lib.callback.register (substitui QBCore.Functions.CreateCallback)
 
 local function BuildDefaultContracts()
+    if AdminService and AdminService.GetActiveContracts then
+        local live = AdminService.GetActiveContracts()
+        if live and #live > 0 then return live end
+    end
     local lc_contracts = {}
     local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-    local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
+    local rentalTrucks = { "hauler", "phantom", "packer", "hauler2", "brickades" }
     for i, load in ipairs(availableLoads) do
         local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
         local def = load.def or {0,0,0,0}
@@ -34,6 +38,8 @@ end
 local function BuildFallbackLcDados(citizenId, playerMoney)
     return {
         config = {
+            locale = Config.locale or Config.lang or 'br',
+            format = Config.format or { lang = 'br', currency = 'USD', location = 'pt-BR' },
             dealership = Config.LC_Dealership or {},
             repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
             required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
@@ -76,16 +82,18 @@ end
 -- Dados iniciais para abrir a NUI
 -- PERF: queries independentes lançadas em paralelo via Citizen.CreateThread (barrier pattern)
 -- Reduz latência de abertura da NUI de ~15 queries sequenciais para 2 fases paralelas
-lib.callback.register('aurp_trucker:getInitialData', function(source)
-    local Player = Framework.GetPlayer(source)
-    if not Player then
+function BuildInitialDataForPlayer(source, citizenId)
+    local Player = source and Framework.GetPlayer(source)
+    if not citizenId and Player then
+        citizenId = Framework.GetCitizenId(Player)
+    end
+    if not citizenId then
         return {
             lc_dados = BuildFallbackLcDados(nil, 0),
             jobs = {},
             recruitingCompanies = {}
         }
     end
-    local citizenId = Framework.GetCitizenId(Player)
 
     local ok, result = pcall(function()
         local _r       = {}   -- resultados acumulados
@@ -229,10 +237,14 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                 local membersPayload = {}
                 for cid, info in pairs(party.members) do
                     table.insert(membersPayload, {
-                        citizenid = cid,
-                        name      = info.src and GetCharName(info.src) or cid,
-                        isLeader  = (cid == party.leader),
-                        online    = info.src ~= nil,
+                        citizenid           = cid,
+                        user_id             = cid,
+                        name                = info.src and GetCharName(info.src) or cid,
+                        isLeader            = (cid == party.leader),
+                        owner               = (cid == party.leader and 1 or 0),
+                        online              = info.src ~= nil,
+                        joined_at           = info.joined_at or os.time(),
+                        finished_deliveries = info.finished_deliveries or 0,
                     })
                 end
                 local convoyActive = false
@@ -240,51 +252,83 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                     if convoy.partyId == myPartyId then convoyActive = true; break end
                 end
                 partyPayload = {
+                    id           = myPartyId,
                     partyId      = myPartyId,
+                    code         = party.code or string.upper(string.sub(myPartyId, 1, 6)),
+                    name         = party.name or ('Grupo #' .. string.upper(string.sub(myPartyId, 1, 6))),
+                    description  = party.description or 'Grupo de transporte cooperativo',
                     isLeader     = (party.leader == citizenId),
+                    owner        = (party.leader == citizenId and 1 or 0),
                     members      = membersPayload,
                     convoyActive = convoyActive,
-                    maxSize      = party.maxSize,
+                    maxSize      = party.maxSize or 4,
                 }
             end
         end
 
-        -- Montar contratos LC idênticos à referência (Quick Jobs)
+        -- Montar contratos LC idênticos à referência (Quick Jobs) com Sincronização em Tempo Real do AdminService
         local lc_contracts = {}
-        local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
-        local rentalTrucks = { "hauler", "phantom", "packer", "blacktop", "brickades" }
-        local stats = _r.stats or {}
-        local skills = _r.skills or {}
-        local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or 0
-        local playerLevel = (ProgressionService and ProgressionService.CalcLevel and ProgressionService.CalcLevel(playerXP)) or (stats and stats.level) or 1
+        if AdminService and AdminService.GetActiveContracts then
+            lc_contracts = AdminService.GetActiveContracts(citizenId)
+        end
 
-        for i, load in ipairs(availableLoads) do
-            local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
-            local def = load.def or {0,0,0,0}
-            local adr = def[1] or 0
-            local fragile = def[2] or 0
-            local valuable = def[3] or 0
-            local illegal = def[4] or 0
+        if not lc_contracts or #lc_contracts == 0 then
+            local availableLoads = (Config.LC_Jobs and Config.LC_Jobs.available_loads) or {}
+            local rentalTrucks = { "hauler", "phantom", "packer", "hauler2", "brickades" }
+            local deliveryLocs = Config.LC_DeliveryLocations or { vector4(1452.67, 6552.02, 14.89, 138.69) }
+            local originCoords = Config.LC_Headquarters and Config.LC_Headquarters.coords or vector3(1208.83, -3115.0, 5.54)
 
-            local baseDist = 0.8 + ((i * 1.37) % 9.2)
-            local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
-            local reward = math.floor(baseDist * rewardRate + 950)
+            for i, load in ipairs(availableLoads) do
+                local truckModel = rentalTrucks[((i - 1) % #rentalTrucks) + 1]
+                local def = load.def or {0,0,0,0}
+                local adr = def[1] or 0
+                local fragile = def[2] or 0
+                local valuable = def[3] or 0
+                local illegal = def[4] or 0
+                local fast = (i % 3 == 0) and 1 or 0
 
-            table.insert(lc_contracts, {
-                contract_id   = i,
-                contract_name = load.name,
-                contract_type = (i % 2 == 0) and 1 or 0, -- Alterna entre Quick Jobs (0) e Freight Jobs (1)
-                distance      = tonumber(string.format("%.2f", baseDist)),
-                reward        = reward,
-                truck         = truckModel,
-                trailer       = load.trailer,
-                cargo_type    = adr,
-                fragile       = fragile,
-                valuable      = valuable,
-                fast          = (i % 3 == 0) and 1 or 0,
-                illegal       = illegal,
-                progress      = nil,
-            })
+                local destIndex = ((i - 1) % #deliveryLocs) + 1
+                local dest = deliveryLocs[destIndex] or deliveryLocs[1]
+                local rawDist = #(vector3(dest.x, dest.y, dest.z) - originCoords) / 1000.0
+                local realDist = tonumber(string.format("%.2f", rawDist)) or 1.0
+                if realDist <= 0 then realDist = 1.0 end
+
+                local rewardRate = 1200 + (valuable * 450) + (fragile * 350) + (adr > 0 and 600 or 0)
+                local baseReward = math.floor(realDist * rewardRate + 950)
+
+                local contractData = {
+                    contract_id   = i,
+                    contract_name = load.name,
+                    contract_type = (i % 2 == 0) and 1 or 0,
+                    distance      = realDist,
+                    reward        = baseReward,
+                    truck         = truckModel,
+                    trailer       = load.trailer,
+                    cargo_type    = adr,
+                    fragile       = fragile,
+                    valuable      = valuable,
+                    fast          = fast,
+                    illegal       = illegal,
+                    progress      = nil,
+                }
+
+                local canAccept, lockType, lockReason = true, nil, nil
+                if ProgressionService and ProgressionService.CanPlayerAcceptContract then
+                    canAccept, lockType, lockReason = ProgressionService.CanPlayerAcceptContract(citizenId, contractData)
+                end
+                contractData.locked = not canAccept
+                contractData.lock_type = lockType
+                contractData.lock_reason = lockReason
+
+                if ProgressionService and ProgressionService.CalculateContractBonuses then
+                    local bonuses = ProgressionService.CalculateContractBonuses(citizenId, contractData)
+                    contractData.reward = math.floor(baseReward * bonuses.moneyMultiplier)
+                    contractData.bonus_money_pct = bonuses.moneyBonusPct
+                    contractData.bonus_exp_pct = bonuses.expBonusPct
+                end
+
+                table.insert(lc_contracts, contractData)
+            end
         end
 
         local fleetTrucks = _r.fleetTrucks or (TruckFleetService and TruckFleetService.GetPlayerTrucks(citizenId)) or {}
@@ -334,20 +378,38 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             })
         end
 
-        -- Ranking dos Top Caminhoneiros
+        -- Ranking dos Top Caminhoneiros (Leaderboard Competitivo Unificado)
         local topTruckersList = {}
         local topOk, topRows = pcall(function()
             return MySQL.query.await([[
-                SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp
-                FROM trucker_player_progression p
-                ORDER BY p.xp DESC
+                SELECT 
+                    COALESCE(r.citizenid, p.citizenid) as citizenid,
+                    COALESCE(p.total_distance, 0) as traveled_distance,
+                    GREATEST(COALESCE(r.xp, 0), COALESCE(p.xp, 0)) as exp,
+                    COALESCE(c.name, '') as company_name
+                FROM `0r_trucker` r
+                LEFT JOIN trucker_player_progression p ON p.citizenid = r.citizenid
+                LEFT JOIN trucker_company c ON c.user_id = r.citizenid
+                ORDER BY exp DESC, traveled_distance DESC
                 LIMIT 10
             ]])
         end)
-        if topOk and type(topRows) == 'table' then
+        if not topOk or not topRows or #topRows == 0 then
+            pcall(function()
+                topRows = MySQL.query.await([[
+                    SELECT p.citizenid, p.total_distance as traveled_distance, p.xp as exp, COALESCE(c.name, '') as company_name
+                    FROM trucker_player_progression p
+                    LEFT JOIN trucker_company c ON c.user_id = p.citizenid
+                    ORDER BY p.xp DESC
+                    LIMIT 10
+                ]])
+            end)
+        end
+        if type(topRows) == 'table' then
             for _, row in ipairs(topRows) do
+                local label = (row.company_name and row.company_name ~= '') and row.company_name or ('Motorista #' .. string.sub(tostring(row.citizenid), 1, 6))
                 table.insert(topTruckersList, {
-                    name = 'Motorista #' .. string.sub(tostring(row.citizenid), 1, 5),
+                    name = label,
                     firstname = '',
                     traveled_distance = tonumber(row.traveled_distance) or 0,
                     exp = tonumber(row.exp) or 0
@@ -360,6 +422,9 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
         local partyMembersList = {}
         if partyPayload then
             partyObj = {
+                id            = partyPayload.partyId,
+                partyId       = partyPayload.partyId,
+                code          = partyPayload.code,
                 name          = partyPayload.name or ('Grupo #' .. partyPayload.partyId),
                 description   = partyPayload.description or 'Grupo de transporte cooperativo',
                 owner         = partyPayload.isLeader and 1 or 0,
@@ -369,15 +434,32 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             }
             for _, m in ipairs(partyPayload.members) do
                 table.insert(partyMembersList, {
-                    user_id = m.citizenid,
-                    name    = m.name,
-                    owner   = m.isLeader,
+                    user_id             = m.citizenid or m.user_id,
+                    citizenid           = m.citizenid or m.user_id,
+                    name                = m.name,
+                    owner               = m.isLeader or (m.owner == 1),
+                    online              = m.online,
+                    joined_at           = m.joined_at or os.time(),
+                    finished_deliveries = m.finished_deliveries or 0,
                 })
             end
         end
 
+        local activeLocale = Config.locale or Config.lang or 'br'
+        local activeFormat = Config.format or { lang = activeLocale, currency = 'USD', location = 'pt-BR' }
+
+        local stats = _r.stats or {}
+        local skills = _r.skills or {}
+        local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or (stats.money) or 0
+        local playerXP = tonumber(stats.xp) or 0
+        local playerLevel = tonumber(stats.level) or (ProgressionService and ProgressionService.GetPlayerLevel and ProgressionService.GetPlayerLevel(playerXP)) or 0
+        local playerSkillPoints = tonumber(stats.skill_points) or 0
+        local loanPlans = (LoanService and LoanService.GetPlans and LoanService.GetPlans()) or (Config.LC_Loans and Config.LC_Loans.plans) or {}
+
         local lc_dados = {
             config = {
+                locale = activeLocale,
+                format = activeFormat,
                 dealership = Config.LC_Dealership or {},
                 repair_price = Config.LC_RepairPrice or { engine = 100, transmission = 100, wheels = 100, body = 100, fuel = 10 },
                 required_xp_to_levelup = Config.LC_RequiredXP or { 100, 250, 450, 700, 1000, 1500, 2200, 3000, 4000, 5200 },
@@ -398,7 +480,7 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
                 finished_deliveries = tonumber(stats.total_deliveries) or 0,
                 exp = playerXP,
                 traveled_distance = tonumber(stats.total_distance) or 0.0,
-                skill_points = (ProgressionService and ProgressionService.GetSkillPoints and ProgressionService.GetSkillPoints(citizenId)) or math.floor(playerLevel / 2),
+                skill_points = playerSkillPoints,
                 product_type = skills.product_type or 0,
                 distance = skills.distance or 0,
                 valuable = skills.valuable or 0,
@@ -461,6 +543,37 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
     end
 
     return result
+end
+
+-- Callback principal para o frontend da NUI
+lib.callback.register('aurp_trucker:getInitialData', function(source)
+    local Player = Framework.GetPlayer(source)
+    if not Player then
+        return {
+            lc_dados = BuildFallbackLcDados(nil, 0),
+            jobs = {},
+            recruitingCompanies = {}
+        }
+    end
+    local citizenId = Framework.GetCitizenId(Player)
+    return BuildInitialDataForPlayer(source, citizenId)
+end)
+
+-- Abertura direta padrão truck_logistics:getData / getDataFor(src)
+function getDataFor(src)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return end
+    local citizenId = Framework.GetCitizenId(Player)
+    local data = BuildInitialDataForPlayer(src, citizenId)
+    local activeLocale = Config.locale or Config.lang or 'br'
+    local activeFormat = Config.format or { lang = activeLocale, currency = 'USD', location = 'pt-BR' }
+    TriggerClientEvent('truck_logistics:open', src, data.lc_dados, { config = { locale = activeLocale, format = activeFormat } })
+end
+exports('getDataFor', getDataFor)
+
+RegisterNetEvent('truck_logistics:getData', function()
+    local src = source
+    getDataFor(src)
 end)
 
 -- Membros da empresa — derivação server-side (não confia no companyId do cliente)
@@ -826,30 +939,41 @@ end)
 -- PARTY / CONVOY CALLBACKS (Fase 3A)
 -- =============================================
 
-lib.callback.register('aurp_trucker:partyCreate', function(source)
-    local partyId, err = PartyService.Create(source)
+lib.callback.register('aurp_trucker:partyCreate', function(source, data)
+    local partyId, err = PartyService.Create(source, data)
     return { success = partyId ~= nil, partyId = partyId, reason = err }
 end)
 
-lib.callback.register('aurp_trucker:partyInvite', function(source, targetName)
-    -- H-05: Validar targetName antes de chamar :lower() — evita crash se nil/não-string
-    if type(targetName) ~= 'string' or targetName == '' or #targetName > 64 then
-        return { success = false, reason = 'Nome inválido' }
-    end
-    -- Buscar targetSrc pelo nome do personagem (ou Steam name como fallback)
-    local targetSrc = nil
-    local searchLower = targetName:lower()
-    for _, playerSrc in ipairs(GetPlayers()) do
-        local s = tonumber(playerSrc)
-        local charName = GetCharName(s):lower()
-        local steamName = (GetPlayerName(s) or ''):lower()
-        if charName:find(searchLower, 1, true) or steamName:find(searchLower, 1, true) then
-            targetSrc = s; break
+lib.callback.register('aurp_trucker:partyJoin', function(source, data)
+    local nameOrCode = data and (data.name or data.code or data.nameOrCode or data.target)
+    local pass = data and (data.pass or data.password)
+    local ok, res = PartyService.Join(source, nameOrCode, pass)
+    return { success = ok == true, partyId = (ok and res) or nil, reason = (not ok and res) or nil }
+end)
+
+lib.callback.register('aurp_trucker:partyInvite', function(source, target)
+    local targetSrc = tonumber(target)
+    if not targetSrc and type(target) == 'string' and target ~= '' then
+        local searchLower = target:lower()
+        for _, playerSrc in ipairs(GetPlayers()) do
+            local s = tonumber(playerSrc)
+            local charName = GetCharName(s):lower()
+            local steamName = (GetPlayerName(s) or ''):lower()
+            if charName:find(searchLower, 1, true) or steamName:find(searchLower, 1, true) then
+                targetSrc = s; break
+            end
         end
     end
-    if not targetSrc then return { success = false, reason = 'Jogador não encontrado' } end
+    if not targetSrc then
+        return { success = false, reason = 'Jogador não encontrado ou offline.' }
+    end
 
     local ok, err = PartyService.Invite(source, targetSrc)
+    return { success = ok, reason = err }
+end)
+
+lib.callback.register('aurp_trucker:partyKick', function(source, targetCid)
+    local ok, err = PartyService.Kick(source, targetCid)
     return { success = ok, reason = err }
 end)
 
@@ -1351,4 +1475,73 @@ lib.callback.register('aurp_trucker:upgradeSkill', function(source, skillType)
     if not Player then return false, 'Jogador não encontrado' end
     local citizenId = Framework.GetCitizenId(Player)
     return ProgressionService.PurchaseSkill(source, citizenId, tostring(skillType))
+end)
+
+-- ============================================================
+-- SISTEMA DE LICENÇAS E EXAMES TÉCNICOS (ADR E HEAVY LIFT)
+-- ============================================================
+
+lib.callback.register('aurp_trucker:getLicenses', function(source)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { adr = false, heavy = false } end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local row = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
+    return {
+        adr = row and row.adr_certified == 1 or false,
+        heavy = row and row.heavy_certified == 1 or false
+    }
+end)
+
+lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseType)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+    local citizenId = Framework.GetCitizenId(Player)
+
+    local cfg = Config.Licenses and Config.Licenses[licenseType]
+    if not cfg then
+        return { success = false, reason = 'Licença inexistente' }
+    end
+
+    local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
+    local pLevel = truckerRow and truckerRow.level or 1
+    if pLevel < (cfg.minLevel or 1) then
+        return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel) }
+    end
+
+    local fee = cfg.examFee or 1000
+    local hasMoney = false
+    if exports.qbx_core then
+        hasMoney = exports.qbx_core:RemoveMoney(source, 'bank', fee, 'trucker-license-fee')
+        if not hasMoney then
+            hasMoney = exports.qbx_core:RemoveMoney(source, 'cash', fee, 'trucker-license-fee')
+        end
+    else
+        hasMoney = Framework.RemoveMoney(Player, 'bank', fee, 'trucker-license-fee')
+    end
+
+    if not hasMoney then
+        return { success = false, reason = ('Saldo insuficiente para a taxa de exame ($%d)'):format(fee) }
+    end
+
+    local colName = (licenseType == 'adr') and 'adr_certified' or 'heavy_certified'
+    MySQL.query.await(([[
+        INSERT INTO trucker_licenses (citizenid, %s)
+        VALUES (?, 1)
+        ON DUPLICATE KEY UPDATE %s = 1
+    ]]):format(colName, colName), { citizenId })
+
+    return {
+        success = true,
+        message = ('Aprovado no exame! Certificado %s emitido com sucesso.'):format(cfg.name)
+    }
+end)
+
+lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
+    local offsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
+    local specific = nil
+    if trailerModel and offsets then
+        specific = offsets[tostring(trailerModel):lower()] or offsets[trailerModel]
+    end
+    return { all = offsets, specific = specific }
 end)

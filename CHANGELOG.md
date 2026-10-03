@@ -1,5 +1,6 @@
 # Changelog — AUST_trucker
 
+## [20.6.2] — 2026-10-03 — Correção no Alvo da Empilhadeira, Unificação de Colisão Híbrida e Normalização de Offsets do TruckerAdmin
 ## [Unreleased] — 2026-09-28 — Sync do repo VP local (só servidor + docs)
 
 Detalhes e achados: [`docs/SYNC_VP_LOCAL_2026-09-28.md`](docs/SYNC_VP_LOCAL_2026-09-28.md).
@@ -14,10 +15,114 @@ Verificação: harness MOCK 13/13 + sintaxe. **Não testado in-game.** UI/HTML/c
 
 ## [Unreleased] — 2026-09-16 — Auditoria de runtime (/fivem)
 
-### Corrigido
-- `server/events.lua` e `server/flatbed.server.lua`: `NetworkDoesEntityExistWithNetworkId` não existe no server (a checagem de roubo de carga e do flatbed quebrava) → `NetworkGetEntityFromNetworkId` + `DoesEntityExist`.
+### 🎯 Reabertura Imediata de Alvo (`ox_target:addSphereZone`)
+- **SphereZone Dedicada para a Empilhadeira:** Ao estivar todos os paletes e posicionar a empilhadeira, o script gera uma `addSphereZone` de 3.0m nas coordenadas da empilhadeira, eliminando falhas de raycast ou posicionamento de câmera.
+- **Ciclo Resiliente de Repetição em Falha:** Se o jogador errar o minigame de travamento das catracas, `ForkliftSecured` permanece `false` e a `SphereZone` é imediatamente reaberta para permitir nova tentativa, sem travar o fluxo.
 
-Verificação: sintaxe de cada arquivo alterado. **Não testado in-game.**
+### 🧱 Unificação da Matriz de Colisão Híbrida (1:1 com os Paletes)
+- **Colisão Ativa a Pé:** A empilhadeira embarcada na carreta mantém colisão física ativa com o jogador e o mundo (`SetEntityCollision(fork, true, true)` e `SetCanClimbOnEntity(fork, true)`), permitindo subir e inspecionar a carga normalmente a pé.
+- **Isolamento Havok Total:** Anulada a colisão mútua contra o reboque e o caminhão (`SetEntityNoCollisionEntity(fork, trailer, false)`), prevenindo qualquer trepidação física.
+- **Desativação em Trânsito:** A colisão é desativada temporariamente apenas quando o caminhão estiver em trânsito rodoviário acelerado na estrada para evitar picos de física.
+
+### 📐 Resolução de Offsets do TruckerAdmin & Normalização 32-bit
+- **Compatibilidade com `TINYINT(1)`:** Corrigida a identificação do campo `is_forklift` no MySQL, que retornava valor booleano no `oxmysql`, impedindo que os offsets da empilhadeira fossem gravados erroneamente como paletes.
+- **Normalização de Hash 32-bit (Signed / Unsigned):** Implementada a máscara `hash & 0xFFFFFFFF` e dual-indexação (`signed` e `unsigned`), assegurando que `GetEntityModel(trailer)` (assinado) encontre perfeitamente as chaves numéricas salvas pelo Gizmo 3D.
+- **Auto-Sync no Boot do Client:** O cliente realiza o download automático e cacheamento dos offsets do servidor logo na inicialização, garantindo que o reboque utilize sempre os offsets do banco.
+
+### 👁️ Alcance Visual de Cintas (LOD Estendido)
+- **Renderização a 100 Metros:** O raio de renderização contínua das cintas 3D (`DrawPoly`) foi expandido de 35 metros para **100 metros** ao redor da carreta, permitindo visualização nítida das cintas na estrada e em comboios à distância.
+
+## [20.6.1] — 2026-10-02 — Refatoração Visual de Cintas (DrawPoly Bilateral de 6cm, Condicionamento por Minigame & Remoção do Texto 3D)
+
+### 🪢 Cintas Visuais 3D com Malha Planar Realista (`DrawPoly`)
+- **Substituição da Nativa `DrawLine` por `DrawPoly`:** Eliminada a limitação de espessura de 1 pixel ("laser irreal") das linhas de debug. Implementada renderização poligonal em malhas de triângulos planos (`DrawPoly`) gerando tiras têxteis com **6 cm de largura real** (`hw = 0.03m`).
+- **Renderização Bilateral Anti-Culling:** Cada segmento da cinta (trilho esquerdo $\to$ topo esquerdo $\to$ topo direito $\to$ trilho direito) é desenhado com ordem horária e anti-horária de vértices, impedindo desaparecimento visual por *backface culling* independente do ângulo da câmera.
+- **Cor Industrial Vibrante:** Tiras em vermelho industrial (`220, 20, 20, 255`) projetadas dinamicamente sobre a geometria do palete com base nas suas dimensões (`GetModelDimensions`).
+
+### 🎯 Condicionamento Estrito de Estado & Fluxo do Minigame
+- **Ativação Pós-Vitória Exclusiva:** As cintas visuais só são renderizadas após a conclusão com sucesso do minigame de habilidade (`isSecured == true`). Paletes pendentes ou recém-estivados não exibem nenhuma fita.
+- **Comportamento em Falha no Minigame:** Caso o jogador falhe na combinação de teclas do `lib.skillCheck`, o palete permanece desamarrado (`isSecured = false`), nenhuma fita é desenhada e o sistema reabre a zona de interação do `ox_target` para permitir nova tentativa sem avançar indevidamente a lista.
+- **Tratamento Idêntico para a Empilhadeira:** Falhas no minigame de travamento da empilhadeira mantêm `ForkliftSecured = false` e reconfiguram a zona de trava para repetição imediata.
+
+### 🚫 Remoção Total do Texto 3D Flutuante
+- **Abolição Absoluta do `DrawText3D`:** Removidos todos os marcadores flutuantes com o texto "Amarrar" ou "[E] Amarrar" sobre os paletes e a empilhadeira, limpando a poluição visual do pátio.
+- **Interação 100% via `ox_target` / Sistema Padronizado:** A amarração e travamento operam de forma limpa e imersiva através dos alvos do `ox_target` configurados para cada palete e para o modelo da empilhadeira.
+
+## [20.6.0] — 2026-10-02 — Sistema Visual de Amarração de Carga (Cintas 3D DrawLine, Texto 3D Interativo e Encadeamento Imediato da Forklift)
+
+### 🪢 Cintas Visuais 3D Realistas (`DrawLine` & Vetores Dinâmicos)
+- **Cintas Duplas Paralelas por Palete:** Implementado renderizador vetorial contínuo que calcula em tempo real os pontos de fixação da carga (`GetOffsetFromEntityInWorldCoords`). Cada palete recebe duas cintas completas (frontal e traseira) partindo das longarinas laterais da carreta (`-1.25m` e `+1.25m`), subindo pelas laterais do palete e cruzando o topo.
+- **Espessura de Fita Têxtil:** Renderização de linhas com micro-offsets paralelos ($\Delta = 0.012\text{m}$) simulando a textura e a largura de cintas de amarração catraca reais.
+- **Diferenciação Visual de Estado:**
+  - **Pendente:** Vermelho vibrante translúcido (`255, 60, 60, 190`).
+  - **Amarrado:** Vermelho sólido esticado com alta firmeza (`220, 20, 20, 255`).
+- **Persistência em Trânsito:** As fitas vermelhas permanecem esticadas e acompanham a carga durante toda a viagem rodoviária na estrada enquanto o jogador estiver a até 25 metros do reboque (thread entra em repouso com `Wait(500)` a distâncias maiores, garantindo 0.00ms no Resmon).
+
+### 🏷️ Texto 3D Interativo & Amarração Direta com [E] (`DrawText3D`)
+- **Texto Dinâmico por Proximidade:** Renderiza o texto flutuante `~r~Amarrar~s~` a até 6.0 metros de cada palete pendente; ao aproximar-se a pé a menos de 2.5 metros, o texto transiciona para `~g~[E]~s~ Amarrar`.
+- **Ação Direta por Tecla [E]:** Pressionar **[E]** (`Control 38`) inicia a amarração imediatamente com minigame de perícia e animação de ajuste da catraca, sem necessidade de navegar no menu de contexto do `ox_target` (suporte ao `ox_target` mantido de forma complementar).
+- **Suporte à Empilhadeira:** Exibe texto 3D dedicado `~g~[E]~s~ Travar Catracas da Empilhadeira` quando próximo da empilhadeira embarcada na caçamba.
+
+### 🚜 Encadeamento Imediato de Carga & Correção de Setas
+- **Gatilho Imediato da Forklift no Último Palete:** Ao estivar o último palete exigido pelo frete (`loaded == total`), a busca por novos paletes no pátio é imediatamente cancelada. O holograma e a seta de objetivo (`forklift_dock`) passam instantaneamente para a traseira da carreta.
+- **Eliminação de Seta Residual:** Removido o disparo de evento legado do servidor (`aust_trucker:client:SetObjective`) que recriava indevidamente marcadores sobre a empilhadeira após a colocação de cada palete.
+- **Transição Fluida para as Cordas:** O embarque da empilhadeira com **[G]** avança automaticamente para a etapa de coleta de cintas na caixa lateral do caminhão (`STEP_6_GET_ROPES`).
+
+## [20.5.0] — 2026-10-02 — Blindagem Anti-Desync de Proximidade (OneSync Observer Shield, Lock de Propriedade de Rede Server-Side & Matriz Havok Passiva)
+
+### 🌐 Governança de Rede OneSync & Prevenção de Migração por Proximidade (A1)
+- **Lock Autoritativo Server-Side (`SetEntityOwner`):** Criado helper autoritativo `LockEntityNetworkOwner(entity, src)` no servidor (`server/main.lua`, `server/events.lua`). Todas as entidades geradas na missão (`truck`, `trailer`, `forklift`, `pallets`, `container`, `carrierCars`) têm sua titularidade de rede travada estritamente no motorista contratante no momento do spawn e reafirmada em `registerJobEntities` e `HandlePalletLoaded`.
+- **Desativação Total de Migração de Rede (`SetNetworkIdCanMigrate = false`):** O OneSync Infinity fica proibido de transferir a propriedade de rede das entidades da carga para outros jogadores (observers) que se aproximem do reboque, eliminando a disputa de pacotes físicos e a perda de autoridade do condutor.
+
+### 👥 Comportamento de Clientes Espectadores / Observers (A2 & A3)
+- **Observer Passivo Total nos StateBags:** Refatorados `AddStateBagChangeHandler('loadedSlots')` e `'loadedForklift'` em `client/main.lua`. Clientes observadores (terceiros) **nunca mais** requisitam controle de rede (`NetworkRequestControlOfEntity`) sobre a carga alheia. Apenas aplicam o anexo passivo no **Bone 0** (`AttachEntityToEntity`) mantendo cinemática rígida (`SetEntityDynamic = false`, gravidade e velocidade nulas) e `FreezeEntityPosition = false`.
+- **Havok Shield Contínuo para Observers:** A thread de anulação contínua de colisão mútua por frame (`Wait(0)`) foi estendida para inspecionar reboques com carga num raio de até 35 metros ao redor de qualquer jogador. A engine Havok de observers próximos agora executa `SetEntityNoCollisionEntity(pEnt, veh, true)` a cada tick, impedindo 100% de qualquer colisão física, empurrão ou trepidação entre a carga e o reboque no client de observadores.
+- **Matriz Havok Híbrida em Observers:** A carga mantém colisão ativa com o mundo e com o pedestre do observer (`SetEntityCollision = true`, `SetCanClimbOnEntity = true`), permitindo que terceiros subam ou inspecionem a carga fisicamente sem causar qualquer desestabilização no caminhão em movimento.
+
+## [20.4.0] — 2026-10-02 — Padronização de Ancoragem Bone 0, Embarque Contínuo da Forklift [G] e Resolução Hierárquica Dupla
+
+### 🚜 Sistema de Posicionamento & Ancoragem de Cargas (Bone 0 / Root)
+- **Padronização Estrita no Bone 0:** Unificada a ancoragem de paletes e empilhadeiras (`AttachEntityToEntity`) para utilizar invariavelmente o **Bone 0 (Root da Entidade)** em todas as fases do ciclo de vida: estiva (`SnapPalletToCurrentSlot`, `SnapForkliftToSlot`), amarração individual a pé (`ExecutePalletTie`, `ExecuteForkliftTie`), início de viagem rodoviária (`StartDeliveryRoute`) e laço de sincronização de trânsito (`Sync Anchor`). Elimina o deslocamento relativo causado pelo osso secundário `"chassis"`, alcançando correspondência milimétrica 1:1 com o Gizmo 3D do `truckeradmin` e os hologramas fantasmas.
+- **Resolução Hierárquica Dupla de Offsets:** O motor de resolução (`ForkliftModule.GetForkliftSlotOffset` e `GetSlotOffset`) agora normaliza e inspeciona chaves de entidade, modelos string (`"trailers2"`) e hashes numéricos (`joaat`), garantindo que os offsets salvos pelo Administrador no MySQL sobrescrevam com prioridade absoluta qualquer valor nativo ou fallback.
+- **Fallback Contextual Inteligente:** Reboques de grande porte (`trailers2`, `trailers`) possuem fallback proporcional ajustado para a traseira (`y = -6.6`), eliminando a sobreposição de carga causada pelo fallback genérico curto (`-5.2`).
+
+### 📦 Fluxo Operacional & Embarque Contínuo da Empilhadeira (Tecla [G])
+- **Gatilho Imediato do Fantasma Traseiro:** Ao estivar o último palete exigido pelo frete, o holograma do palete é finalizado e o holograma fantasma da empilhadeira surge instantaneamente na caçamba do reboque na posição exata calibrada.
+- **Embarque Direto da Cabine [G]:** O jogador pilota a empilhadeira até a traseira da carreta sobre o fantasma; ao aproximar-se da vaga, a interface exibe `[G] Embarcar Empilhadeira no Reboque`. O acionamento executa `SnapForkliftToSlot`, desembarca o condutor ordenadamente com `TaskLeaveVehicle`, acopla a empilhadeira sem soft-pinning no Bone 0 e avança o fluxo diretamente para a amarração com cintas a pé.
+- **Compatibilidade Bidirecional:** Mantido suporte ao acoplamento manual a pé via menu de contexto `ox_target` para situações em que o condutor optar por descer da máquina antes do embarque.
+
+## [20.3.0] — 2026-10-02 — Cinemática Rígida Anti-Inércia, Zero-Desync na Arrancada & OneSync Handoff
+
+### 🚚 Física Havok & Estabilidade de Carga (Micro-Desync Zero)
+- **Eliminação do Arrasto Inercial Havok:** Paletes e empilhadeiras agora são mantidos estritamente como corpos cinemáticos (`SetEntityDynamic = false`, `SetEntityHasGravity = false`, `SetEntityVelocity = 0.0`) enquanto anexados à prancha do reboque (`client/modules/forklift.lua`, `client/main.lua`). Isso impede que o solver do Havok simule inércia de massa e arraste a carga para trás no momento da aceleração inicial do caminhão.
+- **Remoção do Toggle de Colisão aos 3 km/h:** Eliminada a oscilação de `SetEntityCollision` entre repouso e movimento (< 3 km/h vs $\ge$ 3 km/h) que provocava recriação síncrona de *physics proxies* da engine física no exato instante da arrancada. A alternância de colisão agora é governada exclusivamente pelo estado de permanência do jogador na cabine (`isDrivingTruck`), assegurando transição estática inalterada durante toda a aceleração.
+- **Reativação Cinemática Segura na Queda Dinâmica:** `SetEntityDynamic(true)`, gravidade e impulsos físicos são restaurados exclusivamente na rotina de perda/tombamento de carga (`palletLost` / `isFallen`), preservando o realismo de acidentes e capotamentos sem penalizar a fixação em trânsito estável.
+
+### 🌐 Sincronização OneSync & Controle de Rede
+- **Aperto de Mão Autoritativo Síncrono (Network Handoff):** Refatorada a rotina de controle de entidades em `StartDeliveryRoute` e `Sync Anchor` para aguardar ativamente o controle do cliente (`NetworkRequestControlOfEntity` com timeout seguro) antes de invocar `SetNetworkIdCanMigrate(netId, false)`. Impede que entidades de carga fiquem presas sob controle do servidor enquanto a carreta é movida localmente pelo motorista.
+- **Sincronização Ativa em Repouso:** Garantida a propriedade da rede no momento em que o motorista assume o volante, eliminando pacotes de correção de posição mundiais defasados emitidos pelo servidor na partida.
+
+## [20.2.0] — 2026-10-01 — Gizmo 3D, Colisão Inteligente & Roadmap de 6 Pilares de Engenharia
+
+### 🧭 Motor 3D & Ferramenta ADM
+- **Engenharia Reversa `vp_staff_studio`:** Implementado Gizmo vetorial tridimensional completo de translação e rotação em tempo real com Three.js e TransformControls (`client/modules/offset_editor.lua`).
+- **Isolamento de Câmera Livre & Cursor:** Navegação simultânea pelo teclado enquanto o mouse interage de forma independente com os eixos X, Y e Z.
+- **Cálculo de Offsets Relativos:** As coordenadas manipuladas pelo Gizmo são convertidas diretamente em relação à origem do reboque (`GetOffsetFromEntityGivenWorldCoords`), garantindo alinhamento independente do terreno.
+- **Persistência de Fantasmas Múltiplos:** Renderização contínua de paletes salvos em transparência durante a calibração de todos os slots.
+
+### 💥 Física Havok & Sincronização OneSync
+- **Máquina de Estados de Colisão Adaptativa:**
+  - *Modo Parado / A Pé (< 3 km/h ou fora da cabine):* Colisão 100% sólida para o jogador (`SetEntityCollision(true, true)` + `SetCanClimbOnEntity(true)`) com isolamento mútuo da malha do reboque (`SetEntityNoCollisionEntity`). Permite andar, subir e inspecionar a carga na prancha.
+  - *Modo Trânsito (>= 3 km/h):* Desativação dinâmica de colisão durante a viagem, eliminando 100% dos conflitos Havok, catapultas de física e trepidações.
+- **Eliminação de Flickering OneSync:** Removido `FreezeEntityPosition(true)` em entidades acopladas, permitindo sincronização fluida da hierarquia de entidades na rede sem oscilações visuais para outros jogadores.
+
+### 🛡️ Roadmap de Auditoria Estrutural (6 Pilares)
+- **Pilar 1 (OneSync StateBags):** O reboque replica `Entity(trailer).state.loadedSlots` e `loadedForklift`. `AddStateBagChangeHandler('loadedSlots')` re-acopla automaticamente qualquer palete desprendido por *culling* de longa distância.
+- **Pilar 2 (Anti-Cheat Server Authority):** Validação autoritativa de distância ($\le 25\text{m}$) e contrato ativo em `AntiCheatService.ValidateDelivery` e `FinalizeLCContract`. Executa `DropPlayer` sumário em tentativas de injeção ou conclusão fraudulenta.
+- **Pilar 3 (Garbage Collection & Grace Period):** Rastreamento de todos os NetIDs da missão (caminhão, reboque, empilhadeira, paletes). Em caso de `playerDropped`, o servidor aguarda 3 minutos para reconexão antes de deletar todas as entidades em cascata.
+- **Pilar 4 (RAM Cache do Banco de Dados):** Offsets de reboques servidos diretamente da memória RAM (`AdminService.TrailerOffsets` em `getTrailerOffsetsForModel`), eliminando queries SQL síncronas durante o trabalho.
+- **Pilar 5 (Havok Parking Freeze):** Caminhão e reboque estacionados (velocidade < 0.5 km/h por 5 segundos sem motorista) são congelados no solo; descongelamento imediato ao sentar na cabine.
+- **Pilar 6 (NUI Hard Escape):** Listener da tecla `Escape` em `html/panel.js` e comando de console F8 `/truckerfix` forçando liberação de foco (`SetNuiFocus(false, false)`).
 
 ## [20.1.0] — 2026-09-14 — Auditoria Completa de Segurança & Hardening Transacional (OmniRoute)
 

@@ -139,6 +139,20 @@ local function GenerateOne()
                     local dist    = CalcDistance(origin.coords, dest.coords)
                     local payment = math.floor((product.basePrice * cargoQty) + dist * Config.JobGeneration.distanceMultiplier * dest.multiplier)
                     payment = math.min(payment, Config.General.payment.maxPayment)
+                    local adrInt = 0
+                    if product.adr then
+                        local adrMap = {
+                            ['explosives'] = 1,
+                            ['gases'] = 2,
+                            ['flammable_liquid'] = 3,
+                            ['flammable_solids'] = 4,
+                            ['toxic'] = 5,
+                            ['corrosives'] = 6,
+                            ['environmental'] = 5
+                        }
+                        adrInt = adrMap[product.adr] or 1
+                    end
+
                     return {
                         id            = GenerateJobId(),
                         origin_id     = origin.id,
@@ -150,6 +164,12 @@ local function GenerateOne()
                         expires_at    = CalcExpiresAt(payment),
                         cargo_qty     = cargoQty,
                         weight        = product.weight or 80,
+                        contract_type = 0,
+                        cargo_type    = adrInt,
+                        fragile       = product.fragile and 1 or 0,
+                        valuable      = product.valuable and 1 or 0,
+                        fast          = 0,
+                        illegal       = 0,
                     }
                 end
             end
@@ -312,7 +332,11 @@ function JobService.Complete(src, payload)
 
     local citizenId = Framework.GetCitizenId(Player)
     local activeJob = DB_GetActiveJobByPlayer(citizenId)
-    if not activeJob then return false end
+    if not activeJob then
+        print(('[AUST_Trucker Anti-Cheat] DROP aplicado em %s (src %s): tentativa de entrega sem job ativo'):format(tostring(citizenId), tostring(src)))
+        DropPlayer(src, '[AUST_Trucker Anti-Cheat] Violação de segurança: finalização sem contrato ativo.')
+        return false
+    end
 
     -- Validação estrita de tempo server-side: nunca confiar no client
     if not activeJob.accepted_at_unix or activeJob.accepted_at_unix <= 0 then
@@ -553,6 +577,20 @@ function JobService.GenerateConvoyBatch(convoyId, partyId, memberCids)
         local payment = math.floor(product.basePrice + dist * Config.JobGeneration.distanceMultiplier * sharedDest.multiplier)
         payment = math.min(payment, Config.General.payment.maxPayment)
 
+        local adrInt = 0
+        if product.adr then
+            local adrMap = {
+                ['explosives'] = 1,
+                ['gases'] = 2,
+                ['flammable_liquid'] = 3,
+                ['flammable_solids'] = 4,
+                ['toxic'] = 5,
+                ['corrosives'] = 6,
+                ['environmental'] = 5
+            }
+            adrInt = adrMap[product.adr] or 1
+        end
+
         local job = {
             id            = GenerateJobId(),
             origin_id     = sharedOrigin.id,
@@ -562,6 +600,12 @@ function JobService.GenerateConvoyBatch(convoyId, partyId, memberCids)
             base_payment  = payment,
             distance      = dist,
             expires_at    = CalcExpiresAt(payment),
+            contract_type = 0,
+            cargo_type    = adrInt,
+            fragile       = product.fragile and 1 or 0,
+            valuable      = product.valuable and 1 or 0,
+            fast          = 0,
+            illegal       = 0,
         }
 
         -- INSERT sequencial: trucker_jobs primeiro, depois trucker_convoy_members

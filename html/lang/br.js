@@ -18,6 +18,10 @@ Lang["br"] = {
 	sidebar_party: "Grupos",
 	sidebar_close: "Fechar",
 
+	confirmation_modal_title: "Confirmação",
+	confirmation_modal_body: "Você tem certeza de que deseja continuar?",
+	confirmation_modal_cancel_button: "Cancelar",
+	confirmation_modal_confirm_button: "Confirmar",
 	confirmation_modal_sell_vehicle: "Você tem certeza de que deseja vender este veículo?",
 	confirmation_modal_delete_party: "Você tem certeza de que deseja excluir este grupo?",
 	confirmation_modal_loan_payoff: "Você tem certeza de que deseja pagar o saldo total de {0}?",
@@ -281,4 +285,12 @@ Lang["br"] = {
 	str_invalid_value:"Valor inválido",
 	str_more_than:"Deve ser maior ou igual a {0}",
 	str_less_than:"Deve ser menor ou igual a {0}",
+
+	contract_page_button_locked: "Bloqueado",
+	contract_locked_adr: "Requer Certificado ADR Classe {0}",
+	contract_locked_distance: "Distância excede o limite da sua habilidade ({0} km)",
+	contract_locked_fragile: "Requer habilidade Carga Frágil (Nível 1)",
+	contract_locked_valuable: "Requer habilidade Carga Valiosa (Nível 1)",
+	contract_locked_fast: "Requer habilidade Entrega Urgente (Nível 1)",
+	contract_locked_illegal: "Requer especialização em Cargas Ilegais",
 };

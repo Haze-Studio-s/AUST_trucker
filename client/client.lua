@@ -42,11 +42,62 @@ local function ShowNotification(title, description, type, duration)
     })
 end
 
+local function SafeGetNetworkId(entity)
+    if not entity or entity == 0 or not DoesEntityExist(entity) then return nil end
+    local timeout = 100
+    while not NetworkGetEntityIsNetworked(entity) and timeout > 0 do
+        NetworkRegisterEntityAsNetworked(entity)
+        Wait(10)
+        timeout = timeout - 1
+    end
+    if NetworkGetEntityIsNetworked(entity) then
+        local netId = NetworkGetNetworkIdFromEntity(entity)
+        if netId and netId ~= 0 then
+            SetNetworkIdCanMigrate(netId, true)
+            SetNetworkIdExistsOnAllMachines(netId, true)
+            return netId
+        end
+    end
+    return nil
+end
+
 local pickupPoint = nil
 local deliveryPoint = nil
 local contractStopPoint = nil
+local lcActiveJob = nil
+local lcDeliveryPoint = nil
+local lcDeliveryBlip = nil
+local isStartingJob = false
+
+local function CleanupLCContract()
+    isStartingJob = false
+    if lcDeliveryPoint then
+        pcall(function() lcDeliveryPoint:remove() end)
+        lcDeliveryPoint = nil
+    end
+    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+        RemoveBlip(lcDeliveryBlip)
+        lcDeliveryBlip = nil
+    end
+    SetWaypointOff()
+    if lib and lib.hideTextUI then
+        lib.hideTextUI()
+    end
+
+    if lcActiveJob then
+        if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
+            DeleteEntity(lcActiveJob.trailer)
+        end
+        -- Apenas deletar o caminhão se for veículo alugado de Quick Job! Nunca deletar caminhão próprio do jogador!
+        if lcActiveJob.isQuickJob and lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
+            DeleteEntity(lcActiveJob.truck)
+        end
+        lcActiveJob = nil
+    end
+end
 
 local function ClearJobPoints()
+    CleanupLCContract()
     if pickupPoint then
         pcall(function() pickupPoint:remove() end)
         pickupPoint = nil
@@ -179,10 +230,10 @@ local function SpawnTrailer(model, coords)
         SetModelAsNoLongerNeeded(modelHash)
 
         -- Registrar entidades no servidor para cleanup autoritativo em playerDropped ou abandono
-        local trlNetId = NetworkGetNetworkIdFromEntity(trailer)
+        local trlNetId = SafeGetNetworkId(trailer)
         local ped = PlayerPedId()
         local veh = GetVehiclePedIsIn(ped, false)
-        local vehNetId = (veh ~= 0 and DoesEntityExist(veh)) and NetworkGetNetworkIdFromEntity(veh) or nil
+        local vehNetId = (veh ~= 0 and DoesEntityExist(veh)) and SafeGetNetworkId(veh) or nil
         TriggerServerEvent('aurp_trucker:server:registerJobEntities', vehNetId, trlNetId)
 
         return trailer
@@ -286,6 +337,7 @@ local serverJobs = {}
 
 -- Job aceito pelo servidor — iniciar no cliente
 RegisterNetEvent('aurp_trucker:client:jobStarted', function(job)
+    if not job or type(job) ~= 'table' then return end
     -- Mapear campos do server para o formato que StartJob espera
     local mapped = {
         id         = job.jobId or job.id,
@@ -315,9 +367,41 @@ RegisterNetEvent('aurp_trucker:client:jobStarted', function(job)
     end
 end)
 
--- Notificação genérica do servidor
-RegisterNetEvent('aurp_trucker:notify', function(title, message, notifType)
-    lib.notify({ title = title, description = message, type = notifType or 'inform' })
+-- Notificação genérica do servidor (suporta chamadas com 2 ou 3 argumentos)
+RegisterNetEvent('aurp_trucker:notify', function(arg1, arg2, arg3)
+    local title, message, notifType
+    if arg3 ~= nil then
+        title = tostring(arg1 or 'Logística')
+        message = tostring(arg2 or '')
+        notifType = arg3 or 'inform'
+    else
+        message = tostring(arg1 or '')
+        notifType = arg2 or 'inform'
+        if notifType == 'error' then
+            title = 'Erro de Logística'
+        elseif notifType == 'success' then
+            title = 'Sucesso'
+        else
+            title = 'Aviso'
+        end
+    end
+    lib.notify({ title = title, description = message, type = notifType })
+
+    if title == 'Licença Obrigatória' or string.find(message, 'Certificação') then
+        CreateThread(function()
+            Wait(1000)
+            local alert = lib.alertDialog({
+                header = 'Certificação Exigida',
+                content = message .. '\n\nDeseja abrir o Centro de Certificações para prestar o exame técnico agora?',
+                centered = true,
+                cancel = true,
+                labels = { confirm = 'Abrir Exames', cancel = 'Agora Não' }
+            })
+            if alert == 'confirm' then
+                OpenLicensesMenu()
+            end
+        end)
+    end
 end)
 
 -- Atualização de empresa: companyInfo = tabela → entrou/atualizou; nil → saiu
@@ -336,6 +420,8 @@ local function CloseJobBoard()
     isNUIOpen = false
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close', hidemenu = true })
+    SendNUIMessage({ action = 'closeUI' })
+    SendNUIMessage({ action = 'hide' })
 end
 
 local function OpenJobBoard()
@@ -350,6 +436,7 @@ local function OpenJobBoard()
 
     isNUIOpen = true
     SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
 
     local lcDados = data.lc_dados or data
     if type(lcDados) ~= 'table' then lcDados = {} end
@@ -384,15 +471,21 @@ local function OpenJobBoard()
         end
     end
 
+    -- Detectar idioma e formato ativo (Prioridade: config vinda do servidor -> Config.locale -> Config.lang -> "br")
+    local activeLocale = (lcDados and lcDados.config and lcDados.config.locale) or Config.locale or Config.lang or "br"
+    local activeFormat = (lcDados and lcDados.config and lcDados.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
+
     -- Enviar para a interface oficial LC Truck Logistics
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
     SendNUIMessage({
         showmenu     = true,
         update       = false,
         dados        = lcDados,
         utils        = {
             config = {
-                locale = "en",
-                format = { currency = "USD", location = "en-US" }
+                locale = activeLocale,
+                format = activeFormat,
             },
             lang = {}
         },
@@ -406,7 +499,38 @@ local function OpenJobBoard()
         playerName   = data.playerName,
         playerMoney  = data.playerMoney,
     })
+    SetNuiFocus(true, true)
 end
+
+RegisterNetEvent('truck_logistics:openJobBoard', function()
+    OpenJobBoard()
+end)
+AddEventHandler('truck_logistics:openJobBoard', function()
+    OpenJobBoard()
+end)
+
+RegisterNetEvent('truck_logistics:openCargoManifest', function(contractId, party, baseReward)
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'openCargoManifest',
+        contractId = contractId,
+        party = party,
+        baseReward = baseReward
+    })
+    SetNuiFocus(true, true)
+end)
+AddEventHandler('truck_logistics:openCargoManifest', function(contractId, party, baseReward)
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({
+        action = 'openCargoManifest',
+        contractId = contractId,
+        party = party,
+        baseReward = baseReward
+    })
+    SetNuiFocus(true, true)
+end)
 
 -- Backspace fecha a UI (ESC é reservado pelo FiveM para pause menu)
 RegisterCommand('+trucker_close_ui', function()
@@ -419,43 +543,94 @@ RegisterKeyMapping('+trucker_close_ui', 'Fechar painel caminhoneiro', 'keyboard'
 
 local function RefreshNUIData()
     if not isNUIOpen then return end
-    SetTimeout(350, function()
+    SetTimeout(50, function()
         if not isNUIOpen then return end
         local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
         if ok and data then
+            local lc = data.lc_dados or data
+            local activeLocale = (lc and lc.config and lc.config.locale) or Config.locale or Config.lang or "br"
+            local activeFormat = (lc and lc.config and lc.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
             SendNUIMessage({
+                action = 'open',
                 update = true,
-                dados = data.lc_dados or data,
+                dados = lc,
+                utils = {
+                    config = {
+                        locale = activeLocale,
+                        format = activeFormat,
+                    }
+                }
             })
         end
     end)
 end
+
+RegisterNetEvent('aurp_trucker:client:refreshNUI', function()
+    RefreshNUIData()
+end)
 
 -- NUI Callbacks: Protocolo LC Logistics (Utils.post)
 RegisterNUICallback('post', function(body, cb)
     local event = body and body.event
     local data  = body and body.data
 
-    if event == "close" then
-        CloseJobBoard()
-        SetNuiFocus(false, false)
+    if event == "focusMenu" then
+        isNUIOpen = true
+        SetNuiFocus(true, true)
+        SetNuiFocusKeepInput(false)
         cb(200)
         return
     end
 
-    if event == "startContract" then
-        CloseJobBoard()
+    if event == "close" or event == "closeMenu" or event == "closeUI" or event == "closeModal" then
         SetNuiFocus(false, false)
+        CloseJobBoard()
+        cb(200)
+        return
+    end
+
+    if event == "startContract" or event == "startJob" or event == "acceptJob" or event == "confirmJob" then
         local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
-        TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
-        TriggerServerEvent('truck_logistics:startContract', 'buccaneer_hq', data)
+        local contractType = data and (data.contract_type or data.contractType or data.type)
+        local isParty = data and (data.party == true or data.isParty == true)
+        print(("^2[AUST_Trucker DEBUG - ETAPA 1] NUI %s acionado! ID=%s, type=%s, party=%s^7"):format(tostring(event), tostring(contractId), tostring(contractType), tostring(isParty)))
+        SetNuiFocus(false, false)
+        CloseJobBoard()
+        if lcActiveJob then
+            local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
+            if not isAlive then
+                lcActiveJob = nil
+            else
+                print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7")
+                lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+                return cb(200)
+            end
+        end
+        if isStartingJob then
+            print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7")
+            return cb(200)
+        end
+        isStartingJob = true
+        SetTimeout(4000, function() isStartingJob = false end)
+        print("^2[AUST_Trucker DEBUG - ETAPA 1] Enviando TriggerServerEvent 'aurp_trucker:server:startDelivery'...^7")
+        TriggerServerEvent('aurp_trucker:server:startDelivery', {
+            id = contractId,
+            contractId = contractId,
+            contractType = contractType,
+            isParty = isParty,
+            palletCount = data and data.palletCount,
+            withForklift = data and data.withForklift
+        })
         cb(200)
         return
     end
 
-    if event == "cancelContract" then
+    if event == "cancelContract" or event == "cancelJob" then
+        SetNuiFocus(false, false)
+        CloseJobBoard()
+        print("^3[AUST_Trucker Client] cancelContract/cancelJob NUI Callback invoked^7")
         ExecuteCommand('canceljob')
-        TriggerServerEvent('truck_logistics:cancelContract', 'buccaneer_hq', data)
+        TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
         cb(200)
         return
     end
@@ -463,7 +638,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "buyTruck" then
         local truckName = data and (data.truck_name or data.model or data.name)
         TriggerServerEvent('aurp_trucker:fleet:buyTruck', truckName)
-        TriggerServerEvent('truck_logistics:buyTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -472,7 +646,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "sellTruck" then
         local truckId = data and (data.truck_id or data.truckId or data.id)
         TriggerServerEvent('aurp_trucker:fleet:sellTruck', truckId)
-        TriggerServerEvent('truck_logistics:sellTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -481,7 +654,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "repairTruck" then
         local truckId = data and (data.id or data.truck_id)
         TriggerServerEvent('aurp_trucker:fleet:repairTruck', truckId, 'all')
-        TriggerServerEvent('truck_logistics:repairTruck', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -490,7 +662,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "upgradeSkill" then
         local skillId = data and data.id
         TriggerServerEvent('aurp_trucker:server:upgradeSkill', skillId)
-        TriggerServerEvent('truck_logistics:upgradeSkill', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -499,7 +670,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "loan" then
         local planId = data and data.loan_id
         TriggerServerEvent('aurp_trucker:loan:takePlan', planId)
-        TriggerServerEvent('truck_logistics:loan', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -508,7 +678,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "payLoan" then
         local loanId = data and data.loan_id
         TriggerServerEvent('aurp_trucker:loan:payOff', loanId)
-        TriggerServerEvent('truck_logistics:payLoan', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -517,7 +686,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "hireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:hireAgency', driverId)
-        TriggerServerEvent('truck_logistics:hireDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -526,7 +694,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "fireDriver" then
         local driverId = data and data.driver_id
         TriggerServerEvent('aurp_trucker:driver:fireHired', driverId)
-        TriggerServerEvent('truck_logistics:fireDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -536,7 +703,6 @@ RegisterNUICallback('post', function(body, cb)
         local driverId = data and data.driver_id
         local truckId = data and data.truck_id
         TriggerServerEvent('aurp_trucker:driver:setTruck', driverId, truckId)
-        TriggerServerEvent('truck_logistics:setDriver', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -545,7 +711,6 @@ RegisterNUICallback('post', function(body, cb)
     if event == "depositMoney" then
         local amount = data and data.amount
         TriggerServerEvent('aurp_trucker:bank:deposit', amount)
-        TriggerServerEvent('truck_logistics:depositMoney', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
@@ -554,51 +719,152 @@ RegisterNUICallback('post', function(body, cb)
     if event == "withdrawMoney" then
         local amount = data and data.amount
         TriggerServerEvent('aurp_trucker:bank:withdraw', amount)
-        TriggerServerEvent('truck_logistics:withdrawMoney', 'buccaneer_hq', data)
         RefreshNUIData()
         cb(200)
         return
     end
 
     if event == "createParty" then
-        TriggerServerEvent('aurp_trucker:party:create')
-        TriggerServerEvent('truck_logistics:createParty', 'buccaneer_hq', data)
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyCreate', false, data)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Grupo de transporte criado com sucesso!', type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Falha ao criar grupo.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "joinParty" then
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyJoin', false, data)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Você ingressou no grupo com sucesso!', type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Falha ao ingressar no grupo.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        RefreshNUIData()
+        cb(200)
+        return
+    end
+
+    if event == "inviteParty" or event == "invitePartyMember" then
+        local targetId = data and (data.targetId or data.id or data.source or data.target)
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyInvite', false, targetId)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = ('Convite enviado ao jogador ID %s!'):format(tostring(targetId)), type = 'success' })
+        else
+            local reason = (res and res.reason) or 'Jogador não encontrado ou offline.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
+        cb(200)
+        return
+    end
+
+    if event == "kickParty" then
+        local userId = data and (data.user_id or data.citizenid or data.cid)
+        local ok, res = pcall(lib.callback.await, 'aurp_trucker:partyKick', false, userId)
+        if ok and res and res.success then
+            lib.notify({ title = 'Grupos', description = 'Membro removido do grupo.', type = 'info' })
+        else
+            local reason = (res and res.reason) or 'Erro ao remover membro.'
+            lib.notify({ title = 'Grupos', description = reason, type = 'error' })
+        end
         RefreshNUIData()
         cb(200)
         return
     end
 
     if event == "quitParty" or event == "deleteParty" then
-        TriggerServerEvent('aurp_trucker:party:leave')
-        TriggerServerEvent('truck_logistics:quitParty', 'buccaneer_hq', data)
+        if event == "deleteParty" then
+            pcall(lib.callback.await, 'aurp_trucker:partyDisband', false)
+            lib.notify({ title = 'Grupos', description = 'Grupo dissolvido.', type = 'info' })
+        else
+            pcall(lib.callback.await, 'aurp_trucker:partyLeave', false)
+            lib.notify({ title = 'Grupos', description = 'Você saiu do grupo.', type = 'info' })
+        end
         RefreshNUIData()
         cb(200)
         return
     end
 
-    if event then
-        TriggerServerEvent('truck_logistics:' .. event, 'buccaneer_hq', data)
-    end
     cb(200)
 end)
 
-RegisterNUICallback('startJob', function(data, cb)
-    CloseJobBoard()
+local function HandleDirectStartContract(data, cb)
     SetNuiFocus(false, false)
+    CloseJobBoard()
     local contractId = data and (data.id or data.contract_id or data.contractId or data.jobId)
-    TriggerServerEvent('aurp_trucker:server:startLCContract', contractId)
-    TriggerServerEvent('truck_logistics:startContract', 'buccaneer_hq', data)
+    local contractType = data and (data.contract_type or data.contractType or data.type)
+    local isParty = data and (data.party == true or data.isParty == true)
+    print(("^2[AUST_Trucker Client] NUI Direct Start received: ID=%s, Type=%s, Party=%s^7"):format(tostring(contractId), tostring(contractType), tostring(isParty)))
+    if lcActiveJob then
+        local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
+        if not isAlive then
+            lcActiveJob = nil
+        else
+            lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
+            return cb('ok')
+        end
+    end
+    if isStartingJob then return cb('ok') end
+    isStartingJob = true
+    SetTimeout(3000, function() isStartingJob = false end)
+    TriggerServerEvent('aurp_trucker:server:startDelivery', {
+        id = contractId,
+        contractId = contractId,
+        contractType = contractType,
+        isParty = isParty,
+        palletCount = data and data.palletCount,
+        withForklift = data and data.withForklift
+    })
     cb('ok')
-end)
+end
+
+-- Centralizado exclusivamente em client/main.lua (HandleStartDeliveryNUI) com suporte a sub-estados e montagem manual
+-- RegisterNUICallback('startJob', HandleDirectStartContract)
+-- RegisterNUICallback('startContract', HandleDirectStartContract)
+-- RegisterNUICallback('confirmJob', HandleDirectStartContract)
 
 RegisterNUICallback('close', function(data, cb)
+    SetNuiFocus(false, false)
     CloseJobBoard()
-    cb('ok')
+    if cb then cb('ok') end
 end)
 
 RegisterNUICallback('closeUI', function(data, cb)
+    SetNuiFocus(false, false)
     CloseJobBoard()
-    cb('ok')
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('closeMenu', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('closeModal', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('focusMenu', function(data, cb)
+    isNUIOpen = true
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('cancelJob', function(data, cb)
+    SetNuiFocus(false, false)
+    CloseJobBoard()
+    ExecuteCommand('canceljob')
+    TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+    if cb then cb('ok') end
 end)
 
 RegisterNUICallback('rentTruck', function(data, cb)
@@ -657,27 +923,11 @@ RegisterNUICallback('returnTruck', function(data, cb)
     end
 end)
 
-RegisterNUICallback('acceptJob', function(data, cb)
-    local jobId = data.jobId
-
-    if not jobId then
-        lib.notify({ title = 'Erro', description = 'ID do trabalho inválido', type = 'error' })
-        cb('ok')
-        return
-    end
-
-    -- Fechar UI imediatamente para jogador ver o mapa
-    CloseJobBoard()
-
-    -- Enviar para servidor para aceitar o job
-    TriggerServerEvent('aurp_trucker:acceptJob', jobId)
-
-    if Config.Debug then
-        print("^2[AURP_TRUCKER]^7 Solicitando job ao servidor: " .. jobId)
-    end
-
-    cb('ok')
-end)
+-- Centralizado exclusivamente em client/main.lua (HandleStartDeliveryNUI)
+-- RegisterNUICallback('acceptJob', function(data, cb)
+--     local jobId = data and (data.jobId or data.id or data.contractId or data.contract_id)
+--     ...
+-- end)
 
 RegisterNUICallback('spawnTrailer', function(data, cb)
     local model = data.model
@@ -1629,6 +1879,130 @@ local function ReturnRentedTruck()
 end
 
 -- =======================================
+-- CENTRO DE CERTIFICAÇÕES & LICENÇAS TÉCNICAS (ADR & HEAVY LIFT)
+-- =======================================
+
+local function StartLicenseExam(licenseType, cfg)
+    local alert = lib.alertDialog({
+        header = cfg.name,
+        content = ('**Requisitos:** Nível %d\n**Taxa do Exame:** $%d (débito em conta ou dinheiro)\n\n%s\n\nVocê responderá a perguntas técnicas obrigatórias. Deseja prosseguir com o exame?'):format(
+            cfg.minLevel or 1,
+            cfg.examFee or 1000,
+            cfg.description or ''
+        ),
+        centered = true,
+        cancel = true,
+        labels = {
+            confirm = 'Iniciar Exame',
+            cancel = 'Cancelar'
+        }
+    })
+
+    if alert ~= 'confirm' then return end
+
+    local questions = cfg.questions or {}
+    for i, qData in ipairs(questions) do
+        local options = {}
+        for optIdx, optText in ipairs(qData.options) do
+            table.insert(options, { value = tostring(optIdx), label = optText })
+        end
+
+        local input = lib.inputDialog(('Questão %d/%d - %s'):format(i, #questions, cfg.name), {
+            {
+                type = 'select',
+                label = qData.q,
+                options = options,
+                required = true
+            }
+        })
+
+        if not input or not input[1] then
+            lib.notify({ title = 'Exame Cancelado', description = 'Você cancelou o exame técnico.', type = 'warning' })
+            return
+        end
+
+        if tonumber(input[1]) ~= qData.correct then
+            PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+            lib.notify({
+                title = 'Reprovado no Exame',
+                description = 'Você selecionou uma resposta incorreta. Revise os procedimentos e tente novamente.',
+                type = 'error'
+            })
+            return
+        end
+    end
+
+    local res = lib.callback.await('aurp_trucker:takeLicenseExam', false, licenseType)
+    if res and res.success then
+        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+        lib.notify({
+            title = 'Certificação Concedida!',
+            description = res.message or 'Parabéns! Você foi aprovado e certificado.',
+            type = 'success',
+            duration = 8000
+        })
+        OpenLicensesMenu()
+    else
+        PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
+        lib.notify({
+            title = 'Falha na Emissão',
+            description = (res and res.reason) or 'Não foi possível emitir a certificação.',
+            type = 'error'
+        })
+    end
+end
+
+function OpenLicensesMenu()
+    local licenses = lib.callback.await('aurp_trucker:getLicenses', false) or { adr = false, heavy = false }
+    local options = {}
+
+    local cfgLicenses = Config.Licenses or {}
+    for licKey, cfg in pairs(cfgLicenses) do
+        local isCertified = licenses[licKey] == true
+        local statusLabel = isCertified and '✅ Certificado Ativo' or '❌ Não Habilitado'
+        local icon = isCertified and 'fas fa-certificate' or 'fas fa-file-signature'
+        local iconColor = isCertified and '#22c55e' or '#f59e0b'
+
+        table.insert(options, {
+            title = cfg.name,
+            description = ('Status: %s | Nível Mínimo: %d | Taxa: $%d'):format(statusLabel, cfg.minLevel or 1, cfg.examFee or 1000),
+            icon = icon,
+            iconColor = iconColor,
+            disabled = isCertified,
+            metadata = {
+                { label = 'Status', value = statusLabel },
+                { label = 'Exigência', value = ('Nível %d'):format(cfg.minLevel or 1) },
+                { label = 'Taxa de Inscrição', value = ('$%d'):format(cfg.examFee or 1000) },
+                { label = 'Escopo', value = cfg.description or 'Sem descrição' }
+            },
+            onSelect = function()
+                if not isCertified then
+                    StartLicenseExam(licKey, cfg)
+                end
+            end
+        })
+    end
+
+    lib.registerContext({
+        id = 'trucker_licenses_menu',
+        title = 'Centro de Certificações & Licenças Técnicas',
+        options = options
+    })
+
+    lib.showContext('trucker_licenses_menu')
+end
+
+RegisterCommand('truckerlicenses', function()
+    OpenLicensesMenu()
+end, false)
+
+RegisterCommand('licencas', function()
+    OpenLicensesMenu()
+end, false)
+
+exports('OpenLicensesMenu', OpenLicensesMenu)
+
+-- =======================================
 -- INICIALIZAÇÃO: MARCADORES VISUAIS & INTERAÇÃO [E]
 -- =======================================
 
@@ -1643,12 +2017,7 @@ local function SafeRequestModel(modelHash, timeoutMs)
     return HasModelLoaded(modelHash)
 end
 
-local hqLocations = {
-    {
-        coords = Config.TrailerCompany.coords, -- Elysian Island: vector3(-1266.0, -3396.0, 13.94)
-        name   = Config.TrailerCompany.name or 'Central Logística (Elysian Island)',
-    }
-}
+local hqLocations = {}
 if Config.LC_Headquarters and Config.LC_Headquarters.coords then
     table.insert(hqLocations, {
         coords = Config.LC_Headquarters.coords, -- Buccaneer Way: vector3(1208.83, -3115.0, 5.54)
@@ -1710,62 +2079,7 @@ end)
 CreateThread(function()
     Wait(500)
 
-    -- 1. Blip Elysian Island
-    blips.trailerCompany = CreateBlip(
-        Config.TrailerCompany.coords,
-        477, -- truck icon
-        5,   -- yellow
-        Config.TrailerCompany.name,
-        0.8
-    )
-
-    -- NPC Elysian Island
-    local elysianCoords = Config.TrailerCompany.coords
-    local elysianHeading = Config.TrailerCompany.spawnCoords and Config.TrailerCompany.spawnCoords.w or 180.0
-    local modelElysian = GetHashKey('a_m_m_business_01')
-    if SafeRequestModel(modelElysian, 4000) then
-        local dispatcherPed = CreatePed(4, modelElysian, elysianCoords.x, elysianCoords.y, elysianCoords.z, elysianHeading, false, true)
-        if dispatcherPed and dispatcherPed ~= 0 and DoesEntityExist(dispatcherPed) then
-            SetEntityInvincible(dispatcherPed, true)
-            SetBlockingOfNonTemporaryEvents(dispatcherPed, true)
-            FreezeEntityPosition(dispatcherPed, true)
-            SetModelAsNoLongerNeeded(modelElysian)
-
-            exports.ox_target:addLocalEntity(dispatcherPed, {
-                {
-                    name     = 'open_job_board',
-                    icon     = 'fas fa-clipboard-list',
-                    label    = 'Central de Trabalhos',
-                    distance = 3.0,
-                    onSelect = function() CreateThread(OpenJobBoard) end,
-                },
-                {
-                    name     = 'rent_truck',
-                    icon     = 'fas fa-truck-moving',
-                    label    = 'Alugar Caminhão (Caução)',
-                    distance = 3.0,
-                    onSelect = function() OpenRentalMenu() end,
-                },
-                {
-                    name     = 'return_truck',
-                    icon     = 'fas fa-undo-alt',
-                    label    = 'Devolver Caminhão Alugado',
-                    distance = 3.0,
-                    onSelect = function() ReturnRentedTruck() end,
-                },
-            })
-
-            AddEventHandler('onResourceStop', function(res)
-                if res ~= GetCurrentResourceName() then return end
-                if dispatcherPed and DoesEntityExist(dispatcherPed) then
-                    exports.ox_target:removeLocalEntity(dispatcherPed)
-                    DeleteEntity(dispatcherPed)
-                end
-            end)
-        end
-    end
-
-    -- 2. Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
+    -- Sede Original lc_truck_logistics: Terminal Buccaneer Way / Porto de Los Santos
     if Config.LC_Headquarters then
         local hq = Config.LC_Headquarters
         blips.lcHq = CreateBlip(
@@ -1807,6 +2121,13 @@ CreateThread(function()
                         label    = 'Devolver Caminhão Alugado',
                         distance = 3.0,
                         onSelect = function() ReturnRentedTruck() end,
+                    },
+                    {
+                        name     = 'licenses_lc',
+                        icon     = 'fas fa-graduation-cap',
+                        label    = 'Centro de Exames & Licenças (ADR / Heavy)',
+                        distance = 3.0,
+                        onSelect = function() OpenLicensesMenu() end,
                     },
                 })
 
@@ -1929,7 +2250,10 @@ RegisterCommand('checktrailer', function()
 end, false)
 
 RegisterCommand('clearjob', function()
-    if currentJob then
+    CleanupLCContract()
+    TriggerServerEvent('aurp_trucker:server:cancelActiveLCContract')
+
+    if currentJob or activeJob or lcActiveJob then
         if jobProgress.pickupBlip then
             RemoveBlip(jobProgress.pickupBlip)
         end
@@ -1949,7 +2273,9 @@ RegisterCommand('clearjob', function()
 
         currentJob = nil
         VP_Trucker_CurrentJobOriginId = nil
-        activeJob = nil -- Limpar activeJob também
+        activeJob = nil
+        lcActiveJob = nil
+        isStartingJob = false
         jobProgress = {
             stage = nil,
             startTime = nil,
@@ -1957,7 +2283,6 @@ RegisterCommand('clearjob', function()
             deliveryBlip = nil
         }
 
-        -- Atualizar NUI se estiver aberta
         if isNUIOpen then
             SendNUIMessage({
                 action = 'updateActiveJob',
@@ -1967,14 +2292,14 @@ RegisterCommand('clearjob', function()
 
         ShowNotification(
             'Trabalho Cancelado',
-            'Seu trabalho foi cancelado',
+            'Seu trabalho e veículos foram cancelados e limpos com sucesso.',
             'info'
         )
     else
         ShowNotification(
             'Nenhum Trabalho',
-            'Você não possui trabalho ativo',
-            'error'
+            'Nenhum trabalho ativo detectado. Estado redefinido.',
+            'info'
         )
     end
 end, false)
@@ -2287,14 +2612,9 @@ RegisterNUICallback('getConvoyHistory', function(data, cb)
 end)
 
 -- Auto-refresh da lista de jobs quando o servidor gera novos
-AddEventHandler('aurp_trucker:client:jobsUpdated', function()
-    if not IsNUIFocused() then return end
-    local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
-    if ok and data then
-        SendNUIMessage({
-            update = true,
-            dados  = data.lc_dados or data,
-        })
+RegisterNetEvent('aurp_trucker:client:jobsUpdated', function()
+    if isNUIOpen or (IsNUIFocused and IsNUIFocused()) then
+        RefreshNUIData()
     end
 end)
 
@@ -2310,9 +2630,6 @@ RegisterNetEvent('QBCore:Client:OnPlayerUnload', function()
     end
     if jobProgress.deliveryBlip then
         RemoveBlip(jobProgress.deliveryBlip)
-    end
-    if blips.trailerCompany then
-        RemoveBlip(blips.trailerCompany)
     end
 
     -- Limpar blips de localização marcados
@@ -2336,6 +2653,7 @@ end)
 
 AddEventHandler('onResourceStop', function(resourceName)
     if resourceName == GetCurrentResourceName() then
+        CleanupLCContract()
         CloseJobBoard()
 
         if jobProgress.pickupBlip then
@@ -2343,9 +2661,6 @@ AddEventHandler('onResourceStop', function(resourceName)
         end
         if jobProgress.deliveryBlip then
             RemoveBlip(jobProgress.deliveryBlip)
-        end
-        if blips.trailerCompany then
-            RemoveBlip(blips.trailerCompany)
         end
         if blips.lcHq then
             RemoveBlip(blips.lcHq)
@@ -2763,43 +3078,128 @@ end)
 -- LC LOGISTICS: QUICK JOBS EXECUTION
 -- =====================================================
 
-local lcActiveJob = nil
-local lcDeliveryPoint = nil
-local lcDeliveryBlip = nil
+local function createVehicleMarkersThread(truck, trailer)
+    CreateThread(function()
+        local timer = 2000
+        local tkMaxZ = 2.0
+        local trMaxZ = 2.0
 
-RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
-    if not contract then return end
-    lcActiveJob = contract
+        if DoesEntityExist(truck) then
+            local _, maxDim = GetModelDimensions(GetEntityModel(truck))
+            if maxDim then tkMaxZ = maxDim.z end
+        end
 
-    -- 1. Spawn do caminhão da firma
-    local truckModel = contract.truckModel or 'hauler'
-    local truckHash = joaat(truckModel)
-    lib.requestModel(truckHash)
-    local tspawn = contract.truckSpawn or vector4(1250.55, -3162.4, 5.88, 270.00)
-    local truck = CreateVehicle(truckHash, tspawn.x, tspawn.y, tspawn.z, tspawn.w, true, false)
-    SetEntityHeading(truck, tspawn.w)
-    SetVehicleOnGroundProperly(truck)
-    SetVehicleNumberPlateText(truck, 'LC' .. math.random(1000, 9999))
-    SetEntityAsMissionEntity(truck, true, true)
-    SetVehicleHasBeenOwnedByPlayer(truck, true)
-    if exports.qbx_vehiclekeys then pcall(function() exports.qbx_vehiclekeys:GiveKeys(truck) end) end
-    if exports.ox_fuel then pcall(function() exports.ox_fuel:SetFuel(truck, 100.0) end) end
+        if DoesEntityExist(trailer) then
+            local _, maxDim = GetModelDimensions(GetEntityModel(trailer))
+            if maxDim then trMaxZ = maxDim.z end
+        end
 
-    -- 2. Spawn do reboque designado
-    local trailerModel = contract.trailerModel or 'docktrailer'
-    local trailerHash = joaat(trailerModel)
-    lib.requestModel(trailerHash)
-    local trspawn = contract.trailerSpawn or vector4(1274.21, -3186.43, 5.91, 90.00)
-    local trailer = CreateVehicle(trailerHash, trspawn.x, trspawn.y, trspawn.z, trspawn.w, true, false)
-    SetEntityHeading(trailer, trspawn.w)
-    SetVehicleOnGroundProperly(trailer)
-    SetEntityAsMissionEntity(trailer, true, true)
+        while lcActiveJob and (DoesEntityExist(truck) or DoesEntityExist(trailer)) do
+            timer = 2000
+            local ped = cache.ped or PlayerPedId()
+            local pCoords = GetEntityCoords(ped)
 
-    lcActiveJob.truck = truck
-    lcActiveJob.trailer = trailer
+            local isAttached = (DoesEntityExist(truck) and DoesEntityExist(trailer)) and (
+                IsEntityAttachedToEntity(trailer, truck) or 
+                IsEntityAttachedToEntity(truck, trailer) or 
+                IsVehicleAttachedToTrailer(truck)
+            )
 
-    -- 3. Marcar GPS e Blip de Destino
+            if not isAttached then
+                local hoverOffset = math.sin(GetGameTimer() / 200.0) * 0.2
+
+                if DoesEntityExist(truck) then
+                    local tkCoords = GetEntityCoords(truck)
+                    local distTruck = #(pCoords - tkCoords)
+                    if distTruck < 50.0 and GetVehiclePedIsIn(ped, false) ~= truck then
+                        timer = 2
+                        local pos = GetOffsetFromEntityInWorldCoords(truck, 0.0, 0.0, tkMaxZ + 1.2 + hoverOffset)
+                        DrawMarker(0, pos.x, pos.y, pos.z,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            1.0, 1.0, 1.0,
+                            0, 100, 255, 180, false, true, 2, false, nil, nil, false)
+                    end
+                end
+
+                if DoesEntityExist(trailer) then
+                    local trCoords = GetEntityCoords(trailer)
+                    local distTrailer = #(pCoords - trCoords)
+                    if distTrailer < 50.0 then
+                        timer = 2
+                        local pos = GetOffsetFromEntityInWorldCoords(trailer, 0.0, 0.0, trMaxZ + 1.2 + hoverOffset)
+                        DrawMarker(0, pos.x, pos.y, pos.z,
+                            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                            1.0, 1.0, 1.0,
+                            0, 100, 255, 180, false, true, 2, false, nil, nil, false)
+                    end
+                end
+            else
+                break
+            end
+
+            Wait(timer)
+        end
+    end)
+end
+
+local function GetSafeVehicleSpawnCoords(baseSpawn, clearRadius)
+    if not baseSpawn then return vector4(1250.55, -3162.4, 5.88, 270.00) end
+    local radius = clearRadius or 4.0
+    local targetX, targetY, targetZ = baseSpawn.x, baseSpawn.y, baseSpawn.z
+    local heading = baseSpawn.w or 0.0
+
+    -- 1. Verificação primária da vaga designada
+    local isOccupied = IsPositionOccupied(targetX, targetY, targetZ, radius, false, true, false, false, false, 0, false)
+    local closestVeh = GetClosestVehicle(targetX, targetY, targetZ, radius, 0, 71)
+
+    if not isOccupied and closestVeh == 0 then
+        return baseSpawn
+    end
+
+    -- 2. Varredura de coordenadas alternativas adjacentes seguras
+    local headingRad = math.rad(heading)
+    local fwdX, fwdY = -math.sin(headingRad), math.cos(headingRad)
+    local sideX, sideY = math.cos(headingRad), math.sin(headingRad)
+
+    local candidateOffsets = {
+        { x = fwdX * 5.0,  y = fwdY * 5.0 },
+        { x = -fwdX * 5.0, y = -fwdY * 5.0 },
+        { x = sideX * 4.2, y = sideY * 4.2 },
+        { x = -sideX * 4.2, y = -sideY * 4.2 },
+        { x = fwdX * 10.0, y = fwdY * 10.0 },
+        { x = -fwdX * 10.0, y = -fwdY * 10.0 },
+    }
+
+    for _, offset in ipairs(candidateOffsets) do
+        local testX = targetX + offset.x
+        local testY = targetY + offset.y
+        local _, groundZ = GetGroundZFor_3dCoord(testX, testY, targetZ + 2.0, false)
+        local testZ = (groundZ and groundZ > 0.0) and (groundZ + 0.15) or targetZ
+
+        local occ = IsPositionOccupied(testX, testY, testZ, radius, false, true, false, false, false, 0, false)
+        local nearVeh = GetClosestVehicle(testX, testY, testZ, radius, 0, 71)
+
+        if not occ and nearVeh == 0 then
+            return vector4(testX, testY, testZ, heading)
+        end
+    end
+
+    -- 3. Fallback de mitigação anti-explosão
+    local _, finalZ = GetGroundZFor_3dCoord(targetX, targetY, targetZ + 2.5, false)
+    return vector4(targetX, targetY, (finalZ and finalZ > 0.0) and (finalZ + 0.1) or targetZ, heading)
+end
+
+-- ========================================================
+-- LOGÍSTICA 2.0: MÁQUINA DE ESTADOS & CARREGAMENTO FÍSICO
+-- ========================================================
+
+local function StartDeliveryRoute()
+    if not lcActiveJob then return end
+    local contract = lcActiveJob
     local dest = contract.deliveryCoords
+    if not dest then return end
+
+    -- 1. Marcar GPS e Blip de Destino
     SetNewWaypoint(dest.x, dest.y)
 
     if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then RemoveBlip(lcDeliveryBlip) end
@@ -2813,23 +3213,13 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
     AddTextComponentString("Entrega: " .. (contract.cargoName or "Carga"))
     EndTextCommandSetBlipName(lcDeliveryBlip)
 
-    lib.notify({
-        title = 'Quick Job Iniciado!',
-        description = ('Carga: %s | Recompensa: $%d\nCaminhão e reboque liberados na doca!'):format(contract.cargoName, contract.payment),
-        type = 'success',
-        duration = 8000
-    })
-
-    -- 4. Registro de Entidades e Chaves no Servidor
-    local truckNetId = NetworkGetNetworkIdFromEntity(truck)
-    local trailerNetId = NetworkGetNetworkIdFromEntity(trailer)
-    TriggerServerEvent('aurp_trucker:server:registerJobEntities', truckNetId, trailerNetId)
-
-    -- 5. Loop de Entrega com DrawMarker 30 autoritativo (Padrão LC Truck Logistics)
+    -- 2. Loop de Entrega com DrawMarker 30 autoritativo (Padrão LC Truck Logistics)
     CreateThread(function()
         local destX, destY, destZ = dest.x, dest.y, dest.z
         local destH = dest.w or 0.0
         local thisJobId = contract.jobId
+        local isQuickJob = contract.isQuickJob
+        local currentTextUi = nil
         local isFinished = false
 
         while lcActiveJob and lcActiveJob.jobId == thisJobId and not isFinished do
@@ -2853,49 +3243,267 @@ RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
                 local isAligned = (vehDiff <= 10.0) and (trDiff <= 10.0) and isAttached
 
                 if distance <= 4.0 and isAligned then
-                    DrawMarker(30,destX,destY,destZ-0.6,0,0,0,90.0,destH,0.0,3.0,1.0,10.0,0,255,0,50,0,0,0,0)
-                    lib.showTextUI('[E] Estacionar e Descarregar Carga')
-                    if IsControlJustPressed(0, 38) then
-                        lib.hideTextUI()
-                        BringVehicleToHalt(tk, 2.5, 1, false)
-                        Wait(10)
+                    DrawMarker(30, destX, destY, destZ - 0.6, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                    if currentTextUi ~= 'park' then
+                        lib.showTextUI('[E] Estacionar e Descarregar Carga')
+                        currentTextUi = 'park'
+                    end
+                    if IsControlJustPressed(0, 38) and not isFinished then
+                        isFinished = true
+                        if currentTextUi ~= nil then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
+                        BringVehicleToHalt(veh ~= 0 and veh or tk, 2.5, 1, false)
+                        Wait(100)
                         DoScreenFadeOut(500)
                         Wait(500)
-                        local trailerBody = (tr ~= 0 and DoesEntityExist(tr)) and GetVehicleBodyHealth(tr) or 1000
-                        local truckEngine = (tk ~= 0 and DoesEntityExist(tk)) and GetVehicleEngineHealth(tk) or 1000
-                        local truckBody = (tk ~= 0 and DoesEntityExist(tk)) and GetVehicleBodyHealth(tk) or 1000
+
+                        -- Desengatar e deletar APENAS o reboque/carga
+                        if tr ~= 0 and DoesEntityExist(tr) then
+                            DetachEntity(tr, true, true)
+                            DeleteEntity(tr)
+                        end
+                        if lcActiveJob then lcActiveJob.trailer = nil end
+
+                        if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
+                            RemoveBlip(lcDeliveryBlip)
+                            lcDeliveryBlip = nil
+                        end
+                        SetWaypointOff()
 
                         TriggerServerEvent("truck_logistics:deliveredCargo")
-                        TriggerServerEvent('aurp_trucker:server:completeLCContract', thisJobId, true)
-                        TriggerServerEvent("truck_logistics:finishContract", truckEngine, truckBody, trailerBody)
 
-                        PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-                        Wait(1000)
-                        DoScreenFadeIn(1000)
-                        isFinished = true
-                        break
+                        if not isQuickJob then
+                            -- ========================================================
+                            -- CAMINHÃO PRÓPRIO (OWNED TRUCK / FRETE)
+                            -- ========================================================
+                            TriggerServerEvent('aurp_trucker:server:finishOwnedTruckContract', thisJobId, true)
+                            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                            Wait(600)
+                            DoScreenFadeIn(800)
+                            break
+                        else
+                            -- ========================================================
+                            -- TRABALHO RÁPIDO (QUICK JOB)
+                            -- ========================================================
+                            DoScreenFadeIn(800)
+                            lib.notify({
+                                title = 'Carga Entregue!',
+                                description = 'Reboque descarregado com sucesso! Devolva o caminhão da firma na central de logística para receber seu pagamento.',
+                                type = 'inform',
+                                duration = 9000
+                            })
+
+                            local returnCoords = contract.returnCoords or vector4(1250.55, -3162.4, 5.88, 270.00)
+                            SetNewWaypoint(returnCoords.x, returnCoords.y)
+
+                            lcDeliveryBlip = AddBlipForCoord(returnCoords.x, returnCoords.y, returnCoords.z)
+                            SetBlipSprite(lcDeliveryBlip, 357)
+                            SetBlipColour(lcDeliveryBlip, 5)
+                            SetBlipScale(lcDeliveryBlip, 0.95)
+                            SetBlipRoute(lcDeliveryBlip, true)
+                            SetBlipRouteColour(lcDeliveryBlip, 5)
+                            BeginTextCommandSetBlipName("STRING")
+                            AddTextComponentString("Devolução: Central de Logística")
+                            EndTextCommandSetBlipName(lcDeliveryBlip)
+
+                            -- Thread de devolução e vistoria na central
+                            CreateThread(function()
+                                local retX, retY, retZ = returnCoords.x, returnCoords.y, returnCoords.z
+                                local retTextUi = nil
+                                local returning = false
+                                while lcActiveJob and lcActiveJob.jobId == thisJobId and not returning do
+                                    local sleep = 1000
+                                    local p = PlayerPedId()
+                                    local cVeh = GetVehiclePedIsIn(p, false)
+                                    local pos = GetEntityCoords(p)
+                                    local distRet = #(pos - vector3(retX, retY, retZ))
+
+                                    if distRet <= 60.0 then
+                                        sleep = 2
+                                        DrawMarker(1, retX, retY, retZ - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 4.0, 4.0, 1.2, 255, 180, 0, 140, false, false, 2, false, nil, nil, false)
+
+                                        if distRet <= 4.5 then
+                                            local isRental = (cVeh ~= 0) and (cVeh == tk or (DoesEntityExist(tk) and cVeh == tk) or (tk and cVeh ~= 0))
+                                            if isRental then
+                                                if retTextUi ~= 'return' then
+                                                    lib.showTextUI('[E] Devolver Caminhão da Firma')
+                                                    retTextUi = 'return'
+                                                end
+
+                                                if IsControlJustPressed(0, 38) then
+                                                    returning = true
+                                                    if retTextUi then
+                                                        lib.hideTextUI()
+                                                        retTextUi = nil
+                                                    end
+
+                                                    BringVehicleToHalt(cVeh, 2.5, 1, false)
+                                                    Wait(100)
+                                                    DoScreenFadeOut(500)
+                                                    Wait(500)
+
+                                                    local engH = GetVehicleEngineHealth(cVeh)
+                                                    local bdyH = GetVehicleBodyHealth(cVeh)
+                                                    local burst = 0
+                                                    for tIdx = 0, 7 do
+                                                        if IsVehicleTyreBurst(cVeh, tIdx, false) then
+                                                            burst = burst + 1
+                                                        end
+                                                    end
+
+                                                    TaskLeaveVehicle(p, cVeh, 0)
+                                                    Wait(200)
+                                                    if DoesEntityExist(cVeh) then
+                                                        DeleteEntity(cVeh)
+                                                    end
+                                                    if tk ~= cVeh and DoesEntityExist(tk) then
+                                                        DeleteEntity(tk)
+                                                    end
+
+                                                    TriggerServerEvent('aurp_trucker:server:finishQuickJobContract', thisJobId, {
+                                                        engineHealth = engH,
+                                                        bodyHealth = bdyH,
+                                                        burstTires = burst
+                                                    })
+
+                                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                                    Wait(800)
+                                                    DoScreenFadeIn(800)
+                                                    break
+                                                end
+                                            else
+                                                if retTextUi ~= 'not_rental' then
+                                                    lib.showTextUI('Você precisa estar no caminhão da firma para devolvê-lo!')
+                                                    retTextUi = 'not_rental'
+                                                end
+                                            end
+                                        else
+                                            if retTextUi then
+                                                lib.hideTextUI()
+                                                retTextUi = nil
+                                            end
+                                        end
+                                    else
+                                        if retTextUi then
+                                            lib.hideTextUI()
+                                            retTextUi = nil
+                                        end
+                                    end
+                                    Wait(sleep)
+                                end
+                                if retTextUi then
+                                    lib.hideTextUI()
+                                    retTextUi = nil
+                                end
+                            end)
+                            break
+                        end
                     end
                 else
                     if distance <= 15.0 then
-                        lib.showTextUI('Alinhe o caminhão e o reboque na vaga demarcada')
+                        if currentTextUi ~= 'align' then
+                            lib.showTextUI('Alinhe o caminhão e o reboque na vaga demarcada')
+                            currentTextUi = 'align'
+                        end
                     else
-                        lib.hideTextUI()
+                        if currentTextUi ~= nil then
+                            lib.hideTextUI()
+                            currentTextUi = nil
+                        end
                     end
-                    DrawMarker(30,destX,destY,destZ-0.6,0,0,0,90.0,destH,0.0,3.0,1.0,10.0,255,0,0,50,0,0,0,0)
+                    DrawMarker(30, destX, destY, destZ - 0.6, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
                 end
             else
-                lib.hideTextUI()
+                if currentTextUi ~= nil then
+                    lib.hideTextUI()
+                    currentTextUi = nil
+                end
             end
             Wait(timer)
         end
-        lib.hideTextUI()
+        if currentTextUi ~= nil then
+            lib.hideTextUI()
+            currentTextUi = nil
+        end
     end)
-end)
+end
 
-RegisterNetEvent('truck_logistics:startContract', function(key, contract_data, location)
-    if contract_data and not lcActiveJob then
-        TriggerEvent('aurp_trucker:client:startLCContract', contract_data)
-    end
+RegisterNetEvent('aurp_trucker:client:startLCContract', function(contract)
+    print(("^2[AUST_Trucker Client] aurp_trucker:client:startLCContract received for job: %s^7"):format(tostring(contract and contract.jobId)))
+    if not contract or lcActiveJob then return end
+    isStartingJob = true
+    lcActiveJob = contract
+    lcActiveJob.stage = 'STATUS_IN_TRANSIT'
+
+    local isQuickJob = (contract.isQuickJob ~= false) and (contract.contractType ~= 1)
+    lcActiveJob.isQuickJob = isQuickJob
+
+    CreateThread(function()
+        local truck = nil
+        local trailer = nil
+
+        if isQuickJob then
+            if contract.truckNetId then
+                local timeout = 0
+                while (not truck or not DoesEntityExist(truck)) and timeout < 50 do
+                    Wait(100)
+                    truck = NetworkGetEntityFromNetworkId(contract.truckNetId)
+                    timeout = timeout + 1
+                end
+            end
+
+            if truck and DoesEntityExist(truck) then
+                SetEntityAsMissionEntity(truck, true, true)
+                SetVehicleNeedsToBeHotwired(truck, false)
+                SetVehicleHasBeenOwnedByPlayer(truck, true)
+                SetVehicleDoorsLocked(truck, 1)
+                lcActiveJob.truck = truck
+                lcActiveJob.truckPlate = contract.truckPlate
+            else
+                print("^1[AUST_Trucker Client] AVISO: Caminhão não localizado via OneSync NetID.^7")
+            end
+        end
+
+        if contract.trailerNetId then
+            local timeout = 0
+            while (not trailer or not DoesEntityExist(trailer)) and timeout < 50 do
+                Wait(100)
+                trailer = NetworkGetEntityFromNetworkId(contract.trailerNetId)
+                timeout = timeout + 1
+            end
+        end
+
+        if trailer and DoesEntityExist(trailer) then
+            SetEntityAsMissionEntity(trailer, true, true)
+            lcActiveJob.trailer = trailer
+        end
+
+        if truck or trailer then
+            createVehicleMarkersThread(truck, trailer)
+        end
+
+        if isQuickJob then
+            local modeTitle = contract.isParty and ('Comboio Iniciado (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Trabalho Rápido Iniciado!'
+            lib.notify({
+                title = modeTitle,
+                description = ('Carga: %s | Recompensa: $%d\nVeículo e reboque liberados! Siga a rota no GPS.'):format(contract.cargoName, contract.payment),
+                type = 'success',
+                duration = 7000
+            })
+        else
+            local modeTitle = contract.isParty and ('Comboio Próprio (%d/%d)'):format(contract.partyMemberIndex or 1, contract.totalMembers or 1) or 'Frete Próprio Iniciado!'
+            lib.notify({
+                title = modeTitle,
+                description = ('Carga: %s | Recompensa Integral: $%d\nReboque liberado no pátio! Siga a rota no GPS.'):format(contract.cargoName, contract.payment),
+                type = 'success',
+                duration = 7000
+            })
+        end
+
+        StartDeliveryRoute()
+    end)
 end)
 
 RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
@@ -2903,32 +3511,97 @@ RegisterNetEvent('truck_logistics:closeUIToStartContract', function()
     SetNuiFocus(false, false)
 end)
 
-RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
-    if lcDeliveryPoint then
-        pcall(function() lcDeliveryPoint:remove() end)
-        lcDeliveryPoint = nil
-    end
-    if lcDeliveryBlip and DoesBlipExist(lcDeliveryBlip) then
-        RemoveBlip(lcDeliveryBlip)
-        lcDeliveryBlip = nil
-    end
-    SetWaypointOff()
-    lib.hideTextUI()
+RegisterNetEvent('aurp_trucker:client:quickJobFinished', function(result)
+    CleanupLCContract()
 
-    if lcActiveJob then
-        if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
-            DeleteEntity(lcActiveJob.trailer)
-        end
-        if lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
-            DeleteEntity(lcActiveJob.truck)
-        end
-        lcActiveJob = nil
-    end
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local deductionText = (result.damageDeduction and result.damageDeduction > 0)
+        and (' | Deduções de Reparos: -$%d'):format(result.damageDeduction)
+        or ' | Sem avarias'
 
     lib.notify({
-        title = 'Entrega Concluída!',
-        description = ('Recebido: $%d | Distância: %.2f km\nVeículo da firma recolhido com sucesso!'):format(result.payment or 0, result.distance or 0.0),
+        title = 'Caminhão da Firma Devolvido!',
+        description = ('Bruto: $%d%s\nLíquido Recebido: $%d%s | Rota: %.2f km'):format(
+            result.grossPayment or 0,
+            deductionText,
+            result.netPayment or 0,
+            xpText,
+            result.distance or 0.0
+        ),
         type = 'success',
         duration = 10000
     })
+
+    RefreshNUIData()
+end)
+
+RegisterNetEvent('aurp_trucker:client:ownedTruckContractFinished', function(result)
+    CleanupLCContract()
+
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local bonusText = (result.parkedManually) and ' (+5% Vaga)' or ''
+
+    lib.notify({
+        title = 'Frete Concluído!',
+        description = ('Pagamento integral de $%d%s creditado na sua conta!%s | Rota: %.2f km'):format(
+            result.payment or 0,
+            bonusText,
+            xpText,
+            result.distance or 0.0
+        ),
+        type = 'success',
+        duration = 10000
+    })
+
+    RefreshNUIData()
+end)
+
+RegisterNetEvent('aurp_trucker:client:lcContractFinished', function(result)
+    CleanupLCContract()
+
+    local xpText = (result.xpGained and result.xpGained > 0) and (' | +%d XP'):format(result.xpGained) or ''
+    local bonusText = ''
+    if result.moneyBonusPct and result.moneyBonusPct > 0 then
+        bonusText = (' (Bônus Habilidade: +%d%% $)'):format(result.moneyBonusPct)
+    end
+    lib.notify({
+        title = 'Entrega Concluída!',
+        description = ('Recebido: $%d%s%s | Distância: %.2f km'):format(result.payment or 0, bonusText, xpText, result.distance or 0.0),
+        type = 'success',
+        duration = 10000
+    })
+
+    RefreshNUIData()
+end)
+
+RegisterNetEvent('truck_logistics:open', function(dados, utils)
+    if isNUIOpen then return end
+    isNUIOpen = true
+    SetNuiFocus(true, true)
+    local activeLocale = (utils and utils.config and utils.config.locale) or (dados and dados.config and dados.config.locale) or Config.locale or Config.lang or "br"
+    local activeFormat = (utils and utils.config and utils.config.format) or (dados and dados.config and dados.config.format) or Config.format or { lang = activeLocale, currency = "USD", location = "pt-BR" }
+    SendNUIMessage({
+        showmenu     = true,
+        update       = false,
+        dados        = dados,
+        utils        = {
+            config = {
+                locale = activeLocale,
+                format = activeFormat,
+            },
+            lang = {}
+        },
+        resourceName = GetCurrentResourceName(),
+        action       = 'open',
+    })
+end)
+
+RegisterNetEvent('aurp_trucker:client:levelUp', function(data)
+    lib.notify({
+        title = 'Subiu de Nível!',
+        description = ('Parabéns! Você alcançou o Nível %d!\nGanhou %d ponto(s) de habilidade.'):format(data.newLevel or 1, data.skillPoints or 1),
+        type = 'success',
+        duration = 8000
+    })
+    RefreshNUIData()
 end)

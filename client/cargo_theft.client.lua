@@ -110,11 +110,11 @@ AddEventHandler('aurp_trucker:client:startCargoMonitoring', function()
 end)
 
 -- Job concluído normalmente ou abandonado → parar monitoramento
-AddEventHandler('aurp_trucker:client:jobCompleted', function()
+RegisterNetEvent('aurp_trucker:client:jobCompleted', function()
     StopMonitoring()
 end)
 
-AddEventHandler('aurp_trucker:client:jobAbandoned', function()
+RegisterNetEvent('aurp_trucker:client:jobAbandoned', function()
     StopMonitoring()
 end)
 

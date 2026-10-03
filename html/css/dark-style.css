@@ -3,50 +3,87 @@
    Dark Theme & Glassmorphism Design System
    ============================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700;800&display=swap');
 
 :root {
-    /* Lation Signature Emerald Palette */
-    --primary-accent: #10b981;
-    --primary-accent-hover: #059669;
-    --primary-color: #10b981;
-    --primary-color-hover: #059669;
-    --primary-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-    --primary-glow: rgba(16, 185, 129, 0.45);
+    /* Lation Modern UI (Emerald Edition) Official Palette */
+    --surface: #1e1f24;           /* Fundo principal de cards e modais */
+    --surface-band: #18191e;      /* Faixas de cabeçalho, sidebar e divisores */
+    --surface-hover: #252630;     /* Estado hover de cards/linhas */
+    --surface-elevated: #2a2b31;  /* Elementos elevados / containers internos */
+    --surface-deep: #16171b;      /* Fundo de slots, inputs e tabelas */
 
-    --accent-emerald: #10b981;
-    --accent-neon: #6afe87;
-    --accent-cyan: #06b6d4;
+    /* Linhas & Bordas */
+    --line: #2a2b31;              /* Borda padrão */
+    --line-strong: #3a3b41;       /* Borda destacada / divisórias */
+    --line-hover: #4a4b51;        /* Borda ao passar o mouse */
+
+    /* Conteúdo & Tipografia */
+    --content: #e4e4e7;           /* Texto padrão de leitura */
+    --content-secondary: #a1a1aa; /* Subtítulos, descrições secundárias */
+    --content-muted: #71717a;     /* Labels desativadas, dicas fracas */
+    --content-heading: #ffffff;   /* Títulos principais em destaque */
+
+    /* Acentos Verde Esmeralda (Lation Emerald / Success Palette) */
+    --accent: #10b981;            /* Verde esmeralda padrão */
+    --accent-soft: #34d399;       /* Verde claro / destaques suaves */
+    --accent-bright: #6afe87;     /* Verde neon brilhante (valores/XP/sucesso) */
+    --accent-dim: rgba(16, 185, 129, 0.12); /* Fundo de chips e glow suave */
+    --accent-glow: rgba(16, 185, 129, 0.28);/* Brilho de botões e seleções */
+
+    /* Botões Especializados */
+    --btn-green-bg: #1b3b2d;
+    --btn-green-text: #6afe87;
+    --btn-green-border: #224d3a;
+    --btn-green-hover: #234d3b;
+
+    --btn-warn-bg: #3b2f1b;
+    --btn-warn-text: #fcd34d;
+    --btn-warn-border: #4d3e24;
+
+    --btn-err-bg: #35202b;
+    --btn-err-text: #ff9f87;
+    --btn-err-border: #4a2b3b;
+
+    /* Aliases para Compatibilidade de Classes Existentes */
+    --primary-accent: var(--accent);
+    --primary-accent-hover: var(--accent-soft);
+    --primary-color: var(--accent);
+    --primary-color-hover: var(--accent-soft);
+    --primary-gradient: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+    --primary-glow: var(--accent-glow);
+    --accent-emerald: var(--accent);
+    --accent-neon: var(--accent-bright);
     --accent-amber: #f59e0b;
+    --accent-amber-glow: rgba(245, 158, 11, 0.35);
     --accent-rose: #f43f5e;
 
-    /* Surfaces */
-    --bg-main: rgba(15, 23, 42, 0.96);
-    --bg-sidebar: rgba(30, 41, 59, 0.55);
-    --bg-card: rgba(30, 41, 59, 0.7);
-    --bg-card-hover: rgba(51, 65, 85, 0.85);
-    --bg-input: rgba(255, 255, 255, 0.05);
-    --bg-input-focus: rgba(255, 255, 255, 0.09);
+    --bg-main: var(--surface-deep);
+    --bg-sidebar: var(--surface-band);
+    --bg-card: var(--surface);
+    --bg-card-hover: var(--surface-hover);
+    --bg-card-alt: var(--surface-band);
+    --bg-input: var(--surface-deep);
+    --bg-input-focus: var(--surface-elevated);
 
-    /* Borders & Lines */
-    --border-subtle: rgba(255, 255, 255, 0.08);
-    --border-hover: rgba(16, 185, 129, 0.5);
-    --border-active: #10b981;
+    --border-subtle: var(--line);
+    --border-hover: var(--accent);
+    --border-active: var(--accent);
 
-    /* Typography */
-    --text-primary: #f8fafc;
-    --text-secondary: #94a3b8;
-    --text-muted: #64748b;
+    --text-primary: var(--content-heading);
+    --text-secondary: var(--content);
+    --text-muted: var(--content-secondary);
 
-    /* Radii */
     --radius-sm: 6px;
-    --radius-md: 10px;
-    --radius-lg: 14px;
-    --radius-xl: 16px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 
-    /* Shadows (Clean line highlight, zero outer blur to avoid CEF black artifacts) */
-    --shadow-main: 0 0 0 1px rgba(255, 255, 255, 0.08);
-    --shadow-card: 0 4px 14px rgba(0, 0, 0, 0.25);
+    --panel-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 1px 2px rgba(0, 0, 0, 0.25), 0 16px 40px rgba(0, 0, 0, 0.6);
+    --shadow-main: var(--panel-shadow);
+    --shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 16px rgba(0, 0, 0, 0.45);
 }
 
 /* Base & Font (100% Transparent, No filters, No shadows on outer viewport) */
@@ -211,7 +248,7 @@ html, body {
     visibility: hidden !important;
     opacity: 0 !important;
     pointer-events: none !important;
-    background: rgba(15, 23, 42, 0.98) !important;
+    background: #121212 !important;
     color: #f8fafc !important;
     padding: 6px 14px !important;
     border-radius: var(--radius-sm) !important;
@@ -310,13 +347,16 @@ ul.list-inline li.card-theme {
     background: var(--bg-card) !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
-    transition: all 0.22s ease !important;
+    box-shadow: var(--shadow-card) !important;
+    transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
 }
 
 ul.list-inline li.card-theme:hover {
     background: var(--bg-card-hover) !important;
     border-color: var(--border-hover) !important;
-    transform: scale(1.008);
+    box-shadow: inset 3px 0 0 var(--accent), 0 8px 24px rgba(0, 0, 0, 0.45) !important;
+    transform: translateY(-1px) scale(1.004) !important;
 }
 
 /* User Profile & Candidate Cards */
@@ -366,18 +406,19 @@ ul.list-inline li.card-theme:hover {
 }
 
 .btn-primary {
-    background: var(--primary-gradient) !important;
-    border: none !important;
-    color: #ffffff !important;
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.4), 0 4px 14px rgba(16, 185, 129, 0.25) !important;
+    background: var(--btn-green-bg) !important;
+    border: 1px solid var(--btn-green-border) !important;
+    color: var(--btn-green-text) !important;
+    box-shadow: 0 0 10px var(--accent-dim), 0 2px 8px rgba(0, 0, 0, 0.4) !important;
+    font-family: var(--font-mono) !important;
 }
 
 .btn-primary:hover {
-    background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
-    transform: translateY(-1px) !important;
-    box-shadow: 0 0 16px rgba(16, 185, 129, 0.6), 0 6px 20px rgba(16, 185, 129, 0.35) !important;
-    filter: brightness(1.1) !important;
+    background: var(--btn-green-hover) !important;
+    border-color: var(--accent) !important;
     color: #ffffff !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 0 16px var(--accent-glow), 0 4px 14px rgba(0, 0, 0, 0.5) !important;
 }
 
 .btn-primary:active {
@@ -396,27 +437,55 @@ ul.list-inline li.card-theme:hover {
     box-shadow: 0 0 12px rgba(16, 185, 129, 0.5) !important;
 }
 
-.btn-danger, .btn-outline-danger {
-    background: linear-gradient(135deg, #e11d48 0%, #f43f5e 100%) !important;
-    border: none !important;
+.btn-danger {
+    background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
+    border: 1px solid #f43f5e !important;
     color: #ffffff !important;
-    box-shadow: 0 4px 14px rgba(244, 63, 94, 0.35) !important;
+    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35) !important;
 }
 
-.btn-danger:hover, .btn-outline-danger:hover {
+.btn-danger:hover {
     filter: brightness(1.12) !important;
     transform: translateY(-1px) !important;
+    color: #ffffff !important;
+    box-shadow: 0 6px 18px rgba(225, 29, 72, 0.5) !important;
+}
+
+.btn-outline-danger {
+    background: transparent !important;
+    border: 1px solid rgba(244, 63, 94, 0.5) !important;
+    color: #f43f5e !important;
+    box-shadow: none !important;
+}
+
+.btn-outline-danger:hover {
+    background: rgba(244, 63, 94, 0.15) !important;
+    border-color: #f43f5e !important;
+    color: #ffffff !important;
+}
+
+.btn-outline-secondary, .btn-cancel {
+    background: #18181b !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    color: #d4d4d8 !important;
+    box-shadow: none !important;
+}
+
+.btn-outline-secondary:hover, .btn-cancel:hover {
+    background: #27272a !important;
+    border-color: rgba(255, 255, 255, 0.25) !important;
     color: #ffffff !important;
 }
 
 .btn-dark {
-    background: rgba(30, 41, 59, 0.8) !important;
+    background: #141414 !important;
     border: 1px solid var(--border-subtle) !important;
     color: var(--text-primary) !important;
 }
 
 .btn-dark:hover {
-    background: rgba(51, 65, 85, 0.9) !important;
+    background: #202020 !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
     color: #ffffff !important;
 }
 
@@ -438,16 +507,94 @@ ul.list-inline li.card-theme:hover {
 
 /* Modals */
 .modal-content {
-    background: rgba(15, 23, 42, 0.98) !important;
+    background: #0d0d0d !important;
     border: 1px solid var(--border-subtle) !important;
     border-radius: var(--radius-lg) !important;
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
 }
 
 .modal-header, .modal-footer {
     border-color: var(--border-subtle) !important;
+}
+
+/* Confirmation Modal Modernization */
+#confirmation-modal .modal-dialog {
+    max-width: 440px !important;
+}
+
+#confirmation-modal .modal-content {
+    background: #0d0d0d !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 14px !important;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    overflow: hidden !important;
+}
+
+#confirmation-modal .modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 16px 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+}
+
+#confirmation-modal .modal-header .modal-title {
+    font-size: 16px !important;
+    font-weight: 600 !important;
+    color: #ffffff !important;
+    margin: 0 !important;
+    letter-spacing: 0.2px !important;
+}
+
+#confirmation-modal .modal-header .close {
+    color: #a1a1aa !important;
+    text-shadow: none !important;
+    opacity: 0.8 !important;
+    font-size: 20px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    transition: color 0.15s ease !important;
+}
+
+#confirmation-modal .modal-header .close:hover {
+    color: #ffffff !important;
+    opacity: 1 !important;
+}
+
+#confirmation-modal .modal-body {
+    padding: 20px !important;
+    color: #d4d4d8 !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+}
+
+#confirmation-modal .modal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    padding: 14px 20px !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    justify-content: flex-end !important;
+    gap: 12px !important;
+}
+
+#confirmation-modal .modal-footer > * {
+    margin: 0 !important;
+}
+
+#confirmation-modal .modal-footer button {
+    min-width: 105px !important;
+    height: 38px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+    cursor: pointer !important;
 }
 
 /* Progress Bars & Health Indicators */
@@ -498,6 +645,455 @@ ul.list-inline li.card-theme:hover {
 
 /* Dealership & Garage */
 .dealership-locked-background {
-    background: rgba(15, 23, 42, 0.6) !important;
+    background: rgba(5, 5, 5, 0.85) !important;
     opacity: 0.75;
+}
+
+/* ============================================================
+   ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   Refatorado para OLED Black, Proporção 55/45 e Acentos Amber/Emerald
+   ============================================================ */
+
+.skills-page {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    padding: 20px 24px !important;
+    box-sizing: border-box !important;
+}
+
+.skills-page[style*="display: block"] {
+    display: flex !important;
+}
+
+.ets2-skills-header-bar {
+    text-align: center;
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+}
+
+.ets2-header-title {
+    font-family: 'Montserrat', 'Poppins', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: #f1f5f9;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-skills-layout {
+    display: grid;
+    grid-template-columns: 55% calc(45% - 16px);
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+    height: calc(100% - 46px);
+    box-sizing: border-box;
+}
+
+/* Left Column: Skill Rows (55% Grid Column) */
+.ets2-skills-list-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 6px;
+    height: 100%;
+}
+
+.ets2-skills-list-col::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb {
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-amber);
+}
+
+.ets2-skill-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #0d0d0d;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    box-sizing: border-box;
+}
+
+.ets2-skill-row:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #141414;
+    transform: translateY(-1px);
+}
+
+.ets2-skill-row.active {
+    border-color: #f59e0b !important;
+    background: linear-gradient(180deg, #18150f 0%, #0d0b08 100%) !important;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.25), inset 0 0 0 1px rgba(245, 158, 11, 0.3) !important;
+}
+
+.ets2-skill-row.active .ets2-skill-label {
+    color: #f59e0b !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.ets2-skill-icon-box {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: var(--radius-sm);
+    background: #141414;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-skill-icon-box {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: #1c1810;
+}
+
+.ets2-fa-icon {
+    color: #d1d5db;
+    font-size: 17px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-fa-icon {
+    color: #f59e0b;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+}
+
+.ets2-skill-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ets2-skill-label {
+    font-family: 'Poppins', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: color 0.15s ease;
+}
+
+/* Rank Blocks */
+.ets2-rank-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-block {
+    width: 28px;
+    height: 18px;
+    border-radius: 3px;
+    position: relative;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.ets2-block.locked {
+    background: #181818;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.ets2-block.unlocked {
+    background: linear-gradient(180deg, #fde047 0%, #f59e0b 45%, #b45309 52%, #78350f 100%);
+    border: 1px solid #fef08a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 7px rgba(245, 158, 11, 0.65), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-block.pending {
+    background: linear-gradient(180deg, #6ee7b7 0%, #10b981 45%, #047857 52%, #064e3b 100%);
+    border: 1px solid #a7f3d0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 8px rgba(16, 185, 129, 0.75);
+}
+
+/* ADR Badges */
+.ets2-adr-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-adr-badge {
+    width: 25px;
+    height: 25px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #141414;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.ets2-adr-badge.locked {
+    filter: grayscale(100%) opacity(25%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ets2-adr-badge.unlocked {
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.7));
+    border: 1px solid #f59e0b;
+}
+
+.ets2-adr-badge.pending {
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.85));
+    border: 1px solid #10b981;
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.ets2-adr-badge img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+/* Stepper Buttons */
+.ets2-stepper {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-step-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    background: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: #d1d5db;
+    font-family: monospace;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 26px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    outline: none !important;
+}
+
+.ets2-step-btn:not(:disabled):hover {
+    background: #242424;
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.ets2-step-btn:not(:disabled):active {
+    background: #101010;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-step-btn:disabled {
+    opacity: 0.18;
+    cursor: not-allowed;
+}
+
+/* Right Column: Details Panel (45% Grid Column) */
+.ets2-skills-detail-col {
+    background: #0d0d0d;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.ets2-unassigned-bar {
+    background: #121212;
+    border-bottom: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Poppins', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.ets2-unassigned-num {
+    color: #f59e0b;
+    font-size: 16px;
+    font-weight: 800;
+    text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+}
+
+.ets2-detail-card {
+    padding: 14px 16px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.ets2-detail-card::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb {
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-amber);
+}
+
+.ets2-detail-title {
+    font-family: 'Poppins', sans-serif;
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #f59e0b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    margin: 0;
+}
+
+.ets2-detail-desc {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.ets2-detail-ranks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.ets2-rank-item {
+    font-size: 10.5px;
+    line-height: 1.35;
+}
+
+.ets2-rank-item .rank-heading {
+    font-weight: 700;
+    margin-bottom: 1px;
+    font-size: 11px;
+}
+
+.ets2-rank-item.unlocked .rank-heading {
+    color: #f59e0b;
+}
+.ets2-rank-item.unlocked .rank-perks {
+    color: #fbbf24;
+}
+
+.ets2-rank-item.pending .rank-heading {
+    color: #10b981;
+}
+.ets2-rank-item.pending .rank-perks {
+    color: #6ee7b7;
+}
+
+.ets2-rank-item.locked .rank-heading {
+    color: #64748b;
+}
+.ets2-rank-item.locked .rank-perks {
+    color: #475569;
+}
+
+/* Integrated Detail Footer (Docked Action Button) */
+.ets2-detail-footer {
+    padding: 10px 16px;
+    border-top: 1px solid var(--border-subtle);
+    background: #101010;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ets2-apply-btn {
+    width: 100%;
+    height: 36px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-subtle);
+    font-family: 'Poppins', sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none !important;
+}
+
+.ets2-apply-btn:disabled {
+    background: #141414;
+    color: #475569;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.ets2-apply-btn:not(:disabled) {
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 45%, #b45309 100%);
+    border-color: #fef08a;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 14px rgba(245, 158, 11, 0.65);
+}
+
+.ets2-apply-btn:not(:disabled):hover {
+    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 45%, #d97706 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 18px rgba(245, 158, 11, 0.9);
+    transform: translateY(-1px);
+}
+
+.ets2-apply-btn:not(:disabled):active {
+    transform: translateY(0);
+}
+
+/* Bottom Action Bar (Fallback) */
+.ets2-skills-bottom-bar {
+    display: none;
 }

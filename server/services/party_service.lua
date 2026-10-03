@@ -22,52 +22,138 @@ local function BroadcastPartyUpdate(partyId)
     local membersPayload = {}
     for cid, info in pairs(party.members) do
         table.insert(membersPayload, {
-            citizenid = cid,
-            name      = info.src and GetCharName(info.src) or cid,
-            isLeader  = (cid == party.leader),
-            online    = info.src ~= nil,
+            citizenid           = cid,
+            user_id             = cid,
+            name                = info.src and GetCharName(info.src) or cid,
+            isLeader            = (cid == party.leader),
+            owner               = (cid == party.leader and 1 or 0),
+            online              = info.src ~= nil,
+            joined_at           = info.joined_at or os.time(),
+            finished_deliveries = info.finished_deliveries or 0,
         })
     end
 
+    local partyPayload = {
+        id            = partyId,
+        partyId       = partyId,
+        code          = party.code or string.upper(string.sub(partyId, 1, 6)),
+        name          = party.name or ('Grupo #' .. string.upper(string.sub(partyId, 1, 6))),
+        description   = party.description or 'Grupo de transporte cooperativo',
+        owner         = 0,
+        user_id       = party.leader,
+        members       = party.maxSize or 4,
+        members_count = #membersPayload,
+        members_list  = membersPayload,
+        convoyActive  = party.convoyActive or false,
+        maxSize       = party.maxSize or 4,
+    }
+
     for cid, info in pairs(party.members) do
         if info.src then
+            local pCopy = table.clone and table.clone(partyPayload) or partyPayload
+            pCopy.isLeader = (cid == party.leader)
+            pCopy.owner    = (cid == party.leader and 1 or 0)
             TriggerClientEvent('aurp_trucker:client:partyUpdate', info.src, {
-                party = {
-                    partyId      = partyId,
-                    isLeader     = (cid == party.leader),
-                    members      = membersPayload,
-                    convoyActive = party.convoyActive or false,
-                    maxSize      = party.maxSize,
-                }
+                party = pCopy
             })
         end
     end
 end
 
 -- Cria uma nova party para o jogador
-function PartyService.Create(src)
+function PartyService.Create(src, data)
     local Player = Framework.GetPlayer(src)
     if not Player then return nil, 'Jogador não encontrado' end
     local cid = Framework.GetCitizenId(Player)
 
     if VP_Trucker.PlayerParties[cid] then
-        return nil, 'Você já está em um party'
+        return nil, 'Você já está em um grupo ativo.'
     end
 
+    local maxSize = (data and tonumber(data.members)) or Config.Party.maxSize or 4
+    if maxSize > 8 then maxSize = 8 end
+    if maxSize < 2 then maxSize = 2 end
+
     local partyId = NewUUID()
-    DB_CreateParty(partyId, cid, Config.Party.maxSize)
+    local partyCode = string.upper(string.sub(partyId, 1, 6))
+
+    local partyName = (data and data.name and tostring(data.name):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.name):gsub("^%s*(.-)%s*$", "%1") or ('Frota #' .. partyCode)
+    local partyDesc = (data and data.desc and tostring(data.desc):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.desc):gsub("^%s*(.-)%s*$", "%1") or 'Transporte e Logística em Comboio'
+    local partyPass = (data and data.pass and tostring(data.pass):gsub("^%s*(.-)%s*$", "%1") ~= "") and tostring(data.pass):gsub("^%s*(.-)%s*$", "%1") or nil
+
+    pcall(DB_CreateParty, partyId, cid, maxSize)
 
     VP_Trucker.Parties[partyId] = {
+        id          = partyId,
+        code        = partyCode,
+        name        = partyName,
+        description = partyDesc,
+        pass        = partyPass,
         leader      = cid,
-        members     = { [cid] = { src = src } },
+        members     = { [cid] = { src = src, joined_at = os.time(), finished_deliveries = 0 } },
         graceTimers = {},
-        maxSize     = Config.Party.maxSize,
+        maxSize     = maxSize,
         status      = 'forming',
     }
     VP_Trucker.PlayerParties[cid] = partyId
 
     BroadcastPartyUpdate(partyId)
     return partyId
+end
+
+-- Ingressa em um grupo existente por Nome ou Código
+function PartyService.Join(src, nameOrCode, pass)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return false, 'Jogador não encontrado' end
+    local cid = Framework.GetCitizenId(Player)
+
+    if VP_Trucker.PlayerParties[cid] then
+        return false, 'Você já participa de um grupo. Saia do grupo atual antes de entrar em outro.'
+    end
+
+    if not nameOrCode or tostring(nameOrCode):gsub("^%s*(.-)%s*$", "%1") == "" then
+        return false, 'Informe o nome ou código do grupo.'
+    end
+
+    local cleanSearch = tostring(nameOrCode):gsub("^%s*(.-)%s*$", "%1"):upper()
+
+    local foundPartyId, foundParty = nil, nil
+    for pid, p in pairs(VP_Trucker.Parties) do
+        if p.status ~= 'disbanded' then
+            local pCode = (p.code or string.upper(string.sub(pid, 1, 6))):upper()
+            local pName = (p.name or ""):upper()
+            if pCode == cleanSearch or pName == cleanSearch or pid == nameOrCode then
+                foundPartyId = pid
+                foundParty = p
+                break
+            end
+        end
+    end
+
+    if not foundParty or not foundPartyId then
+        return false, 'Nenhum grupo encontrado com o nome ou código informado.'
+    end
+
+    -- Validar capacidade
+    local memberCount = 0
+    for _ in pairs(foundParty.members) do memberCount = memberCount + 1 end
+    if memberCount >= (foundParty.maxSize or 4) then
+        return false, 'Este grupo atingiu a capacidade máxima de membros.'
+    end
+
+    -- Validar senha se houver
+    if foundParty.pass and foundParty.pass ~= "" then
+        local inputPass = pass and tostring(pass):gsub("^%s*(.-)%s*$", "%1") or ""
+        if inputPass ~= tostring(foundParty.pass) then
+            return false, 'Senha incorreta para entrar neste grupo.'
+        end
+    end
+
+    foundParty.members[cid] = { src = src, joined_at = os.time(), finished_deliveries = 0 }
+    VP_Trucker.PlayerParties[cid] = foundPartyId
+
+    BroadcastPartyUpdate(foundPartyId)
+    return true, foundPartyId
 end
 
 -- Convida jogador pelo server id
@@ -77,22 +163,28 @@ function PartyService.Invite(src, targetSrc)
     local cid = Framework.GetCitizenId(Player)
 
     local partyId = VP_Trucker.PlayerParties[cid]
-    if not partyId then return false, 'Você não está em um party' end
+    if not partyId then return false, 'Você não está em um grupo ativo.' end
 
     local party = VP_Trucker.Parties[partyId]
-    if party.leader ~= cid then return false, 'Apenas o líder pode convidar' end
+    if not party then return false, 'Grupo não encontrado.' end
+    if party.leader ~= cid then return false, 'Apenas o líder da frota pode enviar convites.' end
 
     local memberCount = 0
     for _ in pairs(party.members) do memberCount = memberCount + 1 end
-    if memberCount >= party.maxSize then return false, 'Party cheio' end
+    if memberCount >= (party.maxSize or 4) then return false, 'O grupo já atingiu o limite de membros.' end
 
     local targetPlayer = Framework.GetPlayer(targetSrc)
-    if not targetPlayer then return false, 'Jogador não encontrado' end
+    if not targetPlayer then return false, 'Jogador não encontrado ou offline.' end
     local targetCid = Framework.GetCitizenId(targetPlayer)
 
-    if VP_Trucker.PlayerParties[targetCid] then return false, 'Jogador já está em um party' end
+    if targetCid == cid or tonumber(targetSrc) == tonumber(src) then
+        return false, 'Você não pode convidar a si mesmo.'
+    end
 
-    -- Limpeza de convites expirados (evita memory leak) e registro com TTL de 60s
+    if VP_Trucker.PlayerParties[targetCid] then
+        return false, 'O jogador convidado já está em um grupo.'
+    end
+
     if not VP_Trucker.PartyInvites then VP_Trucker.PartyInvites = {} end
     local now = os.time()
     for cidKey, inv in pairs(VP_Trucker.PartyInvites) do
@@ -108,8 +200,40 @@ function PartyService.Invite(src, targetSrc)
 
     TriggerClientEvent('aurp_trucker:client:partyInvite', targetSrc, {
         partyId    = partyId,
+        partyName  = party.name or 'Frota de Logística',
         leaderName = GetCharName(src),
     })
+    return true
+end
+
+-- Expulsa membro do grupo (apenas líder)
+function PartyService.Kick(src, targetCid)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return false, 'Jogador não encontrado' end
+    local cid = Framework.GetCitizenId(Player)
+
+    local partyId = VP_Trucker.PlayerParties[cid]
+    if not partyId then return false, 'Você não está em um grupo.' end
+
+    local party = VP_Trucker.Parties[partyId]
+    if not party then return false, 'Grupo não encontrado.' end
+    if party.leader ~= cid then return false, 'Apenas o líder pode expulsar membros.' end
+
+    if targetCid == cid then return false, 'Você não pode expulsar a si mesmo.' end
+
+    local memberInfo = party.members[targetCid]
+    if not memberInfo then return false, 'Membro não encontrado no grupo.' end
+
+    -- Se online, notificar e desvincular client
+    if memberInfo.src then
+        TriggerClientEvent('aurp_trucker:notify', memberInfo.src, 'Você foi removido do grupo pelo líder.', 'error')
+        TriggerClientEvent('aurp_trucker:client:partyDisbanded', memberInfo.src)
+    end
+
+    party.members[targetCid] = nil
+    VP_Trucker.PlayerParties[targetCid] = nil
+
+    BroadcastPartyUpdate(partyId)
     return true
 end
 
@@ -119,25 +243,23 @@ function PartyService.Accept(src, partyId)
     if not Player then return false, 'Jogador não encontrado' end
     local cid = Framework.GetCitizenId(Player)
 
-    if VP_Trucker.PlayerParties[cid] then return false, 'Você já está em um party' end
+    if VP_Trucker.PlayerParties[cid] then return false, 'Você já está em um grupo ativo.' end
 
-    -- Validar convite pendente no servidor (fail-closed)
     local invite = VP_Trucker.PartyInvites and VP_Trucker.PartyInvites[cid]
-    if not invite or invite.partyId ~= partyId or os.time() > invite.expiresAt then
-        return false, 'Você não possui convite válido para este grupo'
+    if not invite or invite.partyId ~= partyId or os.time() > (invite.expiresAt or 0) then
+        return false, 'Você não possui convite válido ou ele expirou.'
     end
-    -- Consumir convite imediatamente
     VP_Trucker.PartyInvites[cid] = nil
 
     local party = VP_Trucker.Parties[partyId]
-    if not party then return false, 'Party não encontrado' end
-    if party.status == 'disbanded' then return false, 'Party foi dissolvido' end
+    if not party then return false, 'Grupo não encontrado.' end
+    if party.status == 'disbanded' then return false, 'O grupo foi encerrado.' end
 
     local memberCount = 0
     for _ in pairs(party.members) do memberCount = memberCount + 1 end
-    if memberCount >= party.maxSize then return false, 'Party cheio' end
+    if memberCount >= (party.maxSize or 4) then return false, 'O grupo já atingiu o limite de vagas.' end
 
-    party.members[cid] = { src = src }
+    party.members[cid] = { src = src, joined_at = os.time(), finished_deliveries = 0 }
     VP_Trucker.PlayerParties[cid] = partyId
 
     BroadcastPartyUpdate(partyId)

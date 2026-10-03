@@ -17,7 +17,7 @@
 		
 		<!-- Stylesheets -->
 		<style>
-			html, body {
+			html, body, #app, #root {
 				background: transparent !important;
 				background-color: transparent !important;
 				box-shadow: none !important;
@@ -37,9 +37,14 @@
 		<link rel="stylesheet" href="css/style.css">
 		<link id="css-light" rel="stylesheet" href="css/light-style.css" disabled>
 		<link id="css-dark" rel="stylesheet" href="css/dark-style.css">
+		<link rel="stylesheet" href="css/admin.css">
 
 		<!-- Font Awesome 6 -->
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.0/css/all.min.css" />
+
+		<!-- Three.js & TransformControls (Gizmo 3D estilo vp_staff_studio) -->
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
 
 		<!-- Utils JavaScript & Languages -->
 		<script src="js/utils.js" type="text/javascript"></script>
@@ -268,175 +273,252 @@
 					</div>
 				</div>
 				<div class="pages party-page" style="height: 100%;">
-					<div class="row" style="height: 100%;">
-						<div class="col-md-12" style="height: 100%;">
-							<div id="party-title-div" class="col-12 mt-3 mb-3">
-								
+					<div class="lation-party-wrapper">
+						<div id="party-title-div" class="lation-party-header-bar">
+							<div>
+								<div class="lation-party-header-title"><i class="fas fa-users-gear text-emerald"></i> GRUPOS & CONVOYS</div>
+								<div class="lation-party-header-desc">Crie frotas colaborativas, compartilhe fretes e viaje em comboio com outros motoristas.</div>
 							</div>
-							<div id="party-form-container-base" class="party-body-initial card-theme">
-								<img src="img/party.png" alt="party">
-								<div class="party-buttons">
-									<div class="party-create">
-										<button id="party-create-btn" onclick="createParty()" class="btn btn-primary"></button>
-									</div>
-									<div class="party-join">
-										<button id="party-join-btn" onclick="joinParty()" class="btn btn-primary"></button>
-									</div>
-								</div>
-								<form id="party-form-create" class="party-form" role="form" style="opacity: 0; max-height: 0; padding: 0px; margin: 0px;">
-									<div id="party-form-container-create">
+						</div>
 
+						<!-- View 1: When player has NO active party (Create or Join) -->
+						<div id="party-form-container-base" style="display: none;">
+							<div class="lation-party-tabs">
+								<button type="button" class="lation-tab-btn active" id="tab-btn-create-party" onclick="switchPartyTab('create')">
+									<i class="fas fa-plus-circle"></i> Criar Novo Grupo
+								</button>
+								<button type="button" class="lation-tab-btn" id="tab-btn-join-party" onclick="switchPartyTab('join')">
+									<i class="fas fa-arrow-right-to-bracket"></i> Ingressar por Nome / Código
+								</button>
+							</div>
+
+							<!-- Pane Create Party -->
+							<div id="party-tab-create" class="lation-party-form-card">
+								<form id="party-form-create" onsubmit="event.preventDefault(); submitCreateParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome da Frota / Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-shield-halved"></i>
+											<input id="party-name" name="name" type="text" maxlength="30" placeholder="Ex: TransRota 66" required>
+										</div>
 									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Descrição / Lema <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-quote-left"></i>
+											<input id="party-desc" name="desc" type="text" maxlength="200" placeholder="Ex: Foco em cargas pesadas e comboios noturnos" required>
+										</div>
+									</div>
+
+									<div class="row">
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Senha (Opcional)</label>
+												<div class="lation-input-box">
+													<i class="fas fa-lock"></i>
+													<input id="party-password" name="password" type="password" maxlength="20" placeholder="Livre se vazio">
+												</div>
+											</div>
+										</div>
+										<div class="col-6">
+											<div class="lation-form-group">
+												<label class="lation-input-label">Confirmar Senha</label>
+												<div class="lation-input-box">
+													<i class="fas fa-check-double"></i>
+													<input id="party-password-confirm" name="password-confirm" type="password" maxlength="20" placeholder="Repita a senha">
+												</div>
+											</div>
+										</div>
+									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Limite de Vagas da Frota</label>
+										<div class="lation-slots-selector">
+											<div class="lation-slot-pill" data-slots="2" onclick="selectPartySlots(2)">2 VAGAS</div>
+											<div class="lation-slot-pill active" data-slots="4" onclick="selectPartySlots(4)">4 VAGAS</div>
+											<div class="lation-slot-pill" data-slots="6" onclick="selectPartySlots(6)">6 VAGAS</div>
+										</div>
+										<input type="hidden" id="party-members" name="members" value="4">
+									</div>
+
+									<div id="party-create-error" class="ShowPasswordNotMatchesError text-danger font-small-2 mb-2" style="display:none;">
+										* As senhas digitadas não coincidem.
+									</div>
+
+									<button type="submit" id="submit-party-form" class="lation-btn lation-btn-primary btn-block">
+										<i class="fas fa-circle-check mr-2"></i> CRIAR GRUPO DE TRANSPORTE
+									</button>
 								</form>
-								<form id="party-form-join" class="party-form" role="form" style="opacity: 0; max-height: 0; padding: 0px; margin: 0px;">
-									<div id="party-form-container-join">
+							</div>
 
+							<!-- Pane Join Party -->
+							<div id="party-tab-join" class="lation-party-form-card" style="display: none;">
+								<form id="party-form-join" onsubmit="event.preventDefault(); submitJoinParty();">
+									<div class="lation-form-group">
+										<label class="lation-input-label">Nome ou Código do Grupo <span class="text-emerald">*</span></label>
+										<div class="lation-input-box">
+											<i class="fas fa-hashtag"></i>
+											<input id="party-name-join" name="name" type="text" placeholder="Digite o nome ou o código (ex: TRK-8F2A)" required>
+										</div>
 									</div>
+
+									<div class="lation-form-group">
+										<label class="lation-input-label">Senha de Acesso (se houver)</label>
+										<div class="lation-input-box">
+											<i class="fas fa-key"></i>
+											<input id="party-password-join" name="password" type="password" placeholder="Digite a senha (se aplicável)">
+										</div>
+									</div>
+
+									<div id="party-join-error" class="text-danger font-small-2 mb-2" style="display:none;"></div>
+
+									<button type="submit" id="submit-party-form-join" class="lation-btn lation-btn-accent btn-block">
+										<i class="fas fa-arrow-right-to-bracket mr-2"></i> INGRESSAR NO GRUPO
+									</button>
 								</form>
 							</div>
+						</div>
 
-							<div id="party-container-members" style="max-height: calc(100% - var(--party-title-height)); overflow: auto;">
-								
-							</div>
+						<!-- View 2: When player HAS active party (Dashboard) -->
+						<div id="party-container-members" style="display: none; height: calc(100% - 70px); overflow: auto;">
+							<!-- Dynamically populated by panel.js -->
 						</div>
 					</div>
 				</div>
 				<div class="pages skills-page" style="height: 100%;">
-					<div id="skills-title-div" class="col-12 mt-3 mb-3">
-						<h4 id="skills-title" class="text-uppercase"></h4>
-						<p id="skills-desc"></p>
+					<div id="skills-title-div" class="ets2-skills-header-bar">
+						<div class="ets2-header-title">SKILLS</div>
 					</div>
-					<div style="max-height: calc(100% - var(--skills-title-height)); overflow: auto;">
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="product-type-title" class="m-2"></h4>
-							</div>
-							<div id="product_type" class="progresses">
 
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="product-type-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-product-type-accordion" data-toggle="collapse" data-target="#collapse-product-type-accordion" aria-expanded="false" aria-controls="collapse-distance-accordion">
-											<h6 id="skills-description-1" class="mb-0 p-2"></h6>
+					<div class="ets2-skills-layout">
+						<!-- Left Column: Skill Rows -->
+						<div class="ets2-skills-list-col">
+
+							<!-- 1. Hazardous Cargo -->
+							<div class="ets2-skill-row active" id="ets2-row-product_type" data-skill="product_type" onclick="selectEts2Skill('product_type')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-truck-ramp-box ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-product_type">Hazardous Cargo</div>
+									<div class="ets2-adr-blocks" id="ets2-blocks-product_type">
+										<div class="ets2-adr-badge" data-adr="1" title="Classe 1: Explosivos">
+											<img src="img/icons/explosive-1.png" alt="ADR 1" />
 										</div>
-										<div id="collapse-product-type-accordion" class="collapse" aria-labelledby="heading-product-type-accordion" data-parent="#product-type-desc-accordion">
-											<div id="product-type-desc" class="card-body">
-												
-											</div>
+										<div class="ets2-adr-badge" data-adr="2" title="Classe 2: Gases">
+											<img src="img/icons/flamable-2.png" alt="ADR 2" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="3" title="Classe 3: Líquidos Inflamáveis">
+											<img src="img/icons/flamable-3.png" alt="ADR 3" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="4" title="Classe 4: Sólidos Inflamáveis">
+											<img src="img/icons/flamable-4.png" alt="ADR 4" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="5" title="Classe 6: Substâncias Tóxicas">
+											<img src="img/icons/toxic-6.png" alt="ADR 5" />
+										</div>
+										<div class="ets2-adr-badge" data-adr="6" title="Classe 8: Substâncias Corrosivas">
+											<img src="img/icons/corrosive-8.png" alt="ADR 6" />
 										</div>
 									</div>
 								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-product_type" onclick="stageEts2Skill('product_type', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-product_type" onclick="stageEts2Skill('product_type', -1, event)">-</button>
+								</div>
 							</div>
+
+							<!-- 2. Long Distance -->
+							<div class="ets2-skill-row" id="ets2-row-distance" data-skill="distance" onclick="selectEts2Skill('distance')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-route ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-distance">Long Distance</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-distance"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-distance" onclick="stageEts2Skill('distance', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-distance" onclick="stageEts2Skill('distance', -1, event)">-</button>
+								</div>
+							</div>
+
+							<!-- 3. High Value Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-valuable" data-skill="valuable" onclick="selectEts2Skill('valuable')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-star ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-valuable">High Value Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-valuable"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-valuable" onclick="stageEts2Skill('valuable', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-valuable" onclick="stageEts2Skill('valuable', -1, event)">-</button>
+								</div>
+							</div>
+
+							<!-- 4. Fragile Cargo -->
+							<div class="ets2-skill-row" id="ets2-row-fragile" data-skill="fragile" onclick="selectEts2Skill('fragile')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-wine-glass-empty ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fragile">Fragile Cargo</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fragile"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fragile" onclick="stageEts2Skill('fragile', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fragile" onclick="stageEts2Skill('fragile', -1, event)">-</button>
+								</div>
+							</div>
+
+							<!-- 5. Just-In-Time Delivery -->
+							<div class="ets2-skill-row" id="ets2-row-fast" data-skill="fast" onclick="selectEts2Skill('fast')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-stopwatch ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-fast">Just-In-Time Delivery</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-fast"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-fast" onclick="stageEts2Skill('fast', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-fast" onclick="stageEts2Skill('fast', -1, event)">-</button>
+								</div>
+							</div>
+
+							<!-- 6. Fuel Economy -->
+							<div class="ets2-skill-row" id="ets2-row-illegal" data-skill="illegal" onclick="selectEts2Skill('illegal')">
+								<div class="ets2-skill-icon-box">
+									<i class="fas fa-leaf ets2-fa-icon"></i>
+								</div>
+								<div class="ets2-skill-info">
+									<div class="ets2-skill-label" id="ets2-label-illegal">Fuel Economy</div>
+									<div class="ets2-rank-blocks" id="ets2-blocks-illegal"></div>
+								</div>
+								<div class="ets2-stepper">
+									<button type="button" class="ets2-step-btn" id="ets2-plus-illegal" onclick="stageEts2Skill('illegal', 1, event)">+</button>
+									<button type="button" class="ets2-step-btn" id="ets2-minus-illegal" onclick="stageEts2Skill('illegal', -1, event)">-</button>
+								</div>
+							</div>
+
 						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="distance-title" class="m-2"></h4>
-							</div>
-							<div id="distance" class="progresses">
 
+						<!-- Right Column: Details Panel -->
+						<div class="ets2-skills-detail-col">
+							<div class="ets2-unassigned-bar">
+								<span>Unassigned skill points:</span>
+								<span id="ets2-skill-points" class="ets2-unassigned-num">0</span>
 							</div>
-							<div class="skill-description">
-								<div class="accordion" id="distance-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-distance-accordion" data-toggle="collapse" data-target="#collapse-distance-accordion" aria-expanded="false" aria-controls="collapse-distance-accordion">
-											<h6 id="skills-description-2" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-distance-accordion" class="collapse" aria-labelledby="heading-distance-accordion" data-parent="#distance-desc-accordion">
-											<div id="distance-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
-								</div>
+							<div class="ets2-detail-card">
+								<div id="ets2-detail-title" class="ets2-detail-title">Hazardous Cargo</div>
+								<div id="ets2-detail-desc" class="ets2-detail-desc"></div>
+								<div id="ets2-detail-ranks" class="ets2-detail-ranks-list"></div>
 							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="valuable-skill-title" class="m-2"></h4>
-							</div>
-							<div id="valuable" class="progresses">
-
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="valuable-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-valuable-skill-accordion" data-toggle="collapse" data-target="#collapse-valuable-skill-accordion" aria-expanded="false" aria-controls="collapse-valuable-skill-accordion">
-											<h6 id="skills-description-3" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-valuable-skill-accordion" class="collapse" aria-labelledby="heading-valuable-skill-accordion" data-parent="#valuable-skill-desc-accordion">
-											<div id="valuable-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="fragile-skill-title" class="m-2"></h4>
-							</div>
-							<div id="fragile" class="progresses">
-
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="fragile-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-fragile-skill-accordion" data-toggle="collapse" data-target="#collapse-fragile-skill-accordion" aria-expanded="false" aria-controls="collapse-fragile-skill-accordion">
-											<h6 id="skills-description-4" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-fragile-skill-accordion" class="collapse" aria-labelledby="heading-fragile-skill-accordion" data-parent="#fragile-skill-desc-accordion">
-											<div id="fragile-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="fast-skill-title" class="m-2"></h4>
-							</div>
-							<div id="fast" class="progresses">
-
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="fast-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-fast-skill-accordion" data-toggle="collapse" data-target="#collapse-fast-skill-accordion" aria-expanded="false" aria-controls="collapse-fast-skill-accordion">
-											<h6 id="skills-description-5" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-fast-skill-accordion" class="collapse" aria-labelledby="heading-fast-skill-accordion" data-parent="#fast-skill-desc-accordion">
-											<div id="fast-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						</div>
-						<div class="container-progresses card-theme mb-2">
-							<div>
-								<h4 id="illegal-skill-title" class="m-2"></h4>
-							</div>
-							<div id="illegal" class="progresses">
-
-							</div>
-							<div class="skill-description">
-								<div class="accordion" id="illegal-skill-desc-accordion">
-									<div class="card w-100 m-0">
-										<div class="card-header" id="heading-illegal-skill-accordion" data-toggle="collapse" data-target="#collapse-illegal-skill-accordion" aria-expanded="false" aria-controls="collapse-illegal-skill-accordion">
-											<h6 id="skills-description-6" class="mb-0 p-2"></h6>
-										</div>
-										<div id="collapse-illegal-skill-accordion" class="collapse" aria-labelledby="heading-illegal-skill-accordion" data-parent="#illegal-skill-desc-accordion">
-											<div id="illegal-skill-desc" class="card-body">
-												
-											</div>
-										</div>
-									</div>
-								</div>
+							<div class="ets2-detail-footer">
+								<button type="button" id="ets2-apply-btn" class="ets2-apply-btn" onclick="applyEts2Skills()" disabled>Apply</button>
 							</div>
 						</div>
 					</div>
@@ -673,6 +755,154 @@
 		  .pt-header { display: flex; align-items: center; gap: 8px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 6px; margin-bottom: 8px; font-size: 13px; }
 		  #pt-list { list-style: none; padding: 0; margin: 0; }
 		  #pt-list li { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 12px; }
+
+		  /* --- G-METER HUD (ESTABILIDADE DA CARGA) --- */
+		  #g-meter-hud {
+		    display: none;
+		    position: fixed;
+		    bottom: 40px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 290px;
+		    z-index: 99998;
+		    background: rgba(15, 23, 42, 0.94) !important;
+		    border-radius: 12px;
+		    border: 1px solid rgba(16, 185, 129, 0.4);
+		    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.65), 0 0 15px rgba(16, 185, 129, 0.15);
+		    padding: 10px 14px;
+		    font-family: 'Montserrat', 'Inter', sans-serif;
+		    color: #fff;
+		    user-select: none;
+		    pointer-events: none;
+		    flex-direction: column;
+		    gap: 6px;
+		    transition: border-color 0.2s, box-shadow 0.2s;
+		  }
+		  #g-meter-hud.gm-critical {
+		    border-color: #ef4444 !important;
+		    box-shadow: 0 0 20px rgba(239, 68, 68, 0.7), inset 0 0 12px rgba(239, 68, 68, 0.3) !important;
+		    animation: gmPulse 0.4s infinite alternate;
+		  }
+		  #g-meter-hud.gm-shake {
+		    animation: gmShake 0.4s cubic-bezier(.36,.07,.19,.97) both;
+		  }
+		  @keyframes gmPulse {
+		    from { transform: translateX(-50%) scale(1); }
+		    to { transform: translateX(-50%) scale(1.03); }
+		  }
+		  @keyframes gmShake {
+		    10%, 90% { transform: translateX(-52%); }
+		    20%, 80% { transform: translateX(-48%); }
+		    30%, 50%, 70% { transform: translateX(-53%); }
+		    40%, 60% { transform: translateX(-47%); }
+		  }
+		  .gm-header {
+		    display: flex;
+		    justify-content: space-between;
+		    align-items: center;
+		    font-size: 11px;
+		    letter-spacing: 0.5px;
+		    font-weight: 700;
+		  }
+		  .gm-title {
+		    display: flex;
+		    align-items: center;
+		    gap: 6px;
+		    color: #94a3b8;
+		  }
+		  .gm-title i {
+		    color: #10b981;
+		    font-size: 12px;
+		  }
+		  .gm-status {
+		    font-size: 10px;
+		    font-weight: 800;
+		    padding: 2px 6px;
+		    border-radius: 4px;
+		    background: rgba(16, 185, 129, 0.2);
+		    color: #10b981;
+		    text-transform: uppercase;
+		  }
+		  .gm-status.warning {
+		    background: rgba(245, 158, 11, 0.2);
+		    color: #f59e0b;
+		  }
+		  .gm-status.danger {
+		    background: rgba(239, 68, 68, 0.3);
+		    color: #ef4444;
+		  }
+		  .gm-track-container {
+		    position: relative;
+		    width: 100%;
+		    height: 12px;
+		    background: rgba(255, 255, 255, 0.08);
+		    border-radius: 6px;
+		    border: 1px solid rgba(255, 255, 255, 0.12);
+		    overflow: visible;
+		  }
+		  .gm-limit-line {
+		    position: absolute;
+		    top: -2px;
+		    bottom: -2px;
+		    width: 2px;
+		    background: #ef4444;
+		    box-shadow: 0 0 6px #ef4444;
+		    z-index: 2;
+		  }
+		  .gm-limit-line.left { left: 15%; }
+		  .gm-limit-line.right { right: 15%; }
+		  .gm-danger-area {
+		    position: absolute;
+		    top: 0;
+		    bottom: 0;
+		    width: 15%;
+		    background: rgba(239, 68, 68, 0.25);
+		  }
+		  .gm-danger-area.left { left: 0; border-radius: 6px 0 0 6px; }
+		  .gm-danger-area.right { right: 0; border-radius: 0 6px 6px 0; }
+		  .gm-center-notch {
+		    position: absolute;
+		    top: 1px;
+		    bottom: 1px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 2px;
+		    background: rgba(255, 255, 255, 0.35);
+		    z-index: 2;
+		  }
+		  .gm-indicator {
+		    position: absolute;
+		    top: 50%;
+		    left: 50%;
+		    transform: translate(-50%, -50%);
+		    width: 16px;
+		    height: 16px;
+		    border-radius: 50%;
+		    background: #10b981;
+		    border: 2px solid #ffffff;
+		    box-shadow: 0 0 10px rgba(16, 185, 129, 0.9);
+		    z-index: 5;
+		    transition: left 0.08s ease-out, background-color 0.15s, box-shadow 0.15s;
+		  }
+		  .gm-indicator.warning {
+		    background: #f59e0b;
+		    box-shadow: 0 0 12px rgba(245, 158, 11, 0.95);
+		  }
+		  .gm-indicator.danger {
+		    background: #ef4444;
+		    box-shadow: 0 0 16px rgba(239, 68, 68, 1);
+		  }
+		  .gm-labels {
+		    display: flex;
+		    justify-content: space-between;
+		    font-size: 9px;
+		    font-weight: 600;
+		    color: #64748b;
+		    margin-top: 1px;
+		  }
+		  .gm-labels .gm-danger-label {
+		    color: #ef4444;
+		  }
 		</style>
 		<div id="parcel-tracker" role="complementary" aria-label="Tracker de Entregas">
 		  <div class="pt-header">
@@ -680,6 +910,30 @@
 		    <span id="pt-route-label">Rota de Entrega</span>
 		  </div>
 		  <ul id="pt-list"></ul>
+		</div>
+
+		<!-- G-METER HUD: ESTABILIDADE DA CARGA -->
+		<div id="g-meter-hud" role="complementary" aria-label="Estabilidade da Carga">
+		  <div class="gm-header">
+		    <div class="gm-title">
+		      <i class="fas fa-truck-ramp-box"></i>
+		      <span>ESTABILIDADE DA CARGA</span>
+		    </div>
+		    <div class="gm-status" id="gm-status-label">ESTÁVEL</div>
+		  </div>
+		  <div class="gm-track-container">
+		    <div class="gm-danger-area left"></div>
+		    <div class="gm-danger-area right"></div>
+		    <div class="gm-limit-line left"></div>
+		    <div class="gm-limit-line right"></div>
+		    <div class="gm-center-notch"></div>
+		    <div class="gm-indicator" id="gm-indicator-dot"></div>
+		  </div>
+		  <div class="gm-labels">
+		    <span class="gm-danger-label">15% LIMITE</span>
+		    <span>CENTRO</span>
+		    <span class="gm-danger-label">85% LIMITE</span>
+		  </div>
 		</div>
 
 		<script>
@@ -694,8 +948,574 @@
 		    } else if (d.action === 'parcel_close') {
 		      if (tracker) tracker.style.display = 'none';
 		    }
+
+		    // G-METER HUD HANDLERS
+		    var gMeter = document.getElementById('g-meter-hud');
+		    var gDot = document.getElementById('gm-indicator-dot');
+		    var gStatus = document.getElementById('gm-status-label');
+
+		    if (d.action === 'gmeter_show') {
+		      if (gMeter) gMeter.style.display = 'flex';
+		    } else if (d.action === 'gmeter_hide') {
+		      if (gMeter) gMeter.style.display = 'none';
+		    } else if (d.action === 'gmeter_update') {
+		      if (gMeter && gDot) {
+		        if (gMeter.style.display !== 'flex') gMeter.style.display = 'flex';
+		        var pct = typeof d.percent === 'number' ? d.percent : 50;
+		        gDot.style.left = pct + '%';
+		        if (pct <= 15 || pct >= 85) {
+		          gDot.className = 'gm-indicator danger';
+		          gMeter.className = 'gm-critical';
+		          if (gStatus) { gStatus.innerText = 'CRÍTICO'; gStatus.className = 'gm-status danger'; }
+		        } else if (pct <= 28 || pct >= 72) {
+		          gDot.className = 'gm-indicator warning';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ALERTA'; gStatus.className = 'gm-status warning'; }
+		        } else {
+		          gDot.className = 'gm-indicator';
+		          gMeter.className = '';
+		          if (gStatus) { gStatus.innerText = 'ESTÁVEL'; gStatus.className = 'gm-status'; }
+		        }
+		      }
+		    } else if (d.action === 'gmeter_drop') {
+		      if (gMeter) {
+		        gMeter.classList.remove('gm-shake');
+		        void gMeter.offsetWidth;
+		        gMeter.classList.add('gm-shake');
+		      }
+		    }
 		  });
 		</script>
+		<!-- ========================================== -->
+		<!-- PAINEL ADMINISTRATIVO: GESTÃO DINÂMICA      -->
+		<!-- ========================================== -->
+		<div id="admin-panel">
+			<!-- Header -->
+			<div class="admin-header">
+				<div class="admin-header-title">
+					<i class="fas fa-truck-monster"></i>
+					<h4>PAINEL ADMINISTRATIVO • GESTÃO DINÂMICA</h4>
+					<span>Admin V2.5</span>
+				</div>
+				<button class="admin-close-btn" title="Fechar (ESC)"><i class="fas fa-times"></i></button>
+			</div>
+
+			<!-- Body -->
+			<div class="admin-body">
+				<!-- Sidebar de Abas -->
+				<div class="admin-sidebar">
+					<button class="admin-tab-btn active" data-tab="routes">
+						<i class="fas fa-route"></i> Contratos & Rotas
+					</button>
+					<button class="admin-tab-btn" data-tab="spawns">
+						<i class="fas fa-map-marker-alt"></i> Spawns Dinâmicos
+					</button>
+					<button class="admin-tab-btn" data-tab="props">
+						<i class="fas fa-boxes"></i> Cargas & Props
+					</button>
+					<button class="admin-tab-btn" data-tab="offsets">
+						<i class="fas fa-truck-loading"></i> Offsets Trailer 3D
+					</button>
+					<button class="admin-tab-btn" data-tab="economy">
+						<i class="fas fa-chart-line"></i> Economia & XP
+					</button>
+					<button class="admin-tab-btn" data-tab="npcs">
+						<i class="fas fa-user-tie"></i> NPCs Despachantes
+					</button>
+				</div>
+
+				<!-- Área de Conteúdo -->
+				<div class="admin-content">
+					<!-- ABA 1: ROTAS & CONTRATOS -->
+					<div id="admin-tab-routes" class="admin-tab-pane active">
+						<div class="admin-card">
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-list-ul"></i> Contratos e Rotas Ativas</span>
+								<input type="text" id="routes-search-input" class="admin-input" placeholder="Buscar rota por nome ou ID..." style="max-width: 260px; padding: 6px 12px; font-size:12px;">
+							</div>
+							
+							<!-- Barra de Filtros por Categoria -->
+							<div class="admin-filter-bar" id="routes-filter-bar">
+								<button class="admin-filter-btn active" data-filter="all"><i class="fas fa-layer-group"></i> Todas as Cargas</button>
+								<button class="admin-filter-btn" data-filter="freight"><i class="fas fa-truck"></i> Frete Próprio</button>
+								<button class="admin-filter-btn" data-filter="quick"><i class="fas fa-shipping-fast"></i> Trabalho Rápido</button>
+								<button class="admin-filter-btn" data-filter="adr"><i class="fas fa-biohazard"></i> Perigosa ADR</button>
+								<button class="admin-filter-btn" data-filter="heavy"><i class="fas fa-weight-hanging"></i> Pesada / Contêiner</button>
+								<button class="admin-filter-btn" data-filter="carrier"><i class="fas fa-car"></i> Cegonha de Carros</button>
+							</div>
+
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID Rota</th>
+											<th>Título da Carga</th>
+											<th>Tipo</th>
+											<th>Recompensa</th>
+											<th>Distância / Nível</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-routes-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus-circle"></i> Criar ou Editar Rota Dinâmica</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único (ID)</label>
+									<input type="text" id="route-form-id" class="admin-input" placeholder="ex: rota_paleto_oil">
+								</div>
+								<div class="admin-form-group">
+									<label>Título / Descrição da Carga</label>
+									<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
+								</div>
+								<div class="admin-form-group">
+									<label>Tipo de Contrato</label>
+									<select id="route-form-type" class="admin-select">
+										<option value="freight">Trabalho de Frete (Veículo Próprio)</option>
+										<option value="quick">Trabalho Rápido (Caminhão da Empresa)</option>
+										<option value="adr">Carga Perigosa ADR (Certificação)</option>
+										<option value="heavy">Carga Pesada / Maquinário</option>
+										<option value="carrier">Cegonha / Transporte de Veículos</option>
+									</select>
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo 3D da Carga (Prop)</label>
+									<input type="text" id="route-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+								<div class="admin-form-group">
+									<label>Pagamento Base (R$)</label>
+									<input type="number" id="route-form-payment" class="admin-input" value="2500">
+								</div>
+								<div class="admin-form-group">
+									<label>Recompensa de XP</label>
+									<input type="number" id="route-form-xp" class="admin-input" value="150">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Distância Estimada (KM)</label>
+									<input type="number" step="0.1" id="route-form-distance" class="admin-input" value="6.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Nível Mínimo Requerido</label>
+									<input type="number" id="route-form-level" class="admin-input" value="1">
+								</div>
+							</div>
+
+							<div class="admin-grid-2" style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Coleta (X, Y, Z)</label>
+										<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-pickup-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-pickup-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-pickup-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+								<div>
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+										<label style="margin:0;">Ponto de Entrega (X, Y, Z)</label>
+										<button id="btn-cap-deliv" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+									</div>
+									<div style="display:flex; gap: 8px;">
+										<input type="number" step="0.01" id="route-form-deliv-x" class="admin-input" placeholder="X">
+										<input type="number" step="0.01" id="route-form-deliv-y" class="admin-input" placeholder="Y">
+										<input type="number" step="0.01" id="route-form-deliv-z" class="admin-input" placeholder="Z">
+									</div>
+								</div>
+							</div>
+
+							<div style="display: flex; justify-content: space-between; align-items: center;">
+								<div style="display:flex; gap: 20px;">
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-forklift"> Incluir Empilhadeira no Trailer
+									</label>
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="route-form-adr"> Exigir Licença ADR
+									</label>
+								</div>
+								<button id="btn-save-route" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar Rota em Tempo Real</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 2: SPAWNS DINÂMICOS (PASTAS & PREVIEW) -->
+					<div id="admin-tab-spawns" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-folder-open"></i> Gerenciador de Spawns (Pastas & Drag-and-Drop)</span>
+								<div style="display:flex; gap: 8px;">
+									<button id="btn-new-spawn-folder" class="admin-btn admin-btn-outline" style="padding: 5px 12px; font-size: 11px;"><i class="fas fa-folder-plus"></i> + Nova Pasta</button>
+									<button id="btn-preview-spawns" class="admin-btn admin-btn-primary" style="padding: 5px 12px; font-size: 11px;"><i class="fas fa-eye"></i> Teste / Preview da Área</button>
+								</div>
+							</div>
+							<p style="font-size:11px; color:var(--admin-text-muted); margin: 0 0 12px 0;">
+								Arraste e solte os pontos de spawn entre as pastas para categorizar as baias e pátios logísticos.
+							</p>
+							<div id="admin-spawns-folders-container" class="admin-folders-container">
+								<!-- Pastas e Spawns gerados via admin.js -->
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-plus"></i> Novo Ponto de Spawn</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador (ID)</label>
+									<input type="text" id="spawn-form-id" class="admin-input" placeholder="ex: spawn_truck_paleto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Ponto</label>
+									<input type="text" id="spawn-form-name" class="admin-input" placeholder="ex: Vaga de Caminhão Paleto">
+								</div>
+								<div class="admin-form-group">
+									<label>Pasta / Categoria</label>
+									<select id="spawn-form-folder" class="admin-select">
+										<option value="Geral">Geral</option>
+									</select>
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Tipo de Entidade</label>
+									<select id="spawn-form-type" class="admin-select">
+										<option value="truck">Caminhão (Truck)</option>
+										<option value="trailer">Reboque (Trailer)</option>
+										<option value="forklift">Empilhadeira (Forklift)</option>
+										<option value="pallet">Palete de Carga (Pallet)</option>
+										<option value="handler">Container Handler (Porto)</option>
+										<option value="load_bay">Baia de Carregamento (DrawMarker)</option>
+										<option value="delivery_bay">Ponto de Entrega (DrawMarker)</option>
+									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Modelo Específico (Opcional)</label>
+									<input type="text" id="spawn-form-model" class="admin-input" placeholder="ex: hauler, trailers2, forklift...">
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<div style="display:flex; gap: 8px;">
+										<button id="btn-gizmo-spawn" class="admin-btn admin-btn-primary" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-cube"></i> Coords (Gizmo 3D)</button>
+										<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Posição Atual</button>
+									</div>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="spawn-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="spawn-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="spawn-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="spawn-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end;">
+								<button id="btn-save-spawn" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Gravar Ponto de Spawn</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 3: CARGAS & PROPS (HOMOLOGAÇÃO) -->
+					<div id="admin-tab-props" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-stamp"></i> Homologação de Cargas & Props</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
+								Registre novos modelos 3D homologados pelo servidor. O sistema valida automaticamente dimensões, LOD e amarração de cordas.
+							</p>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo do Prop (Spawn Name)</label>
+									<input type="text" id="prop-form-model" class="admin-input" placeholder="ex: prop_boxpile_07d">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome / Label de Exibição</label>
+									<input type="text" id="prop-form-label" class="admin-input" placeholder="ex: Caixas de Carga Seca">
+								</div>
+								<div class="admin-form-group">
+									<label>Categoria de Transporte</label>
+									<select id="prop-form-category" class="admin-select">
+										<option value="dry">Carga Seca Padrão</option>
+										<option value="fragile">Carga Frágil (Sensível)</option>
+										<option value="valuable">Carga Valiosa (Alto Valor)</option>
+										<option value="adr">Carga Perigosa (ADR)</option>
+										<option value="heavy">Carga Pesada / Contêiner</option>
+									</select>
+								</div>
+							</div>
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Offset Z de Apoio (Altura Base)</label>
+									<input type="number" step="0.01" id="prop-form-offsetz" class="admin-input" value="0.0">
+								</div>
+								<div class="admin-form-group" style="display:flex; align-items:flex-end;">
+									<button id="btn-save-homologated-prop" class="admin-btn admin-btn-primary" style="width:100%; height:40px;"><i class="fas fa-check-circle"></i> Homologar e Atrelar Carga</button>
+								</div>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cubes"></i> Props Homologados Ativos</span>
+							</div>
+							<div id="admin-props-grid" class="admin-grid-3">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 4: OFFSETS VISUAIS 3D NO TRAILER -->
+					<div id="admin-tab-offsets" class="admin-tab-pane">
+						<div class="admin-card" style="border-left: 4px solid var(--admin-primary);">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-cube"></i> Calibração Visual 3D (Gizmo 3D & Nomenclatura)</span>
+							</div>
+							<p style="font-size:12px; color:var(--admin-text-muted); margin-bottom: 14px;">
+								Posicione a carga em tempo real com <b>Gizmo 3D Nativo</b> e <b>Câmera Livre</b>. Use <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">T</kbd> (Translação), <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">R</kbd> (Rotação), arraste os eixos com mouse livre, e salve com <kbd style="background:rgba(255,255,255,0.1); padding:2px 6px; border-radius:4px;">ENTER</kbd>.
+							</p>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Modelo do Trailer</label>
+									<input type="text" id="offset-form-trailer" class="admin-input" list="trailer-models-list" placeholder="ex: trailers2" value="trailers2">
+									<datalist id="trailer-models-list">
+										<option value="trailers2">trailers2 (Prancha Baixa / Flatbed)</option>
+										<option value="trailers">trailers (Baú Fechado)</option>
+										<option value="trailers3">trailers3 (Tanque / Líquidos)</option>
+										<option value="trailers4">trailers4 (Carreta Carga)</option>
+										<option value="tr2">tr2 (Reboque Pequeno)</option>
+										<option value="trflat">trflat (Trailer Prancha Curto)</option>
+										<option value="docktrailer">docktrailer (Trailer Portuário)</option>
+										<option value="freighttrailer">freighttrailer (Carreta de Trem / Pesada)</option>
+										<option value="armytrailer">armytrailer (Trailer Militar)</option>
+									</datalist>
+								</div>
+								<div class="admin-form-group">
+									<label>Slot Alvo</label>
+									<select id="offset-form-slot" class="admin-select">
+										<option value="1">Slot 1 (Frente)</option>
+										<option value="2">Slot 2 (Meio-Frente)</option>
+										<option value="3">Slot 3 (Meio-Trás)</option>
+										<option value="4">Slot 4 (Traseira)</option>
+										<option value="5">Slot 5 (Extra)</option>
+										<option value="6">Slot 6 (Extra)</option>
+									</select>
+								</div>
+								<div class="admin-form-group">
+									<label>Nomenclatura / Nome do Slot</label>
+									<input type="text" id="offset-form-label" class="admin-input" placeholder="ex: Palete Frente Esquerdo">
+								</div>
+							</div>
+							<div class="admin-grid-2" style="margin-top: 6px;">
+								<div class="admin-form-group">
+									<label>Prop de Teste</label>
+									<input type="text" id="offset-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
+								</div>
+								<div style="display:flex; justify-content:space-between; align-items:center;">
+									<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+										<input type="checkbox" id="offset-form-isforklift"> Empilhadeira Traseira (Tie-Down)
+									</label>
+									<button id="btn-start-calibration" class="admin-btn admin-btn-primary" style="padding: 10px 18px; font-size: 13px;">
+										<i class="fas fa-eye"></i> INICIAR CALIBRAÇÃO 3D
+									</button>
+								</div>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-database"></i> Offsets Customizados Salvos no Banco</span>
+							</div>
+							<div id="admin-offsets-list">
+								<!-- Populado via admin.js -->
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 5: ECONOMIA & XP (LISTAGEM GLOBAL & EDIÇÃO RÁPIDA) -->
+					<div id="admin-tab-economy" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-coins"></i> Gestão Global de Recompensas das Rotas</span>
+							</div>
+							<!-- Filtro por tipo de trabalho -->
+							<div class="admin-filter-bar" id="eco-filter-bar">
+								<button class="admin-filter-btn active" data-filter="all"><i class="fas fa-layer-group"></i> Todas as Cargas</button>
+								<button class="admin-filter-btn" data-filter="freight"><i class="fas fa-truck"></i> Frete Próprio</button>
+								<button class="admin-filter-btn" data-filter="quick"><i class="fas fa-shipping-fast"></i> Trabalho Rápido</button>
+								<button class="admin-filter-btn" data-filter="adr"><i class="fas fa-biohazard"></i> Perigosa ADR</button>
+								<button class="admin-filter-btn" data-filter="heavy"><i class="fas fa-weight-hanging"></i> Pesada / Contêiner</button>
+								<button class="admin-filter-btn" data-filter="carrier"><i class="fas fa-car"></i> Cegonha</button>
+							</div>
+
+							<div style="max-height: 240px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID Rota</th>
+											<th>Nome do Contrato</th>
+											<th>Tipo</th>
+											<th>Distância</th>
+											<th>Pagamento (R$)</th>
+											<th>XP Recompensa</th>
+											<th>Ação</th>
+										</tr>
+									</thead>
+									<tbody id="admin-eco-routes-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-balance-scale"></i> Multiplicadores Globais de Economia</span>
+							</div>
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Pagamento Base por Quilômetro (R$ / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-pay" class="admin-input" value="18.5">
+								</div>
+								<div class="admin-form-group">
+									<label>Multiplicador de XP por Quilômetro (XP / KM)</label>
+									<input type="number" step="0.5" id="eco-form-km-xp" class="admin-input" value="5.0">
+								</div>
+							</div>
+
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Multiplicador ADR (Cargas Perigosas)</label>
+									<input type="number" step="0.05" id="eco-form-adr-mult" class="admin-input" value="1.45">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Frágil</label>
+									<input type="number" step="0.05" id="eco-form-fragile-mult" class="admin-input" value="1.25">
+								</div>
+								<div class="admin-form-group">
+									<label>Bônus Carga Valiosa</label>
+									<input type="number" step="0.05" id="eco-form-valuable-mult" class="admin-input" value="1.35">
+								</div>
+							</div>
+
+							<div class="admin-grid-2">
+								<div class="admin-form-group">
+									<label>Penalidade por Carga Perdida / Queda (R$)</label>
+									<input type="number" id="eco-form-penalty" class="admin-input" value="500">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:flex-end; margin-top: 10px;">
+								<button id="btn-save-economy" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar Multiplicadores Globais</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 6: NPCS DESPACHANTES -->
+					<div id="admin-tab-npcs" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-users-cog"></i> NPCs Despachantes Ativos no Mapa</span>
+							</div>
+							<div style="max-height: 220px; overflow-y: auto;">
+								<table class="admin-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Nome</th>
+											<th>Modelo Ped</th>
+											<th>Coordenadas</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="admin-npcs-tbody">
+										<!-- Populado via admin.js -->
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div class="admin-card">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-user-plus"></i> Adicionar ou Atualizar NPC</span>
+							</div>
+							<div class="admin-grid-3">
+								<div class="admin-form-group">
+									<label>Identificador Único</label>
+									<input type="text" id="npc-form-id" class="admin-input" placeholder="ex: dispatcher_porto_01">
+								</div>
+								<div class="admin-form-group">
+									<label>Nome do Despachante</label>
+									<input type="text" id="npc-form-name" class="admin-input" placeholder="ex: Sr. Roberto (Despachante)">
+								</div>
+								<div class="admin-form-group">
+									<label>Modelo do Ped (Hash / String)</label>
+									<input type="text" id="npc-form-model" class="admin-input" value="s_m_m_trucker_01">
+								</div>
+							</div>
+
+							<div style="background: rgba(0,0,0,0.25); padding: 12px; border-radius: 8px; margin-bottom: 14px;">
+								<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+									<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+									<button id="btn-cap-npc" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
+								</div>
+								<div style="display:flex; gap: 8px;">
+									<input type="number" step="0.01" id="npc-form-x" class="admin-input" placeholder="X">
+									<input type="number" step="0.01" id="npc-form-y" class="admin-input" placeholder="Y">
+									<input type="number" step="0.01" id="npc-form-z" class="admin-input" placeholder="Z">
+									<input type="number" step="0.01" id="npc-form-h" class="admin-input" placeholder="Heading">
+								</div>
+							</div>
+
+							<div style="display:flex; justify-content:space-between; align-items:center;">
+								<label style="display:inline-flex; align-items:center; gap: 8px; cursor:pointer; font-size:12px; margin:0;">
+									<input type="checkbox" id="npc-form-target" checked> Habilitar Interação via ox_target
+								</label>
+								<button id="btn-save-npc" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Spawnar NPC</button>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Container do Gizmo 3D (WebGL Overlay Transparente estilo vp_staff_studio) -->
+		<div id="gizmo-overlay-container" style="position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999999; display: none;">
+			<canvas id="gizmo-three-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+			<!-- Barra Flutuante de Ação do Gizmo 3D -->
+			<div id="gizmo-hud-bar" style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; z-index: 1000000; pointer-events: auto;">
+				<button id="btn-gizmo-confirm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(16,185,129,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-check"></i> Confirmar Posição (ENTER)
+				</button>
+				<button id="btn-gizmo-mode" style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(59,130,246,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-arrows-alt"></i> Modo: Setas (T)
+				</button>
+				<button id="btn-gizmo-cancel" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; padding: 10px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(239,68,68,0.4); transition: transform 0.15s ease;">
+					<i class="fas fa-times"></i> Finalizar (ESC)
+				</button>
+			</div>
+		</div>
+
 		<script src="panel.js" type="text/javascript"></script>
+		<script src="js/admin.js" type="text/javascript"></script>
+		<script src="js/gizmo_overlay.js" type="text/javascript"></script>
 	</body>
 </html>

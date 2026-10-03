@@ -1,28 +1,52 @@
 let Utils = {};
 
-let locale = "en";
-let format = { currency: "USD", location: "en-US" };
+let locale = "br";
+let format = { currency: "USD", location: "pt-BR" };
+const defaultTranslations = {
+    "confirmation_modal_title": { br: "Confirmação", en: "Confirmation", es: "Confirmación" },
+    "confirmation_modal_body": { br: "Você tem certeza de que deseja continuar?", en: "Are you sure you want to proceed?", es: "¿Estás seguro de que deseas continuar?" },
+    "confirmation_modal_cancel_button": { br: "Cancelar", en: "Cancel", es: "Cancelar" },
+    "confirmation_modal_confirm_button": { br: "Confirmar", en: "Confirm", es: "Confirmar" },
+    "confirmation_modal_sell_vehicle": { br: "Você tem certeza de que deseja vender este veículo?", en: "Are you sure you want to sell this vehicle?", es: "¿Estás seguro de que deseas vender este vehículo?" },
+    "confirmation_modal_delete_party": { br: "Você tem certeza de que deseja excluir este grupo?", en: "Are you sure you want to delete this party?", es: "¿Estás seguro de que deseas eliminar este grupo?" },
+    "confirmation_modal_loan_payoff": { br: "Você tem certeza de que deseja pagar o saldo total de {0}?", en: "Are you sure you want to pay the entire balance of {0}?", es: "¿Estás seguro de que deseas pagar el saldo total de {0}?" }
+};
+
 Utils.translate = function (key) {
+    if (!key || typeof key !== "string") return key;
+    let curLocale = locale || "br";
     if (typeof Lang === "undefined" || !Lang) {
+        if (defaultTranslations[key]) {
+            return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"] || key;
+        }
         return key;
     }
-    if (!locale || !Lang.hasOwnProperty(locale)) {
-        locale = "en";
+    if (!locale || !Lang[locale]) {
+        locale = (Lang["br"] && "br") || (Lang["en"] && "en") || Object.keys(Lang)[0] || "br";
     }
 
-    let langObj = Lang[locale] || Lang["en"];
-    if (!langObj) return key;
+    let langObj = Lang[locale] || Lang["br"] || Lang["en"];
+    if (!langObj) {
+        if (defaultTranslations[key]) {
+            return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"] || key;
+        }
+        return key;
+    }
 
     const keys = key.split(".");
+    let target = langObj;
 
     for (const k of keys) {
-        if (!langObj.hasOwnProperty(k)) {
+        if (!target || typeof target !== "object" || !target.hasOwnProperty(k)) {
+            if (defaultTranslations[key]) {
+                return defaultTranslations[key][curLocale] || defaultTranslations[key]["br"] || defaultTranslations[key]["en"] || key;
+            }
             return key;
         }
-        langObj = langObj[k];
+        target = target[k];
     }
 
-    return langObj;
+    return target;
 };
 
 Utils.setLocale = function (current_locale) {
@@ -242,7 +266,7 @@ Utils.showDefaultModal = function (action, body = Utils.translate("confirmation_
         title: Utils.translate("confirmation_modal_title"),
         body,
         buttons: [
-            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-primary", dismiss: true },
+            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-secondary btn-cancel", dismiss: true },
             { text: Utils.translate("confirmation_modal_confirm_button"), class: "btn btn-primary", dismiss: true, action },
         ],
     });
@@ -253,7 +277,7 @@ Utils.showDefaultDangerModal = function (action, body = Utils.translate("confirm
         title: Utils.translate("confirmation_modal_title"),
         body,
         buttons: [
-            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-danger", dismiss: true },
+            { text: Utils.translate("confirmation_modal_cancel_button"), class: "btn btn-outline-secondary btn-cancel", dismiss: true },
             { text: Utils.translate("confirmation_modal_confirm_button"), class: "btn btn-danger", dismiss: true, action },
         ],
     });
@@ -322,10 +346,8 @@ const exampleConfig = {
 };
 */
 Utils.showCustomModal = function (config) {
-	const $existingModal = $("#confirmation-modal");
-    if ($existingModal.length > 0) {
-        return;
-    }
+    $("#confirmation-modal").remove();
+    $(".modal-backdrop").remove();
 
     const modalConfig = {
         title: Utils.translate("confirmation_modal_title"),
@@ -370,7 +392,8 @@ Utils.showCustomModal = function (config) {
     const $modalBody = $modal.find(".modal-body");
 
     // Set modal content
-    $modal.find(".modal-title").text(mergedConfig.title);
+    const translatedTitle = Utils.translate(mergedConfig.title || "confirmation_modal_title");
+    $modal.find(".modal-title").text(translatedTitle);
 
     // Set custom close button behavior
     const $closeBtn = $modal.find("#modal-close-btn");
@@ -460,7 +483,8 @@ Utils.showCustomModal = function (config) {
     const $footer = $modal.find(".modal-footer");
     $footer.empty();
     mergedConfig.buttons.forEach(button => {
-        const $button = $("<button>", { class: button.class, text: button.text, type: button.type ?? "button" });
+        const buttonText = Utils.translate(button.text || "");
+        const $button = $("<button>", { class: button.class, text: buttonText, type: button.type ?? "button" });
         if (button.dismiss) {
             $button.attr("data-dismiss", "modal");
         }
@@ -642,7 +666,8 @@ Utils.convertFileToBase64 = function (file, callback) {
 };
 
 $(function () {
-    Utils.setResourceName("lc_utils");
+    let currentRes = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+    Utils.setResourceName(currentRes);
     window.addEventListener("message", function (event) {
         let item = event.data;
         if (item.notification) {
@@ -678,6 +703,10 @@ $(function () {
                 $("#confirmation-modal").modal("hide");
             } else if ($(".main").is(":visible")){
                 $(".modal").modal("hide");
+                let res = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+                try {
+                    fetch(`https://${res}/closeMenu`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) }).catch(() => {});
+                } catch(e) {}
                 Utils.post("close","");
             }
         }

@@ -1,10 +1,26 @@
 let config = {};
 
+// Hard Escape Listener (Prevenção de NUI Deadlock)
+window.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" || e.keyCode === 27) {
+        $(".main").fadeOut(150);
+        if (typeof Utils !== "undefined" && Utils.post) {
+            Utils.post("escapeNui", {});
+        } else {
+            fetch(`https://${GetParentResourceName()}/escapeNui`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json; charset=UTF-8" },
+                body: JSON.stringify({})
+            }).catch(() => {});
+        }
+    }
+});
+
 window.addEventListener("message", async function (event) {
     let item = event.data;
     if (!item) return;
 
-    if (item.action === "close" || item.hidemenu) {
+    if (item.action === "close" || item.action === "close_all" || item.hidemenu) {
         $(".main").fadeOut(200);
         return;
     }
@@ -13,14 +29,41 @@ window.addEventListener("message", async function (event) {
         Utils.setResourceName(item.resourceName);
     }
 
-    if (item.utils && item.utils.config) {
-        Utils.setLocale(item.utils.config.locale || "en");
-        Utils.setFormat(item.utils.config.format || { currency: "USD", location: "en-US" });
+    let activeLocale = (item.utils && item.utils.config && item.utils.config.locale)
+        || (item.dados && item.dados.config && item.dados.config.locale)
+        || (item.dados && item.dados.locale)
+        || item.locale
+        || (config && config.locale)
+        || "br";
+    let activeFormat = (item.utils && item.utils.config && item.utils.config.format)
+        || (item.dados && item.dados.config && item.dados.config.format)
+        || (item.dados && item.dados.format)
+        || item.format
+        || (config && config.format)
+        || { currency: "USD", location: activeLocale === "br" ? "pt-BR" : "en-US" };
+
+    Utils.setLocale(activeLocale);
+    Utils.setFormat(activeFormat);
+
+    if (item.action === "partyUpdate") {
+        if (item.party) {
+            renderLationParty(item.party, item.party.members_list || item.party.members || []);
+        } else {
+            renderLationParty(null, []);
+        }
+        return;
     }
 
-    if (item.showmenu || item.action === "open") {
+    if (item.action === "openCargoManifest") {
+        openContractConfigModal(item.contractId, item.party, item.baseReward);
+        return;
+    }
+
+    if (item.showmenu || item.action === "open" || item.update) {
         let dados = item.dados || item;
         config = dados.config || {};
+        config.locale = config.locale || activeLocale;
+        config.format = config.format || activeFormat;
         config.cooldown = config.cooldown || 2;
         config.max_emprestimo = config.max_emprestimo || 400000;
         config.player_level = config.player_level || 0;
@@ -49,11 +92,16 @@ window.addEventListener("message", async function (event) {
                 reward: Number(c.reward || c.basePayment) || 1200,
                 truck: c.truck || 'hauler',
                 trailer: c.trailer || c.trailerModel || 'docktrailer',
-                cargo_type: c.cargo_type || 0,
-                fragile: c.fragile || 0,
-                valuable: c.valuable || 0,
-                fast: c.fast || 0,
-                illegal: c.illegal || 0,
+                cargo_type: Number(c.cargo_type) || 0,
+                fragile: Number(c.fragile) || 0,
+                valuable: Number(c.valuable) || 0,
+                fast: Number(c.fast) || 0,
+                illegal: Number(c.illegal) || 0,
+                locked: Boolean(c.locked),
+                lock_type: c.lock_type || null,
+                lock_reason: c.lock_reason || null,
+                bonus_money_pct: Number(c.bonus_money_pct) || 0,
+                bonus_exp_pct: Number(c.bonus_exp_pct) || 0,
                 progress: c.progress || null,
                 external_data: c.external_data || null,
             };
@@ -273,44 +321,7 @@ window.addEventListener("message", async function (event) {
             $("#illegal-skill-desc").empty();
             $("#illegal-skill-desc").append(Utils.translate("skills_page_illegal_desc"));
 
-            let form = document.getElementById("party-form-create");
-            form.style.opacity = "0";
-            form.style.maxHeight = "0";
-            form.style.fontSize = "0";
-            form.style.position = "absolute";
-
-            let formJoin = document.getElementById("party-form-join");
-            formJoin.style.opacity = "0";
-            formJoin.style.maxHeight = "0";
-            formJoin.style.fontSize = "0";
-            formJoin.style.position = "absolute";
-
-            $("#party-form-container-create").empty();
-            $("#party-form-container-create").append(`
-				<input id="party-name" maxlength="30" class="input-party form-control form-control-sm" name="name" type="text" placeholder="${Utils.translate("party_page_name")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-desc" maxlength="300" class="input-party form-control form-control-sm" name="desc" type="text" placeholder="${Utils.translate("party_page_subtitle")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-password" maxlength="20" class="input-party form-control form-control-sm input-pass" name="password" type="password" placeholder="${Utils.translate("party_page_password")}">
-				<input id="party-password-confirm" maxlength="20" class="input-party form-control form-control-sm input-pass" name="password-confirm" type="password" placeholder="${Utils.translate("party_page_password_confirm")}">
-				<div class="ShowPasswordNotMatchesError" style="display:none;">${Utils.translate("party_page_password_mismatch")}</div>
-				<div class="party-members-container">
-					<input id="party-members" max="${config.party.max_members}" style="margin-bottom: 0px;" name="members" class="input-party form-control form-control-sm" type="number" placeholder="${Utils.translate("party_page_members")}" oninput="Utils.invalidMsg(this,1,${config.party.max_members});" required>
-					<span>${Utils.currencyFormat(0)}</span>
-				</div>
-				<div class="ShowSubmitErrorCreate" style="display:none;"></div>
-				<button class="btn btn-primary btn-block submit-party-form btn-sm" id="submit-party-form">${Utils.translate("party_page_finish_button").format(Utils.currencyFormat(config.party.price_to_create), Utils.currencyFormat(0))}</button>
-			`);
-            $("#party-create-btn").empty();
-            $("#party-create-btn").append(`${Utils.translate("party_page_create")}`);
-            $("#party-join-btn").empty();
-            $("#party-join-btn").append(`${Utils.translate("party_page_join")}`);
-
-            $("#party-form-container-join").empty();
-            $("#party-form-container-join").append(`
-				<input id="party-name-join" class="input-party form-control form-control-sm" name="name" type="text" placeholder="${Utils.translate("party_page_name")}" oninput="Utils.invalidMsg(this);" required>
-				<input id="party-password-join" class="input-party form-control form-control-sm input-pass" name="password" type="password" placeholder="${Utils.translate("party_page_password")}">
-				<div class="ShowSubmitErrorJoin" style="display:none;"></div>
-				<button class="btn btn-primary btn-block submit-party-form btn-sm" id="submit-party-form-join">${Utils.translate("party_page_finish_button_2")}</button>
-			`);
+            switchPartyTab('create');
 
             $(".sidebar-navigation ul li").removeClass("active");
             $("#sidebar-job").addClass("active");
@@ -484,7 +495,42 @@ window.addEventListener("message", async function (event) {
 
         for (const contract of contracts) {
             if (!contract || !contract.distance) continue;
-            if (contract.illegal == 1 && (!users.illegal || users.illegal == 0)) continue;
+
+            // Verificação de bloqueio por requisitos de habilidade (ETS2 style)
+            let userProductType = Number(users.product_type || 0);
+            let userDistance = Number(users.distance || 0);
+            let userFragile = Number(users.fragile || 0);
+            let userValuable = Number(users.valuable || 0);
+            let userFast = Number(users.fast || 0);
+            let userIllegal = Number(users.illegal || 0);
+
+            let distLimits = [6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 999.0];
+            let maxDistAllowed = distLimits[userDistance] || 6.0;
+
+            let isLocked = Boolean(contract.locked);
+            let lockReason = contract.lock_reason || "";
+
+            if (!isLocked) {
+                if (contract.cargo_type > 0 && userProductType < contract.cargo_type) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_adr").format(contract.cargo_type);
+                } else if (contract.distance > maxDistAllowed) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_distance").format(maxDistAllowed.toFixed(1));
+                } else if (contract.fragile == 1 && userFragile < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_fragile");
+                } else if (contract.valuable == 1 && userValuable < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_valuable");
+                } else if (contract.fast == 1 && userFast < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_fast");
+                } else if (contract.illegal == 1 && userIllegal < 1) {
+                    isLocked = true;
+                    lockReason = Utils.translate("contract_locked_illegal");
+                }
+            }
 
             let icon = "";
             let border = "";
@@ -495,6 +541,10 @@ window.addEventListener("message", async function (event) {
             if (contract.illegal == 1) {
                 border = ` style="border: 1px solid #dc3545;"`;
             }
+            if (isLocked) {
+                border = ` style="border: 1px solid rgba(239, 68, 68, 0.4); opacity: 0.72;"`;
+            }
+
             if (config.dealership && config.dealership[contract.truck]) {
                 icon = `<img src="${config.dealership[contract.truck].img}" class="img-width" alt="${config.dealership[contract.truck].img}">`;
             } else {
@@ -503,13 +553,19 @@ window.addEventListener("message", async function (event) {
             icon += `<img src="img/trailers/${contract.trailer}.png" class="img-width" alt="${contract.trailer}">`;
 
             let partystart_btn = "";
-            if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="true" onclick="startContract(${contract.contract_id},true)" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
-            }
-            let button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-party="false" onclick="startContract(${contract.contract_id},false)" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
-            if (contract.progress) {
-                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
-                partystart_btn = "";
+            let button = "";
+
+            if (isLocked) {
+                button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
+            } else {
+                if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
+                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                }
+                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                if (contract.progress) {
+                    button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
+                    partystart_btn = "";
+                }
             }
 
             let cargo_badge = "";
@@ -525,15 +581,23 @@ window.addEventListener("message", async function (event) {
             if (contract.fast == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_urgent")}"><img src="img/icons/fast.png" width="30"></div>`;
             if (contract.illegal == 1) cargo_badge += `<div data-tooltip-location="left" data-tooltip="${Utils.translate("contract_page_cargo_illegal")}"><img src="img/icons/illegal.png" width="30"></div>`;
 
+            let bonusBadge = (contract.bonus_money_pct && contract.bonus_money_pct > 0)
+                ? `<span class="badge badge-success ml-2" style="font-size: 11px; background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);"><i class="fas fa-arrow-trend-up mr-1"></i>+${contract.bonus_money_pct}% $</span>`
+                : "";
+
+            let lockTag = isLocked
+                ? `<span class="badge badge-danger ml-2" style="font-size: 10px; font-weight: normal; background: rgba(239, 68, 68, 0.2); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.4);"><i class="fas fa-lock mr-1"></i>${lockReason}</span>`
+                : "";
+
             let item_html = `
             <ul class="list list-inline mb-2">
                 <li class="d-flex justify-content-between card-theme"${border}>
                     <div class="d-flex flex-row align-items-center">${icon}
                         <div class="ml-2">
-                            <h6 class="mb-0">${contract.contract_name}</h6>
+                            <h6 class="mb-0 d-flex align-items-center flex-wrap">${contract.contract_name} ${lockTag}</h6>
                             <div class="d-flex flex-row mt-1 text-black-50 date-time">
                                 <div><i class="fas fa-route"></i><span class="ml-2">${Utils.translate("contract_page_distance").format(Utils.numberFormat(contract.distance, 2))}</span></div>
-                                <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}</span></div>
+                                <div class="ml-3"><i class="fas fa-coins"></i><span class="ml-2">${Utils.translate("contract_page_reward").format(Utils.currencyFormat(contract.reward))}${bonusBadge}</span></div>
                             </div>
                         </div>
                     </div>
@@ -579,19 +643,14 @@ window.addEventListener("message", async function (event) {
 
         $("#skills-desc").empty();
         $("#skills-desc").append(Utils.translate("skills_page_desc").format(users.skill_points));
-        setSkill("distance", users.distance);
-        setSkill("product_type", users.product_type);
-        setSkill("valuable", users.valuable);
-        setSkill("fragile", users.fragile);
-        setSkill("fast", users.fast);
-        setSkill("illegal", users.illegal);
+        initEts2Skills(users);
 
         $("#dealership-page-list").empty();
         list_item = ``;
         const sorted_dealership = Utils.sortElement(config.dealership, ["required_level", "price"]);
         for (const truck of sorted_dealership) {
             let truckIdentifier = truck.id || truck.name || "";
-            let button_html = `<div class="mx-3 mt-3 mb-2"><button data-model="${truckIdentifier}" data-name="${truckIdentifier}" onclick="buyTruck('${truckIdentifier}')" type="button" class="btn btn-primary btn-block buy-truck-btn"><small>${Utils.translate("dealership_page_buy_button")}</small></button></div> <small class="d-flex justify-content-center text-muted">${Utils.translate("dealership_page_bottom_text")}</small>`;
+            let button_html = `<div class="mx-3 mt-3 mb-2"><button data-model="${truckIdentifier}" data-name="${truckIdentifier}" type="button" class="btn btn-primary btn-block buy-truck-btn"><small>${Utils.translate("dealership_page_buy_button")}</small></button></div> <small class="d-flex justify-content-center text-muted">${Utils.translate("dealership_page_bottom_text")}</small>`;
             let dealership_locked_background = "";
             if (config.player_level < truck.required_level) {
                 button_html = `<div class="mx-3 mt-4 mb-2"><div class="d-flex align-items-center" style="min-height: 35px;"><i class="fa-solid fa-lock text-muted"></i><span class=" ml-2 small">${Utils.translate("trucks_page_unlock").format(truck.required_level)}</span></div></div>`;
@@ -962,73 +1021,7 @@ window.addEventListener("message", async function (event) {
             }
         }
 
-        if (trucker_party != undefined) {
-            let quit_str = `<button onclick="quitParty()" class="btn btn-danger">${Utils.translate("party_quit")}</button>`;
-            if (trucker_party.owner == 1) {
-                quit_str = `<button onclick="deleteParty()" class="btn btn-danger">${Utils.translate("party_delete")}</button>`;
-            }
-            $("#party-title-div").empty();
-            $("#party-title-div").append(`
-				<h4 class="text-uppercase">${trucker_party.name} <small>(${trucker_party.members_count}/${trucker_party.members})</small></h4>
-				<div class="party-title-container">
-					<p>${trucker_party.description}</p>
-					${quit_str}
-				</div>
-			`);
-
-            $("#party-form-container-base").css("display", "none");
-            $("#party-container-members").css("display", "");
-
-            $("#party-container-members").empty();
-            for (const member of trucker_party_members) {
-                let kick_str = "";
-                if (trucker_party.owner == 1 && trucker_party.user_id != member.user_id) {
-                    kick_str = `<button onclick="kickParty(\'${member.user_id}\')" class="btn btn-danger">${Utils.translate("party_kick")}</button>`;
-                }
-                let owner_str = "";
-                if (member.owner) {
-                    owner_str = `<div data-tooltip-location="left" data-tooltip="${Utils.translate("party_leader")}"><img src="img/icons/crown.png" width="30"></div>`;
-                }
-                let online_str = "fas fa-xmark-circle xicon";
-                if (member.online) {
-                    online_str = "fas fa-check-circle checkicon";
-                }
-                $("#party-container-members").append(`
-					<ul class="list list-inline mb-2">
-						<li class="d-flex justify-content-between card-theme">
-							<div class="d-flex flex-row align-items-center"><i class="${online_str}" aria-hidden="true"></i>
-								<div class="ml-2">
-									<h6 class="mb-0">${member.name} ${member.firstname ?? ""}</h6>
-									<div class="d-flex flex-row mt-1 text-black-50 date-time">
-										<div>
-											<i class="fas fa-route"></i><span class="ml-2">${Utils.translate("party_finished_deliveries").format(member.finished_deliveries)}</span>
-										</div>
-										<div class="ml-3">
-											<i class="fas fa-clock"></i><span class="ml-2">${Utils.translate("party_joined_time").format(Utils.timeConverter(member.joined_at))}</span>
-										</div>
-									</div>
-								</div>
-							</div>
-							<div class="d-flex flex-row align-items-center">
-								<div class="d-flex flex-column mr-2">
-									<div class="profile-image">
-										${owner_str}
-									</div>
-								</div>
-								${kick_str}
-							</div>
-						</li>
-					</ul>
-				`);
-            }
-        } else {
-            $("#party-title-div").html(`
-				<h4 class="text-uppercase">${Utils.translate("party_page_title")}</h4>
-				<p>${Utils.translate("party_page_desc")}</p>
-			`);
-            $("#party-form-container-base").css("display", "");
-            $("#party-container-members").css("display", "none");
-        }
+        renderLationParty(trucker_party, trucker_party_members);
 
         $(function () {
             $(".input-pass").blur(function () {
@@ -1099,24 +1092,298 @@ function getMyTruckHTML(truck) {
     return truck.driver == 0 ? `<button onclick="spawnTruck(${truck.truck_id})" class="btn btn-primary mr-2">${Utils.translate("trucks_page_spawn")}</button> <button onclick="setDriver(null,'${truck.truck_id}')" class="btn btn-outline-primary mr-2">${Utils.translate("trucks_page_remove")}</button>` : `<button onclick="setDriver('0','${truck.truck_id}')" class="btn btn-primary mr-2">${Utils.translate("trucks_page_select")}</button>`;
 }
 
-function setSkill(id, newValue) {
-    $("#" + id).empty();
-    for (let i = 1; i <= 6; i++) {
-        if (i <= newValue) {
-            if (i == 1) {
-                $("#" + id).append(`<div class="steps bg-success"> <span><i class="fas fa-check"></i></span> </div>`);
-            } else {
-                $("#" + id).append(`<span class="line bg-success"></span><div class="steps bg-success"> <span><i class="fas fa-check"></i></span> </div>`);
-            }
+/* ============================================================
+   ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   ============================================================ */
+
+const ETS2_SKILLS_INFO = {
+    product_type: {
+        title: "Hazardous Cargo (ADR)",
+        desc: "O transporte de mercadorias perigosas exige profissionais com treinamento especial. Adquira certificações ADR para desbloquear fretes com cargas de alto risco e elevada compensação financeira.",
+        ranks: [
+            { heading: "Classe 1 - Explosivos", perk: "Desbloqueia cargas de dinamite, munições, pólvora e fogos de artifício." },
+            { heading: "Classe 2 - Gases", perk: "Desbloqueia gases inflamáveis, não-inflamáveis e comprimidos." },
+            { heading: "Classe 3 - Líquidos Inflamáveis", perk: "Desbloqueia combustíveis perigosos como gasolina, diesel e querosene." },
+            { heading: "Classe 4 - Sólidos Inflamáveis", perk: "Desbloqueia fósforo, magnésio e materiais de combustão espontânea." },
+            { heading: "Classe 6 - Substâncias Tóxicas", perk: "Desbloqueia venenos industriais, pesticidas e agentes biológicos." },
+            { heading: "Classe 8 - Substâncias Corrosivas", perk: "Desbloqueia ácidos concentrados, hidróxidos e substâncias corrosivas." }
+        ]
+    },
+    distance: {
+        title: "Long Distance",
+        desc: "Sua habilidade de longa distância determina a distância máxima que você pode viajar em serviço e garante recompensas financeiras e experiência progressivas.",
+        ranks: [
+            { heading: "Rank 1", perk: "Entregas até 6.5 km (+2% de pagamento e +5% de XP para rotas > 6.0 km)." },
+            { heading: "Rank 2", perk: "Entregas até 7.0 km (+4% de pagamento e +10% de XP para rotas > 6.5 km)." },
+            { heading: "Rank 3", perk: "Entregas até 7.5 km (+6% de pagamento e +15% de XP para rotas > 7.0 km)." },
+            { heading: "Rank 4", perk: "Entregas até 8.0 km (+8% de pagamento e +20% de XP para rotas > 7.5 km)." },
+            { heading: "Rank 5", perk: "Entregas até 8.5 km (+10% de pagamento e +25% de XP para rotas > 8.0 km)." },
+            { heading: "Rank 6", perk: "Entregas em qualquer distância (+12% de pagamento e +30% de XP para rotas > 8.5 km)." }
+        ]
+    },
+    valuable: {
+        title: "High Value Cargo",
+        desc: "Toda carga tem valor, mas algumas são de altíssimo custo. As empresas confiam apenas em motoristas certificados e experientes para transportá-las.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de cargas valiosas (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Cargas de alto valor (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Cargas de alto valor (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Cargas de alto valor (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Cargas de alto valor (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Cargas de alto valor (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    fragile: {
+        title: "Fragile Cargo",
+        desc: "Esta especialização permite transportar cargas frágeis, como vidros nobres, eletrônicos industriais e maquinário de precisão com bônus por cuidado extra.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de cargas frágeis (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Cargas frágeis (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Cargas frágeis (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Cargas frágeis (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Cargas frágeis (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Cargas frágeis (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    fast: {
+        title: "Just-In-Time Delivery",
+        desc: "Entregas com janela horária apertada e grande urgência. Exigem condução precisa e pontualidade sob pressão, recompensando com alto retorno.",
+        ranks: [
+            { heading: "Rank 1", perk: "Desbloqueia fretes de carga urgente (+2% pagamento, +10% de XP)." },
+            { heading: "Rank 2", perk: "Entregas urgentes (+4% pagamento, +15% de XP)." },
+            { heading: "Rank 3", perk: "Entregas urgentes (+6% pagamento, +20% de XP)." },
+            { heading: "Rank 4", perk: "Entregas urgentes (+8% pagamento, +25% de XP)." },
+            { heading: "Rank 5", perk: "Entregas urgentes (+10% pagamento, +30% de XP)." },
+            { heading: "Rank 6", perk: "Entregas urgentes (+12% pagamento, +35% de XP)." }
+        ]
+    },
+    illegal: {
+        title: "Fuel Economy",
+        desc: "Técnicas de condução eficiente e gestão de rota diminuem significativamente o consumo de combustível da sua frota em qualquer serviço.",
+        ranks: [
+            { heading: "Rank 1", perk: "Até 10% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 2", perk: "Até 15% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 3", perk: "Até 20% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 4", perk: "Até 25% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 5", perk: "Até 30% de economia de combustível com reboque ou livre." },
+            { heading: "Rank 6", perk: "Até 35% de economia de combustível com reboque ou livre." }
+        ]
+    }
+};
+
+let ets2SkillsState = {
+    selectedSkill: 'product_type',
+    unassignedPoints: 0,
+    skills: {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    },
+    staged: {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    }
+};
+
+function initEts2Skills(usersData) {
+    if (!usersData) return;
+    ets2SkillsState.unassignedPoints = Number(usersData.skill_points || 0);
+    ets2SkillsState.skills = {
+        product_type: Math.min(6, Math.max(0, Number(usersData.product_type || 0))),
+        distance: Math.min(6, Math.max(0, Number(usersData.distance || 0))),
+        valuable: Math.min(6, Math.max(0, Number(usersData.valuable || 0))),
+        fragile: Math.min(6, Math.max(0, Number(usersData.fragile || 0))),
+        fast: Math.min(6, Math.max(0, Number(usersData.fast || 0))),
+        illegal: Math.min(6, Math.max(0, Number(usersData.illegal || 0)))
+    };
+    ets2SkillsState.staged = {
+        product_type: 0,
+        distance: 0,
+        valuable: 0,
+        fragile: 0,
+        fast: 0,
+        illegal: 0
+    };
+    renderEts2Skills();
+}
+
+function getEts2StagedTotal() {
+    let total = 0;
+    for (let k in ets2SkillsState.staged) {
+        total += ets2SkillsState.staged[k];
+    }
+    return total;
+}
+
+function getEts2AvailablePoints() {
+    return Math.max(0, ets2SkillsState.unassignedPoints - getEts2StagedTotal());
+}
+
+function selectEts2Skill(skillId) {
+    if (!ETS2_SKILLS_INFO[skillId]) return;
+    ets2SkillsState.selectedSkill = skillId;
+    renderEts2Skills();
+}
+
+function stageEts2Skill(skillId, delta, event) {
+    if (event) {
+        event.stopPropagation();
+    }
+    if (!ETS2_SKILLS_INFO[skillId]) return;
+
+    let current = ets2SkillsState.skills[skillId] || 0;
+    let staged = ets2SkillsState.staged[skillId] || 0;
+    let available = getEts2AvailablePoints();
+
+    if (delta > 0) {
+        if (available > 0 && (current + staged) < 6) {
+            ets2SkillsState.staged[skillId]++;
+        }
+    } else if (delta < 0) {
+        if (staged > 0) {
+            ets2SkillsState.staged[skillId]--;
+        }
+    }
+
+    ets2SkillsState.selectedSkill = skillId;
+    renderEts2Skills();
+}
+
+function renderEts2Skills() {
+    let availablePoints = getEts2AvailablePoints();
+    let stagedTotal = getEts2StagedTotal();
+
+    // 1. Contador de pontos disponíveis
+    $("#ets2-skill-points").text(availablePoints);
+
+    // 2. Renderização das linhas de habilidades
+    const skillKeys = ['product_type', 'distance', 'valuable', 'fragile', 'fast', 'illegal'];
+    for (const key of skillKeys) {
+        let current = ets2SkillsState.skills[key] || 0;
+        let staged = ets2SkillsState.staged[key] || 0;
+        let total = current + staged;
+
+        // Seleção de linha
+        let row = $("#ets2-row-" + key);
+        if (key === ets2SkillsState.selectedSkill) {
+            row.addClass("active");
         } else {
-            if (i == 1) {
-                $("#" + id).append(`<div class="redsteps" onclick="upgradeSkill('${id}',${i})"> <span class="font-weight-bold">${i}</span> </div>`);
-            } else {
-                $("#" + id).append(`</div> <span class="redline"></span><div class="redsteps" onclick="upgradeSkill('${id}',${i})"> <span class="font-weight-bold">${i}</span>`);
+            row.removeClass("active");
+        }
+
+        // Botões do stepper
+        let plusBtn = $("#ets2-plus-" + key);
+        let minusBtn = $("#ets2-minus-" + key);
+
+        plusBtn.prop("disabled", !(availablePoints > 0 && total < 6));
+        minusBtn.prop("disabled", !(staged > 0));
+
+        // Renderização dos blocos / diamantes
+        if (key === 'product_type') {
+            let adrBadges = $("#ets2-blocks-product_type .ets2-adr-badge");
+            adrBadges.each(function() {
+                let rank = Number($(this).attr("data-adr"));
+                $(this).removeClass("unlocked pending locked");
+                if (rank <= current) {
+                    $(this).addClass("unlocked");
+                } else if (rank <= total) {
+                    $(this).addClass("pending");
+                } else {
+                    $(this).addClass("locked");
+                }
+            });
+        } else {
+            let blocksContainer = $("#ets2-blocks-" + key);
+            blocksContainer.empty();
+            for (let r = 1; r <= 6; r++) {
+                let stateClass = "locked";
+                if (r <= current) {
+                    stateClass = "unlocked";
+                } else if (r <= total) {
+                    stateClass = "pending";
+                }
+                blocksContainer.append(`<div class="ets2-block ${stateClass}"></div>`);
             }
         }
     }
+
+    // 3. Painel de Detalhes da Direita
+    let info = ETS2_SKILLS_INFO[ets2SkillsState.selectedSkill] || ETS2_SKILLS_INFO.product_type;
+    let selCurrent = ets2SkillsState.skills[ets2SkillsState.selectedSkill] || 0;
+    let selStaged = ets2SkillsState.staged[ets2SkillsState.selectedSkill] || 0;
+    let selTotal = selCurrent + selStaged;
+
+    $("#ets2-detail-title").text(info.title);
+    $("#ets2-detail-desc").text(info.desc);
+
+    let ranksHtml = "";
+    for (let i = 0; i < info.ranks.length; i++) {
+        let rankNum = i + 1;
+        let rInfo = info.ranks[i];
+        let rClass = "locked";
+        if (rankNum <= selCurrent) {
+            rClass = "unlocked";
+        } else if (rankNum <= selTotal) {
+            rClass = "pending";
+        }
+
+        ranksHtml += `
+            <div class="ets2-rank-item ${rClass}">
+                <div class="rank-heading">${rInfo.heading}</div>
+                <div class="rank-perks">${rInfo.perk}</div>
+            </div>
+        `;
+    }
+    $("#ets2-detail-ranks").html(ranksHtml);
+
+    // 4. Botão Apply
+    let applyBtn = $("#ets2-apply-btn");
+    applyBtn.prop("disabled", stagedTotal === 0);
 }
+
+let isEts2Applying = false;
+function applyEts2Skills() {
+    if (isEts2Applying) return;
+    let stagedTotal = getEts2StagedTotal();
+    if (stagedTotal === 0) return;
+
+    isEts2Applying = true;
+    $("#ets2-apply-btn").prop("disabled", true);
+
+    for (let key in ets2SkillsState.staged) {
+        let count = ets2SkillsState.staged[key];
+        if (count > 0) {
+            let startLvl = ets2SkillsState.skills[key];
+            for (let step = 1; step <= count; step++) {
+                upgradeSkill(key, startLvl + step);
+            }
+            ets2SkillsState.skills[key] += count;
+            ets2SkillsState.staged[key] = 0;
+        }
+    }
+
+    ets2SkillsState.unassignedPoints -= stagedTotal;
+    renderEts2Skills();
+
+    setTimeout(() => {
+        isEts2Applying = false;
+    }, 1500);
+}
+
+function setSkill(id, newValue) {
+    if (ets2SkillsState.skills[id] !== undefined) {
+        ets2SkillsState.skills[id] = Number(newValue || 0);
+        renderEts2Skills();
+    }
+}
+
 
 function openPage(pageN) {
     $(".pages").css("display", "none");
@@ -1136,62 +1403,210 @@ function openPage(pageN) {
     $(":root").css(`--${pageN}-title-height`, titleHeight + footerHeight + "px");
 }
 
-function createParty() {
-    let form = document.getElementById("party-form-create");
-    let form2 = document.getElementById("party-form-join");
-    if (form.style.opacity === "1" || form2.style.opacity === "1") {
-        form.style.opacity = "0";
-        form.style.maxHeight = "0";
-        form.style.fontSize = "0";
-
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-        setTimeout(function () {
-            form.style.position = "absolute";
-        }, 300);
-        setTimeout(function () {
-            form2.style.position = "absolute";
-        }, 300);
+function switchPartyTab(tab) {
+    if (tab === 'create') {
+        $("#tab-btn-create-party").addClass("active");
+        $("#tab-btn-join-party").removeClass("active");
+        $("#party-tab-create").show();
+        $("#party-tab-join").hide();
     } else {
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-
-        form.style.opacity = "1";
-        form.style.maxHeight = "1000px";
-        form.style.fontSize = "15px";
-        form.style.position = "";
+        $("#tab-btn-join-party").addClass("active");
+        $("#tab-btn-create-party").removeClass("active");
+        $("#party-tab-join").show();
+        $("#party-tab-create").hide();
     }
 }
 
-function joinParty() {
-    let form = document.getElementById("party-form-join");
-    let form2 = document.getElementById("party-form-create");
-    if (form.style.opacity === "1" || form2.style.opacity === "1") {
-        form.style.opacity = "0";
-        form.style.maxHeight = "0";
-        form.style.fontSize = "0";
+function selectPartySlots(slots) {
+    $(".lation-slot-pill").removeClass("active");
+    $(`.lation-slot-pill[data-slots="${slots}"]`).addClass("active");
+    $("#party-members").val(slots);
+}
 
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
-        setTimeout(function () {
-            form.style.position = "absolute";
-        }, 300);
-        setTimeout(function () {
-            form2.style.position = "absolute";
-        }, 300);
-    } else {
-        form2.style.opacity = "0";
-        form2.style.maxHeight = "0";
-        form2.style.fontSize = "0";
+function submitCreateParty() {
+    let name = $("#party-name").val();
+    let desc = $("#party-desc").val();
+    let pass = $("#party-password").val() || "";
+    let cpass = $("#party-password-confirm").val() || "";
+    let members = parseInt($("#party-members").val()) || 4;
 
-        form.style.opacity = "1";
-        form.style.maxHeight = "1000px";
-        form.style.fontSize = "15px";
-        form.style.position = "";
+    if (pass && cpass && pass !== cpass) {
+        $("#party-create-error").show();
+        return;
     }
+    $("#party-create-error").hide();
+
+    Utils.post("createParty", { name, desc, pass, cpass, members });
+}
+
+function submitJoinParty() {
+    let name = $("#party-name-join").val();
+    let pass = $("#party-password-join").val() || "";
+
+    if (!name || name.trim() === "") {
+        $("#party-join-error").text("Por favor, informe o nome ou código da frota.").show();
+        return;
+    }
+    $("#party-join-error").hide();
+
+    Utils.post("joinParty", { name: name.trim(), pass });
+}
+
+function submitInviteParty() {
+    let targetId = $("#party-invite-target-id").val();
+    if (!targetId || parseInt(targetId) <= 0) {
+        alert("Por favor, digite um ID de jogador válido.");
+        return;
+    }
+    Utils.post("inviteParty", { targetId: parseInt(targetId) });
+    $("#party-invite-target-id").val("");
+}
+
+function copyPartyCode(code) {
+    if (!code) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+            alert(`Código #${code} copiado para a área de transferência!`);
+        });
+    } else {
+        alert(`Código da frota: #${code}`);
+    }
+}
+
+function createParty() {
+    switchPartyTab('create');
+}
+
+function joinParty() {
+    switchPartyTab('join');
+}
+
+function renderLationParty(party, members) {
+    if (!members) members = [];
+
+    if (!party) {
+        // Player has no party
+        $("#party-title-div").html(`
+            <div>
+                <div class="lation-party-header-title"><i class="fas fa-users-gear text-emerald"></i> GRUPOS & CONVOYS</div>
+                <div class="lation-party-header-desc">Crie frotas colaborativas, compartilhe fretes e viaje em comboio com outros motoristas.</div>
+            </div>
+        `);
+        $("#party-form-container-base").show();
+        $("#party-container-members").hide().empty();
+        switchPartyTab('create');
+        return;
+    }
+
+    // Player is in an active party
+    $("#party-form-container-base").hide();
+    $("#party-container-members").show().empty();
+
+    let isOwner = party.owner == 1 || party.isLeader === true;
+    let codeStr = party.code || (party.partyId ? party.partyId.substring(0, 6).toUpperCase() : (party.id ? party.id.substring(0, 6).toUpperCase() : "TRK"));
+    let membersCount = party.members_count || members.length || 1;
+    let maxMembers = party.members || party.maxSize || 4;
+
+    let quitBtnStr = isOwner
+        ? `<button class="lation-btn lation-btn-danger" onclick="deleteParty()"><i class="fas fa-trash-can mr-2"></i> Dissolver Frota</button>`
+        : `<button class="lation-btn lation-btn-danger" onclick="quitParty()"><i class="fas fa-right-from-bracket mr-2"></i> Sair da Frota</button>`;
+
+    // Header Overview
+    let overviewHtml = `
+        <div class="lation-party-overview">
+            <div class="lation-party-top-row">
+                <div class="lation-party-name-box">
+                    <i class="fas fa-shield-halved text-emerald font-large-1"></i>
+                    <div>
+                        <div class="lation-party-name">${party.name || 'Frota de Logística'}</div>
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <span class="lation-code-badge" onclick="copyPartyCode('${codeStr}')" title="Clique para copiar código">
+                                <i class="fas fa-hashtag mr-1"></i> CÓDIGO: #${codeStr} <i class="fas fa-copy ml-1"></i>
+                            </span>
+                            <span class="lation-status-pill ml-2">
+                                <i class="fas fa-circle-dot mr-1 text-emerald"></i> ATIVO
+                            </span>
+                            <span class="lation-slots-pill ml-2">
+                                <i class="fas fa-users mr-1"></i> ${membersCount} / ${maxMembers} VAGAS
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    ${quitBtnStr}
+                </div>
+            </div>
+            <p class="lation-party-desc">${party.description || 'Transporte e Logística Colaborativa'}</p>
+        </div>
+    `;
+
+    // Leader Invite Bar
+    let inviteBarHtml = "";
+    if (isOwner) {
+        inviteBarHtml = `
+            <div class="lation-invite-panel">
+                <div class="lation-invite-title">
+                    <i class="fas fa-user-plus text-emerald mr-2"></i> CONVIDAR MOTORISTA POR ID DO SERVIDOR
+                </div>
+                <div class="lation-invite-form">
+                    <input type="number" id="party-invite-target-id" min="1" placeholder="ID do Servidor (ex: 1, 5)" class="lation-invite-input">
+                    <button type="button" class="lation-btn lation-btn-primary" onclick="submitInviteParty()">
+                        <i class="fas fa-paper-plane mr-1"></i> Enviar Convite
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    // Members Grid
+    let membersGridHtml = `
+        <div class="lation-members-section-title">
+            <i class="fas fa-id-card text-emerald"></i> MOTORISTAS DA FROTA (${members.length})
+        </div>
+        <div class="lation-members-grid">
+    `;
+
+    for (const member of members) {
+        let memberIsLeader = member.owner === 1 || member.owner === true || member.isLeader === true || (party.user_id && party.user_id === member.user_id);
+        let isOnline = member.online !== false;
+        let onlineDotClass = isOnline ? "lation-online-dot" : "lation-online-dot offline";
+        let avatarLeaderClass = memberIsLeader ? "leader-avatar" : "";
+
+        let roleBadge = memberIsLeader
+            ? `<span class="lation-role-badge leader"><i class="fas fa-crown mr-1"></i> LÍDER DA FROTA</span>`
+            : `<span class="lation-role-badge member"><i class="fas fa-truck mr-1"></i> MOTORISTA</span>`;
+
+        let kickBtn = "";
+        if (isOwner && !memberIsLeader) {
+            kickBtn = `<button class="lation-btn-kick" onclick="kickParty('${member.user_id || member.citizenid}')" title="Expulsar"><i class="fas fa-user-xmark mr-1"></i> Expulsar</button>`;
+        }
+
+        let deliveries = member.finished_deliveries != null ? member.finished_deliveries : 0;
+        let joinedTimeStr = member.joined_at ? Utils.timeConverter(member.joined_at) : 'Ativo';
+
+        membersGridHtml += `
+            <div class="lation-member-card ${memberIsLeader ? 'is-leader-card' : ''}">
+                <div class="lation-member-header">
+                    <div class="lation-avatar-wrapper ${avatarLeaderClass}">
+                        <i class="fas ${memberIsLeader ? 'fa-user-tie' : 'fa-user'}"></i>
+                        <span class="${onlineDotClass}"></span>
+                    </div>
+                    <div class="lation-member-info">
+                        <div class="lation-member-name" title="${member.name}">${member.name}</div>
+                        ${roleBadge}
+                    </div>
+                </div>
+                <div class="lation-member-stats">
+                    <span><i class="fas fa-route mr-1 text-emerald"></i> Entregas: <strong>${deliveries}</strong></span>
+                    <span><i class="fas fa-clock mr-1 text-info"></i> <strong>${joinedTimeStr}</strong></span>
+                </div>
+                ${kickBtn}
+            </div>
+        `;
+    }
+    membersGridHtml += `</div>`;
+
+    $("#party-container-members").append(overviewHtml + inviteBarHtml + membersGridHtml);
 }
 
 $(document).ready(function () {
@@ -1219,18 +1634,12 @@ $(document).ready(function () {
 
     $("#party-form-create").on("submit", function (e) {
         e.preventDefault();
-        let form = $("#party-form-create").serializeArray();
-        if (form[2].value !== form[3].value) {
-            $(".ShowPasswordNotMatchesError").show();
-            return;
-        }
-        Utils.post("createParty", { name: form[0].value, desc: form[1].value, pass: form[2].value, cpass: form[3].value, members: form[4].value });
+        submitCreateParty();
     });
 
     $("#party-form-join").on("submit", function (e) {
         e.preventDefault();
-        let form = $("#party-form-join").serializeArray();
-        Utils.post("joinParty", { name: form[0].value, pass: form[1].value });
+        submitJoinParty();
     });
 
     $("#form-deposit-money").on("submit", function (e) {
@@ -1268,25 +1677,45 @@ $(document).ready(function () {
         $("#new-contracts-2").text(`${baseText} (${timeStr})`);
     }, 1000);
 
-    // Delegação de Eventos para botões gerados dinamicamente no DOM
-    $(document).on("click", ".start-job-btn", function(e) {
+    // Trava de Debounce contra duplo clique / spam
+    let isActionProcessing = false;
+
+    // Delegação de Eventos para botões gerados dinamicamente no DOM (com remoção preventiva de listeners duplicados)
+    $(document).off("click", ".start-job-btn").on("click", ".start-job-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
+        let reward = Number($(this).attr("data-reward")) || 0;
         if (typeof id !== "undefined" && id !== null) {
-            startContract(Number(id) || id, false);
+            openContractConfigModal(id, false, reward);
         }
     });
 
-    $(document).on("click", ".party-start-job-btn", function(e) {
+    $(document).off("click", ".party-start-job-btn").on("click", ".party-start-job-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
+        let reward = Number($(this).attr("data-reward")) || 0;
         if (typeof id !== "undefined" && id !== null) {
-            startContract(Number(id) || id, true);
+            openContractConfigModal(id, true, reward);
         }
     });
 
-    $(document).on("click", ".buy-truck-btn", function(e) {
+    $(document).off("click", ".locked-job-btn").on("click", ".locked-job-btn", function(e) {
         e.preventDefault();
+        e.stopPropagation();
+        let reason = $(this).attr("data-reason") || "Requisito de habilidade não atendido.";
+        if (typeof Utils !== "undefined" && Utils.customAlert) {
+            Utils.customAlert(reason);
+        }
+    });
+
+    $(document).off("click", ".buy-truck-btn").on("click", ".buy-truck-btn", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (isActionProcessing) return;
         let model = $(this).attr("data-model") || $(this).attr("data-name");
         if (model) {
             buyTruck(model);
@@ -1305,46 +1734,206 @@ function closeUI() {
     try {
         Utils.post("close", {});
     } catch(e) {}
-    try {
-        let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-        fetch(`https://${parentResource}/close`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({})
-        }).catch(function() {});
-    } catch(e) {}
 }
-function startContract(contract_id, party) {
-    let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-    try {
-        Utils.post("startContract", { id: contract_id, contractId: contract_id, jobId: contract_id, party: party });
-    } catch(e) {}
-    try {
-        fetch(`https://${parentResource}/startJob`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ id: contract_id, jobId: contract_id, contractId: contract_id, party: party })
-        }).catch(function() {});
-    } catch(e) {}
+
+let isContractStarting = false;
+
+function updatePalletConfig(val, baseReward) {
+    let hasForklift = $("#modal-forklift-switch").is(":checked");
+    let maxAllowed = hasForklift ? 6 : 7;
+    let count = Math.min(maxAllowed, Math.max(4, parseInt(val) || 4));
+
+    $("#modal-pallet-slider").attr("max", maxAllowed);
+    $("#modal-pallet-slider").val(count);
+    $("#modal-pallet-count-badge").text(`${count} Paletes`);
+    let weightKg = count * 250;
+    $("#modal-pallet-weight-val").text(`${weightKg.toLocaleString('pt-BR')} kg`);
+
+    let extraPallets = Math.max(0, count - 4);
+    let bonusPct = extraPallets * 15;
+    if (baseReward && baseReward > 0) {
+        let extraMoney = Math.floor(baseReward * (bonusPct / 100));
+        $("#modal-pallet-bonus-val").text(`+${bonusPct}% (+$${extraMoney.toLocaleString('pt-BR')})`);
+    } else {
+        $("#modal-pallet-bonus-val").text(`+${bonusPct}%`);
+    }
+
+    if (!hasForklift) {
+        let feePct = 15;
+        let feeMoney = Math.floor((baseReward || 5000) * (feePct / 100));
+        $("#modal-unloading-fee-container").show();
+        $("#modal-unloading-fee-val").text(`-${feePct}% (-$${feeMoney.toLocaleString('pt-BR')})`);
+    } else {
+        $("#modal-unloading-fee-container").hide();
+    }
 }
+
+function onForkliftSwitchChange(baseReward) {
+    let hasForklift = $("#modal-forklift-switch").is(":checked");
+    let max = hasForklift ? 6 : 7;
+    let slider = $("#modal-pallet-slider");
+    let currentVal = parseInt(slider.val()) || 4;
+
+    slider.attr("max", max);
+    $("#modal-pallet-max-label").text(hasForklift ? "6 (Máx. c/ Empilhadeira)" : "7 (Capacidade Máxima)");
+    if (currentVal > max) {
+        currentVal = max;
+        slider.val(max);
+    }
+    updatePalletConfig(currentVal, baseReward);
+}
+
+function sendNuiAction(actionName, payload) {
+    let res = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : "AUST_trucker";
+    let routeUrl = (typeof Utils !== "undefined" && Utils.getRoute) ? Utils.getRoute(actionName) : `https://${res}/${actionName}`;
+    try {
+        fetch(routeUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json; charset=UTF-8" },
+            body: JSON.stringify(payload || {})
+        }).catch(() => {});
+    } catch(e) {}
+    if (typeof Utils !== "undefined" && Utils.post) {
+        Utils.post(actionName, payload || {}, actionName);
+    }
+}
+
+function openContractConfigModal(contract_id, party, baseReward) {
+    baseReward = Number(baseReward) || 0;
+    sendNuiAction("focusMenu", { id: contract_id });
+    Utils.showCustomModal({
+        title: "Configurar Manifesto de Carga (Estiva)",
+        dialogClass: "modal-dialog modal-dialog-centered",
+        bodyHtml: `
+            <div class="p-2 select-none text-left">
+                <p class="text-muted mb-3" style="font-size: 13px;">Defina a quantidade de paletes a estivar na caçamba e escolha se deseja embarcar a empilhadeira para autonomia de resgate.</p>
+                
+                <div class="card-theme p-3 mb-3" style="border-radius: 8px; border: 1px solid rgba(16,185,129,0.3);">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="mb-0 font-weight-bold text-white"><i class="fas fa-boxes-stacked mr-1 text-emerald"></i> Carga Transportada:</label>
+                        <span id="modal-pallet-count-badge" class="badge badge-success px-2 py-1" style="font-size: 14px; background: #10b981;">4 Paletes</span>
+                    </div>
+                    <input type="range" class="custom-range" id="modal-pallet-slider" min="4" max="6" step="1" value="4" oninput="updatePalletConfig(this.value, ${baseReward})">
+                    <div class="d-flex justify-content-between mt-1 text-muted" style="font-size: 11px;">
+                        <span>4 (Mínimo)</span>
+                        <span>5 (Médio)</span>
+                        <span id="modal-pallet-max-label">6 (Máx. c/ Empilhadeira)</span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center card-theme p-3 mb-3" style="border-radius: 8px;">
+                    <div>
+                        <div class="font-weight-bold text-white"><i class="fas fa-weight-hanging text-emerald mr-1"></i> Peso Total da Carga:</div>
+                        <div class="text-muted" style="font-size: 12px;">250 kg por palete</div>
+                    </div>
+                    <div id="modal-pallet-weight-val" class="font-weight-bold text-emerald" style="font-size: 16px;">1.000 kg</div>
+                </div>
+
+                <div class="d-flex justify-content-between align-items-center card-theme p-3 mb-3" style="border-radius: 8px;">
+                    <div>
+                        <div class="font-weight-bold text-white"><i class="fas fa-coins text-warning mr-1"></i> Bônus de Remuneração:</div>
+                        <div class="text-muted" style="font-size: 12px;">+15% por palete adicional (> 4)</div>
+                    </div>
+                    <div id="modal-pallet-bonus-val" class="font-weight-bold text-warning" style="font-size: 16px;">+0% ($0)</div>
+                </div>
+
+                <div id="modal-unloading-fee-container" class="card-theme p-3 mb-3" style="border-radius: 8px; border: 1px solid rgba(239,68,68,0.4); display: none;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="font-weight-bold text-danger"><i class="fas fa-hand-holding-dollar mr-1"></i> Taxa de Descarregamento (Destino):</div>
+                            <div class="text-muted" style="font-size: 12px;">Cobrada pela doca de destino por falta de empilhadeira própria</div>
+                        </div>
+                        <div id="modal-unloading-fee-val" class="font-weight-bold text-danger" style="font-size: 16px;">-15% (-$750)</div>
+                    </div>
+                </div>
+
+                <div class="card-theme p-3" style="border-radius: 8px;">
+                    <div class="custom-control custom-switch">
+                        <input type="checkbox" class="custom-control-input" id="modal-forklift-switch" checked onchange="onForkliftSwitchChange(${baseReward})">
+                        <label class="custom-control-label font-weight-bold text-white" for="modal-forklift-switch">
+                            Embarcar Empilhadeira (Forklift)
+                        </label>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        <strong>Ligado:</strong> Limite de 6 paletes (espaço traseiro reservado para a empilhadeira).<br>
+                        <strong>Desligado:</strong> Capacidade de 7 paletes (taxa de 15% deduzida no destino para descarregamento terceirizado).
+                    </small>
+                </div>
+            </div>
+        `,
+        onClose: function() {
+            $(".main").hide();
+            sendNuiAction("closeMenu", { id: contract_id });
+        },
+        buttons: [
+            {
+                text: "Cancelar",
+                class: "btn btn-outline-secondary",
+                dismiss: true,
+                action: function() {
+                    $(".main").hide();
+                    sendNuiAction("closeMenu", { id: contract_id });
+                    sendNuiAction("cancelJob", { id: contract_id });
+                }
+            },
+            {
+                text: "Confirmar & Iniciar",
+                class: "btn btn-primary",
+                dismiss: true,
+                action: function() {
+                    let fLift = $("#modal-forklift-switch").is(":checked");
+                    let maxAllowed = fLift ? 6 : 7;
+                    let pCount = Math.min(maxAllowed, Math.max(4, parseInt($("#modal-pallet-slider").val()) || 4));
+                    startContract(contract_id, party, pCount, fLift);
+                }
+            }
+        ]
+    });
+}
+
+function startContract(contract_id, party, palletCount, withForklift) {
+    console.log("[AUST_TRUCKER NUI] startContract acionado! ID:", contract_id, "party:", party, "pallets:", palletCount, "forklift:", withForklift);
+    if (isContractStarting) {
+        console.warn("[AUST_TRUCKER NUI] startContract ignorado - inicialização já em andamento.");
+        return;
+    }
+    isContractStarting = true;
+    setTimeout(() => { isContractStarting = false; }, 3000);
+
+    // Oculta a interface imediatamente
+    $(".main").hide();
+    if ($("#confirmation-modal").length) {
+        $("#confirmation-modal").modal("hide");
+    }
+
+    let payload = {
+        id: contract_id,
+        contract_id: contract_id,
+        party: party,
+        palletCount: palletCount || 4,
+        withForklift: (typeof withForklift !== "undefined") ? withForklift : true
+    };
+    sendNuiAction("confirmJob", payload);
+    sendNuiAction("startContract", payload);
+    sendNuiAction("startJob", payload);
+}
+
 function cancelContract(contract_id) {
     Utils.post("cancelContract", { id: contract_id });
 }
+
 function sellTruck(truck_id, truck_name) {
     Utils.showDefaultDangerModal(() => Utils.post("sellTruck", { truck_id: truck_id, truck_name: truck_name }), Utils.translate("confirmation_modal_sell_vehicle"));
 }
+
+let isTruckBuying = false;
+
 function buyTruck(truck_name) {
-    let parentResource = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
-    try {
-        Utils.post("buyTruck", { truck_name: truck_name, model: truck_name, name: truck_name, id: truck_name });
-    } catch(e) {}
-    try {
-        fetch(`https://${parentResource}/buyTruck`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-            body: JSON.stringify({ model: truck_name, truck_name: truck_name, name: truck_name, id: truck_name })
-        }).catch(function() {});
-    } catch(e) {}
+    if (isTruckBuying) return;
+    isTruckBuying = true;
+    setTimeout(() => { isTruckBuying = false; }, 2500);
+
+    Utils.post("buyTruck", { truck_name: truck_name });
 }
 function spawnTruck(truck_id) {
     Utils.post("spawnTruck", { truck_id: truck_id });

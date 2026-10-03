@@ -57,7 +57,9 @@ if fw == 'qbx' or fw == 'qbcore' then
     end
 
     Framework.AddMoney = function(player, account, amount, reason)
+        if type(player) == 'number' then player = Framework.GetPlayer(player) end
         if not player then return end
+        account = (account == 'cash') and 'cash' or 'bank'
         if fw == 'qbx' then
             exports.qbx_core:AddMoney(player.PlayerData.source, account, amount, reason or '')
         else
@@ -66,7 +68,9 @@ if fw == 'qbx' or fw == 'qbcore' then
     end
 
     Framework.RemoveMoney = function(player, account, amount, reason)
+        if type(player) == 'number' then player = Framework.GetPlayer(player) end
         if not player then return false end
+        account = (account == 'cash') and 'cash' or 'bank'
         if fw == 'qbx' then
             return exports.qbx_core:RemoveMoney(player.PlayerData.source, account, amount, reason or '')
         else
@@ -75,7 +79,9 @@ if fw == 'qbx' or fw == 'qbcore' then
     end
 
     Framework.GetMoney = function(player, account)
+        if type(player) == 'number' then player = Framework.GetPlayer(player) end
         if not player then return 0 end
+        account = (account == 'cash') and 'cash' or 'bank'
         if fw == 'qbx' then
             return exports.qbx_core:GetMoney(player.PlayerData.source, account) or 0
         else
@@ -205,6 +211,28 @@ else
     error(('[aurp_trucker] Config.Framework inválido: "%s". Use "qbx", "qbcore" ou "esx"'):format(fw))
 end
 
+-- ============================================================
+-- Universal Player-Source Money Wrappers (aceita src ou Player)
+-- ============================================================
+Framework.GetPlayerMoney = function(src, account)
+    local player = (type(src) == 'table') and src or Framework.GetPlayer(src)
+    if not player then return 0 end
+    return Framework.GetMoney(player, account)
+end
+
+Framework.AddPlayerMoney = function(src, account, amount, reason)
+    local player = (type(src) == 'table') and src or Framework.GetPlayer(src)
+    if not player then return false end
+    return Framework.AddMoney(player, account, amount, reason)
+end
+
+Framework.RemovePlayerMoney = function(src, account, amount, reason)
+    local player = (type(src) == 'table') and src or Framework.GetPlayer(src)
+    if not player then return false end
+    return Framework.RemoveMoney(player, account, amount, reason)
+end
+
 if Config.Debug then
     print(('[aurp_trucker] Framework: %s'):format(fw))
 end
+

@@ -950,3 +950,988 @@ body {
 	user-select: none;
 	/* Non-prefixed version, currently supported by Chrome, Edge, Opera and Firefox */
 }
+
+/* ============================================================
+   ETS2 Driver Skills Progression System (Classic ETS2 Replica)
+   Refatorado para OLED Black, Proporção 55/45 e Acentos Amber/Emerald
+   ============================================================ */
+
+.skills-page {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    padding: 20px 24px !important;
+    box-sizing: border-box !important;
+}
+
+.skills-page[style*="display: block"] {
+    display: flex !important;
+}
+
+.ets2-skills-header-bar {
+    text-align: center;
+    padding: 0 0 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 14px;
+    flex-shrink: 0;
+}
+
+.ets2-header-title {
+    font-family: 'Montserrat', 'Poppins', sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: #f1f5f9;
+    text-transform: uppercase;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-skills-layout {
+    display: grid;
+    grid-template-columns: 55% calc(45% - 16px);
+    gap: 16px;
+    flex: 1;
+    min-height: 0;
+    height: calc(100% - 46px);
+    box-sizing: border-box;
+}
+
+/* Left Column: Skill Rows (55% Grid Column) */
+.ets2-skills-list-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 6px;
+    height: 100%;
+}
+
+.ets2-skills-list-col::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb {
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-skills-list-col::-webkit-scrollbar-thumb:hover {
+    background: #f59e0b;
+}
+
+.ets2-skill-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: #0d0d0d;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    box-sizing: border-box;
+}
+
+.ets2-skill-row:hover {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: #141414;
+    transform: translateY(-1px);
+}
+
+.ets2-skill-row.active {
+    border-color: #f59e0b !important;
+    background: linear-gradient(180deg, #18150f 0%, #0d0b08 100%) !important;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.25), inset 0 0 0 1px rgba(245, 158, 11, 0.3) !important;
+}
+
+.ets2-skill-row.active .ets2-skill-label {
+    color: #f59e0b !important;
+    text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+}
+
+.ets2-skill-icon-box {
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    border-radius: 6px;
+    background: #141414;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 2px 4px rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-skill-icon-box {
+    border-color: rgba(245, 158, 11, 0.4);
+    background: #1c1810;
+}
+
+.ets2-fa-icon {
+    color: #d1d5db;
+    font-size: 17px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: all 0.2s ease;
+}
+
+.ets2-skill-row.active .ets2-fa-icon {
+    color: #f59e0b;
+    filter: drop-shadow(0 0 6px rgba(245, 158, 11, 0.6));
+}
+
+.ets2-skill-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+}
+
+.ets2-skill-label {
+    font-family: 'Poppins', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: #e2e8f0;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    transition: color 0.15s ease;
+}
+
+/* Rank Blocks */
+.ets2-rank-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-block {
+    width: 28px;
+    height: 18px;
+    border-radius: 3px;
+    position: relative;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.ets2-block.locked {
+    background: #181818;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.ets2-block.unlocked {
+    background: linear-gradient(180deg, #fde047 0%, #f59e0b 45%, #b45309 52%, #78350f 100%);
+    border: 1px solid #fef08a;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 7px rgba(245, 158, 11, 0.65), 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-block.pending {
+    background: linear-gradient(180deg, #6ee7b7 0%, #10b981 45%, #047857 52%, #064e3b 100%);
+    border: 1px solid #a7f3d0;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 0 8px rgba(16, 185, 129, 0.75);
+}
+
+/* ADR Badges */
+.ets2-adr-blocks {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-adr-badge {
+    width: 25px;
+    height: 25px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #141414;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+
+.ets2-adr-badge.locked {
+    filter: grayscale(100%) opacity(25%);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ets2-adr-badge.unlocked {
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.7));
+    border: 1px solid #f59e0b;
+}
+
+.ets2-adr-badge.pending {
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.85));
+    border: 1px solid #10b981;
+    background: rgba(16, 185, 129, 0.15);
+}
+
+.ets2-adr-badge img {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+}
+
+/* Stepper Buttons */
+.ets2-stepper {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ets2-step-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    background: #161616;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 1px 2px rgba(0, 0, 0, 0.5);
+    color: #d1d5db;
+    font-family: monospace;
+    font-size: 15px;
+    font-weight: 900;
+    line-height: 26px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    outline: none !important;
+}
+
+.ets2-step-btn:not(:disabled):hover {
+    background: #242424;
+    color: #f59e0b;
+    border-color: rgba(245, 158, 11, 0.5);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.3);
+}
+
+.ets2-step-btn:not(:disabled):active {
+    background: #101010;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ets2-step-btn:disabled {
+    opacity: 0.18;
+    cursor: not-allowed;
+}
+
+/* Right Column: Details Panel (45% Grid Column) */
+.ets2-skills-detail-col {
+    background: #0d0d0d;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.ets2-unassigned-bar {
+    background: #121212;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Poppins', sans-serif;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #94a3b8;
+    flex-shrink: 0;
+}
+
+.ets2-unassigned-num {
+    color: #f59e0b;
+    font-size: 16px;
+    font-weight: 800;
+    text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+}
+
+.ets2-detail-card {
+    padding: 14px 16px;
+    overflow-y: auto;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+}
+
+.ets2-detail-card::-webkit-scrollbar {
+    width: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb {
+    background: #262626;
+    border-radius: 4px;
+}
+.ets2-detail-card::-webkit-scrollbar-thumb:hover {
+    background: #f59e0b;
+}
+
+.ets2-detail-title {
+    font-family: 'Poppins', sans-serif;
+    font-size: 14.5px;
+    font-weight: 800;
+    color: #f59e0b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    margin: 0;
+}
+
+.ets2-detail-desc {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.45;
+    margin: 0;
+}
+
+.ets2-detail-ranks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+}
+
+.ets2-rank-item {
+    font-size: 10.5px;
+    line-height: 1.35;
+}
+
+.ets2-rank-item .rank-heading {
+    font-weight: 700;
+    margin-bottom: 1px;
+    font-size: 11px;
+}
+
+.ets2-rank-item.unlocked .rank-heading {
+    color: #f59e0b;
+}
+.ets2-rank-item.unlocked .rank-perks {
+    color: #fbbf24;
+}
+
+.ets2-rank-item.pending .rank-heading {
+    color: #10b981;
+}
+.ets2-rank-item.pending .rank-perks {
+    color: #6ee7b7;
+}
+
+.ets2-rank-item.locked .rank-heading {
+    color: #64748b;
+}
+.ets2-rank-item.locked .rank-perks {
+    color: #475569;
+}
+
+/* Integrated Detail Footer (Docked Action Button) */
+.ets2-detail-footer {
+    padding: 10px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    background: #101010;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ets2-apply-btn {
+    width: 100%;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    font-family: 'Poppins', sans-serif;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none !important;
+}
+
+.ets2-apply-btn:disabled {
+    background: #141414;
+    color: #475569;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.ets2-apply-btn:not(:disabled) {
+    background: linear-gradient(180deg, #f59e0b 0%, #d97706 45%, #b45309 100%);
+    border-color: #fef08a;
+    color: #ffffff;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 0 14px rgba(245, 158, 11, 0.65);
+}
+
+.ets2-apply-btn:not(:disabled):hover {
+    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 45%, #d97706 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 0 18px rgba(245, 158, 11, 0.9);
+    transform: translateY(-1px);
+}
+
+.ets2-apply-btn:not(:disabled):active {
+    transform: translateY(0);
+}
+
+/* Bottom Action Bar (Fallback) */
+.ets2-skills-bottom-bar {
+    display: none;
+}
+
+/* ============================================================
+   LATION MODERN UI (EMERALD / OLED DARK) — PARTY & CONVOY SYSTEM
+   ============================================================ */
+
+.lation-party-wrapper {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px 15px 15px 15px;
+    overflow-y: auto;
+    font-family: 'Inter', 'Poppins', sans-serif;
+    color: #e2e8f0;
+    box-sizing: border-box;
+}
+
+/* Header Bar */
+.lation-party-header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-left: 4px solid #10b981;
+    border-radius: 8px;
+    padding: 12px 18px;
+    margin-bottom: 15px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.lation-party-header-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    text-transform: uppercase;
+}
+
+.lation-party-header-desc {
+    font-size: 0.82rem;
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+/* Segmented Tabs (Create / Join) */
+.lation-party-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    background: #121316;
+    padding: 6px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.lation-tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+.lation-tab-btn:hover {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.lation-tab-btn.active {
+    background: #1b3b2d;
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+/* Lation Card Form Container */
+.lation-party-form-card {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    max-width: 680px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.lation-form-group {
+    margin-bottom: 16px;
+}
+
+.lation-input-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #94a3b8;
+    margin-bottom: 6px;
+}
+
+.lation-input-box {
+    display: flex;
+    align-items: center;
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 6px;
+    padding: 0 12px;
+    transition: all 0.2s ease;
+}
+
+.lation-input-box:focus-within {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+.lation-input-box i {
+    color: #64748b;
+    font-size: 0.95rem;
+    margin-right: 10px;
+    min-width: 16px;
+    text-align: center;
+}
+
+.lation-input-box input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #f8fafc;
+    padding: 10px 0;
+    font-size: 0.88rem;
+    font-family: inherit;
+}
+
+.lation-input-box input::placeholder {
+    color: #475569;
+}
+
+/* Slot Selector Pills */
+.lation-slots-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.lation-slot-pill {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    transition: all 0.2s ease;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-slot-pill:hover {
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+.lation-slot-pill.active {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+/* Lation Buttons */
+.lation-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    outline: none;
+    border: 1px solid transparent;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.lation-btn-primary {
+    background: #1b3b2d;
+    border-color: #10b981;
+    color: #6afe87;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.lation-btn-primary:hover {
+    background: #234c3a;
+    border-color: #34d399;
+    color: #ffffff;
+    box-shadow: 0 0 18px rgba(16, 185, 129, 0.4);
+    transform: translateY(-1px);
+}
+
+.lation-btn-accent {
+    background: #132438;
+    border-color: #38bdf8;
+    color: #7dd3fc;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2);
+}
+
+.lation-btn-accent:hover {
+    background: #1a334f;
+    border-color: #0284c7;
+    color: #ffffff;
+    box-shadow: 0 0 16px rgba(56, 189, 248, 0.35);
+    transform: translateY(-1px);
+}
+
+.lation-btn-danger {
+    background: #35202b;
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #ff9f87;
+}
+
+.lation-btn-danger:hover {
+    background: #472637;
+    border-color: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(239, 68, 68, 0.3);
+}
+
+/* ================= Active Party Dashboard ================= */
+.lation-party-overview {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left: 4px solid #10b981;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.lation-party-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.lation-party-name-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lation-party-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.03em;
+}
+
+.lation-code-badge {
+    background: #0f1013;
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    color: #6afe87;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+}
+
+.lation-code-badge:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: #10b981;
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+
+.lation-status-pill {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #34d399;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+}
+
+.lation-slots-pill {
+    background: #0f1013;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-party-desc {
+    color: #94a3b8;
+    font-size: 0.86rem;
+    margin-top: 8px;
+    margin-bottom: 0;
+}
+
+/* Invite Bar */
+.lation-invite-panel {
+    background: #111216;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 8px;
+    padding: 12px 18px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.lation-invite-title {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+}
+
+.lation-invite-form {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex: 1;
+    max-width: 420px;
+    justify-content: flex-end;
+}
+
+.lation-invite-input {
+    background: #0a0b0d;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font-family: 'JetBrains Mono', monospace;
+    padding: 7px 12px;
+    border-radius: 5px;
+    font-size: 0.88rem;
+    outline: none;
+    width: 220px;
+    transition: border-color 0.2s;
+}
+
+.lation-invite-input:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* Members Grid */
+.lation-members-section-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.lation-members-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
+    overflow-y: auto;
+    padding-bottom: 10px;
+}
+
+.lation-member-card {
+    background: #14151a;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.lation-member-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.lation-member-card.is-leader-card {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: linear-gradient(180deg, #17181f 0%, #14151a 100%);
+}
+
+.lation-member-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.lation-avatar-wrapper {
+    position: relative;
+    width: 42px;
+    height: 42px;
+    background: #1f2128;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lation-avatar-wrapper.leader-avatar {
+    border-color: #f59e0b;
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.lation-online-dot {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #10b981;
+    border: 2px solid #14151a;
+    box-shadow: 0 0 6px #10b981;
+}
+
+.lation-online-dot.offline {
+    background: #64748b;
+    box-shadow: none;
+}
+
+.lation-member-info {
+    flex: 1;
+    overflow: hidden;
+}
+
+.lation-member-name {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lation-role-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-top: 3px;
+}
+
+.lation-role-badge.leader {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.lation-role-badge.member {
+    background: rgba(56, 189, 248, 0.12);
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+}
+
+.lation-member-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0f1013;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.lation-member-stats strong {
+    color: #f1f5f9;
+    font-family: 'JetBrains Mono', monospace;
+}
+
+.lation-btn-kick {
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ff9f87;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    align-self: flex-end;
+}
+
+.lation-btn-kick:hover {
+    background: #ef4444;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+}

@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
-version '20.1.0'
+version '20.7.3'
 
 dependencies {
     'oxmysql',
@@ -17,6 +17,10 @@ shared_scripts {
     '@ox_lib/init.lua',
     'config/config.lua',
     'config/logistics_config.lua',
+    'shared/config.lua',
+    'lang/br.lua',
+    'lang/en.lua',
+    'lang/locale.lua',
 }
 
 server_scripts {
@@ -49,6 +53,7 @@ server_scripts {
     'server/crude_oil.lua',
     'server/services/parcel_service.lua',  -- v19/v20: Parcel Delivery (antes de exports — ParcelService global)
     'server/services/truck_rental_service.lua', -- Sistema de Aluguel e Caução de Caminhões
+    'server/services/admin_service.lua',       -- Painel Administrativo e Gestão de Rotas Dinâmicas
     'server/exports.lua',
     'server/exports_shop.lua',   -- v16: exports estoque lojas
     'server/callbacks.lua',
@@ -56,6 +61,16 @@ server_scripts {
 }
 
 client_scripts {
+    'client/modules/forklift.lua',
+    'client/modules/reach_stacker.lua',
+    'client/modules/adr_hazard.lua',
+    'client/modules/car_carrier.lua',
+    'client/modules/dataview.lua',
+    'client/modules/offset_editor.lua',        -- Módulo de Calibração Visual 3D e Gestão de Spawns
+    'client/zones.lua',
+    'client/cargo_dry.lua',
+    'client/cargo_liquid.lua',
+    'client/main.lua',
     'client/carry_system.lua',             -- v19: CarrySystem (antes de todos)
     'client/client.lua',
     'client/hud.client.lua',
@@ -77,6 +92,7 @@ client_scripts {
 ui_page 'html/index.html'
 
 files {
+    'client/modules/*.lua',
     'html/index.html',
     'html/style.css',
     'html/panel.js',
@@ -89,4 +105,26 @@ files {
     'html/img/trailers/*',
     'html/img/trucks/*',
     'html/assets/*',
+    'data/*.meta',
 }
+
+data_file 'HANDLING_FILE' 'data/aerocab_handling.meta'
+data_file 'VEHICLE_METADATA_FILE' 'data/aerocab_vehicles.meta'
+data_file 'VEHICLE_VARIATION_FILE' 'data/aerocab_carvariations.meta'
+
+data_file 'HANDLING_FILE' 'data/brickades_handling.meta'
+data_file 'VEHICLE_METADATA_FILE' 'data/brickades_vehicles.meta'
+data_file 'VEHICLE_VARIATION_FILE' 'data/brickades_carvariations.meta'
+data_file 'DLC_TEXT_FILE' 'data/brickades_dlctext.meta'
+
+data_file 'HANDLING_FILE' 'data/linerunner_handling.meta'
+data_file 'VEHICLE_METADATA_FILE' 'data/linerunner_vehicles.meta'
+data_file 'DLC_TEXT_FILE' 'data/linerunner_dlctext.meta'
+
+data_file 'HANDLING_FILE' 'data/vetirs_handling.meta'
+data_file 'VEHICLE_METADATA_FILE' 'data/vetirs_vehicles.meta'
+data_file 'VEHICLE_VARIATION_FILE' 'data/vetirs_carvariations.meta'
+data_file 'DLC_TEXT_FILE' 'data/vetirs_dlctext.meta'
+
+data_file 'DLC_ITYP_REQUEST' 'stream/sm3d_prop_logi_shelf_def.ytyp'
+data_file 'DLC_ITYP_REQUEST' 'stream/sm3d_prop_pallets_def.ytyp'

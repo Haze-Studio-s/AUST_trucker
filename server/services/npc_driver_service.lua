@@ -799,10 +799,18 @@ function NpcDriverService.GetHiredDrivers(citizenId)
     return drivers
 end
 
+local HiringDriverLock = {}
+
 function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
+    if HiringDriverLock[citizenId] then
+        return false, 'Processando contratação anterior...'
+    end
+    HiringDriverLock[citizenId] = true
+
     local catalog = NpcDriverService.GetAgencyCatalog()
     local driver = catalog[driverIndex]
     if not driver then
+        HiringDriverLock[citizenId] = nil
         return false, 'Candidato não encontrado na agência'
     end
 
@@ -815,15 +823,18 @@ function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
     elseif lvl >= 10 then maxDrivers = 2 end
 
     if #hired >= maxDrivers then
+        HiringDriverLock[citizenId] = nil
         return false, ('Limite de motoristas atingido para seu nível (%d max)'):format(maxDrivers)
     end
 
     local balance = Framework.GetPlayerMoney(src, 'bank')
     if balance < driver.price then
+        HiringDriverLock[citizenId] = nil
         return false, 'Saldo bancário insuficiente para contratar'
     end
 
     if not Framework.RemovePlayerMoney(src, 'bank', driver.price, 'Contratação de Motorista: ' .. driver.name) then
+        HiringDriverLock[citizenId] = nil
         return false, 'Falha ao processar pagamento'
     end
 
@@ -833,6 +844,7 @@ function NpcDriverService.HireAgencyDriver(src, citizenId, driverIndex)
         { citizenId, driver.name, driver.product_type, driver.distance_skill, driver.valuable_skill, driver.fragile_skill, driver.fast_skill, driver.price, driver.img }
     )
 
+    HiringDriverLock[citizenId] = nil
     return true, { driverId = driverId, name = driver.name }
 end
 

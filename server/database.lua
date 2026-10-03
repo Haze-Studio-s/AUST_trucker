@@ -401,6 +401,96 @@ local TABLES = {
         `truck_id`     INT(10) UNSIGNED NULL DEFAULT NULL,
         INDEX `idx_td_user` (`user_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Logística 2.0: aust_trucker_stats para progressão persistente e recompensas
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_stats` (
+        `citizenid` VARCHAR(50) NOT NULL COLLATE 'utf8mb4_unicode_ci',
+        `level` INT(11) NOT NULL DEFAULT 1,
+        `exp` INT(11) NOT NULL DEFAULT 0,
+        `deliveries` INT(11) NOT NULL DEFAULT 0,
+        PRIMARY KEY (`citizenid`) USING BTREE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci]],
+
+    -- Módulo Administrativo: Rotas e Contratos Dinâmicos
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_custom_routes` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `type` ENUM('quick', 'freight', 'adr', 'heavy', 'carrier') NOT NULL DEFAULT 'quick',
+        `cargo_model` VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b',
+        `cargo_name` VARCHAR(100) NOT NULL DEFAULT 'Carga Padrão',
+        `truck_model` VARCHAR(50) NOT NULL DEFAULT 'hauler',
+        `trailer_model` VARCHAR(50) NOT NULL DEFAULT 'trailers2',
+        `base_payment` INT NOT NULL DEFAULT 5000,
+        `base_xp` INT NOT NULL DEFAULT 200,
+        `req_skill` INT NOT NULL DEFAULT 0,
+        `fragile` TINYINT(1) NOT NULL DEFAULT 0,
+        `valuable` TINYINT(1) NOT NULL DEFAULT 0,
+        `pickup_coords` JSON NOT NULL,
+        `delivery_coords` JSON NOT NULL,
+        `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Spawns e Baías Dinâmicas
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_spawns` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `spawn_type` ENUM('truck', 'trailer', 'forklift', 'handler', 'loading_bay', 'delivery') NOT NULL,
+        `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
+        `coords` JSON NOT NULL,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Offsets de Slots de Trailer Mapeados Visualmente
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_trailer_offsets` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `trailer_model` VARCHAR(50) NOT NULL,
+        `label` VARCHAR(100) DEFAULT NULL,
+        `slot_index` INT NOT NULL,
+        `offset_x` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_y` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_z` FLOAT NOT NULL DEFAULT 0.0,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `is_forklift` TINYINT(1) NOT NULL DEFAULT 0,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_trailer_slot` (`trailer_model`, `slot_index`, `is_forklift`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Props de Cargas Homologados
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_homologated_props` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `model_hash` VARCHAR(100) NOT NULL UNIQUE,
+        `name` VARCHAR(100) NOT NULL,
+        `cargo_category` ENUM('dry', 'fragile', 'valuable', 'adr', 'heavy') NOT NULL DEFAULT 'dry',
+        `offset_x` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_y` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_z` FLOAT NOT NULL DEFAULT 0.0,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: NPCs Despachantes Dinâmicos
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_npcs` (
+        `id` VARCHAR(50) PRIMARY KEY,
+        `name` VARCHAR(100) NOT NULL,
+        `model` VARCHAR(50) NOT NULL DEFAULT 's_m_m_dockwork_01',
+        `coords` JSON NOT NULL,
+        `heading` FLOAT NOT NULL DEFAULT 0.0,
+        `blip_sprite` INT NOT NULL DEFAULT 477,
+        `blip_color` INT NOT NULL DEFAULT 2,
+        `is_active` TINYINT(1) NOT NULL DEFAULT 1,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
+    -- Módulo Administrativo: Configurações de Economia e Multiplicadores
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_economy_settings` (
+        `key_name` VARCHAR(50) PRIMARY KEY,
+        `numeric_value` FLOAT NOT NULL,
+        `description` VARCHAR(255) NULL,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 }
 
 -- Migrations para servidores existentes (pcall ignora se coluna já existe)
@@ -437,6 +527,9 @@ local MIGRATIONS = {
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fragile_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `fast_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     "ALTER TABLE `trucker_player_progression` ADD COLUMN `illegal_skill` TINYINT UNSIGNED NOT NULL DEFAULT 0",
+    -- admin overhaul: offsets label and spawns folder_name
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
 }
 
 ---Garante que todas as tabelas e migrations existam. Chamado dentro de MySQL.ready (main.lua).
@@ -603,15 +696,28 @@ end
 -- ============================================================
 
 function DB_InsertJob(job, convoyId)
-    -- job = { id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal }
-    -- convoyId: VARCHAR(36) opcional — nil para jobs individuais
+    local cargoType = tonumber(job.cargo_type)
+    if not cargoType and type(job.cargo_type) == 'string' then
+        local adrMap = {
+            ['explosives'] = 1,
+            ['gases'] = 2,
+            ['flammable_liquid'] = 3,
+            ['flammable_solids'] = 4,
+            ['toxic'] = 5,
+            ['corrosives'] = 6,
+            ['environmental'] = 5
+        }
+        cargoType = adrMap[job.cargo_type] or 0
+    end
+    cargoType = cargoType or 0
+
     return MySQL.insert.await(
         [[INSERT INTO trucker_jobs
           (id, origin_id, dest_id, cargo_item, trailer_model, base_payment, distance, expires_at, convoy_id, cargo_qty, weight, contract_type, cargo_type, fragile, valuable, fast, illegal)
           VALUES (?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?), ?, ?, ?, ?, ?, ?, ?, ?, ?)]],
         { job.id, job.origin_id, job.dest_id, job.cargo_item, job.trailer_model,
           job.base_payment, job.distance, job.expires_at, convoyId or nil, job.cargo_qty or 1, job.weight or 80,
-          job.contract_type or 0, job.cargo_type or job.cargo_item, job.fragile or 0, job.valuable or 0, job.fast or 0, job.illegal or 0 }
+          tonumber(job.contract_type) or 0, cargoType, tonumber(job.fragile) or 0, tonumber(job.valuable) or 0, tonumber(job.fast) or 0, tonumber(job.illegal) or 0 }
     )
 end
 
@@ -672,6 +778,7 @@ end
 -- ============================================================
 
 function DB_GetPlayerStats(citizenId)
+    pcall(DB_UpsertPlayerStats, citizenId)
     return MySQL.single.await(
         'SELECT * FROM trucker_player_progression WHERE citizenid = ? LIMIT 1',
         { citizenId }
@@ -687,13 +794,14 @@ function DB_UpsertPlayerStats(citizenId)
 end
 
 function DB_AddPlayerStats(citizenId, earnings, distance)
+    pcall(DB_UpsertPlayerStats, citizenId)
     MySQL.update.await(
         [[UPDATE trucker_player_progression
           SET total_earnings = total_earnings + ?,
               total_deliveries = total_deliveries + 1,
               total_distance = total_distance + ?
           WHERE citizenid = ?]],
-        { earnings, distance, citizenId }
+        { tonumber(earnings) or 0, tonumber(distance) or 0.0, citizenId }
     )
 end
 
@@ -703,9 +811,10 @@ end
 
 -- Adiciona XP e retorna o estado atual do jogador
 function DB_AddXP(citizenId, xp)
+    pcall(DB_UpsertPlayerStats, citizenId)
     MySQL.update.await(
         'UPDATE trucker_player_progression SET xp = xp + ? WHERE citizenid = ?',
-        { xp, citizenId }
+        { tonumber(xp) or 0, citizenId }
     )
     return MySQL.single.await(
         'SELECT xp, level, rank, skill_points FROM trucker_player_progression WHERE citizenid = ? LIMIT 1',
@@ -1584,3 +1693,47 @@ function DB_ClearShopPendingContract(shopId, itemName)
         { shopId, itemName }
     )
 end
+
+-- ============================================================
+-- AUST TRUCKER STATS (Logística 2.0 Persistence)
+-- ============================================================
+
+function DB_GetAustTruckerStats(citizenId)
+    local row = MySQL.single.await([[
+        SELECT * FROM aust_trucker_stats WHERE citizenid = ? LIMIT 1
+    ]], { citizenId })
+    if not row then
+        MySQL.insert.await([[
+            INSERT INTO aust_trucker_stats (citizenid, level, exp, deliveries)
+            VALUES (?, 1, 0, 0)
+        ]], { citizenId })
+        return { citizenid = citizenId, level = 1, exp = 0, deliveries = 0 }
+    end
+    return row
+end
+
+function DB_UpdateAustTruckerStats(citizenId, addedExp, addedDeliveries)
+    addedExp = tonumber(addedExp) or 0
+    addedDeliveries = tonumber(addedDeliveries) or 0
+
+    local current = DB_GetAustTruckerStats(citizenId)
+    local newExp = (current.exp or 0) + addedExp
+    local newDeliveries = (current.deliveries or 0) + addedDeliveries
+
+    -- Progressão de nível: 1000 EXP por nível
+    local newLevel = math.max(1, math.floor(newExp / 1000) + 1)
+
+    MySQL.update.await([[
+        UPDATE aust_trucker_stats
+        SET level = ?, exp = ?, deliveries = ?
+        WHERE citizenid = ?
+    ]], { newLevel, newExp, newDeliveries, citizenId })
+
+    return {
+        level = newLevel,
+        exp = newExp,
+        deliveries = newDeliveries,
+        levelsGained = math.max(0, newLevel - (current.level or 1))
+    }
+end
+

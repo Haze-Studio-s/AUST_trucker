@@ -18,6 +18,10 @@ Lang["en"] = {
     sidebar_party: "Party",
     sidebar_close: "Close",
 
+    confirmation_modal_title: "Confirmation",
+    confirmation_modal_body: "Are you sure you want to proceed?",
+    confirmation_modal_cancel_button: "Cancel",
+    confirmation_modal_confirm_button: "Confirm",
     confirmation_modal_sell_vehicle: "Are you sure you want to sell this vehicle?",
     confirmation_modal_delete_party: "Are you sure you want to delete this party?",
     confirmation_modal_loan_payoff: "Are you sure you want to pay the entire balance of {0}?",
@@ -281,4 +285,12 @@ Lang["en"] = {
     str_invalid_value:"Invalid value",
     str_more_than:"Must be greater than or equal to {0}",
     str_less_than:"Must be less than or equal to {0}",
+
+    contract_page_button_locked: "Locked",
+    contract_locked_adr: "Requires ADR Class {0} Certificate",
+    contract_locked_distance: "Distance exceeds your skill limit ({0} km)",
+    contract_locked_fragile: "Requires Fragile Cargo skill (Level 1)",
+    contract_locked_valuable: "Requires High Value Cargo skill (Level 1)",
+    contract_locked_fast: "Requires Urgent Delivery skill (Level 1)",
+    contract_locked_illegal: "Requires Illegal Cargo specialization",
 };

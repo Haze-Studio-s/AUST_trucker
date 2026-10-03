@@ -18,6 +18,10 @@ Lang["no"] = {
 	sidebar_party: "Gruppe",
 	sidebar_close: "Lukk",
 
+	confirmation_modal_title: "Bekreftelse",
+	confirmation_modal_body: "Er du sikker på at du vil fortsette?",
+	confirmation_modal_cancel_button: "Avbryt",
+	confirmation_modal_confirm_button: "Bekreft",
 	confirmation_modal_sell_vehicle: "Er du sikker på at du vil selge dette kjøretøyet?",
 	confirmation_modal_delete_party: "Er du sikker på at du vil oppløse denne gruppa?",
 	confirmation_modal_loan_payoff: "Er du sikker på at du vil betale hele saldoen på {0}?",
