@@ -530,7 +530,7 @@ function BuildInitialDataForPlayer(source, citizenId)
     end)
 
     if not ok then
-        print('^1[AUST_trucker] getInitialData ERROR: ' .. tostring(result) .. '^7')
+        if Config.Debug then print('^1[AUST_trucker] getInitialData ERROR: ' .. tostring(result) .. '^7') end
         local pMoney = 0
         if Player then
             pMoney = Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash') or 0
@@ -600,6 +600,13 @@ lib.callback.register('aurp_trucker:retrieveVehicle', function(source, plate)
     local citizenId = Framework.GetCitizenId(Player)
     local company = CompanyService.GetByMember(citizenId)
     if not company then return { success = false, error = 'Sem empresa' } end
+    if type(plate) ~= 'string' or plate == '' or #plate > 12 then return { success = false, error = 'Placa inválida' } end
+
+    -- Role check: apenas owner/manager retiram veículos da frota da empresa
+    local member = DB_GetMember(citizenId)
+    if not member or (member.role ~= 'owner' and member.role ~= 'manager') then
+        return { success = false, error = 'Sem permissão' }
+    end
 
     -- Verificar se o veículo pertence à empresa
     local vehicles = DB_GetVehicles(company.id) or {}
@@ -629,6 +636,13 @@ lib.callback.register('aurp_trucker:storeVehicle', function(source, plate)
     local citizenId = Framework.GetCitizenId(Player)
     local company = CompanyService.GetByMember(citizenId)
     if not company then return { success = false, error = 'Sem empresa' } end
+    if type(plate) ~= 'string' or plate == '' or #plate > 12 then return { success = false, error = 'Placa inválida' } end
+
+    -- Role check: apenas owner/manager guardam veículos da frota da empresa
+    local member = DB_GetMember(citizenId)
+    if not member or (member.role ~= 'owner' and member.role ~= 'manager') then
+        return { success = false, error = 'Sem permissão' }
+    end
 
     local vehicles = DB_GetVehicles(company.id) or {}
     for _, v in ipairs(vehicles) do
@@ -847,6 +861,9 @@ end)
 lib.callback.register('aurp_trucker:purchaseSkill', function(source, data)
     local Player = Framework.GetPlayer(source)
     if not Player then return { success = false, error = 'Jogador não encontrado' } end
+    if type(data) ~= 'table' or type(data.skillType) ~= 'string' or #data.skillType > 32 then
+        return { success = false, error = 'Dados inválidos' }
+    end
     local ok, err = ProgressionService.PurchaseSkill(source, Framework.GetCitizenId(Player), data.skillType)
     if ok then
         return { success = true }
@@ -1054,6 +1071,9 @@ lib.callback.register('aurp_trucker:getIllegalJobs', function(source, contactId)
     return options
 end)
 
+-- Lock em memória do início de job ilegal (por citizenid)
+local IllegalAcceptBusy = {}
+
 -- Aceita um job ilegal específico do contato
 lib.callback.register('aurp_trucker:acceptIllegalJob', function(source, contactId, illegalType)
     if not IllegalService then return { success = false, reason = 'Serviço indisponível' } end
@@ -1062,24 +1082,51 @@ lib.callback.register('aurp_trucker:acceptIllegalJob', function(source, contactI
     if not Player then return { success = false } end
     local cid = Framework.GetCitizenId(Player)
 
-    -- Validar: sem job ativo
-    if DB_GetActiveJobByPlayer(cid) then
-        return { success = false, reason = 'Você já tem um trabalho ativo' }
+    -- Validar contato: precisa existir, o tipo de carga precisa ser um dos que o contato oferece
+    -- e o jogador precisa estar próximo do contato (não confia no contactId/illegalType do client)
+    if type(contactId) ~= 'string' or type(illegalType) ~= 'string' then
+        return { success = false, reason = 'Dados inválidos' }
     end
-
-    local result = IllegalService.Generate(contactId, illegalType, source)
-    if not result then return { success = false, reason = 'Trabalho indisponível agora' } end
-
-    -- Alerta para cops/SALA após aceite
     local contact = nil
     for _, c in ipairs(Config.IllegalJobs.contacts) do
         if c.id == contactId then contact = c; break end
     end
-    if contact then
-        IllegalService.BroadcastAlert(source, illegalType, contact.area)
+    if not contact then return { success = false, reason = 'Contato inválido' } end
+    local cargoAllowed = false
+    for _, ct in ipairs(contact.cargo or {}) do
+        if ct == illegalType then cargoAllowed = true break end
+    end
+    if not cargoAllowed then return { success = false, reason = 'Carga não oferecida por este contato' } end
+    local pPed = GetPlayerPed(source)
+    if not pPed or pPed == 0 or not DoesEntityExist(pPed) then return { success = false } end
+    if contact.coords and #(GetEntityCoords(pPed) - contact.coords) > math.max(25.0, (contact.radius or 5.0) * 4.0) then
+        return { success = false, reason = 'Você está longe demais do contato' }
     end
 
-    return { success = true, jobData = result }
+    -- Início atômico: lock em memória por jogador impede dois jobs simultâneos
+    -- (a checagem do DB + Generate cedem a thread; sem o lock ambos passariam)
+    if IllegalAcceptBusy[cid] then
+        return { success = false, reason = 'Aguarde...' }
+    end
+    IllegalAcceptBusy[cid] = true
+
+    local okRun, result = pcall(function()
+        -- Validar: sem job ativo
+        if DB_GetActiveJobByPlayer(cid) then
+            return { success = false, reason = 'Você já tem um trabalho ativo' }
+        end
+
+        local generated = IllegalService.Generate(contactId, illegalType, source)
+        if not generated then return { success = false, reason = 'Trabalho indisponível agora' } end
+
+        -- Alerta para cops/SALA após aceite
+        IllegalService.BroadcastAlert(source, illegalType, contact.area)
+
+        return { success = true, jobData = generated }
+    end)
+    IllegalAcceptBusy[cid] = nil
+    if not okRun then return { success = false, reason = 'Trabalho indisponível agora' } end
+    return result
 end)
 
 -- =====================================================
@@ -1146,6 +1193,11 @@ lib.callback.register('aurp_trucker:trainNpcDriver', function(source, driverId)
     local company   = CompanyService.GetByMember(citizenId)
     if not company then return { success = false, reason = 'Sem empresa' } end
 
+    local member = DB_GetMember(citizenId)
+    if not member or (member.role ~= 'owner' and member.role ~= 'manager') then
+        return { success = false, reason = 'Apenas owner/manager podem treinar motoristas' }
+    end
+
     local ok, result = NpcDriverService.Train(source, company.id, driverId)
     return { success = ok, reason = not ok and result or nil, newSkill = ok and result or nil }
 end)
@@ -1167,65 +1219,161 @@ lib.callback.register('aurp_trucker:setNpcAllowIllegal', function(source, allowe
 end)
 
 lib.callback.register('aurp_trucker:npcRespondEvent', function(source, eventId, response)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+    local citizenId = Framework.GetCitizenId(Player)
+    local company   = CompanyService.GetByMember(citizenId)
+    if not company then return { success = false, reason = 'Sem empresa' } end
+
+    local member = DB_GetMember(citizenId)
+    if not member or (member.role ~= 'owner' and member.role ~= 'manager') then
+        return { success = false, reason = 'Sem permissão' }
+    end
+
+    -- O evento precisa pertencer à empresa do jogador
+    local pending = VP_Trucker.PendingEvents[eventId]
+    if not pending or not pending.npcJob or pending.npcJob.company_id ~= company.id then
+        return { success = false, reason = 'Evento não encontrado' }
+    end
+    if type(response) ~= 'string' or #response > 16 then
+        return { success = false, reason = 'Resposta inválida' }
+    end
+
     local result = NpcDriverService.RespondToEvent(source, eventId, response)
     return result
 end)
 
 -- ADR Certifications (v11.0.0)
 
+-- Exame ADR: o servidor fixa o conjunto de perguntas por tentativa e só aceita esse conjunto.
+local ADR_EXAM_QUESTIONS = 3                -- nº de perguntas por exame (todas DISTINTAS)
+local ADR_EXAM_SET_TTL   = 900              -- s: validade do conjunto sorteado
+local AdrExamSets = {}                      -- [citizenid_adrType] = { qIdxs = {..}, at = os.time() }
+local AdrExamBusy = {}                      -- [citizenid_adrType] = true durante a avaliação
+
+-- Sorteia (server-side) as perguntas do exame e as guarda por jogador/tipo.
+-- Retorna as perguntas SEM o gabarito. O client atual sorteia localmente (compatível: ver submit).
+lib.callback.register('aurp_trucker:getAdrExamQuestions', function(source, adrType)
+    local Player = Framework.GetPlayer(source)
+    if not Player then return { success = false } end
+    local citizenId = Framework.GetCitizenId(Player)
+    if type(adrType) ~= 'string' or not Config.Adr.ExamCost[adrType] then
+        return { success = false, reason = 'Tipo ADR inválido' }
+    end
+    local bank = Config.Adr.Questions[adrType]
+    if type(bank) ~= 'table' or #bank < ADR_EXAM_QUESTIONS then
+        return { success = false, reason = 'Banco de questões insuficiente' }
+    end
+
+    local idxs, used = {}, {}
+    while #idxs < ADR_EXAM_QUESTIONS do
+        local idx = math.random(1, #bank)
+        if not used[idx] then used[idx] = true; idxs[#idxs + 1] = idx end
+    end
+    AdrExamSets[citizenId .. '_' .. adrType] = { qIdxs = idxs, at = os.time() }
+
+    local out = {}
+    for _, idx in ipairs(idxs) do
+        out[#out + 1] = { qIdx = idx, q = bank[idx].q, options = bank[idx].options }
+    end
+    return { success = true, questions = out }
+end)
+
 lib.callback.register('aurp_trucker:submitAdrExam', function(source, data)
     local Player = Framework.GetPlayer(source)
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
     local citizenId = Framework.GetCitizenId(Player)
-    local adrType   = data and data.adrType
+    if type(data) ~= 'table' then return { success = false, reason = 'Dados inválidos' } end
+    local adrType   = data.adrType
 
     -- Validar tipo
-    if not Config.Adr.ExamCost[adrType] then
+    if type(adrType) ~= 'string' or not Config.Adr.ExamCost[adrType] then
         return { success = false, reason = 'Tipo ADR inválido' }
     end
 
-    -- 1. Verificar cooldown
-    local key     = citizenId .. '_' .. adrType
-    local now     = os.time()
-    local cooldown = VP_Trucker.AdrExamCooldowns[key]
-    if cooldown and now < cooldown then
-        return { success = false, reason = 'retry_cooldown', remainingSeconds = cooldown - now }
+    local key = citizenId .. '_' .. adrType
+    if AdrExamBusy[key] then
+        return { success = false, reason = 'Exame em andamento' }
     end
 
-    -- 2. Verificar se já possui cert válida
-    if AdrService.HasCert(citizenId, adrType) then
-        return { success = false, reason = 'Você já possui esta certificação' }
-    end
-
-    -- 3. Deduzir taxa do exame
-    local cost    = Config.Adr.ExamCost[adrType]
-    local removed = Framework.RemoveMoney(Player, 'bank', cost, 'adr-exam')
-    if not removed then
-        return { success = false, reason = 'Saldo bancário insuficiente' }
-    end
-
-    -- 4. Avaliar respostas (data.answers = { [questionIndex] = selectedOptionIndex })
-    local questions = data.questions  -- { { qIdx, answer } } — índices das perguntas e respostas do player
+    -- 0. Validar payload ANTES de cobrar: exatamente N perguntas DISTINTAS e válidas
     local bank      = Config.Adr.Questions[adrType]
-    local correct   = 0
-    if questions and bank then
-        for _, qa in ipairs(questions) do
+    local questions = data.questions
+    if type(bank) ~= 'table' or type(questions) ~= 'table' or #questions ~= ADR_EXAM_QUESTIONS then
+        return { success = false, reason = 'Exame inválido' }
+    end
+    local seen, submitted = {}, {}
+    for i = 1, ADR_EXAM_QUESTIONS do
+        local qa = questions[i]
+        if type(qa) ~= 'table' then return { success = false, reason = 'Exame inválido' } end
+        local qIdx = tonumber(qa.qIdx)
+        local ans  = tonumber(qa.answer)
+        if not qIdx or qIdx ~= qIdx or qIdx % 1 ~= 0 or qIdx < 1 or qIdx > #bank or seen[qIdx] then
+            return { success = false, reason = 'Exame inválido' }
+        end
+        if not ans or ans ~= ans or ans % 1 ~= 0 or ans < 0 or ans > 10 then
+            return { success = false, reason = 'Exame inválido' }
+        end
+        seen[qIdx] = true
+        submitted[#submitted + 1] = { qIdx = qIdx, answer = ans }
+    end
+
+    -- Se o servidor sorteou o conjunto (getAdrExamQuestions), só ele é aceito (uso único)
+    local issued = AdrExamSets[key]
+    if issued then
+        if (os.time() - issued.at) > ADR_EXAM_SET_TTL then
+            AdrExamSets[key] = nil
+            return { success = false, reason = 'Exame expirado' }
+        end
+        for _, qi in ipairs(issued.qIdxs) do
+            if not seen[qi] then return { success = false, reason = 'Exame inválido' } end
+        end
+    end
+
+    AdrExamBusy[key] = true
+    local okRun, res = pcall(function()
+        -- 1. Verificar cooldown
+        local now     = os.time()
+        local cooldown = VP_Trucker.AdrExamCooldowns[key]
+        if cooldown and now < cooldown then
+            return { success = false, reason = 'retry_cooldown', remainingSeconds = cooldown - now }
+        end
+
+        -- 2. Verificar se já possui cert válida
+        if AdrService.HasCert(citizenId, adrType) then
+            return { success = false, reason = 'Você já possui esta certificação' }
+        end
+
+        -- 3. Deduzir taxa do exame
+        local cost    = Config.Adr.ExamCost[adrType]
+        local removed = Framework.RemoveMoney(Player, 'bank', cost, 'adr-exam')
+        if not removed then
+            return { success = false, reason = 'Saldo bancário insuficiente' }
+        end
+        AdrExamSets[key] = nil -- conjunto consumido
+
+        -- 4. Avaliar respostas (gabarito SEMPRE do servidor; correção enviada pelo client é ignorada)
+        local correct = 0
+        for _, qa in ipairs(submitted) do
             local q = bank[qa.qIdx]
             if q and qa.answer == q.answer then
                 correct = correct + 1
             end
         end
-    end
 
-    -- 5. Resultado
-    if correct >= 2 then
-        local expiresAt = AdrService.GrantCert(citizenId, adrType)
-        return { success = true, passed = true, expiresAt = expiresAt }
-    else
-        -- 6. Reprovar: registrar cooldown (dinheiro NÃO devolvido)
-        VP_Trucker.AdrExamCooldowns[key] = now + Config.Adr.RetryCooldownSeconds
-        return { success = true, passed = false, correct = correct }
-    end
+        -- 5. Resultado
+        if correct >= 2 then
+            local expiresAt = AdrService.GrantCert(citizenId, adrType)
+            return { success = true, passed = true, expiresAt = expiresAt }
+        else
+            -- 6. Reprovar: registrar cooldown (dinheiro NÃO devolvido)
+            VP_Trucker.AdrExamCooldowns[key] = now + Config.Adr.RetryCooldownSeconds
+            return { success = true, passed = false, correct = correct }
+        end
+    end)
+    AdrExamBusy[key] = nil
+    if not okRun then return { success = false, reason = 'Erro ao processar o exame' } end
+    return res
 end)
 
 lib.callback.register('aurp_trucker:renewAdrCert', function(source, adrType)
@@ -1323,6 +1471,7 @@ lib.callback.register('aurp_trucker:completeTradePoint', function(source, data)
     if not Player then return { success = false } end
     local citizenId = Framework.GetCitizenId(Player)
 
+    if type(data) ~= 'table' then return { success = false, reason = 'Dados inválidos' } end
     local rental = ForkliftService.GetRental(citizenId)
     if not rental or rental.mode ~= 'tradepoint' or rental.locationId ~= tostring(data.locationId or '') then
         return { success = false, reason = 'Missão inválida' }
@@ -1335,10 +1484,11 @@ lib.callback.register('aurp_trucker:completeTradePoint', function(source, data)
     -- Usar os.time() aqui garante que o client não pode manipular o speedMult enviando elapsedSeconds = 0
     local elapsedSeconds = os.time() - (rental.rentedAt or os.time())
     local payment = ForkliftService.CompleteTradePoint(citizenId, rental.locationId, elapsedSeconds)
-    Framework.AddMoney(Player, 'bank', payment, 'forklift-tradepoint')
 
-    -- Cleanup SEM refund: missão concluída, forklift "devolvido" implicitamente
+    -- Claim ANTES de pagar: Cleanup remove o aluguel de forma síncrona, então chamadas
+    -- concorrentes caem em 'Missão inválida' e o pagamento acontece uma única vez
     ForkliftService.Cleanup(citizenId)
+    Framework.AddMoney(Player, 'bank', payment, 'forklift-tradepoint')
 
     return { success = true, payment = payment }
 end)
@@ -1504,48 +1654,66 @@ lib.callback.register('aurp_trucker:getLicenses', function(source)
     }
 end)
 
+local LICENSE_TYPES = { adr = 'adr_certified', heavy = 'heavy_certified' }
+local LicenseExamBusy = {}
+
 lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseType)
     local Player = Framework.GetPlayer(source)
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
     local citizenId = Framework.GetCitizenId(Player)
 
+    -- Whitelist do tipo de licença (também define a coluna usada no INSERT)
+    if type(licenseType) ~= 'string' or not LICENSE_TYPES[licenseType] then
+        return { success = false, reason = 'Licença inexistente' }
+    end
+    local colName = LICENSE_TYPES[licenseType]
     local cfg = Config.Licenses and Config.Licenses[licenseType]
     if not cfg then
         return { success = false, reason = 'Licença inexistente' }
     end
 
-    local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
-    local pLevel = truckerRow and truckerRow.level or 1
-    if pLevel < (cfg.minLevel or 1) then
-        return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel) }
+    if LicenseExamBusy[citizenId] then
+        return { success = false, reason = 'Aguarde...' }
     end
+    LicenseExamBusy[citizenId] = true
 
-    local fee = cfg.examFee or 1000
-    local hasMoney = false
-    if exports.qbx_core then
-        hasMoney = exports.qbx_core:RemoveMoney(source, 'bank', fee, 'trucker-license-fee')
-        if not hasMoney then
-            hasMoney = exports.qbx_core:RemoveMoney(source, 'cash', fee, 'trucker-license-fee')
+    local okRun, res = pcall(function()
+        local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
+        local pLevel = truckerRow and truckerRow.level or 1
+        if pLevel < (cfg.minLevel or 1) then
+            return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel or 1) }
         end
-    else
-        hasMoney = Framework.RemoveMoney(Player, 'bank', fee, 'trucker-license-fee')
-    end
 
-    if not hasMoney then
-        return { success = false, reason = ('Saldo insuficiente para a taxa de exame ($%d)'):format(fee) }
-    end
+        -- Quem já possui a licença não paga novamente
+        local owned = MySQL.single.await(('SELECT %s AS has FROM trucker_licenses WHERE citizenid = ?'):format(colName), { citizenId })
+        if owned and owned.has == 1 then
+            return { success = false, reason = 'Você já possui esta certificação' }
+        end
 
-    local colName = (licenseType == 'adr') and 'adr_certified' or 'heavy_certified'
-    MySQL.query.await(([[
-        INSERT INTO trucker_licenses (citizenid, %s)
-        VALUES (?, 1)
-        ON DUPLICATE KEY UPDATE %s = 1
-    ]]):format(colName, colName), { citizenId })
+        local fee = cfg.examFee or 1000
+        local hasMoney = Framework.RemoveMoney(Player, 'bank', fee, 'trucker-license-fee')
+        if not hasMoney then
+            hasMoney = Framework.RemoveMoney(Player, 'cash', fee, 'trucker-license-fee')
+        end
 
-    return {
-        success = true,
-        message = ('Aprovado no exame! Certificado %s emitido com sucesso.'):format(cfg.name)
-    }
+        if not hasMoney then
+            return { success = false, reason = ('Saldo insuficiente para a taxa de exame ($%d)'):format(fee) }
+        end
+
+        MySQL.query.await(([[
+            INSERT INTO trucker_licenses (citizenid, %s)
+            VALUES (?, 1)
+            ON DUPLICATE KEY UPDATE %s = 1
+        ]]):format(colName, colName), { citizenId })
+
+        return {
+            success = true,
+            message = ('Aprovado no exame! Certificado %s emitido com sucesso.'):format(cfg.name)
+        }
+    end)
+    LicenseExamBusy[citizenId] = nil
+    if not okRun then return { success = false, reason = 'Erro ao processar o exame' } end
+    return res
 end)
 
 lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)

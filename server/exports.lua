@@ -25,24 +25,28 @@ end)
 -- @param citizenId string
 -- @return table|nil { jobId, originName, destName, cargoItem, trailerModel, payment, acceptedAt }
 exports('GetPlayerActiveJob', function(citizenId)
+    if not JobService or type(citizenId) ~= 'string' then return nil end
     return JobService.GetActiveByPlayer(citizenId)
 end)
 
 -- Manifesto de transporte (documento para fiscalização física)
 -- @return table|nil { cargo, trailerModel, origin, destination, companyName, issuedAt }
 exports('GetJobManifest', function(citizenId)
+    if not JobService or type(citizenId) ~= 'string' then return nil end
     return JobService.GetManifest(citizenId)
 end)
 
 -- Dados da empresa para auditoria SALA
 -- @return table|nil { id, name, ownerCitizenId, balance, is_recruiting }
 exports('GetCompanyInfo', function(companyId)
+    if not CompanyService then return nil end
     return CompanyService.Get(companyId)
 end)
 
 -- Empresa de um jogador
 -- @return table|nil
 exports('GetPlayerCompany', function(citizenId)
+    if not CompanyService or type(citizenId) ~= 'string' then return nil end
     return CompanyService.GetByMember(citizenId)
 end)
 
@@ -51,12 +55,14 @@ end)
 -- @param issuedBy citizenid do inspetor OU 'vp-sala:auto'
 -- @return boolean
 exports('RecordInfraction', function(citizenId, infractionType, reason, issuedBy)
+    if not JobService or type(citizenId) ~= 'string' or type(infractionType) ~= 'string' then return false end
     return JobService.RecordInfraction(citizenId, infractionType, reason, issuedBy)
 end)
 
 -- Histórico de infrações para MDT SALA
 -- @return table[]
 exports('GetInfractions', function(citizenId)
+    if type(citizenId) ~= 'string' or not DB_GetInfractions then return {} end
     return DB_GetInfractions(citizenId)
 end)
 
@@ -67,12 +73,14 @@ end)
 -- Último combustível sincronizado do jogador (0–100)
 -- Use quando Config.TruckSimulation.HUD.Enabled = false e tiver HUD própria
 exports('GetPlayerFuel', function(source)
+    if not TruckSimulationService then return 100.0 end
     local state = TruckSimulationService.GetState(source)
     return state and state.lastFuel or 100.0
 end)
 
 -- Última fadiga sincronizada do jogador (0–100)
 exports('GetPlayerFatigue', function(source)
+    if not TruckSimulationService then return 0.0 end
     local state = TruckSimulationService.GetState(source)
     return state and state.lastFatigue or 0.0
 end)
@@ -84,7 +92,7 @@ end)
 --- Returns active crude oil job for a given vehicle plate.
 --- Used by vp-sala (via pcall) to verify manifest during transport checks.
 exports('GetActiveJobByPlate', function(plate)
-    if not plate then return nil end
+    if type(plate) ~= 'string' or not GetActiveCrudeJobByPlate then return nil end
     local job = GetActiveCrudeJobByPlate(plate)
     if not job then return nil end
     return {
