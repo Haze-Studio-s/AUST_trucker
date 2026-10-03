@@ -358,29 +358,19 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         false, false, false, false, 2, true
     )
 
-    -- BLINDAGEM HAVOK & COLISÃO COM O JOGADOR (Decisão do Usuário):
-    -- Mantém colisão ativa com o jogador (o player NÃO atravessa o palete e pode subir nele).
-    -- CRUCIAL: Congelar a entidade (FreezeEntityPosition = true) impede que o Havok calcule forças dinâmicas/torque de separação!
+    -- BLINDAGEM HAVOK & ESTIVA SEGURA (Decisão do Usuário - v20.8.0):
+    -- NUNCA congelar entidade anexada a veículo (FreezeEntityPosition = true em entidade com Attach causa
+    -- conflito de restrição de coordenadas no Havok, gerando impulsos gigantescos que catapultam veículos).
+    -- Mantém a carga imóvel relativamente ao reboque via Dynamic/Gravity false sem afetar a suspensão.
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
-    FreezeEntityPosition(palletEntity, true)
+    FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
     SetEntityCollision(palletEntity, false, false)
     SetCanClimbOnEntity(palletEntity, false)
 
-    -- Drenagem de velocidades residuais para estancar impulsos Havok acumulados
-    if targetTrailer and DoesEntityExist(targetTrailer) then
-        SetEntityVelocity(targetTrailer, 0.0, 0.0, 0.0)
-        SetVehicleForwardSpeed(targetTrailer, 0.0)
-    end
-    local currentForklift = ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
-    if currentForklift and DoesEntityExist(currentForklift) then
-        SetEntityVelocity(currentForklift, 0.0, 0.0, 0.0)
-        SetVehicleForwardSpeed(currentForklift, 0.0)
-    end
-
-    -- Isolamento seletivo rigoroso contra o trailer e o caminhão
+    -- Isolamento seletivo rigoroso do palete contra o trailer e o caminhão
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
     local truck = _G.JobEntities and _G.JobEntities.truck
@@ -389,13 +379,25 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         SetEntityNoCollisionEntity(truck, palletEntity, false)
     end
 
-    -- BLINDAGEM ANTI-CLIPPING FORKLIFT (Decisão A1 do Usuário):
-    -- NUNCA desligar a colisão entre currentForklift e targetTrailer!
-    -- A empilhadeira opera sobre a prancha metálica da carreta e precisa manter suporte físico sólido.
-    -- Desativa-se temporariamente apenas o contato entre os garfos da empilhadeira e o palete.
+    -- BLINDAGEM ANTI-CLIPPING FORKLIFT (Decisões A1, A2 e A3 do Usuário):
+    -- NUNCA forçar SetEntityVelocity(forklift, 0,0,0) ou desligar a colisão entre currentForklift e targetTrailer!
+    -- A empilhadeira opera sobre a prancha metálica da carreta e precisa manter suporte físico sólido e suspensão raycast ativa.
+    -- Desativa-se o contato entre a empilhadeira e o palete recém-assentado para desacoplamento suave sem tração.
+    local currentForklift = ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
     if currentForklift and DoesEntityExist(currentForklift) then
         SetEntityNoCollisionEntity(palletEntity, currentForklift, false)
         SetEntityNoCollisionEntity(currentForklift, palletEntity, false)
+
+        -- Supressão de Input de Descida por 800ms: impede que o condutor force a ponta dos garfos contra a chapa do assoalho
+        CreateThread(function()
+            local endSuppression = GetGameTimer() + 800
+            while GetGameTimer() < endSuppression do
+                DisableControlAction(0, 110, true) -- INPUT_VEH_FLY_PITCH_DOWN (Ctrl)
+                DisableControlAction(0, 61, true)  -- INPUT_VEH_SUB_PITCH_DOWN
+                DisableControlAction(0, 72, true)  -- INPUT_VEH_BRAKE
+                Wait(0)
+            end
+        end)
 
         CreateThread(function()
             local pEnt = palletEntity
