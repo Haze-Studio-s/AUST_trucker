@@ -118,20 +118,54 @@ function AdminService.SeedDefaultRoutes()
     end
 end
 
+function AdminService.SeedDefaultProps()
+    local count = MySQL.scalar.await('SELECT COUNT(*) FROM aust_trucker_homologated_props') or 0
+    if count > 0 then return end
+
+    local defaultList = {
+        { model_hash = 'hei_prop_carrier_cargo_04b', name = 'Contêiner Grande Seco', cargo_category = 'dry', offset_z = 0.0 },
+        { model_hash = 'm24_1_prop_m24_1_carrier_cargo_04a', name = 'Carga Marítima M24', cargo_category = 'dry', offset_z = 0.0 },
+        { model_hash = 'prop_boxpile_02b', name = 'Pilhas de Caixas Frágeis', cargo_category = 'fragile', offset_z = 0.0 },
+        { model_hash = 'prop_boxpile_06a', name = 'Caixas de Alta Densidade', cargo_category = 'dry', offset_z = 0.0 },
+        { model_hash = 'prop_barrel_exp_01a', name = 'Barris Explosivos ADR', cargo_category = 'adr', offset_z = 0.0 },
+        { model_hash = 'prop_rub_crate_01', name = 'Carga de Valiosos Blindada', cargo_category = 'valuable', offset_z = 0.0 },
+        { model_hash = 'prop_wood_pallet_01', name = 'Palete de Madeira Padrão', cargo_category = 'dry', offset_z = 0.0 }
+    }
+
+    for _, p in ipairs(defaultList) do
+        MySQL.query.await([[
+            INSERT IGNORE INTO aust_trucker_homologated_props
+            (model_hash, name, cargo_category, offset_x, offset_y, offset_z, heading)
+            VALUES (?, ?, ?, 0.0, 0.0, ?, 0.0)
+        ]], { p.model_hash, p.name, p.cargo_category, p.offset_z })
+    end
+end
+
 function AdminService.ReloadHomologatedProps()
     local props = MySQL.query.await('SELECT * FROM aust_trucker_homologated_props') or {}
     local propMap = {}
+    local propList = {}
     for _, p in ipairs(props) do
-        propMap[p.model_hash] = {
+        local m = tostring(p.model_hash):lower()
+        local item = {
             id = p.id,
-            model_hash = p.model_hash,
+            model_hash = m,
+            prop_model = m,
             name = p.name,
+            label = p.name,
             cargo_category = p.cargo_category,
+            category = p.cargo_category,
+            offset_x = tonumber(p.offset_x) or 0.0,
+            offset_y = tonumber(p.offset_y) or 0.0,
+            offset_z = tonumber(p.offset_z) or 0.0,
+            heading = tonumber(p.heading) or 0.0,
             offset = { x = tonumber(p.offset_x) or 0.0, y = tonumber(p.offset_y) or 0.0, z = tonumber(p.offset_z) or 0.0, heading = tonumber(p.heading) or 0.0 }
         }
+        propMap[m] = item
+        table.insert(propList, item)
     end
     AdminService.HomologatedProps = propMap
-    return propMap
+    return propList, propMap
 end
 
 function AdminService.LoadAll()
@@ -170,7 +204,8 @@ function AdminService.LoadAll()
         -- 3. Carrega Offsets de Reboques Mapeados Visualmente
         local offsetMap = AdminService.ReloadTrailerOffsets()
 
-        -- 4. Carrega Props Homologados
+        -- 4. Carrega Props Homologados (com auto-seed inicial se vazio)
+        AdminService.SeedDefaultProps()
         AdminService.ReloadHomologatedProps()
 
         -- 5. Carrega NPCs Despachantes
@@ -521,14 +556,17 @@ end)
 -- 4. HOMOLOGAÇÃO DE CARGAS & PROPS
 RegisterNetEvent('aurp_trucker:server:adminSaveHomologatedProp', function(propData)
     local src = source
-    if not AdminService.IsPlayerAdmin(src) or not propData or not propData.modelHash then return end
+    if not AdminService.IsPlayerAdmin(src) or not propData then return end
 
-    local modelHash = tostring(propData.modelHash):lower()
-    local name = tostring(propData.name or modelHash)
-    local category = tostring(propData.category or 'dry')
-    local ox = tonumber(propData.x) or 0.0
-    local oy = tonumber(propData.y) or 0.0
-    local oz = tonumber(propData.z) or 0.0
+    local rawModel = propData.modelHash or propData.prop_model or propData.model
+    if not rawModel or rawModel == '' then return end
+
+    local modelHash = tostring(rawModel):lower():gsub('^%s*(.-)%s*$', '%1')
+    local name = tostring(propData.name or propData.label or modelHash):gsub('^%s*(.-)%s*$', '%1')
+    local category = tostring(propData.category or propData.cargo_category or 'dry'):lower()
+    local ox = tonumber(propData.x or propData.offset_x) or 0.0
+    local oy = tonumber(propData.y or propData.offset_y) or 0.0
+    local oz = tonumber(propData.z or propData.offset_z) or 0.0
     local heading = tonumber(propData.heading) or 0.0
 
     MySQL.query.await([[
@@ -540,19 +578,20 @@ RegisterNetEvent('aurp_trucker:server:adminSaveHomologatedProp', function(propDa
         offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z), heading = VALUES(heading)
     ]], { modelHash, name, category, ox, oy, oz, heading })
 
-    local props = AdminService.ReloadHomologatedProps()
-    TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, props)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Prop Homologado', description = ('Carga "%s" (%s) homologada e liberada para rotas!'):format(name, modelHash), type = 'success' })
+    local propsList = AdminService.ReloadHomologatedProps()
+    TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, propsList)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Prop Homologado', description = ('Carga "%s" (%s) homologada e salva no banco!'):format(name, modelHash), type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteHomologatedProp', function(modelHash)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or not modelHash then return end
 
-    MySQL.query.await('DELETE FROM aust_trucker_homologated_props WHERE model_hash = ?', { tostring(modelHash):lower() })
-    local props = AdminService.ReloadHomologatedProps()
-    TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, props)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Prop desomologado e removido do catálogo.', type = 'info' })
+    local m = tostring(modelHash):lower():gsub('^%s*(.-)%s*$', '%1')
+    MySQL.query.await('DELETE FROM aust_trucker_homologated_props WHERE LOWER(model_hash) = ?', { m })
+    local propsList = AdminService.ReloadHomologatedProps()
+    TriggerClientEvent('aurp_trucker:client:adminSyncProps', -1, propsList)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Prop "%s" desomologado e removido do catálogo.'):format(m), type = 'info' })
 end)
 
 -- 5. PASTAS E DRAG-AND-DROP DE SPAWNS

@@ -157,6 +157,12 @@
           renderOffsetsTab();
         }
         break;
+      case 'admin_update_props':
+        if (item.props) {
+          adminData.homologatedProps = normalizeProps(item.props);
+          renderPropsTab();
+        }
+        break;
       case 'admin_spawn_coords_calibrated':
         if (item.coords) {
           const sx = document.getElementById('spawn-form-x');
@@ -198,6 +204,32 @@
     }).then(res => res.json()).catch(() => ({}));
   }
 
+  function normalizeProps(raw) {
+    if (!raw) return [];
+    const list = Array.isArray(raw) ? raw : Object.values(raw);
+    const seen = {};
+    const res = [];
+    list.forEach(p => {
+      if (!p) return;
+      const model = (p.prop_model || p.model_hash || p.model || '').toLowerCase().trim();
+      if (!model || seen[model]) return;
+      seen[model] = true;
+      res.push({
+        id: p.id,
+        prop_model: model,
+        modelHash: model,
+        model: model,
+        label: p.label || p.name || model,
+        name: p.label || p.name || model,
+        category: (p.category || p.cargo_category || 'dry').toLowerCase(),
+        cargo_category: (p.category || p.cargo_category || 'dry').toLowerCase(),
+        offset_z: parseFloat(p.offset_z != null ? p.offset_z : (p.offset ? p.offset.z : 0.0)) || 0.0,
+        z: parseFloat(p.offset_z != null ? p.offset_z : (p.offset ? p.offset.z : 0.0)) || 0.0
+      });
+    });
+    return res;
+  }
+
   function openAdminPanel(data) {
     if (data) {
       adminData = {
@@ -206,7 +238,7 @@
         trailerOffsets: data.trailerOffsets || data.offsets || {},
         npcs: data.npcs || {},
         economy: data.economy || {},
-        homologatedProps: data.homologatedProps || [],
+        homologatedProps: normalizeProps(data.homologatedProps || data.props || []),
         defaultProps: data.defaultProps || []
       };
     }
@@ -684,22 +716,19 @@
     if (!grid) return;
     grid.innerHTML = '';
 
-    const homologated = adminData.homologatedProps || [];
-    const defaultList = [
-      { prop_model: 'hei_prop_carrier_cargo_04b', label: 'Contêiner Grande Seco', category: 'dry', offset_z: 0.0 },
-      { prop_model: 'm24_1_prop_m24_1_carrier_cargo_04a', label: 'Carga Marítima M24', category: 'dry', offset_z: 0.0 },
-      { prop_model: 'prop_boxpile_02b', label: 'Pilhas de Caixas Frágeis', category: 'fragile', offset_z: 0.0 },
-      { prop_model: 'prop_boxpile_06a', label: 'Caixas de Alta Densidade', category: 'dry', offset_z: 0.0 },
-      { prop_model: 'prop_barrel_exp_01a', label: 'Barris Explosivos ADR', category: 'adr', offset_z: 0.0 },
-      { prop_model: 'prop_rub_crate_01', label: 'Carga de Valiosos Blindada', category: 'valuable', offset_z: 0.0 },
-      { prop_model: 'prop_wood_pallet_01', label: 'Palete de Madeira Padrão', category: 'dry', offset_z: 0.0 }
-    ];
+    const list = normalizeProps(adminData.homologatedProps || []);
 
-    const map = {};
-    defaultList.forEach(p => { map[p.prop_model] = p; });
-    homologated.forEach(p => { map[p.prop_model] = p; });
+    if (list.length === 0) {
+      grid.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; color: var(--admin-text-muted); padding: 40px; font-size: 13px;">
+          <i class="fas fa-boxes" style="font-size: 28px; opacity: 0.3; margin-bottom: 8px; display: block;"></i>
+          Nenhum prop de carga cadastrado no momento. Use o formulário acima para adicionar um novo modelo 3D.
+        </div>
+      `;
+      return;
+    }
 
-    Object.values(map).forEach(p => {
+    list.forEach(p => {
       const card = document.createElement('div');
       card.className = 'admin-card';
       card.style.display = 'flex';
@@ -722,7 +751,7 @@
           Modelo: <span style="color:#fff;">${escapeHtml(p.prop_model)}</span> | Offset Z: ${Number(p.offset_z || 0).toFixed(2)}
         </div>
         <div style="display:flex; justify-content:space-between; gap:8px; margin-top:8px;">
-          <button class="admin-btn admin-btn-danger btn-del-prop" data-model="${escapeHtml(p.prop_model)}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-trash"></i></button>
+          <button class="admin-btn admin-btn-danger btn-del-prop" data-model="${escapeHtml(p.prop_model)}" style="padding: 4px 10px; font-size:11px;" title="Remover Homologação"><i class="fas fa-trash"></i></button>
           <button class="admin-btn admin-btn-outline btn-use-prop" data-prop="${escapeHtml(p.prop_model)}" style="padding: 4px 12px; font-size:11px;">Usar no Trailer</button>
         </div>
       `;
@@ -740,11 +769,14 @@
     grid.querySelectorAll('.btn-del-prop').forEach(btn => {
       btn.addEventListener('click', function () {
         const model = this.getAttribute('data-model');
-        showConfirmModal('Remover Homologação', `Deseja remover a homologação do modelo "${model}"?`, () => {
+        showConfirmModal('Remover Homologação', `Deseja desomologar e remover o modelo "${model}"?`, () => {
           postNUI('adminDeleteHomologatedProp', { prop_model: model });
-          adminData.homologatedProps = adminData.homologatedProps.filter(p => p.prop_model !== model);
+          adminData.homologatedProps = (adminData.homologatedProps || []).filter(p => {
+            const m = (p.prop_model || p.model_hash || '').toLowerCase();
+            return m !== model.toLowerCase();
+          });
           renderPropsTab();
-          showAdminToast(`Modelo "${model}" desvinculado.`);
+          showAdminToast(`Modelo "${model}" desvinculado com sucesso.`);
         });
       });
     });
@@ -757,17 +789,35 @@
       return;
     }
 
+    const labelVal = document.getElementById('prop-form-label').value.trim() || model;
+    const catVal = document.getElementById('prop-form-category').value;
+    const offsetZVal = parseFloat(document.getElementById('prop-form-offsetz').value) || 0.0;
+
     const payload = {
       prop_model: model,
-      label: document.getElementById('prop-form-label').value.trim() || model,
-      category: document.getElementById('prop-form-category').value,
-      offset_z: parseFloat(document.getElementById('prop-form-offsetz').value) || 0.0
+      modelHash: model,
+      model: model,
+      label: labelVal,
+      name: labelVal,
+      category: catVal,
+      cargo_category: catVal,
+      offset_z: offsetZVal,
+      z: offsetZVal
     };
 
     postNUI('adminSaveHomologatedProp', payload);
+
+    adminData.homologatedProps = (adminData.homologatedProps || []).filter(p => {
+      const m = (p.prop_model || p.model_hash || '').toLowerCase();
+      return m !== model.toLowerCase();
+    });
     adminData.homologatedProps.push(payload);
     renderPropsTab();
     showAdminToast(`Modelo "${model}" homologado com sucesso! Já disponível como carga.`);
+
+    document.getElementById('prop-form-model').value = '';
+    document.getElementById('prop-form-label').value = '';
+    document.getElementById('prop-form-offsetz').value = '0.0';
   }
 
   // ============================================================

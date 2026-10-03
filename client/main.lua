@@ -2962,7 +2962,8 @@ RegisterNUICallback('adminSaveHomologatedProp', function(data, cb)
 end)
 
 RegisterNUICallback('adminDeleteHomologatedProp', function(data, cb)
-    TriggerServerEvent('aurp_trucker:server:adminDeleteHomologatedProp', data and data.prop_model)
+    local model = (type(data) == 'table' and (data.prop_model or data.modelHash or data.model)) or data
+    TriggerServerEvent('aurp_trucker:server:adminDeleteHomologatedProp', model)
     if cb then cb('ok') end
 end)
 

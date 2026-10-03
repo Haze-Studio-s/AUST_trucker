@@ -724,6 +724,14 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
     ))
 end)
 
+RegisterNetEvent('aurp_trucker:client:adminSyncProps', function(propsList)
+    SendNUIMessage({
+        action = 'admin_update_props',
+        props = propsList
+    })
+    print(("^2[AUST_Trucker Client] Props homologados sincronizados em tempo real! (%d props)^7"):format(type(propsList) == 'table' and #propsList or 0))
+end)
+
 RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
     -- Remove NPCs dinâmicos antigos
     for _, data in pairs(DynamicAdminPeds) do
