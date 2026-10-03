@@ -7,6 +7,14 @@
 -- Not persisted to trucker_jobs (separate flow from regular jobs)
 local ActiveCrudeJobs = {}
 
+-- Normaliza placa: só aceita string; remove espaços e converte para maiúsculas (nil se inválida)
+local function NormPlate(plate)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('%s+', ''):upper()
+    if plate == '' or #plate > 12 then return nil end
+    return plate
+end
+
 ----------------------------------------
 -- EXPORTS (called by lsn-oilfield server via pcall)
 ----------------------------------------
@@ -14,17 +22,19 @@ local ActiveCrudeJobs = {}
 --- Called by lsn-oilfield after barrels are loaded and manifest is created.
 --- Registers the cargo and sends GPS to client.
 exports('StartCrudeJob', function(src, plate, manifestId, wellId, qty, pricePerBarrel)
-    if not src or not plate then return false end
+    if not src then return false end
+    plate = NormPlate(plate)
+    if not plate then return false end
     local plr = Framework.GetPlayer(src)
     if not plr then return false end
 
-    plate = plate:gsub('%s+', ''):upper()
     local citizenId = Framework.GetCitizenId(plr)
 
+    -- Não sobrescreve job ativo existente (o chamador deve abandonar/concluir antes)
     if ActiveCrudeJobs[plate] then
-        if Config.Debug then
-            print(('[crude_oil] WARNING: overwriting active job for plate %s (manifestId=%d)'):format(plate, ActiveCrudeJobs[plate].manifestId or -1))
-        end
+        print(('[crude_oil] WARNING: já existe job ativo para a placa %s (manifestId=%s) - novo job rejeitado'):format(
+            plate, tostring(ActiveCrudeJobs[plate].manifestId)))
+        return false
     end
     ActiveCrudeJobs[plate] = {
         src           = src,
@@ -37,7 +47,7 @@ exports('StartCrudeJob', function(src, plate, manifestId, wellId, qty, pricePerB
     }
 
     if Config.Debug then
-        print(('[crude_oil] Job started: plate=%s manifestId=%d qty=%d'):format(plate, manifestId, qty))
+        print(('[crude_oil] Job started: plate=%s manifestId=%s qty=%s'):format(plate, tostring(manifestId), tostring(qty)))
     end
 
     -- Send refinery coords to client for GPS
@@ -60,8 +70,8 @@ end)
 --- Called by aurp_trucker client after progressBar at refinery completes.
 RegisterNetEvent('aurp_trucker:server:completeCrudeDelivery', function(plate, refineryId)
     local src = source
+    plate = NormPlate(plate)
     if not plate then return end
-    plate = plate:gsub('%s+', ''):upper()
 
     local job = ActiveCrudeJobs[plate]
     if not job then
@@ -116,8 +126,12 @@ RegisterNetEvent('aurp_trucker:server:completeCrudeDelivery', function(plate, re
         return exports['AUST_oilfield']:CompleteTransportDelivery(job.manifestId)
     end)
     if not ok or not delivered then
-        if Config.Debug then print('[crude_oil] CompleteTransportDelivery failed:', delivered) end
-        -- Continue with payment even if manifest update failed (manifest may have expired)
+        print(('[crude_oil] CompleteTransportDelivery falhou (manifest=%s): %s - sem pagamento'):format(
+            tostring(job.manifestId), tostring(delivered)))
+        -- Restaura o job para permitir nova tentativa/abandono (devolve barris)
+        if not ActiveCrudeJobs[plate] then ActiveCrudeJobs[plate] = job end
+        TriggerClientEvent('ox_lib:notify', src, { type = 'error', description = 'Não foi possível concluir o manifesto. Entrega não paga.' })
+        return
     end
 
     -- Calculate payment
@@ -129,7 +143,10 @@ RegisterNetEvent('aurp_trucker:server:completeCrudeDelivery', function(plate, re
     if freightMod ~= 1.0 then totalPayment = math.floor(totalPayment * freightMod) end
 
     -- #7: Usar Framework.AddMoney em vez de QBCore direto
-    Framework.AddMoney(plr, 'cash', totalPayment, 'crude_oil_delivery')
+    if not Framework.AddMoney(plr, 'cash', totalPayment, 'crude_oil_delivery') then
+        print(('[crude_oil] ERRO: pagamento $%s falhou para %s (manifest=%s)'):format(
+            tostring(totalPayment), tostring(job.citizenId), tostring(job.manifestId)))
+    end
 
     -- Imposto de transporte de crude: fire-and-forget (10% padrão em vp-governo)
     TriggerEvent('vp-governo:server:collectTax',
@@ -137,7 +154,7 @@ RegisterNetEvent('aurp_trucker:server:completeCrudeDelivery', function(plate, re
         'Frete crude — Manifesto ' .. job.manifestId)
 
     if Config.Debug then
-        print(('[crude_oil] Payment $%d to %s (manifest=%d)'):format(totalPayment, job.citizenId, job.manifestId))
+        print(('[crude_oil] Payment $%s to %s (manifest=%s)'):format(tostring(totalPayment), tostring(job.citizenId), tostring(job.manifestId)))
     end
 
     -- Notify client to clear GPS and show summary
@@ -161,8 +178,8 @@ end)
 --- Called by client when job is abandoned (player exits vehicle or manually cancels).
 RegisterNetEvent('aurp_trucker:server:abandonCrudeJob', function(plate)
     local src = source
+    plate = NormPlate(plate)
     if not plate then return end
-    plate = plate:gsub('%s+', ''):upper()
 
     local job = ActiveCrudeJobs[plate]
     if not job then return end
@@ -189,15 +206,16 @@ RegisterNetEvent('aurp_trucker:server:abandonCrudeJob', function(plate)
     TriggerClientEvent('aurp_trucker:client:crudeJobAbandoned', src)
     TriggerClientEvent('ox_lib:notify', src, { type = 'warning', description = 'Job de crude oil cancelado — barris devolvidos ao poço' })
     if Config.Debug then
-        print(('[crude_oil] Job abandoned: plate=%s, returned %d barrels to well %d'):format(plate, job.qty, job.wellId))
+        print(('[crude_oil] Job abandoned: plate=%s, returned %s barrels to well %s'):format(plate, tostring(job.qty), tostring(job.wellId)))
     end
 end)
 
 --- Expose for GetActiveJobByPlate export (defined in server/exports.lua)
 --- Must be a global (no 'local') because server/exports.lua is a separate lua54 chunk.
 function GetActiveCrudeJobByPlate(plate)
+    plate = NormPlate(plate)
     if not plate then return nil end
-    return ActiveCrudeJobs[plate:gsub('%s+', ''):upper()]
+    return ActiveCrudeJobs[plate]
 end
 
 --- Retorna todos os jobs de crude ativos para o painel do governo.
@@ -214,4 +232,25 @@ exports('GetActiveCrudeJobsSummary', function()
         }
     end
     return result
+end)
+
+--- Jogador desconectou: devolve barris ao poço, expira manifesto e limpa jobs ativos dele.
+AddEventHandler('playerDropped', function()
+    local src = source
+    local plr = Framework.GetPlayer and Framework.GetPlayer(src) or nil
+    local cid = plr and Framework.GetCitizenId(plr) or nil
+    for plate, job in pairs(ActiveCrudeJobs) do
+        if job.src == src or (cid and job.citizenId == cid) then
+            ActiveCrudeJobs[plate] = nil
+            local ok, err = pcall(function()
+                exports['AUST_oilfield']:ReturnBarrels(job.wellId, job.qty)
+                exports['AUST_oilfield']:ExpireManifest(job.manifestId)
+            end)
+            if not ok then
+                print(('[crude_oil] playerDropped: erro ao devolver barris (plate=%s): %s'):format(plate, tostring(err)))
+            elseif Config.Debug then
+                print(('[crude_oil] playerDropped: job %s encerrado, %s barris devolvidos'):format(plate, tostring(job.qty)))
+            end
+        end
+    end
 end)

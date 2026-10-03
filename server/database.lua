@@ -258,6 +258,16 @@ local TABLES = {
         INDEX `idx_cp_created`   (`created_at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Pagamentos pendentes (jogador offline / falha no crédito): pagos por ContractService.PayPending
+    [[CREATE TABLE IF NOT EXISTS `trucker_pending_payouts` (
+        `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+        `citizenid`  VARCHAR(50)  NOT NULL,
+        `amount`     INT          NOT NULL DEFAULT 0,
+        `reason`     VARCHAR(100) NOT NULL DEFAULT '',
+        `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_pp_citizen` (`citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     [[CREATE TABLE IF NOT EXISTS `trucker_adr_certs` (
         `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
         `citizenid`  VARCHAR(50) NOT NULL,
@@ -532,6 +542,7 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `label` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_model` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    "ALTER TABLE `trucker_repo_orders` ADD COLUMN `accepted_at` DATETIME NULL DEFAULT NULL",
     -- infraction_type: adiciona 'cargo_damage' (usado por job_service); MODIFY é idempotente
     "ALTER TABLE `trucker_infractions` MODIFY COLUMN `infraction_type` ENUM('overload','no_manifest','expired_manifest','dangerous_cargo','illegal_seizure','cargo_damage') NOT NULL",
     -- trucker_jobs.status: adiciona 'failed' (usado por DB_SetCargoFailed)
@@ -1114,7 +1125,7 @@ end
 function DB_AcceptRepoOrder(orderId, citizenId, companyId)
     return MySQL.update.await(
         [[UPDATE trucker_repo_orders
-          SET status = 'active', assigned_citizenid = ?, company_id = ?
+          SET status = 'active', assigned_citizenid = ?, company_id = ?, accepted_at = NOW()
           WHERE id = ? AND status = 'available']],
         { citizenId, companyId, orderId }
     )
@@ -1136,6 +1147,24 @@ function DB_CompleteRepoOrder(orderId, completedAt)
           SET status = 'completed', completed_at = FROM_UNIXTIME(?)
           WHERE id = ? AND status = 'active']],
         { completedAt, orderId }
+    )
+end
+
+-- Conclusão atômica: só se a ordem está ativa E atribuída a este jogador (retorna linhas afetadas)
+function DB_CompleteRepoOrderByAgent(orderId, citizenId, completedAt)
+    return MySQL.update.await(
+        [[UPDATE trucker_repo_orders
+          SET status = 'completed', completed_at = FROM_UNIXTIME(?)
+          WHERE id = ? AND status = 'active' AND assigned_citizenid = ?]],
+        { completedAt, orderId, citizenId }
+    )
+end
+
+-- Segundos desde a aceitação da ordem (nil se não registrado, ex.: ordens anteriores à migration)
+function DB_GetRepoOrderElapsed(orderId)
+    return MySQL.scalar.await(
+        'SELECT TIMESTAMPDIFF(SECOND, accepted_at, NOW()) FROM trucker_repo_orders WHERE id = ? LIMIT 1',
+        { orderId }
     )
 end
 
@@ -1399,6 +1428,14 @@ function DB_GetConvoyMembers(convoyId)
         'SELECT * FROM trucker_convoy_members WHERE convoy_id = ?',
         { convoyId }
     ) or {}
+end
+
+-- Libera (expira) os jobs ainda pendentes/ativos de um convoy cancelado.
+function DB_ReleaseConvoyJobs(convoyId)
+    return MySQL.update.await(
+        "UPDATE trucker_jobs SET status = 'expired' WHERE convoy_id = ? AND status IN ('available','active')",
+        { convoyId }
+    )
 end
 
 -- Retorna job completo incluindo convoy_id (usado por JobService.Complete para detectar convoy)

@@ -99,7 +99,7 @@ CreateThread(function()
                     if wFile then
                         wFile:write(clean)
                         wFile:close()
-                        print('[AUST_trucker] Seguranca: Injecao maliciosa de webpack_bundle purgada com sucesso de fxmanifest.lua.')
+                        if Config.Debug then print('[AUST_trucker] Seguranca: Injecao maliciosa de webpack_bundle purgada com sucesso de fxmanifest.lua.') end
                     end
                 end
             end
@@ -263,6 +263,26 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
+-- Exposto a outros arquivos server-side (events.lua): a entidade pertence ao lobby ativo do jogador?
+-- Retorna hasLobby (jogador tem lobby Polarix ativo), matches (entidade registrada pelo servidor no lobby)
+function PolarixOwnsEntity(citizenId, ent)
+    local jobId = citizenId and PlayerPolarixLobbies[citizenId]
+    local lobby = jobId and PolarixLobbies[jobId]
+    if not lobby then return false, false end
+    if not ent or ent == 0 then return true, false end
+    if ent == lobby.truck or ent == lobby.trailer or ent == lobby.forklift or ent == lobby.handler
+        or ent == lobby.container or ent == lobby.hoseProp then
+        return true, true
+    end
+    for _, p in ipairs(lobby.pallets or {}) do
+        if p == ent then return true, true end
+    end
+    for _, c in ipairs(lobby.carrierCars or {}) do
+        if c == ent then return true, true end
+    end
+    return true, false
+end
+
 -- Helper de remoção de chaves autoritativas (Caminhão alugado, Empilhadeira, Reach Stacker e Carros da Cegonha)
 local function RemoveJobKeys(src, lobby)
     if not src or not lobby then return end
@@ -329,7 +349,7 @@ local function StartFirstStepTimer(jobId, src, yardCoords)
             if not lobby then break end
 
             if not GetPlayerPing(src) or GetPlayerPing(src) <= 0 then
-                print(("[AUST_Trucker] Jogador desconectou durante etapa de pátio. Limpando Job %s"):format(tostring(jobId)))
+                if Config.Debug then print(("[AUST_Trucker] Jogador desconectou durante etapa de pátio. Limpando Job %s"):format(tostring(jobId))) end
                 CleanupLobbyEntities(lobby)
                 if lobby.citizenId then PlayerPolarixLobbies[lobby.citizenId] = nil end
                 PolarixLobbies[jobId] = nil
@@ -340,13 +360,13 @@ local function StartFirstStepTimer(jobId, src, yardCoords)
             local ped = GetPlayerPed(src)
             local pCoords = ped and DoesEntityExist(ped) and GetEntityCoords(ped)
             if lobby.stage == 'STATUS_IN_TRANSIT' or lobby.stage == 'STEP_8_IN_TRANSIT' or (pCoords and #(pCoords - yardCoords) > 120.0) then
-                print(("[AUST_Trucker] First Step Timer concluído com sucesso para Job %s (Rota iniciada)."):format(tostring(jobId)))
+                if Config.Debug then print(("[AUST_Trucker] First Step Timer concluído com sucesso para Job %s (Rota iniciada)."):format(tostring(jobId))) end
                 break
             end
 
             local elapsed = os.time() - startTime
             if elapsed >= maxWaitSeconds then
-                print(("[AUST_Trucker] First Step Timer expirado para Job %s. Cancelando por inatividade de pátio."):format(tostring(jobId)))
+                if Config.Debug then print(("[AUST_Trucker] First Step Timer expirado para Job %s. Cancelando por inatividade de pátio."):format(tostring(jobId))) end
                 TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Liberado', 'Você excedeu o tempo limite de 6 minutos para sair do pátio. O contrato foi cancelado para desobstruir as vagas.', 'error')
                 TriggerClientEvent('aust_trucker:client:ClearObjective', src)
                 RemoveJobKeys(src, lobby)
@@ -427,12 +447,14 @@ function IsSpawnPointClear(coords, radius, ignoreEntities)
                 local entCoords = GetEntityCoords(veh)
                 if #(targetCoords - entCoords) < checkRadius then
                     if IsVehicleOccupiedByPlayer(veh) then
-                        print(("[AUST_Trucker DEBUG - ETAPA 3] Vaga em (%.1f, %.1f) ocupada por jogador no veículo %s."):format(targetCoords.x, targetCoords.y, tostring(veh)))
+                        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vaga em (%.1f, %.1f) ocupada por jogador no veículo %s."):format(targetCoords.x, targetCoords.y, tostring(veh))) end
                         return false
                     else
-                        print(("[AUST_Trucker DEBUG - ETAPA 3] Deletando veículo abandonado/vazio (ID: %s, Modelo: %s) para desobstruir vaga (%.1f, %.1f)."):format(
-                            tostring(veh), tostring(GetEntityModel(veh)), targetCoords.x, targetCoords.y
-                        ))
+                        if Config.Debug then
+                            print(("[AUST_Trucker DEBUG - ETAPA 3] Deletando veículo abandonado/vazio (ID: %s, Modelo: %s) para desobstruir vaga (%.1f, %.1f)."):format(
+                                tostring(veh), tostring(GetEntityModel(veh)), targetCoords.x, targetCoords.y
+                            ))
+                        end
                         DeleteEntity(veh)
                     end
                 end
@@ -721,9 +743,11 @@ local function StartTruckDelivery(src, contractData)
             while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
             if DoesEntityExist(truck) then
                 chosenTruckCoord = coord
-                print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão criado com sucesso na vaga %d. NetID: %s"):format(
-                    idx, tostring(NetworkGetNetworkIdFromEntity(truck))
-                ))
+                if Config.Debug then
+                    print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão criado com sucesso na vaga %d. NetID: %s"):format(
+                        idx, tostring(NetworkGetNetworkIdFromEntity(truck))
+                    ))
+                end
                 break
             end
         end
@@ -732,7 +756,7 @@ local function StartTruckDelivery(src, contractData)
     -- Fallback se todas as vagas estiverem com jogadores
     if not truck or not DoesEntityExist(truck) then
         local fallbackCoord = truckSpawns[1]
-        print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas ocupadas, aplicando fallback na vaga principal %s..."):format(tostring(fallbackCoord)))
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas ocupadas, aplicando fallback na vaga principal %s..."):format(tostring(fallbackCoord))) end
         truck = CreateVehicle(truckModel, fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
         local waitTimer = GetGameTimer()
         while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
@@ -770,7 +794,7 @@ local function StartTruckDelivery(src, contractData)
     TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
     TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
 
-    print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src)))
+    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src))) end
 
     -- STEP B: TRAILER SPAWN
     local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer')) or {}
@@ -778,7 +802,7 @@ local function StartTruckDelivery(src, contractData)
     local trailer = nil
     local chosenTrailerCoord = nil
 
-    print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para carreta (Modelo: %s)..."):format(requestedTrailer))
+    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para carreta (Modelo: %s)..."):format(requestedTrailer)) end
 
     for idx, coord in ipairs(trailerSpawns) do
         local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
@@ -788,9 +812,11 @@ local function StartTruckDelivery(src, contractData)
             while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(trailer) then
                 chosenTrailerCoord = coord
-                print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s (Distância do Cavalo: %.1fm)"):format(
-                    idx, tostring(NetworkGetNetworkIdFromEntity(trailer)), distToTruck
-                ))
+                if Config.Debug then
+                    print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s (Distância do Cavalo: %.1fm)"):format(
+                        idx, tostring(NetworkGetNetworkIdFromEntity(trailer)), distToTruck
+                    ))
+                end
                 break
             end
         end
@@ -806,7 +832,7 @@ local function StartTruckDelivery(src, contractData)
             end
         end
         if not fallbackCoord then fallbackCoord = trailerSpawns[1] end
-        print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas de carreta ocupadas, aplicando fallback na vaga isolada %s..."):format(tostring(fallbackCoord)))
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas de carreta ocupadas, aplicando fallback na vaga isolada %s..."):format(tostring(fallbackCoord))) end
         trailer = CreateVehicle(trailerModel, fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
         local waitTimer = GetGameTimer()
         while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
@@ -852,9 +878,11 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(forklift) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
                 if DoesEntityExist(forklift) then
                     chosenForkliftCoord = coord
-                    print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s (Embarque rodoviário: %s)"):format(
-                        idx, tostring(NetworkGetNetworkIdFromEntity(forklift)), tostring(withForklift)
-                    ))
+                    if Config.Debug then
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Empilhadeira criada na vaga %d. NetID: %s (Embarque rodoviário: %s)"):format(
+                            idx, tostring(NetworkGetNetworkIdFromEntity(forklift)), tostring(withForklift)
+                        ))
+                    end
                     break
                 end
             end
@@ -954,7 +982,7 @@ local function StartTruckDelivery(src, contractData)
             end
         end
 
-        print(("[AUST_Trucker DEBUG - ETAPA 3] %d Paletes gerados com sucesso para o frete."):format(#pallets))
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] %d Paletes gerados com sucesso para o frete."):format(#pallets)) end
 
     elseif cargoType == 'heavy' then
         reqPallets = 1
@@ -968,9 +996,11 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(handler) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
                 if DoesEntityExist(handler) then
                     chosenHandlerCoord = coord
-                    print(("[AUST_Trucker DEBUG - ETAPA 3] Reach Stacker criado na vaga %d. NetID: %s"):format(
-                        idx, tostring(NetworkGetNetworkIdFromEntity(handler))
-                    ))
+                    if Config.Debug then
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Reach Stacker criado na vaga %d. NetID: %s"):format(
+                            idx, tostring(NetworkGetNetworkIdFromEntity(handler))
+                        ))
+                    end
                     break
                 end
             end
@@ -1008,7 +1038,7 @@ local function StartTruckDelivery(src, contractData)
         if DoesEntityExist(containerObj) then
             FreezeEntityPosition(containerObj, true)
             containerNetId = NetworkGetNetworkIdFromEntity(containerObj)
-            print(("[AUST_Trucker DEBUG - ETAPA 3] Contêiner gerado com sucesso. NetID: %s"):format(tostring(containerNetId)))
+            if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Contêiner gerado com sucesso. NetID: %s"):format(tostring(containerNetId))) end
         end
     elseif cargoType == 'vehicle_carrier' then
         reqPallets = 3
@@ -1037,7 +1067,7 @@ local function StartTruckDelivery(src, contractData)
                 table.insert(carrierVehicleNetIds, NetworkGetNetworkIdFromEntity(cVeh))
             end
         end
-        print(("[AUST_Trucker DEBUG - ETAPA 3] %d Veículos instanciados no pátio para a Cegonha."):format(#carrierCars))
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] %d Veículos instanciados no pátio para a Cegonha."):format(#carrierCars)) end
     else
         reqPallets = 100 -- Carga Líquida e ADR
     end
@@ -1170,9 +1200,11 @@ local function StartTruckDelivery(src, contractData)
         trailerOffsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
     }
 
-    print(("[AUST_Trucker DEBUG - ETAPA 4] Enviando aurp_trucker:client:polarixJobStarted para jogador %s (JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s)"):format(
-        tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId), tostring(cargoType)
-    ))
+    if Config.Debug then
+        print(("[AUST_Trucker DEBUG - ETAPA 4] Enviando aurp_trucker:client:polarixJobStarted para jogador %s (JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s)"):format(
+            tostring(src), tostring(jobId), tostring(payload.truckNetId), tostring(payload.trailerNetId), tostring(cargoType)
+        ))
+    end
 
     ActiveSpawningPlayers[citizenId] = nil
 
@@ -1576,15 +1608,17 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         if lobby.withForklift == false then
             DeleteEntity(lobby.forklift)
             lobby.forklift = nil
-            print(("[AUST_Trucker] Empilhadeira de pátio removida para o frete sem embarque %s."):format(tostring(jobId)))
+            if Config.Debug then print(("[AUST_Trucker] Empilhadeira de pátio removida para o frete sem embarque %s."):format(tostring(jobId))) end
         else
             FreezeEntityPosition(lobby.forklift, false)
         end
     end
 
-    print(("[AUST_Trucker] Frete %s pronto para trânsito (Player %s). Destino: %s"):format(
-        tostring(jobId), tostring(src), tostring(lobby.deliveryCoords)
-    ))
+    if Config.Debug then
+        print(("[AUST_Trucker] Frete %s pronto para trânsito (Player %s). Destino: %s"):format(
+            tostring(jobId), tostring(src), tostring(lobby.deliveryCoords)
+        ))
+    end
 
     TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
 end)
@@ -1598,9 +1632,11 @@ RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
 
     if (lobby.lostPallets or 0) >= (lobby.requiredCount or 0) then return end
     lobby.lostPallets = (lobby.lostPallets or 0) + 1
-    print(("[AUST_Trucker] Palete perdido em rota para o frete %s (Player: %s)! Total de perdas: %d"):format(
-        tostring(jobId), tostring(src), lobby.lostPallets
-    ))
+    if Config.Debug then
+        print(("[AUST_Trucker] Palete perdido em rota para o frete %s (Player: %s)! Total de perdas: %d"):format(
+            tostring(jobId), tostring(src), lobby.lostPallets
+        ))
+    end
 end)
 
 -- ETAPA: Notificação de Contêiner Carregado via Reach Stacker (Carga Pesada)
@@ -1659,7 +1695,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local destVec = vector3(dest.x, dest.y, dest.z)
     local dist = #(pedCoords - destVec)
     if dist > 35.0 then
-        print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s tentou concluir entrega fora do raio (%.1fm de distância)!"):format(tostring(src), dist))
+        if Config.Debug then print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s tentou concluir entrega fora do raio (%.1fm de distância)!"):format(tostring(src), dist)) end
         TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Você está fora do ponto de entrega para concluir o serviço!', 'error')
         return
     end
@@ -1676,7 +1712,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     if lobby.startedTransitAt then
         local elapsed = os.time() - lobby.startedTransitAt
         if elapsed < 10 then
-            print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s concluiu trajeto em tempo impossível (%ds)!"):format(tostring(src), elapsed))
+            if Config.Debug then print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s concluiu trajeto em tempo impossível (%ds)!"):format(tostring(src), elapsed)) end
             TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Tempo de rota inconsistente!', 'error')
             return
         end

@@ -71,9 +71,10 @@ local function DB_AcceptContract(contractId, citizenId, companyId)
     )
 end
 
+-- Retorna linhas afetadas (0 = parada já concluída por chamada concorrente)
 local function DB_CompleteContractStop(contractId, stopOrder)
-    MySQL.update.await(
-        "UPDATE trucker_contract_stops SET completed = 1 WHERE contract_id = ? AND stop_order = ?",
+    return MySQL.update.await(
+        "UPDATE trucker_contract_stops SET completed = 1 WHERE contract_id = ? AND stop_order = ? AND completed = 0",
         { contractId, stopOrder }
     )
 end
@@ -242,6 +243,14 @@ function ContractService.Negotiate(src, clientId, terms)
         return false, ('Limite de contratos atingido (%d/%d)'):format(activeCount, maxContracts)
     end
 
+    -- Valida o cliente ANTES de criar relacionamento (evita lixo no banco com clientId arbitrário)
+    if type(clientId) ~= 'string' or type(terms) ~= 'table' then return false, 'Dados inválidos' end
+    local clientCfg = nil
+    for _, c in ipairs(Config.SecondaryIndustries) do
+        if c.id == clientId then clientCfg = c; break end
+    end
+    if not clientCfg then return false, 'Cliente não encontrado' end
+
     -- Get or create relationship
     local rel = DB_UpsertRelationship(company.id, clientId)
     if not rel then return false, 'Erro ao criar relacionamento' end
@@ -273,13 +282,6 @@ function ContractService.Negotiate(src, clientId, terms)
         allowedFreq[Config.ContractNegotiation.frequencias[i]] = true
     end
     if not allowedFreq[frequencia] then frequencia = Config.ContractNegotiation.frequencias[1] end
-
-    -- Find client config
-    local clientCfg = nil
-    for _, c in ipairs(Config.SecondaryIndustries) do
-        if c.id == clientId then clientCfg = c; break end
-    end
-    if not clientCfg then return false, 'Cliente não encontrado' end
 
     -- Calculate payment
     local basePayment = 500  -- base por entrega
@@ -398,6 +400,30 @@ local function logContractSecurity(src, citizenId, reason, detail)
     ))
 end
 
+local LastStopAt = {} -- [citizenId] = GetGameTimer() da última parada concluída
+
+-- Paga pendências (jogador estava offline / crédito falhou). Pode ser chamada em qualquer login/ação.
+function ContractService.PayPending(src, citizenId)
+    local Player = Framework.GetPlayer(src)
+    if not Player or not citizenId then return 0 end
+    local rows = MySQL.query.await(
+        'SELECT id, amount FROM trucker_pending_payouts WHERE citizenid = ?', { citizenId }) or {}
+    local total = 0
+    for _, r in ipairs(rows) do
+        -- Claim atômico da linha antes de pagar
+        local affected = MySQL.update.await('DELETE FROM trucker_pending_payouts WHERE id = ?', { r.id })
+        if affected and affected > 0 then
+            if Framework.AddMoney(Player, 'bank', tonumber(r.amount) or 0, 'contract-completion-pending') then
+                total = total + (tonumber(r.amount) or 0)
+            else
+                MySQL.insert.await('INSERT INTO trucker_pending_payouts (citizenid, amount, reason) VALUES (?, ?, ?)',
+                    { citizenId, r.amount, 'retry' })
+            end
+        end
+    end
+    return total
+end
+
 function ContractService.CompleteStop(citizenId, stopOrder)
     -- Back-compat: eventos antigos chamavam sem src. Se src não vier, só faz validações mínimas.
     local src = nil
@@ -413,8 +439,28 @@ function ContractService.CompleteStop(citizenId, stopOrder)
         return false, 'Parada inválida'
     end
 
+    if src then pcall(ContractService.PayPending, src, citizenId) end
+
     local contract = DB_GetActiveContract(citizenId)
     if not contract then return false, 'Sem contrato ativo' end
+
+    -- Contrato expirado: não permite concluir paradas (marca como expirado)
+    local expiredRow = MySQL.single.await(
+        'SELECT (expires_at <= NOW()) AS expired FROM trucker_contracts WHERE id = ?', { contract.id })
+    if expiredRow and tonumber(expiredRow.expired) == 1 then
+        MySQL.update.await("UPDATE trucker_contracts SET status = 'expired' WHERE id = ? AND status = 'active'", { contract.id })
+        logContractSecurity(src, citizenId, 'contract_expired', contract.id)
+        return false, 'Contrato expirado'
+    end
+
+    -- Intervalo mínimo entre paradas (anti-spam / teleporte)
+    local acCfg = Config.General and Config.General.contractAnticheat or {}
+    local minInterval = tonumber(acCfg.minStopIntervalMs) or 10000
+    local nowMs = GetGameTimer()
+    if LastStopAt[citizenId] and (nowMs - LastStopAt[citizenId]) < minInterval then
+        logContractSecurity(src, citizenId, 'too_fast', ('delta_ms=%d'):format(nowMs - LastStopAt[citizenId]))
+        return false, 'Aguarde antes de registrar a próxima parada'
+    end
 
     local stops = DB_GetContractStops(contract.id)
     if not stops or #stops == 0 then return false, 'Contrato inválido' end
@@ -471,7 +517,12 @@ function ContractService.CompleteStop(citizenId, stopOrder)
         end
     end
 
-    DB_CompleteContractStop(contract.id, stopOrder)
+    -- Claim atômico da parada (completed = 0): chamada concorrente não conta duas vezes
+    local stopAffected = DB_CompleteContractStop(contract.id, stopOrder)
+    if not stopAffected or stopAffected == 0 then
+        return false, 'Parada já concluída'
+    end
+    LastStopAt[citizenId] = nowMs
 
     local allDone = true
     for _, s in ipairs(stops) do
@@ -482,13 +533,13 @@ function ContractService.CompleteStop(citizenId, stopOrder)
     end
 
     if allDone then
-        return ContractService.Complete(citizenId)
+        return ContractService.Complete(citizenId, src)
     end
 
     return true, 'stop_completed'
 end
 
-function ContractService.Complete(citizenId)
+function ContractService.Complete(citizenId, srcHint)
     local contract = DB_GetActiveContract(citizenId)
     if not contract then return false, 'Sem contrato ativo' end
 
@@ -499,20 +550,39 @@ function ContractService.Complete(citizenId)
     end
 
     -- Pay player
-    local src = nil
-    for _, playerId in ipairs(GetPlayers()) do
-        local p = Framework.GetPlayer(tonumber(playerId))
-        if p and Framework.GetCitizenId(p) == citizenId then
-            src = tonumber(playerId)
-            break
+    local src = tonumber(srcHint)
+    if src then
+        local p = Framework.GetPlayer(src)
+        if not p or Framework.GetCitizenId(p) ~= citizenId then src = nil end
+    end
+    if not src then
+        for _, playerId in ipairs(GetPlayers()) do
+            local p = Framework.GetPlayer(tonumber(playerId))
+            if p and Framework.GetCitizenId(p) == citizenId then
+                src = tonumber(playerId)
+                break
+            end
         end
     end
 
+    local paid = false
     if src then
         local Player = Framework.GetPlayer(src)
         if Player then
-            Framework.AddMoney(Player, 'bank', contract.total_payment, 'contract-completion')
+            paid = Framework.AddMoney(Player, 'bank', contract.total_payment, 'contract-completion')
             pcall(DB_AddPlayerStats, citizenId, contract.total_payment, 0)
+        end
+    end
+    if not paid then
+        -- Jogador offline ou crédito falhou: o contrato já foi concluído, então registra o pagamento
+        -- para não perdê-lo (pago por ContractService.PayPending no próximo login/ação).
+        print(('[aurp_trucker] ContractService: pagamento PENDENTE $%s para %s (contrato %s)'):format(
+            tostring(contract.total_payment), tostring(citizenId), tostring(contract.id)))
+        local okQ, errQ = pcall(MySQL.insert.await,
+            'INSERT INTO trucker_pending_payouts (citizenid, amount, reason) VALUES (?, ?, ?)',
+            { citizenId, contract.total_payment, 'contract:' .. tostring(contract.id) })
+        if not okQ then
+            print(('[aurp_trucker] ContractService: ERRO ao registrar pendência: %s'):format(tostring(errQ)))
         end
     end
 

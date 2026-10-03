@@ -8,3 +8,8 @@ cache/
 dist/
 build/
 haze_admin/
+.env
+*.pid
+Thumbs.db
+.DS_Store
+*.local

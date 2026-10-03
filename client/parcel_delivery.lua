@@ -378,12 +378,14 @@ AddEventHandler('onClientResourceStart', function(res)
     SetupDepot()
 end)
 
-AddEventHandler('onClientResourceStop', function(res)
+AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
-    CleanupParcel()
-    if DepotBlip then RemoveBlip(DepotBlip) end
+    pcall(CleanupParcel)
+    if ParcelBlip and DoesBlipExist(ParcelBlip) then RemoveBlip(ParcelBlip); ParcelBlip = nil end
+    if DepotBlip and DoesBlipExist(DepotBlip) then RemoveBlip(DepotBlip); DepotBlip = nil end
     if DepotNPC and DoesEntityExist(DepotNPC) then
-        exports.ox_target:removeLocalEntity(DepotNPC)
+        pcall(function() exports.ox_target:removeLocalEntity(DepotNPC) end)
         DeleteEntity(DepotNPC)
+        DepotNPC = nil
     end
 end)

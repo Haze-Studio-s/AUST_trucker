@@ -479,7 +479,7 @@ local function HandleStartDeliveryNUI(data, cb)
     local raw = data or {}
     local payload = (raw.data and type(raw.data) == 'table') and raw.data or raw
     local contractId = payload.id or payload.contract_id or payload.contractId or payload.jobId
-    print(("^2[AUST_Trucker DEBUG - ETAPA 1] HandleStartDeliveryNUI disparado! ID=%s^7"):format(tostring(contractId)))
+    if Config.Debug then print(("^2[AUST_Trucker DEBUG - ETAPA 1] HandleStartDeliveryNUI disparado! ID=%s^7"):format(tostring(contractId))) end
 
     if ActiveJob then
         SendMissionNotify('Central Logística', 'Você já possui uma rota ou entrega em andamento!', 'error')
@@ -709,7 +709,7 @@ local function ExecutePalletTie(index)
 
     -- BLINDAGEM ESTRITA: Garantir que o trailer seja o reboque do contrato e não a empilhadeira
     if JobEntities.forklift and (palletEnt == JobEntities.forklift or trailer == JobEntities.forklift) then
-        print("[AUST_Trucker] ERRO: Tentativa de amarrar empilhadeira no fluxo de paletes!")
+        if Config.Debug then print("[AUST_Trucker] ERRO: Tentativa de amarrar empilhadeira no fluxo de paletes!") end
         return
     end
 
@@ -1294,8 +1294,8 @@ CreateThread(function()
         local truck = JobEntities.truck
         local hasCargo = false
 
-        -- 1. Condutor do Contrato Ativo
-        if trailer and DoesEntityExist(trailer) then
+        -- 1. Condutor do Contrato Ativo (só enquanto o job existe; ao terminar, o loop volta ao modo 250ms)
+        if ActiveJob and trailer and DoesEntityExist(trailer) then
             local pList = LoadedPallets or LoadedPalletData or {}
             for _, pData in ipairs(pList) do
                 local pEnt = pData.entity
@@ -2436,12 +2436,12 @@ end)
 
 -- ETAPA 1: INÍCIO E SPAWN DINÂMICO
 RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
-    print(("^2[AUST_Trucker DEBUG - ETAPA 4] aurp_trucker:client:polarixJobStarted recebido com sucesso no Cliente! JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s^7"):format(
+    if Config.Debug then print(("^2[AUST_Trucker DEBUG - ETAPA 4] aurp_trucker:client:polarixJobStarted recebido com sucesso no Cliente! JobID: %s, TruckNetId: %s, TrailerNetId: %s, Cargo: %s^7"):format(
         tostring(payload and payload.jobId),
         tostring(payload and payload.truckNetId),
         tostring(payload and payload.trailerNetId),
         tostring(payload and payload.cargoType)
-    ))
+    )) end
 
     CleanupCurrentJob()
     ActiveJob = payload
@@ -2505,16 +2505,16 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         local trailer = WaitForNetworkEntity(payload.trailerNetId, 12000)
 
         if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
-            print(("^1[AUST_Trucker DEBUG - ETAPA 1] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
+            if Config.Debug then print(("^1[AUST_Trucker DEBUG - ETAPA 1] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
                 tostring(truck), tostring(trailer)
-            ))
+            )) end
             SendMissionNotify('Falha de Streaming', 'Não foi possível sincronizar os veículos da missão no cliente.', 'error')
             TriggerServerEvent('aurp_trucker:server:cancelDelivery', payload.jobId, 'Falha de streaming de veículos no cliente')
             CleanupCurrentJob()
             return
         end
 
-        print(("^2[AUST_Trucker DEBUG - ETAPA 1] Caminhão e Carreta sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId)))
+        if Config.Debug then print(("^2[AUST_Trucker DEBUG - ETAPA 1] Caminhão e Carreta sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId))) end
 
         local playerPed = cache.ped or PlayerPedId()
         SetEntityVisible(playerPed, true)
@@ -3159,7 +3159,7 @@ CreateThread(function()
                     end
                 end
             end
-            print("^2[AUST_Trucker] Sincronização inicial de offsets de reboques concluída com sucesso!^7")
+            if Config.Debug then print("^2[AUST_Trucker] Sincronização inicial de offsets de reboques concluída com sucesso!^7") end
         end
     end)
 end)

@@ -66,15 +66,12 @@ end
 -- COMPRA
 -- ============================================================
 
-function IndustryOwnershipService.Buy(src, industryId)
+local BuyingCompanyLock = {} -- [companyId] = true: serializa compras (corrida no limite MaxOwnedPerCompany)
+
+local function BuyUnlocked(src, industryId, company, citizenId)
     local Player = Framework.GetPlayer(src)
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
 
-    local citizenId = Framework.GetCitizenId(Player)
-    local company = GetCompanyOfPlayer(citizenId)
-    if not company then
-        return { success = false, reason = 'Você não pertence a uma empresa' }
-    end
     if company.company_type ~= 'logistics' then
         return { success = false, reason = 'Apenas empresas de logística podem comprar indústrias' }
     end
@@ -142,6 +139,30 @@ function IndustryOwnershipService.Buy(src, industryId)
     return { success = true, industryId = industryId, price = price }
 end
 
+function IndustryOwnershipService.Buy(src, industryId)
+    local Player = Framework.GetPlayer(src)
+    if not Player then return { success = false, reason = 'Jogador não encontrado' } end
+
+    local citizenId = Framework.GetCitizenId(Player)
+    local company = GetCompanyOfPlayer(citizenId)
+    if not company then
+        return { success = false, reason = 'Você não pertence a uma empresa' }
+    end
+
+    -- Lock por empresa (sempre liberado via pcall)
+    if BuyingCompanyLock[company.id] then
+        return { success = false, reason = 'Compra em andamento, tente novamente' }
+    end
+    BuyingCompanyLock[company.id] = true
+    local ok, result = pcall(BuyUnlocked, src, industryId, company, citizenId)
+    BuyingCompanyLock[company.id] = nil
+    if not ok then
+        print(('[aurp_trucker] IndustryOwnership.Buy erro: %s'):format(tostring(result)))
+        return { success = false, reason = 'Erro interno ao comprar indústria' }
+    end
+    return result
+end
+
 -- ============================================================
 -- HOOK DE PROFIT (chamado por IndustryService.BuyFrom)
 -- ============================================================
@@ -157,7 +178,7 @@ function IndustryOwnershipService.OnSale(industryId, totalSalePrice)
 
     -- DB_UpdateCompanyBalance retorna o saldo novo — usar o retorno para manter cache preciso
     local newBalance = DB_UpdateCompanyBalance(owner.company_id, profit)
-    if VP_Trucker.Companies[owner.company_id] then
+    if newBalance and VP_Trucker.Companies[owner.company_id] then
         VP_Trucker.Companies[owner.company_id].balance = newBalance
     end
 

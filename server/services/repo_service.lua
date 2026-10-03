@@ -155,8 +155,17 @@ function RepoService.Complete(src, orderId)
         return { success = false, reason = 'Ordem não encontrada ou inválida' }
     end
 
-    -- C-13: Atualização atômica — retorna 0 se outro coroutine já completou
-    local affected = DB_CompleteRepoOrder(orderId, os.time())
+    -- Tempo mínimo desde a aceitação (anti-completar instantâneo)
+    local minElapsed = tonumber(Config.RepoMan.MinCompleteSeconds) or 30
+    local elapsed = tonumber(DB_GetRepoOrderElapsed(orderId))
+    if elapsed and elapsed < minElapsed then
+        print(('[aurp_trucker] RepoService.Complete negado (rápido demais) cid=%s order=%s elapsed=%ss'):format(
+            tostring(citizenId), tostring(orderId), tostring(elapsed)))
+        return { success = false, reason = 'Missão concluída rápido demais' }
+    end
+
+    -- C-13: Claim atômico (status='active' E atribuída a este agente) — 0 se outra chamada já completou
+    local affected = DB_CompleteRepoOrderByAgent(orderId, citizenId, os.time())
     if not affected or affected == 0 then
         return { success = false, reason = 'Ordem já processada' }
     end
@@ -165,24 +174,34 @@ function RepoService.Complete(src, orderId)
     local companyFee = math.floor(payment * COMPANY_FEE_RATE)
 
     -- Pay agent
-    Framework.AddMoney(Player, 'bank', payment, 'repo-completion')
+    if not Framework.AddMoney(Player, 'bank', payment, 'repo-completion') then
+        print(('[aurp_trucker] ERRO: pagamento repo $%s falhou para %s (ordem %s já concluída)'):format(
+            tostring(payment), tostring(citizenId), tostring(orderId)))
+    end
 
     -- Pay company
     local newBal = DB_UpdateCompanyBalance(order.company_id, companyFee)
-    if VP_Trucker.Companies[order.company_id] then
-        VP_Trucker.Companies[order.company_id].balance = newBal or 0
+    if newBal and VP_Trucker.Companies[order.company_id] then
+        VP_Trucker.Companies[order.company_id].balance = newBal
     end
 
     -- Abate on loan if applicable
     if order.loan_id then
         local loan = DB_GetLoanById(order.loan_id)
         if loan and loan.status == 'active' then
-            local newBalance = math.max(0, loan.remaining_balance - order.vehicle_value)
+            -- Abatimento limitado ao valor real do veículo (config) e ao saldo devedor
+            local cfgValue   = Config.RepoMan.VehicleValues[string.lower(order.vehicle_model or '')]
+            local abatement  = math.min(tonumber(order.vehicle_value) or 0, cfgValue or tonumber(order.vehicle_value) or 0)
+            abatement        = math.max(0, abatement)
+            local newBalance = math.max(0, loan.remaining_balance - abatement)
             local newStatus  = newBalance == 0 and 'paid' or 'active'
             local nextPayAt  = newBalance > 0
                 and (os.time() + Config.Loans.InstallmentDays * 86400)
                 or nil
-            DB_UpdateLoanBalance(loan.id, newBalance, newStatus, nextPayAt)
+            local loanAffected = DB_UpdateLoanBalance(loan.id, newBalance, newStatus, nextPayAt)
+            if not loanAffected or loanAffected == 0 then
+                print(('[aurp_trucker] RepoService.Complete: empréstimo #%s não estava mais ativo, abatimento ignorado'):format(tostring(loan.id)))
+            end
 
             -- Notify loan owner if online
             local loanOwnerSrc = Framework.FindPlayerByCitizenId(loan.citizenid)
@@ -190,7 +209,7 @@ function RepoService.Complete(src, orderId)
                 lib.notify(loanOwnerSrc, {
                     title       = 'Repossessão',
                     description = ('Veículo repossessado. Saldo do empréstimo reduzido em $%d'):format(
-                        order.vehicle_value),
+                        abatement),
                     type     = 'warning',
                     duration = 8000,
                 })
@@ -268,11 +287,14 @@ end
 CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
-        local count = DB_CountAvailableNpcOrders()
-        while count < MAX_NPC_ORDERS do
-            RepoService.GenerateNPC()
-            count = count + 1
-        end
+        local ok, err = pcall(function()
+            local count = DB_CountAvailableNpcOrders()
+            while count < MAX_NPC_ORDERS do
+                RepoService.GenerateNPC()
+                count = count + 1
+            end
+        end)
+        if not ok then print('[aurp_trucker] RepoService pool erro: ' .. tostring(err)) end
         Wait(POOL_INTERVAL * 1000)
     end
 end)
@@ -282,6 +304,7 @@ CreateThread(function()
     while not VP_Trucker.Ready do Wait(100) end
     while true do
         Wait(300 * 1000)
-        RepoService.CheckExpired()
+        local ok, err = pcall(RepoService.CheckExpired)
+        if not ok then print('[aurp_trucker] RepoService expire erro: ' .. tostring(err)) end
     end
 end)

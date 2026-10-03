@@ -13,6 +13,14 @@ for _, d in ipairs((Config.IllegalJobs and Config.IllegalJobs.deliveries) or {})
     end
 end
 
+-- Valida/normaliza placa antes de usá-la como chave de tabela (string, trim, upper, <= 12 chars)
+local function NormalizePlate(plate)
+    if type(plate) ~= 'string' then return nil end
+    plate = plate:gsub('^%s+', ''):gsub('%s+$', ''):upper()
+    if plate == '' or #plate > 12 then return nil end
+    return plate
+end
+
 -- ============================================================
 -- GERAR JOB ILEGAL
 -- ============================================================
@@ -118,6 +126,8 @@ end
 -- Armazena a placa em VP_Trucker.IllegalTargets e faz broadcast para todos os clients
 -- registrarem o ox_target no caminhão (include cops fora de range que já estavam no servidor).
 function IllegalService.RegisterSeizureTarget(src, jobId, plate, illegalType)
+    plate = NormalizePlate(plate)
+    if not plate then return end
     if VP_Trucker.IllegalTargets[plate] then return end  -- já registrado
 
     local Player = Framework.GetPlayer(src)
@@ -148,8 +158,10 @@ end
 
 -- Limpa o registro de apreensão e notifica todos os clients para removerem o ox_target.
 -- IMPORTANTE: lê `target` ANTES de nil-ar VP_Trucker.IllegalTargets[plate]
-function IllegalService.ClearSeizureTarget(plate)
-    local target = VP_Trucker.IllegalTargets[plate]  -- lê ANTES do nil
+function IllegalService.ClearSeizureTarget(plate, targetOverride)
+    plate = NormalizePlate(plate)
+    if not plate then return end
+    local target = VP_Trucker.IllegalTargets[plate] or targetOverride  -- lê ANTES do nil
     VP_Trucker.IllegalTargets[plate] = nil
 
     -- Broadcast para todos os clients removerem o ox_target
@@ -166,13 +178,18 @@ end
 -- Cop aciona "Lacrar Carga" via ox_target.
 -- Cancela o job, multa o motorista, registra infração.
 function IllegalService.Seize(copSrc, plate)
-    local target = VP_Trucker.IllegalTargets[plate]
+    plate = NormalizePlate(plate)
+    local target = plate and VP_Trucker.IllegalTargets[plate] or nil
     if not target then
         TriggerClientEvent('ox_lib:notify', copSrc, {
             title = 'Apreensão', description = 'Carga não encontrada.', type = 'error'
         })
         return
     end
+
+    -- Reivindica a apreensão ATOMICAMENTE (sem yield entre a leitura e a remoção):
+    -- um segundo policial não encontra mais o alvo e não aplica multa duplicada.
+    VP_Trucker.IllegalTargets[plate] = nil
 
     local driverSrc    = target.src
     local jobId        = target.jobId
@@ -219,7 +236,7 @@ function IllegalService.Seize(copSrc, plate)
         'aurp_trucker:cop')
 
     -- Limpar target (broadcast illegalJobEnded para todos)
-    IllegalService.ClearSeizureTarget(plate)
+    IllegalService.ClearSeizureTarget(plate, target)
 
     -- Notificar cop
     TriggerClientEvent('aurp_trucker:client:seizureSuccess', copSrc, {
@@ -263,7 +280,7 @@ function IllegalService.OnComplete(src, activeJob, payload, timeMult)
     Framework.AddMoney(Player, 'cash', payment, 'aurp-trucker-illegal')
 
     -- Limpar target de apreensão (se placa conhecida)
-    if payload.plate then
+    if type(payload) == 'table' and payload.plate then
         IllegalService.ClearSeizureTarget(payload.plate)
     end
 

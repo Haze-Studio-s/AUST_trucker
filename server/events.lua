@@ -10,6 +10,155 @@ local function netEntityExists(netId)
 end
 
 -- =====================================================
+-- HELPERS DE VALIDAÇÃO COMPARTILHADOS
+-- =====================================================
+
+-- Inteiro positivo finito e <= max (rejeita NaN/inf/não-número/<=0). Retorna nil se inválido.
+local function posInt(x, max)
+    if type(x) ~= 'number' then x = tonumber(x) end
+    if type(x) ~= 'number' or x ~= x or x == math.huge or x == -math.huge then return nil end
+    x = math.floor(x)
+    if x <= 0 then return nil end
+    if x > (max or 10000000) then return nil end
+    return x
+end
+
+-- Placa sem espaços (mesma convenção do CargoTrackingService / client: gsub('%s+', ''))
+local function stripPlate(p)
+    if type(p) ~= 'string' then return nil end
+    local s2 = p:gsub('%s+', '')
+    if s2 == '' or #s2 > 12 then return nil end
+    return s2
+end
+
+-- Placa normalizada para armazenar (trim + upper, <= 12 chars, só alfanumérico/espaço)
+local function normPlate(p)
+    if type(p) ~= 'string' then return nil end
+    local t = p:gsub('^%s+', ''):gsub('%s+$', '')
+    t = t:upper()
+    if t == '' or #t > 12 or t:find('[^%w ]') then return nil end
+    return t
+end
+
+-- Veículo em que o jogador é motorista (nil se nenhum) + placa lida no servidor (sem espaços)
+local function getDriverVehicle(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return nil end
+    local veh = GetVehiclePedIsIn(ped, false)
+    if not veh or veh == 0 or not DoesEntityExist(veh) then return nil end
+    if GetPedInVehicleSeat(veh, -1) ~= ped then return nil end
+    local plate = stripPlate(GetVehicleNumberPlateText(veh) or '')
+    if not plate then return nil end
+    return veh, plate
+end
+
+-- Rate limit local por chave (ms). Retorna true se liberado.
+local _rl = {}
+local function rateLimit(key, ms)
+    local now = GetGameTimer()
+    local last = _rl[key]
+    if last and (now - last) < ms then return false end
+    _rl[key] = now
+    return true
+end
+AddEventHandler('playerDropped', function()
+    local suffix = ':' .. tostring(source)
+    for k in pairs(_rl) do
+        if type(k) == 'string' and k:sub(-#suffix) == suffix then _rl[k] = nil end
+    end
+end)
+
+-- Aguarda entidade existir com timeout (padrão 5s). Retorna true/false.
+local function waitEntity(ent, timeoutMs)
+    local t0 = GetGameTimer()
+    while (not ent or ent == 0 or not DoesEntityExist(ent)) and (GetGameTimer() - t0 < (timeoutMs or 5000)) do
+        Wait(10)
+    end
+    return ent ~= nil and ent ~= 0 and DoesEntityExist(ent)
+end
+
+-- Estado dos contratos LC (declarado aqui para ser visível aos handlers de entidades acima)
+local ActiveLCContracts    = {}
+local ActiveLCContractData = {}
+local StartingJobLock      = {}
+local LastNotifyTime       = {}
+
+-- Valida um netId vindo do cliente. expectType: 2 = veículo, 3 = objeto.
+-- Retorna entity, netId, verified (verified = batida com entidade registrada pelo servidor).
+local function validateJobEntity(src, citizenId, rawNetId, expectType)
+    local netId = tonumber(rawNetId)
+    if not netId or netId ~= netId or netId <= 0 or netId > 65535 or netId % 1 ~= 0 then return nil end
+    local ent = NetworkGetEntityFromNetworkId(netId)
+    if not ent or ent == 0 or not DoesEntityExist(ent) then return nil end
+    if GetEntityType(ent) ~= expectType then return nil end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return nil end
+    if #(GetEntityCoords(ped) - GetEntityCoords(ent)) > 250.0 then return nil end
+
+    local verified = false
+    -- 1) Entidade spawnada pelo servidor para o lobby Polarix do jogador (main.lua)
+    if PolarixOwnsEntity then
+        local hasLobby, matches = PolarixOwnsEntity(citizenId, ent)
+        if hasLobby then
+            if not matches then return nil end
+            verified = true
+        end
+    end
+    -- 2) Caminhão spawnado pelo servidor para contrato LC
+    if not verified then
+        local jid = ActiveLCContracts[citizenId]
+        local info = jid and ActiveLCContractData[jid]
+        if info and info.truckEntity and info.truckEntity == ent then verified = true end
+    end
+    -- 3) Entidade criada pelo próprio client: exige que o jogador seja o dono de rede
+    if not verified then
+        local okOwner, owner = pcall(NetworkGetEntityOwner, ent)
+        if not okOwner or owner ~= src then return nil end
+    end
+    return ent, netId, verified
+end
+
+-- Alguém (que não o dono) está dentro do veículo?
+local function vehicleHasOtherPlayer(veh, ownerSrc)
+    if GetEntityType(veh) ~= 2 then return false end
+    for seat = -1, 4 do
+        local pedIn = GetPedInVehicleSeat(veh, seat)
+        if pedIn and pedIn ~= 0 and DoesEntityExist(pedIn) and IsPedAPlayer(pedIn) then
+            if not ownerSrc or pedIn ~= GetPlayerPed(ownerSrc) then return true end
+        end
+    end
+    return false
+end
+
+-- Remove com segurança uma entidade registrada em PlayerJobEntities:
+-- só apaga se foi validada no registro (mesmo modelo) e não há outro jogador dentro.
+local function safeDeleteJobEntity(jobEnts, netId, ownerSrc)
+    netId = tonumber(netId)
+    if not netId or not jobEnts then return end
+    local verified = jobEnts.verified and jobEnts.verified[netId]
+    local trustedRental = (netId == jobEnts.truckNetId and jobEnts.rentalPlate ~= nil)
+    if not verified and not trustedRental then return end
+    local ent = NetworkGetEntityFromNetworkId(netId)
+    if not ent or ent == 0 or not DoesEntityExist(ent) then return end
+    if type(verified) == 'number' and GetEntityModel(ent) ~= verified then return end
+    if vehicleHasOtherPlayer(ent, ownerSrc) then return end
+    DeleteEntity(ent)
+end
+
+local function safeDeleteAllJobEntities(jobEnts, ownerSrc)
+    if not jobEnts then return end
+    safeDeleteJobEntity(jobEnts, jobEnts.truckNetId, ownerSrc)
+    safeDeleteJobEntity(jobEnts, jobEnts.trailerNetId, ownerSrc)
+    safeDeleteJobEntity(jobEnts, jobEnts.forkliftNetId, ownerSrc)
+    if type(jobEnts.palletNetIds) == 'table' then
+        for _, pNet in ipairs(jobEnts.palletNetIds) do
+            safeDeleteJobEntity(jobEnts, pNet, ownerSrc)
+        end
+    end
+end
+
+-- =====================================================
 -- JOB HANDLERS
 -- =====================================================
 
@@ -22,6 +171,8 @@ RegisterNetEvent('aurp_trucker:acceptJob', function(jobId)
 
     -- Crude oil order: just set GPS to well, no formal job entry
     if tostring(jobId):sub(1, 6) == 'crude_' then
+        -- Rate limit (evita spam do GPS/consultas ao AUST_oilfield)
+        if not rateLimit('crudeGPS:' .. src, 2000) then return end
         -- Still block if player has an active regular job
         if JobService.GetActiveByPlayer(citizenId) then
             TriggerClientEvent('aurp_trucker:notify', src, 'Você já tem um job ativo', 'error')
@@ -29,10 +180,16 @@ RegisterNetEvent('aurp_trucker:acceptJob', function(jobId)
         end
 
         -- Permit: transport_commercial obrigatória para Modo B
+        -- Fail-closed: se o resource governo está iniciado e a consulta falha, NÃO libera.
+        -- Só mantém liberado quando o resource não existe/não está rodando neste servidor.
         local hasPermit = true
-        pcall(function()
-            hasPermit = exports['AUST_governo']:HasPermit(citizenId, 'transport_commercial')
-        end)
+        local govState = GetResourceState and GetResourceState('AUST_governo') or 'missing'
+        if govState == 'started' or govState == 'starting' then
+            local okPermit, permitRes = pcall(function()
+                return exports['AUST_governo']:HasPermit(citizenId, 'transport_commercial')
+            end)
+            hasPermit = (okPermit and permitRes == true)
+        end
         if not hasPermit then
             TriggerClientEvent('aurp_trucker:notify', src, 'Licença de transporte comercial necessária', 'error')
             return
@@ -126,27 +283,10 @@ RegisterNetEvent('aurp_trucker:abandonJob', function()
     local citizenId = Framework.GetCitizenId(Player)
     JobService.Abandon(citizenId)
 
-    -- Limpeza estrita de todas as entidades do trabalho (caminhão, trailer, empilhadeira, paletes)
+    -- Limpeza estrita das entidades do trabalho: só apaga entidades validadas no registro
+    -- (servidor spawnou / jogador era o dono de rede) — nunca netIds arbitrários do cliente
     if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
-        local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
-        if jobEnts.truckNetId then
-            local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
-            if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
-        end
-        if jobEnts.trailerNetId then
-            local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
-            if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
-        end
-        if jobEnts.forkliftNetId then
-            local fork = NetworkGetEntityFromNetworkId(jobEnts.forkliftNetId)
-            if fork and DoesEntityExist(fork) then DeleteEntity(fork) end
-        end
-        if jobEnts.palletNetIds and type(jobEnts.palletNetIds) == 'table' then
-            for _, pNet in ipairs(jobEnts.palletNetIds) do
-                local p = NetworkGetEntityFromNetworkId(tonumber(pNet))
-                if p and DoesEntityExist(p) then DeleteEntity(p) end
-            end
-        end
+        safeDeleteAllJobEntities(VP_Trucker.PlayerJobEntities[citizenId], src)
         VP_Trucker.PlayerJobEntities[citizenId] = nil
     end
 
@@ -170,46 +310,67 @@ RegisterNetEvent('aurp_trucker:server:registerJobEntities', function(truckNetId,
 
     VP_Trucker.PlayerJobEntities = VP_Trucker.PlayerJobEntities or {}
     VP_Trucker.PlayerJobEntities[citizenId] = VP_Trucker.PlayerJobEntities[citizenId] or {}
+    local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
+    jobEnts.verified = jobEnts.verified or {}
 
-    if truckNetId and tonumber(truckNetId) then
-        VP_Trucker.PlayerJobEntities[citizenId].truckNetId = tonumber(truckNetId)
+    -- Valida cada netId do cliente (existe, tipo esperado, perto do jogador, e se o servidor
+    -- spawnou, bate com a entidade registrada). Entidades inválidas são ignoradas por completo:
+    -- sem registro, sem LockEntityNetworkOwner e sem GiveKeys.
+    local function accept(rawNetId, expectType)
+        local ent, netId, verified = validateJobEntity(src, citizenId, rawNetId, expectType)
+        if not ent then return nil end
+        jobEnts.verified[netId] = GetEntityModel(ent)
+        if LockEntityNetworkOwner then LockEntityNetworkOwner(ent, src) end
+        return ent, netId
+    end
+
+    if truckNetId then
+        -- Aluguel: RegisterNetId faz a própria validação (placa/modelo/spawn); só confia se retornou sucesso
+        local rentalOk = false
         if TruckRentalService then
-            TruckRentalService.RegisterNetId(citizenId, truckNetId)
+            rentalOk = TruckRentalService.RegisterNetId(citizenId, truckNetId) == true
+            if not rentalOk and TruckRentalService.GetRental then
+                local r = TruckRentalService.GetRental(citizenId)
+                rentalOk = (r and r.netId ~= nil and r.netId == tonumber(truckNetId)) or false
+            end
         end
-        local truckEnt = NetworkGetEntityFromNetworkId(tonumber(truckNetId))
-        if truckEnt and DoesEntityExist(truckEnt) then
-            if LockEntityNetworkOwner then LockEntityNetworkOwner(truckEnt, src) end
+        local truckEnt, tNet = accept(truckNetId, 2)
+        if truckEnt then
+            jobEnts.truckNetId = tNet
             pcall(function()
                 if exports['qbx_vehiclekeys'] then
                     exports['qbx_vehiclekeys']:GiveKeys(src, truckEnt)
                 end
             end)
-        end
-    end
-    if trailerNetId and tonumber(trailerNetId) then
-        VP_Trucker.PlayerJobEntities[citizenId].trailerNetId = tonumber(trailerNetId)
-        local trEnt = NetworkGetEntityFromNetworkId(tonumber(trailerNetId))
-        if trEnt and DoesEntityExist(trEnt) then
-            if LockEntityNetworkOwner then LockEntityNetworkOwner(trEnt, src) end
-        end
-    end
-    if forkliftNetId and tonumber(forkliftNetId) then
-        VP_Trucker.PlayerJobEntities[citizenId].forkliftNetId = tonumber(forkliftNetId)
-        local fEnt = NetworkGetEntityFromNetworkId(tonumber(forkliftNetId))
-        if fEnt and DoesEntityExist(fEnt) then
-            if LockEntityNetworkOwner then LockEntityNetworkOwner(fEnt, src) end
-        end
-    end
-    if palletNetIds and type(palletNetIds) == 'table' then
-        VP_Trucker.PlayerJobEntities[citizenId].palletNetIds = palletNetIds
-        for _, pNet in ipairs(palletNetIds) do
-            if pNet and tonumber(pNet) then
-                local pEnt = NetworkGetEntityFromNetworkId(tonumber(pNet))
-                if pEnt and DoesEntityExist(pEnt) then
-                    if LockEntityNetworkOwner then LockEntityNetworkOwner(pEnt, src) end
-                end
+        elseif rentalOk then
+            local e = NetworkGetEntityFromNetworkId(tonumber(truckNetId))
+            if e and e ~= 0 and DoesEntityExist(e) then
+                jobEnts.truckNetId = tonumber(truckNetId)
+                if LockEntityNetworkOwner then LockEntityNetworkOwner(e, src) end
+                pcall(function()
+                    if exports['qbx_vehiclekeys'] then
+                        exports['qbx_vehiclekeys']:GiveKeys(src, e)
+                    end
+                end)
             end
         end
+    end
+    if trailerNetId then
+        local _, tNet = accept(trailerNetId, 2)
+        if tNet then jobEnts.trailerNetId = tNet end
+    end
+    if forkliftNetId then
+        local _, fNet = accept(forkliftNetId, 2)
+        if fNet then jobEnts.forkliftNetId = fNet end
+    end
+    if type(palletNetIds) == 'table' then
+        local accepted = {}
+        for i, pNet in ipairs(palletNetIds) do
+            if i > 16 then break end -- limite de crescimento
+            local _, pId = accept(pNet, 3)
+            if pId then accepted[#accepted + 1] = pId end
+        end
+        jobEnts.palletNetIds = accepted
     end
 end)
 
@@ -225,7 +386,7 @@ AddEventHandler('playerDropped', function(reason)
 
     if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
         local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
-        print(("^3[AUST_Trucker GC] Jogador %s desconectou (%s). Iniciando Grace Period de 3 minutos para limpeza de entidades.^7"):format(tostring(citizenId), tostring(reason)))
+        if Config.Debug then print(("^3[AUST_Trucker GC] Jogador %s desconectou (%s). Iniciando Grace Period de 3 minutos para limpeza de entidades.^7"):format(tostring(citizenId), tostring(reason))) end
 
         JobService.PendingCleanups = JobService.PendingCleanups or {}
         if JobService.PendingCleanups[citizenId] then
@@ -237,29 +398,13 @@ AddEventHandler('playerDropped', function(reason)
 
         SetTimeout(180000, function()
             if cleanupRef.cancelled then
-                print(("^2[AUST_Trucker GC] Limpeza cancelada para %s: jogador retornou a tempo.^7"):format(tostring(citizenId)))
+                    if Config.Debug then print(("^2[AUST_Trucker GC] Limpeza cancelada para %s: jogador retornou a tempo.^7"):format(tostring(citizenId))) end
                 return
             end
 
-            print(("^1[AUST_Trucker GC] Grace period expirado (3 min) para %s. Deletando entidades órfãs no servidor.^7"):format(tostring(citizenId)))
-            if jobEnts.truckNetId then
-                local e = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
-                if e and DoesEntityExist(e) then DeleteEntity(e) end
-            end
-            if jobEnts.trailerNetId then
-                local e = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
-                if e and DoesEntityExist(e) then DeleteEntity(e) end
-            end
-            if jobEnts.forkliftNetId then
-                local e = NetworkGetEntityFromNetworkId(jobEnts.forkliftNetId)
-                if e and DoesEntityExist(e) then DeleteEntity(e) end
-            end
-            if jobEnts.palletNetIds and type(jobEnts.palletNetIds) == 'table' then
-                for _, pNet in ipairs(jobEnts.palletNetIds) do
-                    local p = NetworkGetEntityFromNetworkId(tonumber(pNet))
-                    if p and DoesEntityExist(p) then DeleteEntity(p) end
-                end
-            end
+            if Config.Debug then print(("^1[AUST_Trucker GC] Grace period expirado (3 min) para %s. Deletando entidades órfãs no servidor.^7"):format(tostring(citizenId))) end
+            -- Apenas entidades validadas no registro (o dono já desconectou: ownerSrc nil)
+            safeDeleteAllJobEntities(jobEnts, nil)
 
             VP_Trucker.PlayerJobEntities[citizenId] = nil
             JobService.PendingCleanups[citizenId] = nil
@@ -273,18 +418,20 @@ RegisterNetEvent('aurp_trucker:rental:registerNetId', function(netId)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
-    if netId and tonumber(netId) then
-        if TruckRentalService then
-            TruckRentalService.RegisterNetId(citizenId, netId)
-        end
-        local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
-        if veh and DoesEntityExist(veh) then
-            pcall(function()
-                if exports['qbx_vehiclekeys'] then
-                    exports['qbx_vehiclekeys']:GiveKeys(src, veh)
-                end
-            end)
-        end
+    if not (netId and tonumber(netId)) or not TruckRentalService then return end
+    if not rateLimit('rentalNet:' .. src, 1000) then return end
+
+    -- Só entrega chaves se o serviço de aluguel aceitou o netId (placa/modelo/posição conferidos)
+    local registered = TruckRentalService.RegisterNetId(citizenId, netId)
+    if registered ~= true then return end
+
+    local veh = NetworkGetEntityFromNetworkId(tonumber(netId))
+    if veh and veh ~= 0 and DoesEntityExist(veh) then
+        pcall(function()
+            if exports['qbx_vehiclekeys'] then
+                exports['qbx_vehiclekeys']:GiveKeys(src, veh)
+            end
+        end)
     end
 end)
 
@@ -297,14 +444,9 @@ RegisterNetEvent('aurp_trucker:server:onPlayerDeath', function()
 
     if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenId] then
         local jobEnts = VP_Trucker.PlayerJobEntities[citizenId]
-        if jobEnts.truckNetId then
-            local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
-            if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
-        end
-        if jobEnts.trailerNetId then
-            local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
-            if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
-        end
+        -- Só caminhão/trailer validados no registro (nunca netIds arbitrários)
+        safeDeleteJobEntity(jobEnts, jobEnts.truckNetId, src)
+        safeDeleteJobEntity(jobEnts, jobEnts.trailerNetId, src)
         VP_Trucker.PlayerJobEntities[citizenId] = nil
     end
 
@@ -380,10 +522,20 @@ RegisterNetEvent('aurp_trucker:kickMember', function(targetCitizenId)
         TriggerClientEvent('aurp_trucker:notify', src, 'Sem permissão', 'error')
         return
     end
+    if type(targetCitizenId) ~= 'string' or targetCitizenId == '' or #targetCitizenId > 50 then return end
+    -- Não permite expulsar a si mesmo nem o owner da empresa
+    if targetCitizenId == citizenId or targetCitizenId == company.owner_citizenid then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Não é possível expulsar o dono da empresa', 'error')
+        return
+    end
     -- S-01: Verificar que target pertence à MESMA empresa
     local targetMember = DB_GetMember(targetCitizenId)
     if not targetMember or targetMember.company_id ~= company.id then
         TriggerClientEvent('aurp_trucker:notify', src, 'Membro não pertence à sua empresa', 'error')
+        return
+    end
+    if targetMember.role == 'owner' then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Não é possível expulsar o dono da empresa', 'error')
         return
     end
     CompanyService.RemoveMember(targetCitizenId)
@@ -408,9 +560,9 @@ end)
 
 RegisterNetEvent('aurp_trucker:depositMoney', function(amount)
     local src = source
-    -- #4: Validar amount (previne exploit com valores negativos/zero)
-    amount = math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return end
+    -- #4: Validar amount (previne exploit com valores negativos/zero/NaN/inf)
+    amount = posInt(amount, 10000000)
+    if not amount then return end
 
     local Player = Framework.GetPlayer(src)
     if not Player then return end
@@ -433,9 +585,9 @@ end)
 
 RegisterNetEvent('aurp_trucker:withdrawMoney', function(amount)
     local src = source
-    -- #5: Validar amount (previne exploit com valores negativos/zero)
-    amount = math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return end
+    -- #5: Validar amount (previne exploit com valores negativos/zero/NaN/inf)
+    amount = posInt(amount, 10000000)
+    if not amount then return end
 
     local Player = Framework.GetPlayer(src)
     if not Player then return end
@@ -477,6 +629,46 @@ RegisterNetEvent('aurp_trucker:registerVehicle', function(plate, model, vehicleT
     vehicleType = type(vehicleType) == 'string' and vehicleType or 'truck'
     if not VALID_VEHICLE_TYPES[vehicleType] then
         TriggerClientEvent('aurp_trucker:notify', src, 'Tipo de veículo inválido', 'error')
+        return
+    end
+    if not rateLimit('registerVehicle:' .. src, 1500) then return end
+
+    -- Placa: string normalizada (<= 12 chars) e o jogador precisa estar em/perto desse veículo
+    plate = normPlate(plate)
+    if not plate then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Placa inválida', 'error')
+        return
+    end
+    if type(model) ~= 'string' or #model == 0 or #model > 32 or model:find('[^%w_%-%s]') then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Modelo inválido', 'error')
+        return
+    end
+    local function samePlate(a, b) return a and b and a:gsub('%s+', ''):upper() == b:gsub('%s+', ''):upper() end
+    local found = false
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 and DoesEntityExist(ped) then
+        local cur = GetVehiclePedIsIn(ped, false)
+        if cur and cur ~= 0 and DoesEntityExist(cur) and samePlate(GetVehicleNumberPlateText(cur), plate) then
+            found = true
+        elseif GetAllVehicles then
+            local pc = GetEntityCoords(ped)
+            for _, v in ipairs(GetAllVehicles()) do
+                if DoesEntityExist(v) and #(GetEntityCoords(v) - pc) <= 20.0
+                    and samePlate(GetVehicleNumberPlateText(v), plate) then
+                    found = true
+                    break
+                end
+            end
+        end
+    end
+    if not found then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Você precisa estar no veículo para registrá-lo', 'error')
+        return
+    end
+    -- Limita crescimento da tabela de veículos da empresa
+    local existingVehicles = DB_GetVehicles and DB_GetVehicles(company.id)
+    if existingVehicles and #existingVehicles >= 100 then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Limite de veículos da empresa atingido', 'error')
         return
     end
     local ok, err = CompanyService.RegisterVehicle(company.id, plate, model, vehicleType)
@@ -531,11 +723,42 @@ end)
 -- INDUSTRY TRADING HANDLERS
 -- =====================================================
 
+-- Valida indústria/item/proximidade: item precisa existir na config da indústria (produção p/ compra,
+-- consumo p/ venda) e o jogador precisa estar no raio da indústria. Retorna true ou false+motivo.
+local function validateIndustryTrade(src, industryId, item, isBuy)
+    if type(industryId) ~= 'string' or type(item) ~= 'string' or #item > 64 or #industryId > 64 then
+        return false, 'Dados inválidos'
+    end
+    local ind = Config.Industries and Config.Industries[industryId]
+    if not ind then return false, 'Indústria não encontrada' end
+    local allowed = false
+    if isBuy then
+        allowed = ind.production and ind.production.item == item
+    else
+        for _, c in ipairs(ind.consumption or {}) do
+            if c.item == item then allowed = true break end
+        end
+    end
+    if not allowed then return false, 'Produto não disponível nesta indústria' end
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return false, 'Jogador inválido' end
+    if ind.coords and #(GetEntityCoords(ped) - vector3(ind.coords.x, ind.coords.y, ind.coords.z)) > ((ind.radius or 15.0) + 5.0) then
+        return false, 'Muito longe da indústria'
+    end
+    return true
+end
+
 RegisterNetEvent('aurp_trucker:buyFromIndustry', function(industryId, item, qty)
     local src = source
-    -- H-04: Sanitizar qty — previne exploit de qty negativa/zero/overflow
-    qty = math.floor(tonumber(qty) or 0)
-    if qty <= 0 or qty > 500 then return end
+    -- H-04: Sanitizar qty — previne exploit de qty negativa/zero/overflow/NaN
+    qty = posInt(qty, 500)
+    if not qty then return end
+    if not rateLimit('industryTrade:' .. src, 750) then return end
+    local valid, why = validateIndustryTrade(src, industryId, item, true)
+    if not valid then
+        TriggerClientEvent('aurp_trucker:notify', src, why or 'Erro na compra', 'error')
+        return
+    end
     local ok, err = IndustryService.BuyFrom(src, industryId, item, qty)
     if not ok then
         TriggerClientEvent('aurp_trucker:notify', src, err or 'Erro na compra', 'error')
@@ -547,8 +770,14 @@ end)
 RegisterNetEvent('aurp_trucker:sellToIndustry', function(industryId, item, qty)
     local src = source
     -- H-04: Sanitizar qty — previne exploit de qty negativa (RemoveItem(-n) pode adicionar itens)
-    qty = math.floor(tonumber(qty) or 0)
-    if qty <= 0 or qty > 500 then return end
+    qty = posInt(qty, 500)
+    if not qty then return end
+    if not rateLimit('industryTrade:' .. src, 750) then return end
+    local valid, why = validateIndustryTrade(src, industryId, item, false)
+    if not valid then
+        TriggerClientEvent('aurp_trucker:notify', src, why or 'Erro na venda', 'error')
+        return
+    end
     local ok, err = IndustryService.SellTo(src, industryId, item, qty)
     if not ok then
         TriggerClientEvent('aurp_trucker:notify', src, err or 'Erro na venda', 'error')
@@ -669,14 +898,15 @@ end)
 -- ============================================================
 
 RegisterNetEvent('aurp_trucker:requestLoan', function(amount, isCompanyLoan, vehiclePlate)
-    amount = math.floor(tonumber(amount) or 0)
+    amount = posInt(amount, 100000000)
+    if not amount then return end
     local src       = source
     local Player    = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
 
     -- Normalizar plate (6A)
-    vehiclePlate = type(vehiclePlate) == 'string' and vehiclePlate:upper() or nil
+    vehiclePlate = type(vehiclePlate) == 'string' and #vehiclePlate <= 12 and vehiclePlate:upper() or nil
 
     local companyId = nil
     if isCompanyLoan then
@@ -933,14 +1163,9 @@ AddEventHandler('playerDropped', function()
         -- Limpeza estrita de entidades órfãs (caminhão e trailer) via DeleteEntity
         if VP_Trucker and VP_Trucker.PlayerJobEntities and VP_Trucker.PlayerJobEntities[citizenid] then
             local jobEnts = VP_Trucker.PlayerJobEntities[citizenid]
-            if jobEnts.truckNetId then
-                local truck = NetworkGetEntityFromNetworkId(jobEnts.truckNetId)
-                if truck and DoesEntityExist(truck) then DeleteEntity(truck) end
-            end
-            if jobEnts.trailerNetId then
-                local trailer = NetworkGetEntityFromNetworkId(jobEnts.trailerNetId)
-                if trailer and DoesEntityExist(trailer) then DeleteEntity(trailer) end
-            end
+            -- Só entidades validadas no registro; o dono já saiu (ownerSrc nil)
+            safeDeleteJobEntity(jobEnts, jobEnts.truckNetId, nil)
+            safeDeleteJobEntity(jobEnts, jobEnts.trailerNetId, nil)
             VP_Trucker.PlayerJobEntities[citizenid] = nil
         end
         if TruckRentalService then
@@ -1211,11 +1436,6 @@ end)
 -- =====================================================
 -- LC LOGISTICS: QUICK JOBS & FREIGHT CONTRACTS
 -- =====================================================
-
-local ActiveLCContracts    = {}
-local ActiveLCContractData = {}
-local StartingJobLock      = {}
-local LastNotifyTime       = {}
 
 local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
     local Player = Framework.GetPlayer(src)
@@ -2396,8 +2616,9 @@ RegisterNetEvent('aurp_trucker:bank:deposit', function(amount)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
 
-    amount = math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return end
+    amount = posInt(amount, 10000000)
+    if not amount then return end
+    if not rateLimit('bank:' .. src, 1000) then return end
 
     local company = CompanyService.GetByMember(citizenId)
     if not company then
@@ -2421,12 +2642,19 @@ RegisterNetEvent('aurp_trucker:bank:withdraw', function(amount)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
 
-    amount = math.floor(tonumber(amount) or 0)
-    if amount <= 0 then return end
+    amount = posInt(amount, 10000000)
+    if not amount then return end
+    if not rateLimit('bank:' .. src, 1000) then return end
 
     local company = CompanyService.GetByMember(citizenId)
     if not company then
         TriggerClientEvent('aurp_trucker:notify', src, 'Você não possui empresa registrada.', 'error')
+        return
+    end
+    -- Apenas owner/manager podem sacar da conta da empresa
+    local bankMember = DB_GetMember(citizenId)
+    if not bankMember or (bankMember.role ~= 'owner' and bankMember.role ~= 'manager') then
+        TriggerClientEvent('aurp_trucker:notify', src, 'Sem permissão para sacar', 'error')
         return
     end
 

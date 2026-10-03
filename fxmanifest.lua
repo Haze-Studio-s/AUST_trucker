@@ -92,12 +92,12 @@ client_scripts {
 ui_page 'html/index.html'
 
 files {
-    'client/modules/*.lua',
     'html/index.html',
     'html/style.css',
     'html/panel.js',
     'html/css/*',
     'html/js/*',
+    'html/vendor/**',
     'html/lang/*',
     'html/img/*',
     'html/img/avatar/*',

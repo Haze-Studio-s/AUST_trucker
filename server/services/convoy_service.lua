@@ -20,6 +20,7 @@ function ConvoyService.StartPositionBroadcast(convoyId)
     if not convoy then return end
 
     local handle = SetInterval(Config.Party.positionBroadcastInterval, function()
+      local okTick, errTick = pcall(function()
         local cv = VP_Trucker.Convoys[convoyId]
         if not cv then return end
 
@@ -47,6 +48,8 @@ function ConvoyService.StartPositionBroadcast(convoyId)
                 TriggerClientEvent('aurp_trucker:client:positionsUpdate', info.src, positions)
             end
         end
+      end)
+      if not okTick then print('[aurp_trucker] Convoy broadcast erro: ' .. tostring(errTick)) end
     end)
 
     VP_Trucker.Convoys[convoyId].broadcastTimer = handle
@@ -174,7 +177,7 @@ function ConvoyService.MemberAbandon(convoyId, citizenid)
     for _, row in ipairs(rows) do
         if row.status == 'completed' then completedCount = completedCount + 1 end
     end
-    local completedFraction = completedCount / convoy.totalCount
+    local completedFraction = (convoy.totalCount and convoy.totalCount > 0) and (completedCount / convoy.totalCount) or 0
     local newMult = 1.0 + (0.5 * completedFraction)
     DB_SetConvoyBonusMult(convoyId, newMult)
     convoy.bonus_mult = newMult
@@ -254,54 +257,41 @@ function ConvoyService._PayAll(convoyId)
 
     for _, row in ipairs(rows) do
         if row.status == 'completed' then
-            -- Idempotência: verificar se este membro já recebeu o pagamento deste convoy
-            local alreadyPaid = MySQL.scalar.await(
-                "SELECT COUNT(*) FROM trucker_convoy_payments WHERE convoy_id = ? AND citizenid = ?",
-                { convoyId, row.citizenid }
-            )
-            if (alreadyPaid or 0) > 0 then
-                if Config.Debug then
-                    print(('[aurp_trucker] Convoy %s: %s já foi pago, ignorando duplicidade'):format(convoyId, row.citizenid))
-                end
-            else
-                local jobRow = DB_GetJobWithConvoy(row.job_id)
-                if jobRow then
-                    local payment = math.floor((jobRow.base_payment or 0) * bonusMult)
+            local jobRow = DB_GetJobWithConvoy(row.job_id)
+            if jobRow then
+                local payment = math.floor((jobRow.base_payment or 0) * bonusMult)
+                -- Idempotência: reivindica o pagamento ANTES de pagar (INSERT IGNORE + UNIQUE convoy/membro).
+                -- Só paga quem conseguiu inserir o registro.
+                if DB_ClaimConvoyPayment(convoyId, row.citizenid, payment, bonusMult, completedCount, convoy.totalCount) then
                     local memberSrc = Framework.FindPlayerByCitizenId(row.citizenid)
-                    if memberSrc then
-                        local p = Framework.GetPlayer(memberSrc)
-                        if p then
-                            Framework.AddMoney(p, Config.General.payment.currency, payment, 'aurp-trucker-convoy')
-                            DB_AddPlayerStats(row.citizenid, payment, 0)
-                            DB_RecordConvoyPayment(convoyId, row.citizenid, payment, bonusMult, completedCount, convoy.totalCount)
-                            TriggerClientEvent('aurp_trucker:client:jobCompleted', memberSrc, payment)
-                            TriggerClientEvent('aurp_trucker:notify', memberSrc,
-                                ('Convoy concluído! Bônus ×%.1f — $%d recebidos'):format(bonusMult, payment), 'success')
+                    local p = memberSrc and Framework.GetPlayer(memberSrc)
+                    local paid = false
+                    if p then
+                        paid = Framework.AddMoney(p, Config.General.payment.currency, payment, 'aurp-trucker-convoy')
+                    end
+                    if paid then
+                        DB_AddPlayerStats(row.citizenid, payment, 0)
+                        TriggerClientEvent('aurp_trucker:client:jobCompleted', memberSrc, payment)
+                        TriggerClientEvent('aurp_trucker:notify', memberSrc,
+                            ('Convoy concluído! Bônus ×%.1f — $%d recebidos'):format(bonusMult, payment), 'success')
+                        if ContractService and ContractService.PayPending then
+                            pcall(ContractService.PayPending, memberSrc, row.citizenid)
                         end
                     else
-                        -- Offline fallback idempotente: jogador completou mas desconectou antes do último membro finalizar
+                        -- Offline (ou crédito falhou): NÃO mexe direto nas tabelas do framework.
+                        -- Registra pagamento pendente (trucker_pending_payouts) + log; pago no próximo login/ação.
                         DB_AddPlayerStats(row.citizenid, payment, 0)
-                        DB_RecordConvoyPayment(convoyId, row.citizenid, payment, bonusMult, completedCount, convoy.totalCount)
-                        if Config.Framework == 'qbx' or Config.Framework == 'qbcore' then
-                            pcall(function()
-                                MySQL.update.await(
-                                    'UPDATE players SET money = JSON_SET(money, "$.bank", JSON_EXTRACT(money, "$.bank") + ?) WHERE citizenid = ?',
-                                    { payment, row.citizenid }
-                                )
-                            end)
-                        elseif Config.Framework == 'esx' then
-                            pcall(function()
-                                MySQL.update.await(
-                                    'UPDATE users SET bank = bank + ? WHERE identifier = ?',
-                                    { payment, row.citizenid }
-                                )
-                            end)
-                        end
-                        if Config.Debug then
-                            print(('[aurp_trucker] Convoy %s: Pagamento offline $%d creditado para %s'):format(
-                                convoyId, payment, row.citizenid))
+                        print(('[aurp_trucker] Convoy %s: pagamento PENDENTE $%d para %s (offline/falha)'):format(
+                            convoyId, payment, tostring(row.citizenid)))
+                        local okQ, errQ = pcall(MySQL.insert.await,
+                            'INSERT INTO trucker_pending_payouts (citizenid, amount, reason) VALUES (?, ?, ?)',
+                            { row.citizenid, payment, 'convoy:' .. tostring(convoyId) })
+                        if not okQ then
+                            print(('[aurp_trucker] Convoy %s: ERRO ao registrar pendência: %s'):format(convoyId, tostring(errQ)))
                         end
                     end
+                elseif Config.Debug then
+                    print(('[aurp_trucker] Convoy %s: %s já foi pago, ignorando duplicidade'):format(convoyId, row.citizenid))
                 end
             end
         end
@@ -332,6 +322,20 @@ function ConvoyService.Cancel(convoyId)
 
     ConvoyService.StopPositionBroadcast(convoyId)
     DB_SetConvoyStatus(convoyId, 'cancelled')
+
+    -- Libera os jobs ativos dos membros (e marca membros pendentes/ativos como abandonados)
+    local okRel, errRel = pcall(function()
+        local members = DB_GetConvoyMembers(convoyId) or {}
+        for _, m in ipairs(members) do
+            if m.status == 'pending' or m.status == 'active' then
+                DB_SetConvoyMemberStatus(convoyId, m.citizenid, 'abandoned')
+            end
+        end
+        DB_ReleaseConvoyJobs(convoyId)
+    end)
+    if not okRel then
+        print(('[aurp_trucker] Convoy %s: erro ao liberar jobs no cancelamento: %s'):format(convoyId, tostring(errRel)))
+    end
 
     local party = VP_Trucker.Parties[convoy.partyId]
     if party then
