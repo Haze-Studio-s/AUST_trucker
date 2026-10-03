@@ -113,6 +113,11 @@ CreateThread(function()
         SchemaService.EnsureTables()   -- v17: garantir schema antes de queries
         -- HARDENING: Resetar veículos que ficaram presos com status 'out' após restart/crash
         MySQL.update.await("UPDATE trucker_company_vehicles SET status = 'stored' WHERE status = 'out'")
+        -- Aluguéis abertos antes do restart → caução integral como estorno pendente
+        CreateThread(function()
+            while not TruckRentalService do Wait(100) end
+            TruckRentalService.Init()
+        end)
         LoadCompanies()
         -- JobService ainda não existe aqui no load order — usar callback
         CreateThread(function()

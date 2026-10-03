@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS `trucker_rentals` (
     `model`       VARCHAR(50) NOT NULL,
     `deposit`     INT         NOT NULL,
     `fee`         INT         NOT NULL,
+    `refund_due`  INT         NULL DEFAULT NULL,
     `rented_at`   DATETIME    DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
