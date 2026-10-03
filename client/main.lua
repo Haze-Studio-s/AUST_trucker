@@ -1378,7 +1378,7 @@ CreateThread(function()
             end
 
             local fork = JobEntities.forklift
-            if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
+            if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer and IsEntityAttachedToEntity(fork, trailer) then
                 hasCargo = true
                 SetEntityNoCollisionEntity(fork, trailer, true)
                 SetEntityNoCollisionEntity(trailer, fork, true)
@@ -1413,7 +1413,7 @@ CreateThread(function()
                     local lFork = sBag and sBag.loadedForklift
                     if lFork and lFork.forkNet then
                         local fEnt = NetworkGetEntityFromNetworkId(lFork.forkNet)
-                        if fEnt and fEnt ~= 0 and DoesEntityExist(fEnt) then
+                        if fEnt and fEnt ~= 0 and DoesEntityExist(fEnt) and IsEntityAttachedToEntity(fEnt, veh) then
                             hasCargo = true
                             SetEntityNoCollisionEntity(fEnt, veh, true)
                             SetEntityNoCollisionEntity(veh, fEnt, true)
@@ -2390,6 +2390,17 @@ lib.onCache('vehicle', function(veh)
     if CurrentStage == 'STEP_5_ENTER_FORKLIFT' then
         if JobEntities.forklift and veh == JobEntities.forklift then
             CurrentStage = 'STEP_6_LOAD_PALLETS'
+            ForkliftLoadedOnTrailer = false
+
+            -- Garante física e colisão ativa mútua e com o mundo na empilhadeira e no trailer
+            if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                SetEntityCollision(JobEntities.trailer, true, true)
+                SetCanClimbOnEntity(JobEntities.trailer, true)
+            end
+            if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                SetEntityCollision(JobEntities.forklift, true, true)
+                SetCanClimbOnEntity(JobEntities.forklift, true)
+            end
 
             -- Ao entrar na empilhadeira, a seta passa para os pallets no pátio
             local firstPallet = GetNextAvailablePallet()
@@ -2501,7 +2512,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     -- Prevenção de Deadlock: se não houver empilhadeira contratada, inicia como concluída
     local hasFork = payload and payload.withForklift and (payload.forkliftNetId and payload.forkliftNetId ~= 0)
     ForkliftSecured = not hasFork
-    ForkliftLoadedOnTrailer = not hasFork
+    ForkliftLoadedOnTrailer = false
     ForkliftRiskLevel = 0
 
     -- Runtime Synchronization: Sobrescreve os offsets em memória com os dados mais recentes do banco

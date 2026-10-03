@@ -539,6 +539,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             -- Yield defensivo para garantia de propagação atômica em memória
             Wait(50)
 
+            if trailer and DoesEntityExist(trailer) then
+                SetEntityCollision(trailer, true, true)
+                SetCanClimbOnEntity(trailer, true)
+            end
+            local currentFork = ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+            if currentFork and DoesEntityExist(currentFork) then
+                SetEntityCollision(currentFork, true, true)
+                SetCanClimbOnEntity(currentFork, true)
+            end
+
             local firstOffset, firstHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
             ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', firstOffset, firstHeading)
         end
@@ -671,11 +681,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
                                     else
                                         -- Todos os paletes estivados! O fantasma da empilhadeira surge IMEDIATAMENTE antes da amarração
-                                        local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
-                                        local hasForklift = (withForklift == true)
-                                            or (_G.ActiveJob and _G.ActiveJob.withForklift)
-                                            or (_G.JobEntities and _G.JobEntities.forklift and DoesEntityExist(_G.JobEntities.forklift))
-                                            or (currentFork ~= nil and DoesEntityExist(currentFork))
+                                        local hasForklift = false
+                                        if withForklift ~= nil then
+                                            hasForklift = (withForklift == true)
+                                        elseif _G.ActiveJob and _G.ActiveJob.withForklift ~= nil then
+                                            hasForklift = (_G.ActiveJob.withForklift == true)
+                                        else
+                                            local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+                                            hasForklift = (currentFork ~= nil and DoesEntityExist(currentFork))
+                                        end
 
                                         if hasForklift then
                                             -- GATILHO IMEDIATO DO FANTASMA DA EMPILHADEIRA (Embarque Contínuo)
