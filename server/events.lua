@@ -842,6 +842,22 @@ end)
 -- PLAYER LIFECYCLE
 -- =====================================================
 
+-- Paga no login o que ficou em trucker_pending_payouts enquanto o jogador estava offline
+-- (contratos/convoy). O claim da linha é atômico (DELETE antes de pagar); erro não bloqueia o login.
+local function PayPendingPayoutsOnLogin(src, citizenId)
+    if not ContractService or not ContractService.PayPending then return end
+    local ok, paid = pcall(ContractService.PayPending, src, citizenId)
+    if not ok then
+        print(('[AUST_Trucker] PayPending falhou no login de %s: %s'):format(tostring(citizenId), tostring(paid)))
+        return
+    end
+    paid = tonumber(paid) or 0
+    if paid > 0 then
+        TriggerClientEvent('aurp_trucker:notify', src,
+            ('Pagamentos pendentes recebidos: $%d'):format(paid), 'success')
+    end
+end
+
 AddEventHandler('QBCore:Server:OnPlayerLoaded', function()
     local src = source
     local Player = Framework.GetPlayer(src)
@@ -854,6 +870,7 @@ AddEventHandler('QBCore:Server:OnPlayerLoaded', function()
     if TruckRentalService and TruckRentalService.OnPlayerLoaded then
         TruckRentalService.OnPlayerLoaded(src, citizenId) -- estorno pendente da caução
     end
+    PayPendingPayoutsOnLogin(src, citizenId)
     if PartyService then
         PartyService.OnPlayerReconnect(src, citizenId)
     end
@@ -869,6 +886,10 @@ if Config.Framework == 'esx' then
         local citizenId = Framework.GetCitizenId(Player)
         DB_UpsertPlayerStats(citizenId)
         TruckSimulationService.OnPlayerLoaded(src)
+        if TruckRentalService and TruckRentalService.OnPlayerLoaded then
+            TruckRentalService.OnPlayerLoaded(src, citizenId) -- estorno pendente da caução
+        end
+        PayPendingPayoutsOnLogin(src, citizenId)
         if PartyService then
             PartyService.OnPlayerReconnect(src, citizenId)
         end
