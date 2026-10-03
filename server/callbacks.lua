@@ -1260,7 +1260,7 @@ lib.callback.register('aurp_trucker:getAdrExamQuestions', function(source, adrTy
     if type(adrType) ~= 'string' or not Config.Adr.ExamCost[adrType] then
         return { success = false, reason = 'Tipo ADR inválido' }
     end
-    local bank = Config.Adr.Questions[adrType]
+    local bank = AdrExamBank and AdrExamBank[adrType]
     if type(bank) ~= 'table' or #bank < ADR_EXAM_QUESTIONS then
         return { success = false, reason = 'Banco de questões insuficiente' }
     end
@@ -1306,7 +1306,7 @@ lib.callback.register('aurp_trucker:submitAdrExam', function(source, data)
     end
 
     -- 0. Validar payload ANTES de cobrar: exatamente N perguntas DISTINTAS e válidas
-    local bank      = Config.Adr.Questions[adrType]
+    local bank      = AdrExamBank and AdrExamBank[adrType]
     local questions = data.questions
     if type(bank) ~= 'table' or type(questions) ~= 'table' or #questions ~= ADR_EXAM_QUESTIONS then
         return { success = false, reason = 'Exame inválido' }
