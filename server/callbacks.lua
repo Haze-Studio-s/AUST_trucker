@@ -448,6 +448,14 @@ function BuildInitialDataForPlayer(source, citizenId)
         local activeLocale = Config.locale or Config.lang or 'br'
         local activeFormat = Config.format or { lang = activeLocale, currency = 'USD', location = 'pt-BR' }
 
+        local stats = _r.stats or {}
+        local skills = _r.skills or {}
+        local playerMoney = (Player and (Framework.GetMoney(Player, 'bank') or Framework.GetMoney(Player, 'cash'))) or (stats.money) or 0
+        local playerXP = tonumber(stats.xp) or 0
+        local playerLevel = tonumber(stats.level) or (ProgressionService and ProgressionService.GetPlayerLevel and ProgressionService.GetPlayerLevel(playerXP)) or 0
+        local playerSkillPoints = tonumber(stats.skill_points) or 0
+        local loanPlans = (LoanService and LoanService.GetPlans and LoanService.GetPlans()) or (Config.LC_Loans and Config.LC_Loans.plans) or {}
+
         local lc_dados = {
             config = {
                 locale = activeLocale,

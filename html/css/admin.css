@@ -1,56 +1,118 @@
-/* AUST_trucker — html/css/admin.css */
-/* Tema Oficial Lation Modern UI (Emerald / Admin Edition) */
+/* ==========================================================================
+   AUST_trucker — html/css/admin.css
+   Tema Oficial Lation Modern UI (Emerald / Admin Edition - Clean UI & UX)
+   Identidade: Esmeralda (#10b981), Grafite Escuro (#0d1418 / #161f26), Vidro & Sombra
+   ========================================================================== */
 
 :root {
-  --admin-bg: rgba(13, 20, 24, 0.95);
+  --admin-bg: rgba(13, 20, 24, 0.96);
+  --admin-sidebar-bg: rgba(10, 15, 19, 0.75);
   --admin-card-bg: rgba(22, 31, 38, 0.85);
-  --admin-card-border: rgba(16, 185, 129, 0.2);
-  --admin-card-border-hover: rgba(16, 185, 129, 0.5);
+  --admin-card-bg-hover: rgba(26, 37, 46, 0.92);
+  --admin-card-border: rgba(16, 185, 129, 0.18);
+  --admin-card-border-hover: rgba(16, 185, 129, 0.45);
   --admin-primary: #10b981;
-  --admin-primary-glow: rgba(16, 185, 129, 0.4);
+  --admin-primary-dark: #059669;
+  --admin-primary-glow: rgba(16, 185, 129, 0.35);
+  --admin-primary-light: rgba(16, 185, 129, 0.12);
   --admin-text-main: #f1f5f9;
   --admin-text-muted: #94a3b8;
+  --admin-text-dim: #64748b;
   --admin-danger: #ef4444;
+  --admin-danger-glow: rgba(239, 68, 68, 0.3);
   --admin-warning: #f59e0b;
   --admin-info: #06b6d4;
+  --admin-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --admin-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --admin-transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ==========================================================================
+   Custom Scrollbars (Finas, Ergonômicas e Modernas)
+   ========================================================================== */
+#admin-panel *::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+#admin-panel *::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+}
+
+#admin-panel *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  transition: background var(--admin-transition-fast);
+}
+
+#admin-panel *::-webkit-scrollbar-thumb:hover {
+  background: var(--admin-primary);
+  box-shadow: 0 0 8px var(--admin-primary-glow);
+}
+
+/* ==========================================================================
+   Painel Container (Janela Principal Centralizada)
+   ========================================================================== */
 #admin-panel {
   display: none;
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1100px;
+  width: 1140px;
   max-width: 95vw;
-  height: 720px;
-  max-height: 92vh;
+  height: 740px;
+  max-height: 94vh;
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
-  border-radius: 14px;
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8), 0 0 25px var(--admin-card-border);
-  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85),
+              0 0 35px rgba(16, 185, 129, 0.12),
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   z-index: 9999;
   flex-direction: column;
   overflow: hidden;
-  font-family: 'Inter', 'Poppins', sans-serif;
+  font-family: var(--admin-font);
   color: var(--admin-text-main);
-  animation: adminFadeIn 0.2s ease-out;
+  animation: adminPanelPop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
-@keyframes adminFadeIn {
-  from { opacity: 0; transform: translate(-50%, -48%) scale(0.98); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+@keyframes adminPanelPop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
 }
 
-/* Header */
+/* ==========================================================================
+   Header Superior
+   ========================================================================== */
 .admin-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(15, 23, 42, 0.6);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(15, 23, 42, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  position: relative;
+}
+
+.admin-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 24px;
+  width: 120px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--admin-primary), transparent);
 }
 
 .admin-header-title {
@@ -60,33 +122,40 @@
 }
 
 .admin-header-title i {
-  font-size: 22px;
+  font-size: 20px;
   color: var(--admin-primary);
-  filter: drop-shadow(0 0 8px var(--admin-primary-glow));
+  filter: drop-shadow(0 0 10px var(--admin-primary-glow));
+  transition: transform var(--admin-transition);
+}
+
+.admin-header-title:hover i {
+  transform: scale(1.08);
 }
 
 .admin-header-title h4 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.5px;
-  color: #fff;
+  letter-spacing: 0.6px;
+  color: #ffffff;
+  text-transform: uppercase;
 }
 
 .admin-header-title span {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.12);
   color: var(--admin-primary);
-  border: 1px solid var(--admin-card-border);
+  border: 1px solid rgba(16, 185, 129, 0.25);
   padding: 3px 8px;
   border-radius: 6px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
 
 .admin-close-btn {
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--admin-text-muted);
   width: 34px;
   height: 34px;
@@ -95,176 +164,226 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--admin-transition);
 }
 
 .admin-close-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.18);
   border-color: var(--admin-danger);
-  color: #fff;
+  color: #ffffff;
+  transform: rotate(90deg);
 }
 
-/* Body / Navigation Tabs */
+/* ==========================================================================
+   Layout Principal: Sidebar + Área de Conteúdo
+   ========================================================================== */
 .admin-body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
+/* Sidebar de Navegação */
 .admin-sidebar {
-  width: 230px;
-  background: rgba(10, 15, 20, 0.5);
+  width: 240px;
+  min-width: 240px;
+  background: var(--admin-sidebar-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 14px 10px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
+  overflow-y: auto;
 }
 
 .admin-tab-btn {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 11px 14px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-left: 3px solid transparent;
+  border-radius: 10px;
   color: var(--admin-text-muted);
   font-size: 13px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--admin-transition);
+  position: relative;
+  overflow: hidden;
 }
 
 .admin-tab-btn i {
-  font-size: 16px;
-  width: 20px;
+  font-size: 15px;
+  width: 22px;
   text-align: center;
+  color: var(--admin-text-dim);
+  transition: all var(--admin-transition);
 }
 
 .admin-tab-btn:hover {
   background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  color: #ffffff;
+  transform: translateX(3px);
+}
+
+.admin-tab-btn:hover i {
+  color: var(--admin-primary);
 }
 
 .admin-tab-btn.active {
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid var(--admin-card-border);
-  color: var(--admin-primary);
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.14) 0%, rgba(16, 185, 129, 0.03) 100%);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-left: 3px solid var(--admin-primary);
+  color: #ffffff;
   font-weight: 600;
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.1);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.08);
 }
 
 .admin-tab-btn.active i {
   color: var(--admin-primary);
+  filter: drop-shadow(0 0 6px var(--admin-primary-glow));
 }
 
-/* Content Area */
+/* Área de Conteúdo */
 .admin-content {
   flex: 1;
-  padding: 20px 24px;
+  padding: 22px 26px;
   overflow-y: auto;
   background: rgba(15, 23, 42, 0.25);
 }
 
+/* Abas com Transição Fluida */
 .admin-tab-pane {
   display: none;
-  animation: adminTabFade 0.18s ease-out;
 }
 
 .admin-tab-pane.active {
   display: block;
+  animation: adminTabSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes adminTabFade {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes adminTabSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-/* Card Boxes */
+/* ==========================================================================
+   Cards e Caixas de Conteúdo
+   ========================================================================== */
 .admin-card {
   background: var(--admin-card-bg);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 10px;
-  padding: 16px 20px;
-  margin-bottom: 18px;
-  transition: border-color 0.2s;
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: all var(--admin-transition);
 }
 
 .admin-card:hover {
   border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .admin-card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .admin-card-title {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #fff;
+  color: #ffffff;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  letter-spacing: 0.3px;
 }
 
 .admin-card-title i {
   color: var(--admin-primary);
+  font-size: 14px;
 }
 
-/* Buttons */
+/* ==========================================================================
+   Botões e Ações Interativas
+   ========================================================================== */
 .admin-btn {
-  padding: 8px 14px;
-  border-radius: 6px;
+  padding: 9px 16px;
+  border-radius: 8px;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.2s;
+  transition: all var(--admin-transition);
   border: 1px solid transparent;
+  outline: none;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+}
+
+.admin-btn:hover {
+  transform: translateY(-1px);
+}
+
+.admin-btn:active {
+  transform: translateY(0);
 }
 
 .admin-btn-primary {
-  background: var(--admin-primary);
+  background: linear-gradient(135deg, var(--admin-primary) 0%, var(--admin-primary-dark) 100%);
   color: #042f2e;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.2);
 }
 
 .admin-btn-primary:hover {
-  background: #059669;
-  box-shadow: 0 0 12px var(--admin-primary-glow);
-  color: #fff;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  box-shadow: 0 4px 16px var(--admin-primary-glow);
+  color: #ffffff;
 }
 
 .admin-btn-outline {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .admin-btn-outline:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   border-color: var(--admin-primary);
   color: var(--admin-primary);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.15);
 }
 
 .admin-btn-danger {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.28);
   color: var(--admin-danger);
 }
 
 .admin-btn-danger:hover {
   background: var(--admin-danger);
-  color: #fff;
+  border-color: var(--admin-danger);
+  color: #ffffff;
+  box-shadow: 0 4px 14px var(--admin-danger-glow);
 }
 
-/* Inputs & Forms */
+/* ==========================================================================
+   Formulários, Inputs e Controles
+   ========================================================================== */
 .admin-form-group {
   margin-bottom: 14px;
 }
@@ -281,22 +400,61 @@
 
 .admin-input, .admin-select {
   width: 100%;
-  padding: 10px 14px;
-  background: rgba(10, 15, 20, 0.7);
+  height: 40px;
+  padding: 0 14px;
+  background: rgba(10, 15, 20, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: #fff;
-  font-size: 13px;
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 12.5px;
   outline: none;
-  transition: border-color 0.2s;
+  font-family: inherit;
+  transition: all var(--admin-transition);
+  box-sizing: border-box;
+}
+
+.admin-input::placeholder {
+  color: var(--admin-text-dim);
 }
 
 .admin-input:focus, .admin-select:focus {
   border-color: var(--admin-primary);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.25);
+  background: rgba(10, 15, 20, 0.85);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 
-/* Tables */
+.admin-select {
+  cursor: pointer;
+}
+
+.admin-select option {
+  background: #111a20;
+  color: #ffffff;
+}
+
+.admin-inline-input {
+  width: 90px;
+  height: 32px;
+  padding: 4px 8px;
+  background: rgba(10, 15, 20, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 12px;
+  text-align: right;
+  outline: none;
+  font-family: inherit;
+  transition: all var(--admin-transition-fast);
+}
+
+.admin-inline-input:focus {
+  border-color: var(--admin-primary);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
+/* ==========================================================================
+   Tabelas Administrativas
+   ========================================================================== */
 .admin-table {
   width: 100%;
   border-collapse: collapse;
@@ -305,43 +463,77 @@
 
 .admin-table th {
   text-align: left;
-  padding: 10px 12px;
-  background: rgba(10, 15, 20, 0.4);
+  padding: 10px 14px;
+  background: rgba(10, 15, 20, 0.6);
   color: var(--admin-text-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .admin-table td {
-  padding: 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--admin-text-main);
   vertical-align: middle;
+  transition: background var(--admin-transition-fast);
 }
 
 .admin-table tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(16, 185, 129, 0.04);
 }
 
-/* Badges */
+/* Badges de Categoria */
 .admin-badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 3px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
-.admin-badge-quick { background: rgba(6, 182, 212, 0.15); color: #06b6d4; border: 1px solid rgba(6, 182, 212, 0.3); }
-.admin-badge-freight { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-.admin-badge-adr { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
-.admin-badge-heavy { background: rgba(168, 85, 247, 0.15); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); }
-.admin-badge-carrier { background: rgba(236, 72, 153, 0.15); color: #ec4899; border: 1px solid rgba(236, 72, 153, 0.3); }
+.admin-badge-quick {
+  background: rgba(6, 182, 212, 0.12);
+  color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.25);
+}
 
-/* Grid */
+.admin-badge-freight {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.admin-badge-adr {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.admin-badge-heavy {
+  background: rgba(168, 85, 247, 0.12);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.admin-badge-carrier {
+  background: rgba(236, 72, 153, 0.12);
+  color: #ec4899;
+  border: 1px solid rgba(236, 72, 153, 0.25);
+}
+
+/* ==========================================================================
+   Grids de Layout Responsivos
+   ========================================================================== */
 .admin-grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -350,46 +542,52 @@
 
 .admin-grid-3 {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
 }
 
-/* Filtros por Categoria / Tipo de Trabalho */
+/* ==========================================================================
+   Barra de Filtros (Pílulas Arredondadas Modernas)
+   ========================================================================== */
 .admin-filter-bar {
   display: flex;
   gap: 8px;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
 .admin-filter-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--admin-text-muted);
   padding: 6px 14px;
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all var(--admin-transition);
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
 .admin-filter-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
 
 .admin-filter-btn.active {
   background: var(--admin-primary);
   color: #0b1418;
   border-color: var(--admin-primary);
-  box-shadow: 0 0 10px var(--admin-primary-glow);
+  box-shadow: 0 2px 10px var(--admin-primary-glow);
+  font-weight: 700;
 }
 
-/* Pastas e Drag-and-Drop (Aba Spawns) */
+/* ==========================================================================
+   Gerenciador de Spawns: Pastas e Drag-and-Drop
+   ========================================================================== */
 .admin-folders-container {
   display: flex;
   flex-direction: column;
@@ -400,25 +598,30 @@
 .admin-folder-card {
   background: rgba(18, 26, 32, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border-radius: 10px;
   overflow: hidden;
-  transition: all 0.2s;
+  transition: all var(--admin-transition);
 }
 
 .admin-folder-card.drag-over {
   border: 2px dashed var(--admin-primary) !important;
   background: rgba(16, 185, 129, 0.12) !important;
-  box-shadow: 0 0 16px var(--admin-primary-glow);
+  box-shadow: 0 0 20px var(--admin-primary-glow);
 }
 
 .admin-folder-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
+  padding: 12px 16px;
   background: rgba(255, 255, 255, 0.03);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   cursor: pointer;
+  transition: background var(--admin-transition-fast);
+}
+
+.admin-folder-header:hover {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .admin-folder-title {
@@ -431,85 +634,89 @@
 }
 
 .admin-folder-badge {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--admin-text-muted);
   font-size: 10px;
-  padding: 2px 7px;
+  font-weight: 600;
+  padding: 2px 8px;
   border-radius: 10px;
 }
 
 .admin-folder-items {
-  padding: 8px 12px;
+  padding: 10px 14px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  min-height: 40px;
+  gap: 8px;
+  min-height: 44px;
 }
 
 .admin-spawn-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 9px 14px;
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
   cursor: grab;
-  transition: all 0.15s;
+  transition: all var(--admin-transition-fast);
 }
 
 .admin-spawn-row:hover {
   background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: rgba(16, 185, 129, 0.35);
+  transform: translateX(2px);
 }
 
 .admin-spawn-row.dragging {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: grabbing;
 }
 
-/* Inputs Inline (Aba Economia) */
-.admin-inline-input {
-  width: 90px;
-  padding: 4px 8px;
-  background: rgba(10, 15, 20, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 4px;
-  color: #fff;
-  font-size: 12px;
-  text-align: right;
-  outline: none;
-}
-
-.admin-inline-input:focus {
-  border-color: var(--admin-primary);
-  box-shadow: 0 0 6px var(--admin-primary-glow);
-}
-
-/* Modal In-Game Customizado (Confirmação e Entrada) */
+/* ==========================================================================
+   Modais In-Game Customizados (100% In-Game)
+   ========================================================================== */
 .admin-modal-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(6px);
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 99999;
-  animation: adminFadeIn 0.15s ease-out;
+  animation: adminModalFadeIn 0.16s ease-out;
+}
+
+@keyframes adminModalFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .admin-modal-box {
   background: #111a20;
   border: 1px solid var(--admin-card-border);
-  border-radius: 12px;
-  width: 440px;
+  border-radius: 14px;
+  width: 450px;
   max-width: 90%;
-  padding: 22px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px var(--admin-primary-glow);
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95), 0 0 25px var(--admin-primary-glow);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
+  animation: adminModalPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes adminModalPop {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .admin-modal-header {
@@ -518,27 +725,30 @@
   gap: 10px;
   font-size: 15px;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
 }
 
 .admin-modal-header i {
   color: var(--admin-warning);
+  font-size: 16px;
 }
 
 .admin-modal-body {
   font-size: 13px;
   color: var(--admin-text-main);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .admin-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 10px;
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
-/* Toast In-Game */
+/* ==========================================================================
+   Toasts In-Game
+   ========================================================================== */
 .admin-toast-container {
   position: absolute;
   top: 70px;
@@ -551,19 +761,31 @@
 }
 
 .admin-toast {
-  background: rgba(18, 26, 32, 0.95);
+  background: rgba(18, 26, 32, 0.96);
   border: 1px solid var(--admin-primary);
   border-left: 4px solid var(--admin-primary);
-  color: #fff;
-  padding: 10px 16px;
-  border-radius: 6px;
+  color: #ffffff;
+  padding: 11px 18px;
+  border-radius: 8px;
   font-size: 12px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  font-weight: 500;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   gap: 10px;
   pointer-events: auto;
-  animation: adminFadeIn 0.2s ease-out;
+  animation: adminToastSlide 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes adminToastSlide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .admin-toast.error {
