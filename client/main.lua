@@ -1213,73 +1213,6 @@ local PalletPropModels = {
 
 exports.ox_target:addModel(PalletPropModels, {
     {
-        name = 'aust_snap_pallet_slot',
-        icon = 'fas fa-truck-ramp-box',
-        label = 'Fixar no Slot Ativo (Fantasma)',
-        distance = 3.2,
-        canInteract = function(entity)
-            if CurrentStage ~= 'STEP_6_LOAD_PALLETS' then return false end
-            if not ActiveJob or not JobEntities.trailer or not DoesEntityExist(JobEntities.trailer) then return false end
-            if IsPedInAnyVehicle(cache.ped, false) then return false end
-            if IsEntityAttached(entity) then return false end
-            local tCoords = GetEntityCoords(JobEntities.trailer)
-            local pCoords = GetEntityCoords(entity)
-            return #(tCoords - pCoords) < 14.0
-        end,
-        onSelect = function(data)
-            local palletEnt = data and data.entity
-            if not palletEnt or not DoesEntityExist(palletEnt) then return end
-            local trailer = JobEntities.trailer
-            local currentSlot = ForkliftModule.GetCurrentSlotIndex and ForkliftModule.GetCurrentSlotIndex() or 1
-            
-            local ok = lib.progressBar({
-                duration = 2000,
-                label = ('Estivando palete no Slot %d...'):format(currentSlot),
-                useWhileDead = false,
-                canCancel = true,
-                disable = { move = true, car = true, combat = true },
-                anim = { dict = 'anim@heists@box_carry@', clip = 'idle' }
-            })
-            if ok then
-                local snapped, snappedOffset = ForkliftModule.SnapPalletToCurrentSlot(palletEnt, trailer, currentSlot)
-                if snapped then
-                    local sOffset = snappedOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, currentSlot)) or vector3(0.0, 0.0, 0.35)
-                    table.insert(LoadedPallets, {
-                        entity = palletEnt,
-                        isSecured = false,
-                        riskLevel = 0,
-                        lost = false,
-                        slotIndex = currentSlot,
-                        relOffset = sOffset,
-                        relHeading = 0.0
-                    })
-                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-                    local loadedCount = #LoadedPallets
-                    local requiredCount = ActiveJob.requiredCount or 4
-                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', ActiveJob.jobId, loadedCount)
-
-                    if loadedCount < requiredCount then
-                        local nextSlot = currentSlot + 1
-                        local nextOffset = ForkliftModule.GetSlotOffset(trailer, nextSlot)
-                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset)
-                    else
-                        local hasFork = (ActiveJob and ActiveJob.withForklift) or (JobEntities.forklift and DoesEntityExist(JobEntities.forklift))
-                        if hasFork and ForkliftModule.SpawnForkliftGhost then
-                            ForkliftModule.SpawnForkliftGhost(trailer)
-                            if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                UpdateMissionObjective('forklift', JobEntities.forklift, 'Embarcar Empilhadeira no Reboque')
-                            end
-                            SendMissionNotify('Central Logística', 'Paletes carregados! Posicione a empilhadeira na traseira da carreta sobre o holograma fantasma.', 'info')
-                        else
-                            ForkliftModule.StopOperation()
-                            SetupRopesStage()
-                        end
-                    end
-                end
-            end
-        end
-    },
-    {
         name = 'aust_rescue_fallen_pallet',
         icon = 'fas fa-hand-holding-box',
         label = 'Recuperar Palete Caído',
@@ -2408,15 +2341,15 @@ lib.onCache('vehicle', function(veh)
                 UpdateMissionObjective('pallet', firstPallet, 'Pallet de Carga')
             end
 
-            SendMissionNotify('Central Logística', 'Utilize a empilhadeira para carregar os pallets. Aproxime os garfos e aperte [G].', 'info')
+            SendMissionNotify('Central Logística', 'Encaixe os garfos sob o palete e erga a carga (Shift / NumPad 5) para travar.', 'info')
 
-            -- Inicia ciclo de manuseio com a tecla [G]
+            -- Inicia ciclo de manuseio puramente baseado em física
             ForkliftModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.requiredCount or 4, function(action, palletEnt, loaded, total, stowedSlot, slotOffset, slotHeading)
                 if action == 'picked' then
                     -- Com o pallet carregado, a seta aponta para o interior/traseira da carreta
                     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
                         local rearCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, -5.5, 0.5)
-                        UpdateMissionObjective('trailer_rear', rearCoords, 'Aperte [G] na caçamba para posicionar o pallet')
+                        UpdateMissionObjective('trailer_rear', rearCoords, 'Alinhe a carga sobre o holograma e baixe os garfos')
                     end
                 elseif action == 'dropped' then
                     -- Registra o palete carregado com os dados exatos do slot para a amarração individual
@@ -2449,8 +2382,8 @@ lib.onCache('vehicle', function(veh)
                         if hasFork and JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
                             local fOffset = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(JobEntities.trailer) or { x = 0.0, y = -6.0, z = 0.35 }
                             local dockWorldPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, fOffset.x or 0.0, fOffset.y or -6.0, (fOffset.z or 0.35) + 0.6)
-                            UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [G]')
-                            SendMissionNotify('Central Logística', 'Último palete estivado! Posicione a empilhadeira na traseira da carreta sobre o holograma e aperte [G] para embarcar.', 'info')
+                            UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [E]')
+                            SendMissionNotify('Central Logística', 'Último palete estivado! Posicione a empilhadeira na traseira da carreta sobre o holograma e aperte [E] para embarcar.', 'info')
                         end
                     end
                 end

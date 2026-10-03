@@ -94,6 +94,7 @@ local TargetTrailerEntity = nil
 
 function ForkliftModule.DeleteGhostProp()
     if CurrentGhostEntity and DoesEntityExist(CurrentGhostEntity) then
+        pcall(function() SetEntityDrawOutline(CurrentGhostEntity, false) end)
         DetachEntity(CurrentGhostEntity, true, true)
         DeleteEntity(CurrentGhostEntity)
     end
@@ -559,7 +560,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
             if forklift and DoesEntityExist(forklift) then
                 if awaitingForkliftDock then
-                    -- Caso 3: Embarque Contínuo da Empilhadeira na Traseira via [G]
+                    -- Caso 3: Embarque da Empilhadeira na Traseira do Reboque (Interação Controlada via [E] ou [G])
                     if trailer and DoesEntityExist(trailer) then
                         local fCoords = GetEntityCoords(forklift)
                         local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, fCoords.x, fCoords.y, fCoords.z)
@@ -575,11 +576,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         if dx <= 2.2 and dy <= 3.2 and dz <= 2.5 then
                             sleep = 0
                             if TextUIShowing ~= 'dock_forklift' then
-                                lib.showTextUI('[G] Embarcar Empilhadeira no Reboque', { position = 'left-center', icon = 'truck-ramp-box' })
+                                lib.showTextUI('[E] Embarcar Empilhadeira no Reboque', { position = 'left-center', icon = 'truck-ramp-box' })
                                 TextUIShowing = 'dock_forklift'
                             end
 
-                            if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
+                            if IsControlJustPressed(0, 38) or IsControlJustPressed(0, 47) then -- Tecla E (38) ou G (47)
                                 if TextUIShowing then
                                     lib.hideTextUI()
                                     TextUIShowing = nil
@@ -605,118 +606,202 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
                 elseif not CurrentForkliftPallet then
-                    -- Caso 1: Buscar palete no chão
+                    -- Caso 1: Coleta Física do Palete no Chão (Sem botões / Auto-Attach por Elevação)
                     local targetPallet = ForkliftModule.GetNearestGroundPallet(forklift)
                     if targetPallet and DoesEntityExist(targetPallet) then
-                        sleep = 0
-                        if TextUIShowing ~= 'pickup' then
-                            lib.showTextUI('[G] Pegar Pallet', { position = 'left-center', icon = 'pallet' })
-                            TextUIShowing = 'pickup'
-                        end
+                        local forkCoords, forkBone = GetForkliftForksCoords(forklift)
+                        local pCoords = GetEntityCoords(targetPallet)
+                        local relPallet = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
 
-                        if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                            local ok = AttachPalletToForklift(forklift, targetPallet)
-                            if ok then
-                                CurrentForkliftPallet = targetPallet
-                                PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                        -- Alinhamento Angular entre a empilhadeira e o palete
+                        local fHeading = GetEntityHeading(forklift)
+                        local pHeading = GetEntityHeading(targetPallet)
+                        local diffH = math.abs((fHeading - pHeading) % 180)
+                        if diffH > 90 then diffH = 180 - diffH end
+                        local isAngleAligned = (diffH <= 35.0)
 
+                        -- Garfos encaixados sob a estrutura do palete:
+                        -- Lateral: centrado entre os garfos (desvio <= 0.65m)
+                        -- Longitudinal: penetração dos garfos sob a base do palete (Y entre 0.85m e 2.45m)
+                        local isForksInside = (math.abs(relPallet.x) <= 0.65) and (relPallet.y >= 0.85 and relPallet.y <= 2.45)
+
+                        if isForksInside and isAngleAligned then
+                            sleep = 0
+                            if TextUIShowing ~= 'forks_inserted' then
+                                lib.showTextUI('Garfos encaixados: Erga o mastro para travar o palete (Shift / NumPad 5)', { position = 'left-center', icon = 'arrows-up-down' })
+                                TextUIShowing = 'forks_inserted'
+                            end
+
+                            -- Gatilho de Elevação: comando de subida acionado ou elevação relativa dos garfos/palete
+                            local isRaisingControl = IsControlPressed(0, 111) or IsControlPressed(0, 60) or IsControlPressed(0, 71)
+                            local forkRelPos = GetOffsetFromEntityGivenWorldCoords(forklift, forkCoords.x, forkCoords.y, forkCoords.z)
+                            local pHeightAboveGround = GetEntityHeightAboveGround(targetPallet)
+
+                            -- Quando o jogador ergue o mastro e a carga descola do chão
+                            local isLiftTriggered = (isRaisingControl and (forkRelPos.z > -0.38 or pHeightAboveGround > 0.15)) or (forkRelPos.z > -0.28) or (pHeightAboveGround > 0.22)
+
+                            if isLiftTriggered then
                                 if TextUIShowing then
                                     lib.hideTextUI()
                                     TextUIShowing = nil
                                 end
+                                local ok = AttachPalletToForklift(forklift, targetPallet)
+                                if ok then
+                                    CurrentForkliftPallet = targetPallet
+                                    PlaySoundFrontend(-1, "ATTACH_CARGO", "HUD_AWARDS", 0)
+                                    PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
 
-                                if onLoadedCb then
-                                    onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
+                                    if onLoadedCb then
+                                        onLoadedCb('picked', targetPallet, loadedCount, requiredCount)
+                                    end
+                                end
+                            end
+                        else
+                            local dist = #(forkCoords - pCoords)
+                            if dist <= 4.0 then
+                                sleep = 0
+                                if TextUIShowing ~= 'align_forks' then
+                                    lib.showTextUI('Aproxime e encaixe os garfos nas canaletas do palete', { position = 'left-center', icon = 'pallet' })
+                                    TextUIShowing = 'align_forks'
+                                end
+                            else
+                                if TextUIShowing == 'align_forks' or TextUIShowing == 'forks_inserted' then
+                                    lib.hideTextUI()
+                                    TextUIShowing = nil
                                 end
                             end
                         end
                     else
-                        if TextUIShowing == 'pickup' then
+                        if TextUIShowing == 'align_forks' or TextUIShowing == 'forks_inserted' or TextUIShowing == 'pickup' then
                             lib.hideTextUI()
                             TextUIShowing = nil
                         end
                     end
                 else
-                    -- Caso 2: Acomodar palete na carreta (Slot Sequencial com Ghost Preview)
+                    -- Caso 2: Acomodar Palete na Carreta (Auto-Snap Tridimensional ao Baixar a Carga no Fantasma)
                     if trailer and DoesEntityExist(trailer) then
                         local palletEntity = CurrentForkliftPallet
-                        local pCoords = palletEntity and DoesEntityExist(palletEntity) and GetEntityCoords(palletEntity) or GetEntityCoords(forklift)
-                        local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+                        if not palletEntity or not DoesEntityExist(palletEntity) then
+                            CurrentForkliftPallet = nil
+                        else
+                            local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                            local ghostWorldCoords = GetOffsetFromEntityInWorldCoords(trailer, slotOffset.x, slotOffset.y, slotOffset.z)
+                            local pCoords = GetEntityCoords(palletEntity)
+                            local dist3D = #(pCoords - ghostWorldCoords)
 
-                        -- Validação de aproximação da caçamba do reboque
-                        local isNearTrailerBed = (math.abs(relPos.x) <= 2.2) and (relPos.y >= -7.5 and relPos.y <= 6.2) and (relPos.z >= -1.0 and relPos.z <= 2.8)
+                            -- Alinhamento angular entre o palete e o slot do reboque
+                            local trailerH = GetEntityHeading(trailer)
+                            local targetHeading = (trailerH + (slotHeading or 0.0)) % 360
+                            local curH = GetEntityHeading(palletEntity)
+                            local diffAngle = math.abs((curH - targetHeading) % 180)
+                            if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                        if isNearTrailerBed and CurrentSlotIndex <= requiredCount then
-                            sleep = 0
-                            if TextUIShowing ~= 'drop' then
-                                lib.showTextUI(('[G] Fixar Palete no Slot %d (Fantasma)'):format(CurrentSlotIndex), { position = 'left-center', icon = 'truck-ramp-box' })
-                                TextUIShowing = 'drop'
-                            end
+                            -- Tolerância Balanceada: raio 3D <= 0.75m e ângulo <= 30°
+                            local isAlignedInSlot = (dist3D <= 0.75) and (diffAngle <= 30.0)
 
-                            if IsControlJustPressed(0, 47) then -- Tecla G (control 47)
-                                local ok, slotOffset, slotHeading = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
-                                if ok then
-                                    local stowedSlot = CurrentSlotIndex
-                                    CurrentForkliftPallet = nil
-                                    loadedCount = loadedCount + 1
-                                    CurrentSlotIndex = CurrentSlotIndex + 1
-                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-
-                                    if TextUIShowing then
-                                        lib.hideTextUI()
-                                        TextUIShowing = nil
-                                    end
-
-                                    -- Notifica o servidor com autoridade de rede e offsets completos
-                                    local pNetId = NetworkGetEntityIsNetworked(palletEntity) and NetworkGetNetworkIdFromEntity(palletEntity) or nil
-                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, slotOffset, slotHeading)
-
-                                    if onLoadedCb then
-                                        onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, slotOffset, slotHeading)
-                                    end
-
-                                    if loadedCount < requiredCount then
-                                        -- Spawna o holograma no próximo slot sequencial de palete
-                                        local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                                        ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
-                                    else
-                                        -- Todos os paletes estivados! O fantasma da empilhadeira surge IMEDIATAMENTE antes da amarração
-                                        local hasForklift = false
-                                        if withForklift ~= nil then
-                                            hasForklift = (withForklift == true)
-                                        elseif _G.ActiveJob and _G.ActiveJob.withForklift ~= nil then
-                                            hasForklift = (_G.ActiveJob.withForklift == true)
-                                        else
-                                            local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
-                                            hasForklift = (currentFork ~= nil and DoesEntityExist(currentFork))
-                                        end
-
-                                        if hasForklift then
-                                            -- GATILHO IMEDIATO DO FANTASMA DA EMPILHADEIRA (Embarque Contínuo)
-                                            awaitingForkliftDock = true
-                                            ForkliftModule.SpawnForkliftGhost(trailer)
-                                            if _G.UpdateMissionObjective and trailer and DoesEntityExist(trailer) then
-                                                local fOff = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or { x = 0.0, y = -6.0, z = 0.35 }
-                                                local dockWorldPos = GetOffsetFromEntityInWorldCoords(trailer, fOff.x or 0.0, fOff.y or -6.0, (fOff.z or 0.35) + 0.6)
-                                                _G.UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [G]')
-                                            end
-                                            if _G.SendMissionNotify then
-                                                _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [G] para embarcar.', 'info')
-                                            end
-                                        else
-                                            ForkliftModule.StopOperation()
-                                            if onAllLoadedCb then
-                                                onAllLoadedCb()
-                                            end
-                                            break
-                                        end
-                                    end
+                            local ghost = CurrentGhostEntity
+                            if ghost and DoesEntityExist(ghost) then
+                                if isAlignedInSlot then
+                                    -- FEEDBACK VISUAL DINÂMICO: Verde Brilhante com Outline Shader
+                                    SetEntityAlpha(ghost, 220, false)
+                                    SetEntityDrawOutline(ghost, true)
+                                    SetEntityDrawOutlineColor(30, 255, 60, 255)
+                                    SetEntityDrawOutlineShader(1)
+                                else
+                                    -- Desalinhado / Em aproximação: Translúcido padrão sem outline
+                                    SetEntityAlpha(ghost, 130, false)
+                                    SetEntityDrawOutline(ghost, false)
                                 end
                             end
-                        else
-                            if TextUIShowing == 'drop' then
-                                lib.hideTextUI()
-                                TextUIShowing = nil
+
+                            if dist3D <= 2.5 then
+                                sleep = 0
+                                if isAlignedInSlot then
+                                    if TextUIShowing ~= 'lower_forks' then
+                                        lib.showTextUI(('Slot %d Alinhado: Abaixe os garfos para assentar (Ctrl / NumPad 8)'):format(CurrentSlotIndex), { position = 'left-center', icon = 'arrow-down' })
+                                        TextUIShowing = 'lower_forks'
+                                    end
+
+                                    -- GATILHO DE AUTO-SNAP: O jogador começa a abaixar a carga sobre o slot
+                                    local isLoweringControl = IsControlPressed(0, 110) or IsControlPressed(0, 61) or IsControlPressed(0, 72)
+                                    local isCloseToDeck = (pCoords.z <= ghostWorldCoords.z + 0.18)
+
+                                    if isLoweringControl or isCloseToDeck then
+                                        if TextUIShowing then
+                                            lib.hideTextUI()
+                                            TextUIShowing = nil
+                                        end
+
+                                        if ghost and DoesEntityExist(ghost) then
+                                            SetEntityDrawOutline(ghost, false)
+                                        end
+
+                                        local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, CurrentSlotIndex)
+                                        if ok then
+                                            local stowedSlot = CurrentSlotIndex
+                                            CurrentForkliftPallet = nil
+                                            loadedCount = loadedCount + 1
+                                            CurrentSlotIndex = CurrentSlotIndex + 1
+
+                                            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                                            PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
+
+                                            -- Notifica o servidor com autoridade de rede e offsets completos
+                                            local pNetId = NetworkGetEntityIsNetworked(palletEntity) and NetworkGetNetworkIdFromEntity(palletEntity) or nil
+                                            TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, sOff, sHead)
+
+                                            if onLoadedCb then
+                                                onLoadedCb('dropped', palletEntity, loadedCount, requiredCount, stowedSlot, sOff, sHead)
+                                            end
+
+                                            if loadedCount < requiredCount then
+                                                -- Spawna o holograma no próximo slot sequencial
+                                                local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
+                                                ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
+                                            else
+                                                -- Todos os paletes estivados!
+                                                local hasForklift = false
+                                                if withForklift ~= nil then
+                                                    hasForklift = (withForklift == true)
+                                                elseif _G.ActiveJob and _G.ActiveJob.withForklift ~= nil then
+                                                    hasForklift = (_G.ActiveJob.withForklift == true)
+                                                else
+                                                    local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+                                                    hasForklift = (currentFork ~= nil and DoesEntityExist(currentFork))
+                                                end
+
+                                                if hasForklift then
+                                                    awaitingForkliftDock = true
+                                                    ForkliftModule.SpawnForkliftGhost(trailer)
+                                                    if _G.UpdateMissionObjective and trailer and DoesEntityExist(trailer) then
+                                                        local fOff = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or { x = 0.0, y = -6.0, z = 0.35 }
+                                                        local dockWorldPos = GetOffsetFromEntityInWorldCoords(trailer, fOff.x or 0.0, fOff.y or -6.0, (fOff.z or 0.35) + 0.6)
+                                                        _G.UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [E]')
+                                                    end
+                                                    if _G.SendMissionNotify then
+                                                        _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [E] para embarcar.', 'info')
+                                                    end
+                                                else
+                                                    ForkliftModule.StopOperation()
+                                                    if onAllLoadedCb then
+                                                        onAllLoadedCb()
+                                                    end
+                                                    break
+                                                end
+                                            end
+                                        end
+                                    end
+                                else
+                                    if TextUIShowing ~= 'align_slot' then
+                                        lib.showTextUI(('Alinhe a carga sobre o Fantasma do Slot %d'):format(CurrentSlotIndex), { position = 'left-center', icon = 'truck-ramp-box' })
+                                        TextUIShowing = 'align_slot'
+                                    end
+                                end
+                            else
+                                if TextUIShowing == 'align_slot' or TextUIShowing == 'lower_forks' then
+                                    lib.hideTextUI()
+                                    TextUIShowing = nil
+                                end
                             end
                         end
                     end
