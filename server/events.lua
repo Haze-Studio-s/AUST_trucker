@@ -1865,7 +1865,26 @@ end
 -- ========================================================
 -- CONCLUSÃO: TRABALHO RÁPIDO (QUICK JOB) COM VISTORIA DE DANOS
 -- ========================================================
-local function FinishQuickJobContract(src, jobId, damages)
+-- Vistoria de danos lida NO SERVIDOR a partir do caminhão que o servidor spawnou para o
+-- contrato (replicado via OneSync). O client não informa mais engine/body/pneus: antes o
+-- payload do evento definia a dedução e permitia reportar "0 de dano" sempre.
+-- Sem entidade rastreada (ex.: reinício do resource), devolve nil e o chamador assume sem dano.
+local function ReadServerDamages(contractId)
+    local info = ActiveLCContractData[contractId]
+    local veh = info and info.truckEntity
+    if not veh or not DoesEntityExist(veh) then return nil end
+
+    local engine = tonumber(GetVehicleEngineHealth(veh)) or 1000.0
+    local body = tonumber(GetVehicleBodyHealth(veh)) or 1000.0
+    local burst = 0
+    for tyre = 0, 5 do
+        if IsVehicleTyreBurst(veh, tyre, false) then burst = burst + 1 end
+    end
+    return { engineHealth = engine, bodyHealth = body, burstTires = burst }
+end
+
+-- O 3º parâmetro é ignorado de propósito (mantido só por compatibilidade de assinatura).
+local function FinishQuickJobContract(src, jobId, _ignoredClientDamages)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
@@ -1911,8 +1930,13 @@ local function FinishQuickJobContract(src, jobId, damages)
     local grossPayment = row.base_payment or 2500
     local dist = row.distance or 2.5
 
-    -- Cálculo de Vistoria de Danos Mecânicos e Lataria
-    damages = damages or {}
+    -- Cálculo de Vistoria de Danos Mecânicos e Lataria (leitura autoritativa do servidor)
+    -- Lido aqui, antes de qualquer remoção do caminhão mais abaixo.
+    local damages = ReadServerDamages(row.id)
+    if not damages then
+        print(('[AUST_Trucker] Vistoria sem caminhão rastreado para o job %s: assumindo sem danos'):format(tostring(row.id)))
+        damages = {}
+    end
     local engineHealth = tonumber(damages.engineHealth) or 1000.0
     local bodyHealth = tonumber(damages.bodyHealth) or 1000.0
     local burstTires = tonumber(damages.burstTires) or 0
@@ -2146,12 +2170,12 @@ local function FinalizeLCContract(src, jobId, parkedManually)
     if row and row.contract_type == 1 then
         FinishOwnedTruckContract(src, jobId, parkedManually)
     else
-        FinishQuickJobContract(src, jobId, { engineHealth = 1000, bodyHealth = 1000, burstTires = 0 })
+        FinishQuickJobContract(src, jobId)
     end
 end
 
-RegisterNetEvent('aurp_trucker:server:finishQuickJobContract', function(jobId, damages)
-    FinishQuickJobContract(source, jobId, damages)
+RegisterNetEvent('aurp_trucker:server:finishQuickJobContract', function(jobId)
+    FinishQuickJobContract(source, jobId)
 end)
 
 RegisterNetEvent('aurp_trucker:server:finishOwnedTruckContract', function(jobId, parkedManually)
