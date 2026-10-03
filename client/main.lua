@@ -907,6 +907,10 @@ local function ExecuteForkliftTie(forkEntity)
         false, false, false, false, 2, true
     )
 
+    -- Matriz Híbrida Havok (Padrão Paletes): Colisão com o jogador e mundo ATIVA
+    SetEntityCollision(fork, true, true)
+    SetCanClimbOnEntity(fork, true)
+
     -- Isolamento rigoroso: Nunca acordar física de colisão contra o trailer ou cavalo mecânico
     SetEntityNoCollisionEntity(fork, trailer, false)
     SetEntityNoCollisionEntity(trailer, fork, false)
@@ -1033,8 +1037,8 @@ CreateThread(function()
             local trCoords = GetEntityCoords(trailer)
             local distTrailer = #(pCoords - trCoords)
 
-            -- Renderização ativa sempre que o jogador estiver até 35m do reboque
-            if distTrailer <= 35.0 then
+            -- Renderização ativa sempre que o jogador estiver até 100m do reboque
+            if distTrailer <= 100.0 then
                 sleep = 0
                 for _, pData in ipairs(pList) do
                     local pEnt = pData.entity
@@ -1066,6 +1070,10 @@ local function SetupForkliftTieTarget()
         return
     end
 
+    -- Garante colisão física ativa no modelo para o raycast do ox_target
+    SetEntityCollision(fork, true, true)
+    SetCanClimbOnEntity(fork, true)
+
     -- 1. Spawna o holograma fantasma da empilhadeira na extremidade traseira da carreta se ainda não estiver embarcada
     if ForkliftModule.SpawnForkliftGhost and not ForkliftModule.GetCurrentGhost() and not ForkliftLoadedOnTrailer then
         ForkliftModule.SpawnForkliftGhost(trailer)
@@ -1074,6 +1082,28 @@ local function SetupForkliftTieTarget()
     -- 2. Atualiza a rota/objetivo visual para guiar o jogador até a empilhadeira
     local fCoords = GetEntityCoords(fork)
     UpdateMissionObjective('forklift', fCoords, 'Amarrar Empilhadeira na Carreta')
+
+    -- 3. Cria SphereZone dedicada no ox_target na posição da empilhadeira (Padrão Paletes)
+    ActiveStrappingZoneId = exports.ox_target:addSphereZone({
+        coords = fCoords,
+        radius = 3.0,
+        debug = false,
+        options = {
+            {
+                name = 'aust_tie_current_forklift_zone',
+                icon = 'fas fa-link',
+                label = 'Travar Catracas da Empilhadeira',
+                distance = 4.0,
+                canInteract = function()
+                    return (hasRopes or HasRopes) and not ForkliftSecured and not IsPedInAnyVehicle(cache.ped, false)
+                end,
+                onSelect = function()
+                    ExecuteForkliftTie(fork)
+                end
+            }
+        }
+    })
+
     if ForkliftLoadedOnTrailer then
         SendMissionNotify('Central Logística', 'Paletes amarrados! Trave as catracas da empilhadeira a pé para concluir a amarração.', 'info')
     else
@@ -1093,12 +1123,9 @@ exports.ox_target:addModel('forklift', {
             if IsPedInAnyVehicle(cache.ped, false) then return false end
             local trailer = JobEntities.trailer
             if not trailer or not DoesEntityExist(trailer) then return false end
-            -- Deve ser liberado estritamente após todos os paletes estarem amarrados
-            local totalLoaded = #LoadedPallets
-            if totalLoaded > 0 and currentTieIndex <= totalLoaded then return false end
             local forkCoords = GetEntityCoords(entity)
             local trailerCoords = GetEntityCoords(trailer)
-            return #(trailerCoords - forkCoords) < 12.0
+            return #(trailerCoords - forkCoords) < 15.0
         end,
         onSelect = function(data)
             ExecuteForkliftTie(data and data.entity)
@@ -1788,7 +1815,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
                     local fork = JobEntities.forklift
                     if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer then
-                        SetEntityCollision(fork, false, false)
+                        SetEntityCollision(fork, true, true)
+                        SetCanClimbOnEntity(fork, true)
                         SetEntityDynamic(fork, false)
                         SetEntityHasGravity(fork, false)
                         SetEntityVelocity(fork, 0.0, 0.0, 0.0)
@@ -3083,6 +3111,36 @@ AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _u
             end
         end
     end
+end)
+
+-- Sincronização inicial de offsets de reboques do banco no carregamento do client
+CreateThread(function()
+    Wait(1500)
+    pcall(function()
+        local res = lib.callback.await('aurp_trucker:server:getTrailerOffsetsForModel', false, 'all')
+        if res and res.all then
+            for mKey, data in pairs(res.all) do
+                local numKey = tonumber(mKey)
+                local h = numKey or joaat(tostring(mKey):lower())
+                local u = h & 0xFFFFFFFF
+                local s = (u >= 0x80000000) and (u - 0x100000000) or u
+                local storeKeys = { mKey, h, u, s, tostring(h), tostring(u), tostring(s) }
+                for _, sk in ipairs(storeKeys) do
+                    if not Config.TrailerSlots[sk] then Config.TrailerSlots[sk] = { pallets = {}, forklift = nil } end
+                    for idx, v in pairs(data.pallets or {}) do
+                        local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                        Config.TrailerSlots[sk].pallets[tonumber(idx)] = slotEntry
+                        Config.TrailerSlots[sk].pallets[tostring(idx)] = slotEntry
+                    end
+                    if data.forklift then
+                        local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                        Config.TrailerSlots[sk].forklift = slotEntry
+                    end
+                end
+            end
+            print("^2[AUST_Trucker] Sincronização inicial de offsets de reboques concluída com sucesso!^7")
+        end
+    end)
 end)
 
 

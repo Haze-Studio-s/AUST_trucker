@@ -133,7 +133,8 @@ function AdminService.ReloadTrailerOffsets()
             z = tonumber(o.offset_z) or 0.0,
             heading = tonumber(o.heading) or 0.0
         }
-        if o.is_forklift == 1 then
+        local isFork = (o.is_forklift == 1 or o.is_forklift == true or tonumber(o.is_forklift) == 1 or tostring(o.is_forklift) == '1')
+        if isFork then
             offsetMap[model].forklift = vecData
         else
             offsetMap[model].pallets[tostring(o.slot_index)] = vecData
@@ -141,35 +142,42 @@ function AdminService.ReloadTrailerOffsets()
         end
     end
 
-    -- Dual-indexação limpa em tabela desacoplada (evita mutação durante o pairs)
+    -- Dual-indexação com normalização estrita de hash 32-bit (Signed e Unsigned)
     local dualMap = {}
     for model, data in pairs(offsetMap) do
         dualMap[model] = data
         local h = joaat(model)
+        local u = h & 0xFFFFFFFF
+        local s = (u >= 0x80000000) and (u - 0x100000000) or u
         dualMap[h] = data
+        dualMap[u] = data
+        dualMap[s] = data
         dualMap[tostring(h)] = data
+        dualMap[tostring(u)] = data
+        dualMap[tostring(s)] = data
     end
     AdminService.TrailerOffsets = dualMap
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
     if Config and Config.TrailerSlots then
         for model, data in pairs(offsetMap) do
-            local hash = joaat(model)
-            if not Config.TrailerSlots[hash] then
-                Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
-            end
-            if not Config.TrailerSlots[model] then
-                Config.TrailerSlots[model] = { pallets = {}, forklift = nil }
-            end
-            for idx, vec in pairs(data.pallets or {}) do
-                local slotEntry = { x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
-                Config.TrailerSlots[hash].pallets[tonumber(idx)] = slotEntry
-                Config.TrailerSlots[model].pallets[tonumber(idx)] = slotEntry
-            end
-            if data.forklift then
-                local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
-                Config.TrailerSlots[hash].forklift = slotEntry
-                Config.TrailerSlots[model].forklift = slotEntry
+            local h = joaat(model)
+            local u = h & 0xFFFFFFFF
+            local s = (u >= 0x80000000) and (u - 0x100000000) or u
+
+            local keys = { model, h, u, s, tostring(h), tostring(u), tostring(s) }
+            for _, k in ipairs(keys) do
+                if not Config.TrailerSlots[k] then
+                    Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
+                end
+                for idx, vec in pairs(data.pallets or {}) do
+                    local slotEntry = { x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
+                    Config.TrailerSlots[k].pallets[tonumber(idx)] = slotEntry
+                end
+                if data.forklift then
+                    local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                    Config.TrailerSlots[k].forklift = slotEntry
+                end
             end
         end
     end
@@ -241,10 +249,12 @@ lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(
 
     local modelKey = tostring(trailerModel or ''):lower()
     local hash = tonumber(trailerModel) or joaat(modelKey)
+    local u = hash & 0xFFFFFFFF
+    local s = (u >= 0x80000000) and (u - 0x100000000) or u
 
-    local targetData = offsets[modelKey] or offsets[hash] or offsets[tostring(hash)]
+    local targetData = offsets[modelKey] or offsets[hash] or offsets[u] or offsets[s] or offsets[tostring(hash)] or offsets[tostring(u)] or offsets[tostring(s)]
     if not targetData and Config.TrailerSlots then
-        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[modelKey] or Config.TrailerSlots[tostring(hash)]
+        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[u] or Config.TrailerSlots[s] or Config.TrailerSlots[modelKey]
     end
 
     return {

@@ -1,5 +1,24 @@
 # Changelog — AUST_trucker
 
+## [20.6.2] — 2026-10-03 — Correção no Alvo da Empilhadeira, Unificação de Colisão Híbrida e Normalização de Offsets do TruckerAdmin
+
+### 🎯 Reabertura Imediata de Alvo (`ox_target:addSphereZone`)
+- **SphereZone Dedicada para a Empilhadeira:** Ao estivar todos os paletes e posicionar a empilhadeira, o script gera uma `addSphereZone` de 3.0m nas coordenadas da empilhadeira, eliminando falhas de raycast ou posicionamento de câmera.
+- **Ciclo Resiliente de Repetição em Falha:** Se o jogador errar o minigame de travamento das catracas, `ForkliftSecured` permanece `false` e a `SphereZone` é imediatamente reaberta para permitir nova tentativa, sem travar o fluxo.
+
+### 🧱 Unificação da Matriz de Colisão Híbrida (1:1 com os Paletes)
+- **Colisão Ativa a Pé:** A empilhadeira embarcada na carreta mantém colisão física ativa com o jogador e o mundo (`SetEntityCollision(fork, true, true)` e `SetCanClimbOnEntity(fork, true)`), permitindo subir e inspecionar a carga normalmente a pé.
+- **Isolamento Havok Total:** Anulada a colisão mútua contra o reboque e o caminhão (`SetEntityNoCollisionEntity(fork, trailer, false)`), prevenindo qualquer trepidação física.
+- **Desativação em Trânsito:** A colisão é desativada temporariamente apenas quando o caminhão estiver em trânsito rodoviário acelerado na estrada para evitar picos de física.
+
+### 📐 Resolução de Offsets do TruckerAdmin & Normalização 32-bit
+- **Compatibilidade com `TINYINT(1)`:** Corrigida a identificação do campo `is_forklift` no MySQL, que retornava valor booleano no `oxmysql`, impedindo que os offsets da empilhadeira fossem gravados erroneamente como paletes.
+- **Normalização de Hash 32-bit (Signed / Unsigned):** Implementada a máscara `hash & 0xFFFFFFFF` e dual-indexação (`signed` e `unsigned`), assegurando que `GetEntityModel(trailer)` (assinado) encontre perfeitamente as chaves numéricas salvas pelo Gizmo 3D.
+- **Auto-Sync no Boot do Client:** O cliente realiza o download automático e cacheamento dos offsets do servidor logo na inicialização, garantindo que o reboque utilize sempre os offsets do banco.
+
+### 👁️ Alcance Visual de Cintas (LOD Estendido)
+- **Renderização a 100 Metros:** O raio de renderização contínua das cintas 3D (`DrawPoly`) foi expandido de 35 metros para **100 metros** ao redor da carreta, permitindo visualização nítida das cintas na estrada e em comboios à distância.
+
 ## [20.6.1] — 2026-10-02 — Refatoração Visual de Cintas (DrawPoly Bilateral de 6cm, Condicionamento por Minigame & Remoção do Texto 3D)
 
 ### 🪢 Cintas Visuais 3D com Malha Planar Realista (`DrawPoly`)

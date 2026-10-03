@@ -591,24 +591,28 @@ end
 RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, slotIndex, isForklift, offsetVec, heading, updatedOffsets)
     trailerModel = trailerModel:lower()
     local hash = joaat(trailerModel)
-    if not Config.TrailerSlots[hash] then
-        Config.TrailerSlots[hash] = { pallets = {}, forklift = nil }
-    end
-    if not Config.TrailerSlots[trailerModel] then
-        Config.TrailerSlots[trailerModel] = { pallets = {}, forklift = nil }
-    end
+    local u = hash & 0xFFFFFFFF
+    local s = (u >= 0x80000000) and (u - 0x100000000) or u
+
+    local keys = { trailerModel, hash, u, s, tostring(hash), tostring(u), tostring(s) }
     local slotEntry = {
         x = tonumber(offsetVec.x) or 0.0,
         y = tonumber(offsetVec.y) or 0.0,
         z = tonumber(offsetVec.z) or 0.0,
         heading = tonumber(heading) or (type(offsetVec) == 'table' and offsetVec.heading) or 0.0
     }
-    if isForklift then
-        Config.TrailerSlots[hash].forklift = slotEntry
-        Config.TrailerSlots[trailerModel].forklift = slotEntry
-    else
-        Config.TrailerSlots[hash].pallets[slotIndex] = slotEntry
-        Config.TrailerSlots[trailerModel].pallets[slotIndex] = slotEntry
+
+    for _, k in ipairs(keys) do
+        if not Config.TrailerSlots[k] then
+            Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
+        end
+        if isForklift then
+            Config.TrailerSlots[k].forklift = slotEntry
+        else
+            Config.TrailerSlots[k].pallets[slotIndex] = slotEntry
+            Config.TrailerSlots[k].pallets[tonumber(slotIndex)] = slotEntry
+            Config.TrailerSlots[k].pallets[tostring(slotIndex)] = slotEntry
+        end
     end
 
     -- Se o pacote completo do banco foi enviado, sincroniza e atualiza imediatamente a UI

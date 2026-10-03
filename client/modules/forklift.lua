@@ -121,34 +121,49 @@ local function ResolveTrailerModel(trailer)
     return nil
 end
 
+local function GetTrailerHashKeys(trailer)
+    local raw = ResolveTrailerModel(trailer)
+    if not raw then return {} end
+    local u = raw & 0xFFFFFFFF
+    local s = (u >= 0x80000000) and (u - 0x100000000) or u
+    return { raw, u, s, tostring(raw), tostring(u), tostring(s) }
+end
+
 function ForkliftModule.GetSlotOffset(trailer, slotIndex)
-    local tModel = ResolveTrailerModel(trailer)
-    if tModel and Config and Config.TrailerSlots then
-        -- 1. Verificação direta por hash numérico ou chave string
-        local slotData = Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel)]
-        if slotData and slotData.pallets then
-            local off = slotData.pallets[slotIndex] or slotData.pallets[tostring(slotIndex)]
-            if off then
-                local h = (type(off) == 'table' and off.heading) or 0.0
-                return off, h
-            end
-        end
-        -- 2. Varredura flexível por nome de modelo ou hash
-        for modelKey, sData in pairs(Config.TrailerSlots) do
-            local numKey = tonumber(modelKey)
-            local keyHash = numKey or joaat(tostring(modelKey):lower())
-            if keyHash == tModel and sData.pallets then
-                local off = sData.pallets[slotIndex] or sData.pallets[tostring(slotIndex)]
+    local keys = GetTrailerHashKeys(trailer)
+    if Config and Config.TrailerSlots then
+        -- 1. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
+        for _, k in ipairs(keys) do
+            local slotData = Config.TrailerSlots[k]
+            if slotData and slotData.pallets then
+                local off = slotData.pallets[slotIndex] or slotData.pallets[tonumber(slotIndex)] or slotData.pallets[tostring(slotIndex)]
                 if off then
                     local h = (type(off) == 'table' and off.heading) or 0.0
                     return off, h
                 end
             end
         end
+        -- 2. Varredura flexível por todas as entradas de Config.TrailerSlots comparando hash unsigned
+        local targetU = keys[2]
+        if targetU then
+            for modelKey, sData in pairs(Config.TrailerSlots) do
+                local numKey = tonumber(modelKey)
+                local keyHash = numKey or joaat(tostring(modelKey):lower())
+                local keyU = keyHash and (keyHash & 0xFFFFFFFF)
+                if keyU == targetU and sData.pallets then
+                    local off = sData.pallets[slotIndex] or sData.pallets[tonumber(slotIndex)] or sData.pallets[tostring(slotIndex)]
+                    if off then
+                        local h = (type(off) == 'table' and off.heading) or 0.0
+                        return off, h
+                    end
+                end
+            end
+        end
     end
+    local tModel = keys[1]
     if Config and Config.Polarix and Config.Polarix.CompatibleTrailers and tModel then
         for modelName, tData in pairs(Config.Polarix.CompatibleTrailers) do
-            if joaat(modelName) == tModel and tData.attachOffsets then
+            if (joaat(modelName) & 0xFFFFFFFF) == (tModel & 0xFFFFFFFF) and tData.attachOffsets then
                 local off = tData.attachOffsets[slotIndex]
                 if off then
                     local h = (type(off) == 'table' and off.heading) or 0.0
@@ -166,29 +181,37 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
 end
 
 function ForkliftModule.GetForkliftSlotOffset(trailer)
-    local tModel = ResolveTrailerModel(trailer)
-    if tModel and Config and Config.TrailerSlots then
-        -- 1. Verificação direta por hash numérico ou chave string
-        local slotData = Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel)]
-        if slotData and slotData.forklift then
-            local off = slotData.forklift
-            local h = (type(off) == 'table' and off.heading) or 0.0
-            return off, h
-        end
-        -- 2. Varredura flexível por nome ou hash numérico
-        for modelKey, sData in pairs(Config.TrailerSlots) do
-            local numKey = tonumber(modelKey)
-            local keyHash = numKey or joaat(tostring(modelKey):lower())
-            if keyHash == tModel and sData.forklift then
-                local off = sData.forklift
+    local keys = GetTrailerHashKeys(trailer)
+    if Config and Config.TrailerSlots then
+        -- 1. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
+        for _, k in ipairs(keys) do
+            local slotData = Config.TrailerSlots[k]
+            if slotData and slotData.forklift then
+                local off = slotData.forklift
                 local h = (type(off) == 'table' and off.heading) or 0.0
                 return off, h
+            end
+        end
+
+        -- 2. Varredura flexível por todas as entradas de Config.TrailerSlots comparando hash unsigned
+        local targetU = keys[2]
+        if targetU then
+            for modelKey, sData in pairs(Config.TrailerSlots) do
+                local numKey = tonumber(modelKey)
+                local keyHash = numKey or joaat(tostring(modelKey):lower())
+                local keyU = keyHash and (keyHash & 0xFFFFFFFF)
+                if keyU == targetU and sData.forklift then
+                    local off = sData.forklift
+                    local h = (type(off) == 'table' and off.heading) or 0.0
+                    return off, h
+                end
             end
         end
     end
 
     -- Fallback contextual para carretas longas comuns (trailers2, trailers)
-    if tModel == joaat('trailers2') or tModel == joaat('trailers') then
+    local targetU = keys[2]
+    if targetU == (joaat('trailers2') & 0xFFFFFFFF) or targetU == (joaat('trailers') & 0xFFFFFFFF) then
         return { x = 0.0, y = -6.6, z = 0.35, heading = 0.0 }, 0.0
     end
     local fallback = { x = 0.0, y = -5.2, z = 0.35, heading = 0.0 }
@@ -494,20 +517,20 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                 for mKey, data in pairs(res.all) do
                     local numKey = tonumber(mKey)
                     local h = numKey or joaat(tostring(mKey):lower())
-                    if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
-                    if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
-                    if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
-                    for idx, v in pairs(data.pallets or {}) do
-                        local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
-                        Config.TrailerSlots[h].pallets[tonumber(idx)] = slotEntry
-                        Config.TrailerSlots[mKey].pallets[tonumber(idx)] = slotEntry
-                        if numKey then Config.TrailerSlots[numKey].pallets[tonumber(idx)] = slotEntry end
-                    end
-                    if data.forklift then
-                        local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
-                        Config.TrailerSlots[h].forklift = slotEntry
-                        Config.TrailerSlots[mKey].forklift = slotEntry
-                        if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
+                    local u = h & 0xFFFFFFFF
+                    local s = (u >= 0x80000000) and (u - 0x100000000) or u
+                    local storeKeys = { mKey, h, u, s, tostring(h), tostring(u), tostring(s) }
+                    for _, sk in ipairs(storeKeys) do
+                        if not Config.TrailerSlots[sk] then Config.TrailerSlots[sk] = { pallets = {}, forklift = nil } end
+                        for idx, v in pairs(data.pallets or {}) do
+                            local slotEntry = { x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                            Config.TrailerSlots[sk].pallets[tonumber(idx)] = slotEntry
+                            Config.TrailerSlots[sk].pallets[tostring(idx)] = slotEntry
+                        end
+                        if data.forklift then
+                            local slotEntry = { x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
+                            Config.TrailerSlots[sk].forklift = slotEntry
+                        end
                     end
                 end
                 print("^2[AUST_Trucker Forklift] Lock 2 Sucesso: Offsets sincronizados antes de instanciar holograma!^7")
