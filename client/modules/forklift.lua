@@ -475,7 +475,7 @@ local function AttachPalletToForklift(forklift, pallet)
     return true
 end
 
-function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb)
+function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb, onAllLoadedCb, withForklift)
     OperationActive = true
     TargetTrailerEntity = trailer
     CurrentSlotIndex = 1
@@ -647,8 +647,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
                                         ForkliftModule.SpawnGhostProp(trailer, 'hei_prop_carrier_cargo_04b', nextOffset, nextHeading)
                                     else
-                                        -- Todos os paletes estivados!
-                                        local hasForklift = (_G.ActiveJob and _G.ActiveJob.withForklift) or (_G.JobEntities and _G.JobEntities.forklift and DoesEntityExist(_G.JobEntities.forklift))
+                                        -- Todos os paletes estivados! O fantasma da empilhadeira surge IMEDIATAMENTE antes da amarração
+                                        local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+                                        local hasForklift = (withForklift == true)
+                                            or (_G.ActiveJob and _G.ActiveJob.withForklift)
+                                            or (_G.JobEntities and _G.JobEntities.forklift and DoesEntityExist(_G.JobEntities.forklift))
+                                            or (currentFork ~= nil and DoesEntityExist(currentFork))
+
                                         if hasForklift then
                                             -- GATILHO IMEDIATO DO FANTASMA DA EMPILHADEIRA (Embarque Contínuo)
                                             awaitingForkliftDock = true

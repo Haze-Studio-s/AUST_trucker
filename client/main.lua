@@ -25,6 +25,8 @@ local JobEntities = {
     container = nil,
     pallets = {}
 }
+_G.JobEntities = JobEntities
+_G.ActiveJob = ActiveJob
 
 local ActiveDeliveryPoint = nil
 local DockWatcherPoint = nil
@@ -815,16 +817,17 @@ local function ExecutePalletTie(index)
         palletData.riskLevel = 0
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
         SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
+
+        -- Avança para o próximo da lista e avalia condição de avanço sem deadlock
+        currentTieIndex = currentTieIndex + 1
+        if not CheckAllTiedAndStartRoute() then
+            SetupNextPalletTarget()
+        end
     else
-        palletData.isSecured = true
+        palletData.isSecured = false
         palletData.riskLevel = 'high'
         PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-        SendMissionNotify('Atenção', 'A corda ficou frouxa! Cuidado redobrado nas curvas.', 'error')
-    end
-
-    -- Avança para o próximo da lista e avalia condição de avanço sem deadlock
-    currentTieIndex = currentTieIndex + 1
-    if not CheckAllTiedAndStartRoute() then
+        SendMissionNotify('Atenção', 'A amarração falhou! Tente amarrar novamente.', 'error')
         SetupNextPalletTarget()
     end
 end
@@ -935,53 +938,71 @@ local function ExecuteForkliftTie(forkEntity)
         ForkliftRiskLevel = 0
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
         SendMissionNotify('Central Logística', 'Empilhadeira travada com correntes de alta resistência!', 'success')
+
+        hasRopes = false
+        HasRopes = false
+        ClearObjectiveMarkers(false)
+
+        -- Transição direta para a rota de entrega
+        local dest = (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
+        TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob and ActiveJob.jobId)
+        if StartDeliveryRoute then
+            StartDeliveryRoute(dest, ActiveJob and ActiveJob.jobId)
+        end
     else
-        ForkliftSecured = true
+        ForkliftSecured = false
         ForkliftRiskLevel = 'high'
         PlaySoundFrontend(-1, "ERROR", "HUD_AMMO_ADD_SOUNDSET", true)
-        SendMissionNotify('Atenção', 'A amarração da empilhadeira ficou frouxa! Cuidado redobrado nas curvas.', 'error')
-    end
-
-    hasRopes = false
-    HasRopes = false
-    ClearObjectiveMarkers(false)
-
-    -- Transição direta para a rota de entrega
-    local dest = (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
-    TriggerServerEvent('aurp_trucker:server:strappingCompleted', ActiveJob and ActiveJob.jobId)
-    if StartDeliveryRoute then
-        StartDeliveryRoute(dest, ActiveJob and ActiveJob.jobId)
+        SendMissionNotify('Atenção', 'A amarração da empilhadeira falhou! Ajuste e tente novamente.', 'error')
+        if SetupForkliftTieTarget then
+            SetupForkliftTieTarget()
+        end
     end
 end
 
 -- =======================================================================
--- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS 3D (DRAWLINE) & INTERAÇÃO [E]
+-- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS REALISTAS 3D (DRAWPOLY BILATERAL)
+-- Renderização ativada EXCLUSIVAMENTE após vitória no minigame (isSecured == true)
+-- Largura: 6cm (half-width 0.03m). Sem DrawText3D ou texto flutuante.
 -- =======================================================================
 
-local function DrawText3D(x, y, z, text)
-    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
-    if onScreen then
-        SetTextScale(0.35, 0.35)
-        SetTextFont(4)
-        SetTextProportional(1)
-        SetTextColour(255, 255, 255, 215)
-        SetTextEntry("STRING")
-        SetTextCentre(1)
-        AddTextComponentString(text)
-        DrawText(_x, _y)
-        local factor = (string.len(text)) / 370
-        DrawRect(_x, _y + 0.0125, 0.015 + factor, 0.03, 0, 0, 0, 140)
-    end
+local function DrawPolyQuad(v1, v2, v3, v4, r, g, b, a)
+    -- Face 1 (Anti-horário)
+    DrawPoly(v1.x, v1.y, v1.z, v2.x, v2.y, v2.z, v3.x, v3.y, v3.z, r, g, b, a)
+    DrawPoly(v1.x, v1.y, v1.z, v3.x, v3.y, v3.z, v4.x, v4.y, v4.z, r, g, b, a)
+    -- Face 2 (Horário - Bilateral para anular Backface Culling de qualquer ângulo)
+    DrawPoly(v3.x, v3.y, v3.z, v2.x, v2.y, v2.z, v1.x, v1.y, v1.z, r, g, b, a)
+    DrawPoly(v4.x, v4.y, v4.z, v3.x, v3.y, v3.z, v1.x, v1.y, v1.z, r, g, b, a)
 end
 
-local function DrawThickStrapLine(p1, p2, r, g, b, a, offY)
-    DrawLine(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, r, g, b, a)
-    local dy = offY or 0.012
-    DrawLine(p1.x, p1.y + dy, p1.z, p2.x, p2.y + dy, p2.z, r, g, b, a)
-    DrawLine(p1.x, p1.y - dy, p1.z, p2.x, p2.y - dy, p2.z, r, g, b, a)
+local function DrawSingleStrap(trailer, pEnt, relPos, yOffset, halfX, topZ, hw, r, g, b, a)
+    -- Trilho esquerdo do trailer
+    local lRail_A = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset - hw, relPos.z - 0.15)
+    local lRail_B = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset + hw, relPos.z - 0.15)
+
+    -- Topo esquerdo do palete
+    local topL_A = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset - hw, topZ)
+    local topL_B = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset + hw, topZ)
+
+    -- Topo direito do palete
+    local topR_A = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset - hw, topZ)
+    local topR_B = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset + hw, topZ)
+
+    -- Trilho direito do trailer
+    local rRail_A = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset - hw, relPos.z - 0.15)
+    local rRail_B = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset + hw, relPos.z - 0.15)
+
+    -- 1. Tira lateral esquerda: Trilho esquerdo -> Topo esquerdo
+    DrawPolyQuad(lRail_A, lRail_B, topL_B, topL_A, r, g, b, a)
+
+    -- 2. Tira superior: Topo esquerdo -> Topo direito
+    DrawPolyQuad(topL_A, topL_B, topR_B, topR_A, r, g, b, a)
+
+    -- 3. Tira lateral direita: Topo direito -> Trilho direito
+    DrawPolyQuad(topR_A, topR_B, rRail_B, rRail_A, r, g, b, a)
 end
 
-local function DrawPalletStraps(trailer, pEnt, isTied)
+local function DrawPalletPolyStraps(trailer, pEnt)
     if not trailer or not DoesEntityExist(trailer) or not pEnt or not DoesEntityExist(pEnt) then return end
     local minDim, maxDim = GetModelDimensions(GetEntityModel(pEnt))
     local topZ = (maxDim and maxDim.z) or 1.1
@@ -989,31 +1010,15 @@ local function DrawPalletStraps(trailer, pEnt, isTied)
     local pCoords = GetEntityCoords(pEnt)
     local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-    -- Configuração de cor da fita: amarrada = firmeza total; pendente = translúcido vibrante
+    -- Vermelho industrial vibrante (220, 20, 20, 255) com 6cm de largura total (hw = 0.03m)
     local r, g, b, a = 220, 20, 20, 255
-    if not isTied then
-        r, g, b, a = 255, 60, 60, 190
-    end
+    local hw = 0.03
 
-    -- Cinta 1: Paralela Frontal (+0.28m no eixo Y local do palete)
-    local lRail1 = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + 0.28, relPos.z - 0.15)
-    local rRail1 = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + 0.28, relPos.z - 0.15)
-    local topL1 = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, 0.28, topZ)
-    local topR1 = GetOffsetFromEntityInWorldCoords(pEnt, halfX, 0.28, topZ)
+    -- Cinta 1: Paralela Frontal (+0.28m)
+    DrawSingleStrap(trailer, pEnt, relPos, 0.28, halfX, topZ, hw, r, g, b, a)
 
-    DrawThickStrapLine(lRail1, topL1, r, g, b, a)
-    DrawThickStrapLine(topL1, topR1, r, g, b, a)
-    DrawThickStrapLine(topR1, rRail1, r, g, b, a)
-
-    -- Cinta 2: Paralela Traseira (-0.28m no eixo Y local do palete)
-    local lRail2 = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y - 0.28, relPos.z - 0.15)
-    local rRail2 = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y - 0.28, relPos.z - 0.15)
-    local topL2 = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, -0.28, topZ)
-    local topR2 = GetOffsetFromEntityInWorldCoords(pEnt, halfX, -0.28, topZ)
-
-    DrawThickStrapLine(lRail2, topL2, r, g, b, a)
-    DrawThickStrapLine(topL2, topR2, r, g, b, a)
-    DrawThickStrapLine(topR2, rRail2, r, g, b, a)
+    -- Cinta 2: Paralela Traseira (-0.28m)
+    DrawSingleStrap(trailer, pEnt, relPos, -0.28, halfX, topZ, hw, r, g, b, a)
 end
 
 CreateThread(function()
@@ -1028,67 +1033,14 @@ CreateThread(function()
             local trCoords = GetEntityCoords(trailer)
             local distTrailer = #(pCoords - trCoords)
 
-            -- Renderização ativa sempre que o jogador estiver até 25m do reboque
-            if distTrailer <= 25.0 then
+            -- Renderização ativa sempre que o jogador estiver até 35m do reboque
+            if distTrailer <= 35.0 then
                 sleep = 0
-                local isPedInVeh = IsPedInAnyVehicle(ped, false)
-                local closestUntiedIdx = nil
-                local closestUntiedDist = 999.0
-                local isNearForkliftTie = false
-
-                for idx, pData in ipairs(pList) do
+                for _, pData in ipairs(pList) do
                     local pEnt = pData.entity
-                    if pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                        local isTied = (pData.isSecured == true)
-                        DrawPalletStraps(trailer, pEnt, isTied)
-
-                        -- Se o palete ainda não foi amarrado, renderiza o texto 3D interativo
-                        if not isTied then
-                            local palletPos = GetEntityCoords(pEnt)
-                            local distPallet = #(pCoords - palletPos)
-                            local textCoords = vector3(palletPos.x, palletPos.y, palletPos.z + 0.65)
-
-                            if distPallet <= 2.5 and not isPedInVeh then
-                                DrawText3D(textCoords.x, textCoords.y, textCoords.z, "~g~[E]~s~ Amarrar")
-                                if distPallet < closestUntiedDist then
-                                    closestUntiedDist = distPallet
-                                    closestUntiedIdx = idx
-                                end
-                            elseif distPallet <= 6.0 then
-                                DrawText3D(textCoords.x, textCoords.y, textCoords.z, "~r~Amarrar~s~")
-                            end
-                        end
-                    end
-                end
-
-                -- Verificação da empilhadeira embarcada na caçamba
-                local fork = JobEntities.forklift
-                if fork and DoesEntityExist(fork) and ForkliftLoadedOnTrailer and not ForkliftSecured then
-                    local fCoords = GetEntityCoords(fork)
-                    local distFork = #(pCoords - fCoords)
-                    local fTextCoords = vector3(fCoords.x, fCoords.y, fCoords.z + 0.8)
-                    if distFork <= 3.0 and not isPedInVeh then
-                        DrawText3D(fTextCoords.x, fTextCoords.y, fTextCoords.z, "~g~[E]~s~ Travar Catracas da Empilhadeira")
-                        isNearForkliftTie = true
-                    elseif distFork <= 7.0 then
-                        DrawText3D(fTextCoords.x, fTextCoords.y, fTextCoords.z, "~y~Travar Empilhadeira~s~")
-                    end
-                end
-
-                -- Captura de interação por tecla [E] (Control 38)
-                if not isPedInVeh and IsControlJustPressed(0, 38) then
-                    if isNearForkliftTie then
-                        if hasRopes or HasRopes then
-                            ExecuteForkliftTie(fork)
-                        else
-                            SendMissionNotify('Central Logística', 'Pegue as cintas na caixa lateral do caminhão primeiro!', 'error')
-                        end
-                    elseif closestUntiedIdx then
-                        if hasRopes or HasRopes then
-                            ExecutePalletTie(closestUntiedIdx)
-                        else
-                            SendMissionNotify('Central Logística', 'Pegue as cintas na caixa lateral do caminhão primeiro!', 'error')
-                        end
+                    -- Condicionamento ESTRITO: Apenas paletes confirmados com sucesso no minigame (isSecured == true)
+                    if pData.isSecured == true and pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
+                        DrawPalletPolyStraps(trailer, pEnt)
                     end
                 end
             end
@@ -2467,7 +2419,7 @@ lib.onCache('vehicle', function(veh)
                 -- Empilhadeira embarcada (ou paletes finalizados sem empilhadeira): inicia a lógica das cordas
                 ForkliftModule.StopOperation()
                 SetupRopesStage()
-            end)
+            end, hasFork)
         end
     end
 
@@ -2515,6 +2467,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
     CleanupCurrentJob()
     ActiveJob = payload
+    _G.ActiveJob = payload
     CurrentStage = 'STEP_1_START'
 
     -- Prevenção de Deadlock: se não houver empilhadeira contratada, inicia como concluída

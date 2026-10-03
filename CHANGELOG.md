@@ -1,5 +1,21 @@
 # Changelog — AUST_trucker
 
+## [20.6.1] — 2026-10-02 — Refatoração Visual de Cintas (DrawPoly Bilateral de 6cm, Condicionamento por Minigame & Remoção do Texto 3D)
+
+### 🪢 Cintas Visuais 3D com Malha Planar Realista (`DrawPoly`)
+- **Substituição da Nativa `DrawLine` por `DrawPoly`:** Eliminada a limitação de espessura de 1 pixel ("laser irreal") das linhas de debug. Implementada renderização poligonal em malhas de triângulos planos (`DrawPoly`) gerando tiras têxteis com **6 cm de largura real** (`hw = 0.03m`).
+- **Renderização Bilateral Anti-Culling:** Cada segmento da cinta (trilho esquerdo $\to$ topo esquerdo $\to$ topo direito $\to$ trilho direito) é desenhado com ordem horária e anti-horária de vértices, impedindo desaparecimento visual por *backface culling* independente do ângulo da câmera.
+- **Cor Industrial Vibrante:** Tiras em vermelho industrial (`220, 20, 20, 255`) projetadas dinamicamente sobre a geometria do palete com base nas suas dimensões (`GetModelDimensions`).
+
+### 🎯 Condicionamento Estrito de Estado & Fluxo do Minigame
+- **Ativação Pós-Vitória Exclusiva:** As cintas visuais só são renderizadas após a conclusão com sucesso do minigame de habilidade (`isSecured == true`). Paletes pendentes ou recém-estivados não exibem nenhuma fita.
+- **Comportamento em Falha no Minigame:** Caso o jogador falhe na combinação de teclas do `lib.skillCheck`, o palete permanece desamarrado (`isSecured = false`), nenhuma fita é desenhada e o sistema reabre a zona de interação do `ox_target` para permitir nova tentativa sem avançar indevidamente a lista.
+- **Tratamento Idêntico para a Empilhadeira:** Falhas no minigame de travamento da empilhadeira mantêm `ForkliftSecured = false` e reconfiguram a zona de trava para repetição imediata.
+
+### 🚫 Remoção Total do Texto 3D Flutuante
+- **Abolição Absoluta do `DrawText3D`:** Removidos todos os marcadores flutuantes com o texto "Amarrar" ou "[E] Amarrar" sobre os paletes e a empilhadeira, limpando a poluição visual do pátio.
+- **Interação 100% via `ox_target` / Sistema Padronizado:** A amarração e travamento operam de forma limpa e imersiva através dos alvos do `ox_target` configurados para cada palete e para o modelo da empilhadeira.
+
 ## [20.6.0] — 2026-10-02 — Sistema Visual de Amarração de Carga (Cintas 3D DrawLine, Texto 3D Interativo e Encadeamento Imediato da Forklift)
 
 ### 🪢 Cintas Visuais 3D Realistas (`DrawLine` & Vetores Dinâmicos)
