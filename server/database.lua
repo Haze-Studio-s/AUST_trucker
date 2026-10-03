@@ -980,14 +980,21 @@ function DB_GetActiveCompanyLoan(companyId)
     )
 end
 
+-- Retorna o nº de linhas afetadas (0 = empréstimo não está mais 'active', ex.: já quitado
+-- por uma chamada concorrente). Chamadores devem checar e reverter efeitos colaterais.
 function DB_UpdateLoanBalance(loanId, newBalance, newStatus, nextPaymentAt)
     -- nextPaymentAt may be nil (for paid loans); FROM_UNIXTIME(NULL) = NULL in MySQL
-    MySQL.update.await(
+    return MySQL.update.await(
         [[UPDATE trucker_loans
           SET remaining_balance = ?, status = ?, next_payment_at = FROM_UNIXTIME(?)
-          WHERE id = ?]],
+          WHERE id = ? AND status = 'active']],
         { newBalance, newStatus, nextPaymentAt, loanId }
     )
+end
+
+-- Remove um empréstimo recém-criado cujo desembolso falhou (rollback)
+function DB_DeleteLoan(loanId)
+    MySQL.update.await('DELETE FROM trucker_loans WHERE id = ?', { loanId })
 end
 
 function DB_GetOverdueLoans()

@@ -2285,7 +2285,8 @@ RegisterNetEvent('aurp_trucker:loan:takePlan', function(planIndex)
         return
     end
 
-    local res = LoanService.Create(src, citizenId, nil, plan.loan_amount)
+    -- TakePlan aplica teto por nível e os termos do plano (juros/prazo); Create ignorava os dois
+    local res = LoanService.TakePlan(src, citizenId, planIndex)
     if res.success then
         TriggerClientEvent('aurp_trucker:notify', src, ('Empréstimo de $%s concedido!'):format(plan.loan_amount), 'success')
     else
