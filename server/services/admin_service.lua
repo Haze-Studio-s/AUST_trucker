@@ -356,6 +356,36 @@ end)
 -- EVENTOS DE SALVAMENTO & HOT-RELOAD EM TEMPO REAL
 -- ============================================================
 
+-- 0. TELEPORTE (autorizado e executado no servidor)
+local function IsFiniteNumber(n)
+    return type(n) == 'number' and n == n and n ~= math.huge and n ~= -math.huge
+end
+
+RegisterNetEvent('aurp_trucker:server:adminTeleport', function(coords)
+    local src = source
+    -- source de evento de rede é sempre > 0; recusa qualquer outra origem
+    if type(src) ~= 'number' or src <= 0 then return end
+    if not AdminService.IsPlayerAdmin(src) then
+        print(('[AUST_Trucker] adminTeleport negado para src %s (sem permissão admin)'):format(tostring(src)))
+        return
+    end
+    if type(coords) ~= 'table' then return end
+
+    local x, y, z = tonumber(coords.x), tonumber(coords.y), tonumber(coords.z)
+    local heading = tonumber(coords.heading or coords.w)
+    -- Coordenadas finitas e dentro dos limites do mapa do GTA V
+    if not (IsFiniteNumber(x) and IsFiniteNumber(y) and IsFiniteNumber(z)) then return end
+    if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 or z < -500.0 or z > 2500.0 then return end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 or not DoesEntityExist(ped) then return end
+
+    SetEntityCoords(ped, x + 0.0, y + 0.0, z + 0.0, false, false, false, false)
+    if IsFiniteNumber(heading) then SetEntityHeading(ped, heading + 0.0) end
+
+    print(('[AUST_Trucker] Admin %s teleportou para %.1f, %.1f, %.1f'):format(tostring(src), x, y, z))
+end)
+
 -- 1. ROTAS E CONTRATOS
 RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
     local src = source
