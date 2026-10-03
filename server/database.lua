@@ -543,6 +543,8 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_model` VARCHAR(100) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
     "ALTER TABLE `trucker_repo_orders` ADD COLUMN `accepted_at` DATETIME NULL DEFAULT NULL",
+    -- calote: parcelas perdidas consecutivas (ao atingir Config.Loans.MaxMissedPayments => 'defaulted')
+    "ALTER TABLE `trucker_loans` ADD COLUMN `missed_payments` TINYINT UNSIGNED NOT NULL DEFAULT 0",
     -- infraction_type: adiciona 'cargo_damage' (usado por job_service); MODIFY é idempotente
     "ALTER TABLE `trucker_infractions` MODIFY COLUMN `infraction_type` ENUM('overload','no_manifest','expired_manifest','dangerous_cargo','illegal_seizure','cargo_damage') NOT NULL",
     -- trucker_jobs.status: adiciona 'failed' (usado por DB_SetCargoFailed)
@@ -651,7 +653,7 @@ function DB_DeleteCompanyIfNoActiveLoan(companyId)
         [[DELETE FROM trucker_companies
           WHERE id = ?
             AND NOT EXISTS (SELECT 1 FROM trucker_loans l
-                            WHERE l.company_id = ? AND l.status = 'active' AND l.remaining_balance > 0)]],
+                            WHERE l.company_id = ? AND l.status IN ('active','defaulted') AND l.remaining_balance > 0)]],
         { companyId, companyId }
     )
 end
@@ -1019,11 +1021,13 @@ function DB_CreateLoan(citizenId, companyId, vehiclePlate, amount, totalToPay, m
     )
 end
 
+-- "Ativo" aqui = dívida em aberto: 'active' OU 'defaulted' (inadimplente). Um empréstimo
+-- inadimplente continua bloqueando novos empréstimos/venda da empresa e pode ser quitado.
 function DB_GetActiveLoan(citizenId)
     return MySQL.single.await(
         [[SELECT *, UNIX_TIMESTAMP(next_payment_at) as next_payment_at
           FROM trucker_loans
-          WHERE citizenid = ? AND company_id IS NULL AND status = 'active'
+          WHERE citizenid = ? AND company_id IS NULL AND status IN ('active','defaulted')
           LIMIT 1]],
         { citizenId }
     )
@@ -1033,7 +1037,7 @@ function DB_GetActiveCompanyLoan(companyId)
     return MySQL.single.await(
         [[SELECT *, UNIX_TIMESTAMP(next_payment_at) as next_payment_at
           FROM trucker_loans
-          WHERE company_id = ? AND status = 'active'
+          WHERE company_id = ? AND status IN ('active','defaulted')
           LIMIT 1]],
         { companyId }
     )
@@ -1045,9 +1049,21 @@ function DB_UpdateLoanBalance(loanId, newBalance, newStatus, nextPaymentAt)
     -- nextPaymentAt may be nil (for paid loans); FROM_UNIXTIME(NULL) = NULL in MySQL
     return MySQL.update.await(
         [[UPDATE trucker_loans
-          SET remaining_balance = ?, status = ?, next_payment_at = FROM_UNIXTIME(?)
+          SET remaining_balance = ?, status = ?, next_payment_at = FROM_UNIXTIME(?),
+              missed_payments = IF(? = 'active', 0, missed_payments)
+          WHERE id = ? AND status IN ('active','defaulted')]],
+        { newBalance, newStatus, nextPaymentAt, newStatus, loanId }
+    )
+end
+
+-- Registra uma parcela perdida (multa aplicada): guarda contador e, se atingiu o limite,
+-- marca 'defaulted'. Só atua em empréstimos 'active' (retorna linhas afetadas).
+function DB_RecordLoanMiss(loanId, newBalance, newStatus, nextPaymentAt, missedPayments)
+    return MySQL.update.await(
+        [[UPDATE trucker_loans
+          SET remaining_balance = ?, status = ?, next_payment_at = FROM_UNIXTIME(?), missed_payments = ?
           WHERE id = ? AND status = 'active']],
-        { newBalance, newStatus, nextPaymentAt, loanId }
+        { newBalance, newStatus, nextPaymentAt, missedPayments, loanId }
     )
 end
 

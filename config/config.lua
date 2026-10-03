@@ -878,6 +878,12 @@ Config.Loans = {
     NumInstallments  = 4,          -- número de parcelas
     InstallmentDays  = 7,          -- dias entre parcelas
     PenaltyRate      = 0.15,       -- multa por atraso (15%)
+    -- Calote: a cada parcela vencida o sistema tenta debitar a parcela automaticamente
+    -- (banco do jogador / cofre da empresa). Sem saldo => multa + parcela perdida.
+    -- Ao atingir MaxMissedPayments consecutivas o empréstimo vira 'defaulted': para de
+    -- acumular multa, bloqueia novos empréstimos/venda da empresa e só sai quitando tudo.
+    AutoDebit         = true,
+    MaxMissedPayments = 3,
     CheckInterval    = 300,        -- segundos entre verificações de atraso
     BankerLocation   = vector3(-2962.6, 485.6, 15.7),  -- Paleto Bay bank
     BankerPed        = 'ig_bankman',
