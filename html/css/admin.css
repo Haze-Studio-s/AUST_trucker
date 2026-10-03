@@ -485,3 +485,88 @@
   border-color: var(--admin-primary);
   box-shadow: 0 0 6px var(--admin-primary-glow);
 }
+
+/* Modal In-Game Customizado (Confirmação e Entrada) */
+.admin-modal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  animation: adminFadeIn 0.15s ease-out;
+}
+
+.admin-modal-box {
+  background: #111a20;
+  border: 1px solid var(--admin-card-border);
+  border-radius: 12px;
+  width: 440px;
+  max-width: 90%;
+  padding: 22px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 20px var(--admin-primary-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.admin-modal-header i {
+  color: var(--admin-warning);
+}
+
+.admin-modal-body {
+  font-size: 13px;
+  color: var(--admin-text-main);
+  line-height: 1.5;
+}
+
+.admin-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Toast In-Game */
+.admin-toast-container {
+  position: absolute;
+  top: 70px;
+  right: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.admin-toast {
+  background: rgba(18, 26, 32, 0.95);
+  border: 1px solid var(--admin-primary);
+  border-left: 4px solid var(--admin-primary);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+  animation: adminFadeIn 0.2s ease-out;
+}
+
+.admin-toast.error {
+  border-color: var(--admin-danger);
+  border-left-color: var(--admin-danger);
+}

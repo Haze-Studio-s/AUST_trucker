@@ -21,7 +21,119 @@
   let ecoFilter = 'all';
   let draggedSpawnId = null;
 
-  // Inicialização e listeners de Mensagens do FiveM
+  // ============================================================
+  // COMPONENTES UI IN-GAME (MODAL E TOASTS 100% IN-GAME)
+  // Elimina janelas nativas do Windows CEF fora do jogo
+  // ============================================================
+
+  function showConfirmModal(title, message, onConfirm) {
+    const existing = document.getElementById('admin-confirm-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'admin-confirm-modal';
+    overlay.className = 'admin-modal-overlay';
+
+    overlay.innerHTML = `
+      <div class="admin-modal-box">
+        <div class="admin-modal-header">
+          <i class="fas fa-exclamation-triangle"></i>
+          <span>${escapeHtml(title || 'Confirmação')}</span>
+        </div>
+        <div class="admin-modal-body">
+          ${escapeHtml(message || 'Tem certeza que deseja executar esta ação?')}
+        </div>
+        <div class="admin-modal-footer">
+          <button class="admin-btn admin-btn-outline btn-modal-cancel">Cancelar</button>
+          <button class="admin-btn admin-btn-danger btn-modal-confirm">Confirmar Exclusão</button>
+        </div>
+      </div>
+    `;
+
+    overlay.querySelector('.btn-modal-cancel').addEventListener('click', () => {
+      overlay.remove();
+    });
+
+    overlay.querySelector('.btn-modal-confirm').addEventListener('click', () => {
+      overlay.remove();
+      if (typeof onConfirm === 'function') onConfirm();
+    });
+
+    const panel = document.getElementById('admin-panel') || document.body;
+    panel.appendChild(overlay);
+  }
+
+  function showPromptModal(title, placeholder, onConfirm) {
+    const existing = document.getElementById('admin-prompt-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'admin-prompt-modal';
+    overlay.className = 'admin-modal-overlay';
+
+    overlay.innerHTML = `
+      <div class="admin-modal-box">
+        <div class="admin-modal-header">
+          <i class="fas fa-folder-plus" style="color:var(--admin-primary)"></i>
+          <span>${escapeHtml(title || 'Nova Pasta')}</span>
+        </div>
+        <div class="admin-modal-body">
+          <input type="text" id="modal-prompt-input" class="admin-input" placeholder="${escapeHtml(placeholder || '')}" style="width:100%; margin-top:4px;">
+        </div>
+        <div class="admin-modal-footer">
+          <button class="admin-btn admin-btn-outline btn-modal-cancel">Cancelar</button>
+          <button class="admin-btn admin-btn-primary btn-modal-submit">Criar</button>
+        </div>
+      </div>
+    `;
+
+    const input = overlay.querySelector('#modal-prompt-input');
+
+    const submit = () => {
+      const val = input.value.trim();
+      overlay.remove();
+      if (val && typeof onConfirm === 'function') onConfirm(val);
+    };
+
+    overlay.querySelector('.btn-modal-cancel').addEventListener('click', () => overlay.remove());
+    overlay.querySelector('.btn-modal-submit').addEventListener('click', submit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submit();
+      if (e.key === 'Escape') overlay.remove();
+    });
+
+    const panel = document.getElementById('admin-panel') || document.body;
+    panel.appendChild(overlay);
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function showAdminToast(message, type = 'success') {
+    let container = document.getElementById('admin-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'admin-toast-container';
+      container.className = 'admin-toast-container';
+      const panel = document.getElementById('admin-panel') || document.body;
+      panel.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `admin-toast ${type === 'error' ? 'error' : ''}`;
+    const icon = type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle';
+    toast.innerHTML = `<i class="fas ${icon}"></i> <span>${escapeHtml(message)}</span>`;
+
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+  }
+
+  // ============================================================
+  // COMUNICAÇÃO FIVEM NUI
+  // ============================================================
+
   window.addEventListener('message', function (event) {
     const item = event.data;
     if (!item || !item.action) return;
@@ -55,6 +167,7 @@
           if (sy) sy.value = item.coords.y;
           if (sz) sz.value = item.coords.z;
           if (sh) sh.value = item.coords.heading;
+          showAdminToast('Coordenadas capturadas com sucesso!');
         }
         break;
     }
@@ -63,6 +176,11 @@
   // Fechar no ESC
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
+      const confirmModal = document.getElementById('admin-confirm-modal');
+      const promptModal = document.getElementById('admin-prompt-modal');
+      if (confirmModal) { confirmModal.remove(); return; }
+      if (promptModal) { promptModal.remove(); return; }
+
       const panel = document.getElementById('admin-panel');
       if (panel && panel.style.display === 'flex') {
         closeAdminPanel();
@@ -71,7 +189,6 @@
     }
   });
 
-  // Helper de comunicação com o Client Lua
   function postNUI(callbackName, data) {
     const resourceName = window.GetParentResourceName ? window.GetParentResourceName() : 'AUST_trucker';
     return fetch(`https://${resourceName}/${callbackName}`, {
@@ -120,7 +237,6 @@
       panel.style.display = 'flex';
     }
 
-    // UX: Avança automaticamente para o próximo slot sequencial (ex: Slot 1 -> Slot 2)
     if (item && item.savedSlot && !item.isForklift) {
       const nextSlot = parseInt(item.savedSlot) + 1;
       const slotSelect = document.getElementById('offset-form-slot');
@@ -171,7 +287,6 @@
     renderSpawnsTab();
   }
 
-  // Troca de Abas
   function switchTab(tabName) {
     activeTab = tabName;
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
@@ -214,7 +329,6 @@
     const routes = adminData.customRoutes || {};
     let entries = Object.keys(routes).map(k => ({ key: k, data: routes[k] }));
 
-    // Filtro por tipo de trabalho
     if (routeFilter && routeFilter !== 'all') {
       entries = entries.filter(e => {
         const t = (e.data.type || e.data.job_type || 'freight').toLowerCase();
@@ -222,7 +336,6 @@
       });
     }
 
-    // Filtro por busca textual
     if (routeSearchQuery && routeSearchQuery.trim() !== '') {
       const q = routeSearchQuery.toLowerCase().trim();
       entries = entries.filter(e => {
@@ -276,12 +389,13 @@
     tbody.querySelectorAll('.btn-del-route').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
-        if (confirm(`Tem certeza que deseja excluir a rota #${id}?`)) {
+        showConfirmModal('Excluir Rota', `Deseja realmente remover a rota #${id}?`, () => {
           postNUI('adminDeleteRoute', { id: id });
           delete adminData.customRoutes[id];
           renderRoutesTab();
           renderEconomyTab();
-        }
+          showAdminToast(`Rota #${id} excluída com sucesso.`);
+        });
       });
     });
   }
@@ -314,7 +428,7 @@
   function saveRouteForm() {
     const routeId = document.getElementById('route-form-id').value.trim();
     if (!routeId) {
-      alert('Informe um identificador único para a rota (ex: rota_porto_oleo).');
+      showAdminToast('Informe um identificador único para a rota (ex: rota_porto_oleo).', 'error');
       return;
     }
 
@@ -357,7 +471,7 @@
     adminData.customRoutes[routeId] = payload;
     renderRoutesTab();
     renderEconomyTab();
-    alert(`Rota #${routeId} salva com sucesso e sincronizada em tempo real!`);
+    showAdminToast(`Rota #${routeId} salva e sincronizada em tempo real!`);
   }
 
   // ============================================================
@@ -377,7 +491,6 @@
       return s;
     });
 
-    // Mapeia todas as pastas existentes
     const folders = {};
     folders['Geral'] = [];
 
@@ -387,7 +500,6 @@
       folders[fName].push(s);
     });
 
-    // Atualiza opções no select do formulário
     if (folderSelect) {
       const currentSelected = folderSelect.value;
       folderSelect.innerHTML = '';
@@ -402,7 +514,6 @@
       }
     }
 
-    // Renderiza cada pasta como container de Drag-and-Drop
     Object.keys(folders).forEach(folderName => {
       const fList = folders[folderName];
       const folderCard = document.createElement('div');
@@ -451,7 +562,6 @@
           </div>
         `;
 
-        // Eventos Drag-and-Drop no item
         row.addEventListener('dragstart', function (e) {
           draggedSpawnId = this.getAttribute('data-id');
           this.classList.add('dragging');
@@ -466,7 +576,6 @@
         itemsContainer.appendChild(row);
       });
 
-      // Eventos Drag-and-Drop na Pasta
       folderCard.addEventListener('dragover', function (e) {
         e.preventDefault();
         folderCard.classList.add('drag-over');
@@ -489,6 +598,7 @@
               folder_name: targetFolder
             });
             renderSpawnsTab();
+            showAdminToast(`Spawn movido para "${targetFolder}".`);
           }
         }
       });
@@ -496,7 +606,6 @@
       container.appendChild(folderCard);
     });
 
-    // Listeners de Teleporte
     container.querySelectorAll('.btn-tp-spawn').forEach(btn => {
       btn.addEventListener('click', function () {
         postNUI('adminTeleport', {
@@ -510,29 +619,29 @@
       });
     });
 
-    // Listeners de Exclusão de Spawn
     container.querySelectorAll('.btn-del-spawn').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
-        if (confirm(`Excluir o spawn #${id}?`)) {
+        showConfirmModal('Excluir Ponto de Spawn', `Deseja realmente excluir o spawn #${id}?`, () => {
           postNUI('adminDeleteSpawn', { id: id });
           delete adminData.spawns[id];
           renderSpawnsTab();
-        }
+          showAdminToast(`Spawn #${id} excluído com sucesso.`);
+        });
       });
     });
 
-    // Listeners de Exclusão de Pasta
     container.querySelectorAll('.btn-del-folder').forEach(btn => {
       btn.addEventListener('click', function () {
         const f = this.getAttribute('data-folder');
-        if (confirm(`Excluir a pasta "${f}"? Todos os pontos contidos nela serão movidos para "Geral".`)) {
+        showConfirmModal('Excluir Pasta', `Deseja excluir a pasta "${f}"? Todos os pontos contidos nela serão movidos para "Geral".`, () => {
           postNUI('adminDeleteSpawnFolder', { folder_name: f });
           Object.values(adminData.spawns).forEach(s => {
             if (s.folder_name === f) s.folder_name = 'Geral';
           });
           renderSpawnsTab();
-        }
+          showAdminToast(`Pasta "${f}" excluída. Pontos movidos para "Geral".`);
+        });
       });
     });
   }
@@ -540,7 +649,7 @@
   function saveSpawnForm() {
     const spawnId = document.getElementById('spawn-form-id').value.trim();
     if (!spawnId) {
-      alert('Informe o ID do ponto de spawn!');
+      showAdminToast('Informe o ID do ponto de spawn!', 'error');
       return;
     }
 
@@ -564,7 +673,7 @@
     postNUI('adminSaveSpawn', payload);
     adminData.spawns[spawnId] = payload;
     renderSpawnsTab();
-    alert(`Ponto de spawn #${spawnId} gravado com sucesso!`);
+    showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso!`);
   }
 
   // ============================================================
@@ -586,7 +695,6 @@
       { prop_model: 'prop_wood_pallet_01', label: 'Palete de Madeira Padrão', category: 'dry', offset_z: 0.0 }
     ];
 
-    // Mescla padrões com os salvos do banco
     const map = {};
     defaultList.forEach(p => { map[p.prop_model] = p; });
     homologated.forEach(p => { map[p.prop_model] = p; });
@@ -632,11 +740,12 @@
     grid.querySelectorAll('.btn-del-prop').forEach(btn => {
       btn.addEventListener('click', function () {
         const model = this.getAttribute('data-model');
-        if (confirm(`Remover a homologação do modelo "${model}"?`)) {
+        showConfirmModal('Remover Homologação', `Deseja remover a homologação do modelo "${model}"?`, () => {
           postNUI('adminDeleteHomologatedProp', { prop_model: model });
           adminData.homologatedProps = adminData.homologatedProps.filter(p => p.prop_model !== model);
           renderPropsTab();
-        }
+          showAdminToast(`Modelo "${model}" desvinculado.`);
+        });
       });
     });
   }
@@ -644,7 +753,7 @@
   function saveHomologatedProp() {
     const model = document.getElementById('prop-form-model').value.trim();
     if (!model) {
-      alert('Informe o modelo 3D do prop (ex: prop_boxpile_07d).');
+      showAdminToast('Informe o modelo 3D do prop (ex: prop_boxpile_07d).', 'error');
       return;
     }
 
@@ -658,7 +767,7 @@
     postNUI('adminSaveHomologatedProp', payload);
     adminData.homologatedProps.push(payload);
     renderPropsTab();
-    alert(`Modelo "${model}" homologado com sucesso! Já disponível como carga.`);
+    showAdminToast(`Modelo "${model}" homologado com sucesso! Já disponível como carga.`);
   }
 
   // ============================================================
@@ -741,22 +850,29 @@
         const trailer = this.getAttribute('data-trailer');
         const slot = parseInt(this.getAttribute('data-slot'));
         const isFork = this.getAttribute('data-fork') === '1';
-        if (confirm(`Excluir offset do trailer "${trailer}" (${isFork ? 'Empilhadeira' : 'Slot ' + slot})?`)) {
-          postNUI('adminDeleteTrailerOffset', {
-            trailerModel: trailer,
-            slotIndex: slot,
-            isForklift: isFork
-          });
-          if (adminData.trailerOffsets[trailer]) {
-            if (isFork) {
-              adminData.trailerOffsets[trailer].forklift = null;
-            } else if (adminData.trailerOffsets[trailer].pallets) {
-              delete adminData.trailerOffsets[trailer].pallets[slot];
-              delete adminData.trailerOffsets[trailer].pallets[String(slot)];
+        const targetDesc = isFork ? 'Empilhadeira Traseira' : `Slot ${slot}`;
+
+        showConfirmModal(
+          'Excluir Offset',
+          `Deseja realmente remover o offset do trailer "${trailer}" (${targetDesc})?`,
+          () => {
+            postNUI('adminDeleteTrailerOffset', {
+              trailerModel: trailer,
+              slotIndex: slot,
+              isForklift: isFork
+            });
+            if (adminData.trailerOffsets[trailer]) {
+              if (isFork) {
+                adminData.trailerOffsets[trailer].forklift = null;
+              } else if (adminData.trailerOffsets[trailer].pallets) {
+                delete adminData.trailerOffsets[trailer].pallets[slot];
+                delete adminData.trailerOffsets[trailer].pallets[String(slot)];
+              }
             }
+            renderOffsetsTab();
+            showAdminToast(`Offset do trailer ${trailer} removido com sucesso.`);
           }
-          renderOffsetsTab();
-        }
+        );
       });
     });
   }
@@ -844,7 +960,7 @@
               adminData.customRoutes[id].xp = newXp;
 
               postNUI('adminSaveRoute', adminData.customRoutes[id]);
-              alert(`Valores da rota #${id} atualizados para R$ ${newPay.toLocaleString()} e ${newXp} XP!`);
+              showAdminToast(`Valores da rota #${id} atualizados para R$ ${newPay.toLocaleString()} e ${newXp} XP!`);
             }
           });
         });
@@ -874,7 +990,7 @@
 
     postNUI('adminSaveEconomy', payload);
     adminData.economy = payload;
-    alert('Multiplicadores globais atualizados e sincronizados com todos os jogadores!');
+    showAdminToast('Multiplicadores globais atualizados e sincronizados!');
   }
 
   // ============================================================
@@ -928,11 +1044,12 @@
     tbody.querySelectorAll('.btn-del-npc').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
-        if (confirm(`Remover NPC despachante #${id}?`)) {
+        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o NPC #${id}?`, () => {
           postNUI('adminDeleteNPC', { id: id });
           delete adminData.npcs[id];
           renderNPCsTab();
-        }
+          showAdminToast(`NPC #${id} removido.`);
+        });
       });
     });
   }
@@ -940,7 +1057,7 @@
   function saveNPCForm() {
     const npcId = document.getElementById('npc-form-id').value.trim();
     if (!npcId) {
-      alert('Informe o identificador do NPC (ex: dispatcher_paleto)!');
+      showAdminToast('Informe o identificador do NPC (ex: dispatcher_paleto)!', 'error');
       return;
     }
 
@@ -962,7 +1079,7 @@
     postNUI('adminSaveNPC', payload);
     adminData.npcs[npcId] = payload;
     renderNPCsTab();
-    alert(`NPC #${npcId} salvo e spawnado no mapa com sucesso!`);
+    showAdminToast(`NPC #${npcId} salvo e spawnado no mapa com sucesso!`);
   }
 
   // ============================================================
@@ -991,6 +1108,7 @@
           document.getElementById('npc-form-z').value = c.z.toFixed(2);
           document.getElementById('npc-form-h').value = c.heading.toFixed(2);
         }
+        showAdminToast('Posição do jogador capturada!');
       }
     });
   }
@@ -1009,7 +1127,6 @@
   // INICIALIZAÇÃO DE EVENTOS DO DOM
   // ============================================================
   document.addEventListener('DOMContentLoaded', function () {
-    // Fechar botão
     const closeBtn = document.querySelector('.admin-close-btn');
     if (closeBtn) {
       closeBtn.addEventListener('click', function () {
@@ -1018,7 +1135,6 @@
       });
     }
 
-    // Toggle empilhadeira no offset
     const chkForklift = document.getElementById('offset-form-isforklift');
     const propInput = document.getElementById('offset-form-prop');
     const slotSelect = document.getElementById('offset-form-slot');
@@ -1036,7 +1152,6 @@
       });
     }
 
-    // Alternância de abas
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.addEventListener('click', function () {
         const tab = this.getAttribute('data-tab');
@@ -1044,7 +1159,6 @@
       });
     });
 
-    // Filtros por categoria na aba de rotas
     const routesFilterBar = document.getElementById('routes-filter-bar');
     if (routesFilterBar) {
       routesFilterBar.querySelectorAll('.admin-filter-btn').forEach(btn => {
@@ -1057,7 +1171,6 @@
       });
     }
 
-    // Campo de busca de rotas
     const routesSearchInput = document.getElementById('routes-search-input');
     if (routesSearchInput) {
       routesSearchInput.addEventListener('input', function () {
@@ -1066,7 +1179,6 @@
       });
     }
 
-    // Filtros por categoria na aba de economia
     const ecoFilterBar = document.getElementById('eco-filter-bar');
     if (ecoFilterBar) {
       ecoFilterBar.querySelectorAll('.admin-filter-btn').forEach(btn => {
@@ -1079,7 +1191,6 @@
       });
     }
 
-    // Botões de formulário
     const btnSaveRoute = document.getElementById('btn-save-route');
     if (btnSaveRoute) btnSaveRoute.addEventListener('click', saveRouteForm);
 
@@ -1098,13 +1209,10 @@
     const btnSaveNPC = document.getElementById('btn-save-npc');
     if (btnSaveNPC) btnSaveNPC.addEventListener('click', saveNPCForm);
 
-    // Botão de Nova Pasta de Spawn
     const btnNewFolder = document.getElementById('btn-new-spawn-folder');
     if (btnNewFolder) {
       btnNewFolder.addEventListener('click', function () {
-        const folderName = prompt('Nome da nova pasta de spawns:');
-        if (folderName && folderName.trim() !== '') {
-          const clean = folderName.trim();
+        showPromptModal('Nova Pasta de Spawns', 'Nome da pasta (ex: Pátio Norte)', (clean) => {
           const folderSelect = document.getElementById('spawn-form-folder');
           if (folderSelect) {
             let exists = false;
@@ -1119,12 +1227,11 @@
               folderSelect.value = clean;
             }
           }
-          alert(`Pasta "${clean}" criada!`);
-        }
+          showAdminToast(`Pasta "${clean}" criada com sucesso!`);
+        });
       });
     }
 
-    // Botão de Gizmo para Coordenadas de Spawn
     const btnGizmoSpawn = document.getElementById('btn-gizmo-spawn');
     if (btnGizmoSpawn) {
       btnGizmoSpawn.addEventListener('click', function () {
@@ -1137,20 +1244,18 @@
       });
     }
 
-    // Botão de Teste / Preview de Spawns da Área
     const btnPreviewSpawns = document.getElementById('btn-preview-spawns');
     if (btnPreviewSpawns) {
       btnPreviewSpawns.addEventListener('click', function () {
         const spawnsList = Object.values(adminData.spawns || {});
         if (spawnsList.length === 0) {
-          alert('Nenhum ponto de spawn cadastrado para testar.');
+          showAdminToast('Nenhum ponto de spawn cadastrado para testar.', 'error');
           return;
         }
         postNUI('adminStartPreview', { spawns: spawnsList });
       });
     }
 
-    // Botões de captura de coordenadas
     const btnCapPickup = document.getElementById('btn-cap-pickup');
     if (btnCapPickup) btnCapPickup.addEventListener('click', () => captureCoords('route-pickup'));
 
