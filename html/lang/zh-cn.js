@@ -285,4 +285,11 @@ Lang["zh-cn"] = {
 	str_invalid_value:"无效值输入",
 	str_more_than:"必须大于或等于 {0}",
 	str_less_than:"必须小于或等于 {0}",
+	contract_page_button_locked: "已锁定",
+	contract_locked_adr: "需要ADR {0} 类证书",
+	contract_locked_distance: "距离超过您的技能上限（{0} 公里）",
+	contract_locked_fragile: "需要技能：易碎货物（1级）",
+	contract_locked_valuable: "需要技能：贵重货物（1级）",
+	contract_locked_fast: "需要技能：紧急配送（1级）",
+	contract_locked_illegal: "需要非法货物专业资质",
 };

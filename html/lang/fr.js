@@ -285,4 +285,11 @@ Lang["fr"] = {
 	str_invalid_value:"valeur invalide",
 	str_more_than:"Doit être supérieur ou égal pour {0}",
 	str_less_than:"Doit être inférieur ou égal à {0}",
+	contract_page_button_locked: "Verrouillé",
+	contract_locked_adr: "Nécessite un certificat ADR Classe {0}",
+	contract_locked_distance: "La distance dépasse la limite de votre compétence ({0} km)",
+	contract_locked_fragile: "Nécessite la compétence Cargaison Fragile (Niveau 1)",
+	contract_locked_valuable: "Nécessite la compétence Cargaison de Valeur (Niveau 1)",
+	contract_locked_fast: "Nécessite la compétence Livraison Urgente (Niveau 1)",
+	contract_locked_illegal: "Nécessite une spécialisation en Cargaisons Illégales",
 };

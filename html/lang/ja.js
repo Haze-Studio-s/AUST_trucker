@@ -285,4 +285,11 @@ Lang["ja"] = {
 	str_invalid_value:"無効な値",
 	str_more_than:"{0}以上である必要があります",
 	str_less_than:"{0}以下である必要があります",
+	contract_page_button_locked: "ロック中",
+	contract_locked_adr: "ADRクラス{0}の証明書が必要です",
+	contract_locked_distance: "距離がスキルの上限({0} km)を超えています",
+	contract_locked_fragile: "スキル「壊れ物貨物」(レベル1)が必要です",
+	contract_locked_valuable: "スキル「高価貨物」(レベル1)が必要です",
+	contract_locked_fast: "スキル「緊急配送」(レベル1)が必要です",
+	contract_locked_illegal: "違法貨物の専門資格が必要です",
 };

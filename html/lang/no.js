@@ -285,4 +285,11 @@ Lang["no"] = {
 	str_invalid_value:"Ugyldig verdi",
 	str_more_than:"Må være mer eller likt {0}",
 	str_less_than:"Må være mindre eller likt {0}",
+	contract_page_button_locked: "Låst",
+	contract_locked_adr: "Krever ADR-sertifikat klasse {0}",
+	contract_locked_distance: "Avstanden overskrider ferdighetsgrensen din ({0} km)",
+	contract_locked_fragile: "Krever ferdigheten Skjør last (nivå 1)",
+	contract_locked_valuable: "Krever ferdigheten Verdifull last (nivå 1)",
+	contract_locked_fast: "Krever ferdigheten Hasteleveranse (nivå 1)",
+	contract_locked_illegal: "Krever spesialisering i ulovlig last",
 };

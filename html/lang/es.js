@@ -282,4 +282,11 @@ Lang["es"] = {
 	str_invalid_value: "Valor inválido",
 	str_more_than: "Debe ser mayor o igual a {0}",
 	str_less_than: "Debe ser menor o igual a {0}",
+	contract_page_button_locked: "Bloqueado",
+	contract_locked_adr: "Requiere certificado ADR Clase {0}",
+	contract_locked_distance: "La distancia supera el límite de tu habilidad ({0} km)",
+	contract_locked_fragile: "Requiere la habilidad Carga Frágil (Nivel 1)",
+	contract_locked_valuable: "Requiere la habilidad Carga Valiosa (Nivel 1)",
+	contract_locked_fast: "Requiere la habilidad Entrega Urgente (Nivel 1)",
+	contract_locked_illegal: "Requiere especialización en Cargas Ilegales",
 };

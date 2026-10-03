@@ -1,5 +1,12 @@
 # Changelog — AUST_trucker
 
+## [20.7.9] — 2026-10-03 — Residuais da auditoria
+
+### Correções
+- Locales `de/es/fr/ja/no/zh-cn` da NUI: adicionadas as 7 chaves de bloqueio de contrato que faltavam (agora 167/167 chaves em todos os idiomas).
+- Reembolso da caução do aluguel usa o pior estado (lataria/motor) amostrado pelo servidor durante o aluguel, em vez de só a saúde no momento da devolução.
+- `AUDIT_REPORT.md`: residuais reavaliados (locales já eram carregados sob demanda; demais itens documentados com o motivo de não serem correções pontuais).
+
 ## [20.7.8] — 2026-10-03 — Itens menores da auditoria
 
 ### Segurança / correções
