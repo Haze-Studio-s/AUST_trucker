@@ -717,7 +717,7 @@ function AdminService.GetSpawnsByType(spawnType)
     local results = {}
     if not AdminService.Spawns then return results end
     local targetType = tostring(spawnType or ''):lower()
-    for _, s in ipairs(AdminService.Spawns) do
+    for _, s in pairs(AdminService.Spawns) do
         if tostring(s.spawn_type):lower() == targetType and s.coords then
             table.insert(results, s.coords)
         end

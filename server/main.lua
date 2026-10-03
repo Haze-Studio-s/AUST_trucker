@@ -689,14 +689,15 @@ local function StartTruckDelivery(src, contractData)
     print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para carreta (Modelo: %s)..."):format(requestedTrailer))
 
     for idx, coord in ipairs(trailerSpawns) do
-        if IsSpawnPointClear(coord, 5.0, { [truck] = true }) then
+        local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
+        if distToTruck >= 14.0 and IsSpawnPointClear(coord, 5.0) then
             trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(trailer) then
                 chosenTrailerCoord = coord
-                print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s"):format(
-                    idx, tostring(NetworkGetNetworkIdFromEntity(trailer))
+                print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s (Distância do Cavalo: %.1fm)"):format(
+                    idx, tostring(NetworkGetNetworkIdFromEntity(trailer)), distToTruck
                 ))
                 break
             end
@@ -704,8 +705,16 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not trailer or not DoesEntityExist(trailer) then
-        local fallbackCoord = trailerSpawns[1]
-        print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas de carreta ocupadas, aplicando fallback na vaga principal %s..."):format(tostring(fallbackCoord)))
+        local fallbackCoord = nil
+        for _, coord in ipairs(trailerSpawns) do
+            local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
+            if distToTruck >= 14.0 then
+                fallbackCoord = coord
+                break
+            end
+        end
+        if not fallbackCoord then fallbackCoord = trailerSpawns[1] end
+        print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas de carreta ocupadas, aplicando fallback na vaga isolada %s..."):format(tostring(fallbackCoord)))
         trailer = CreateVehicle(trailerModel, fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
         local waitTimer = GetGameTimer()
         while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end

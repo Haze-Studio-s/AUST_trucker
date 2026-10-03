@@ -2216,6 +2216,12 @@ local function OnPlayerEnteredTruck(truck)
 
     JobEntities.truck = truck
 
+    -- Restaura colisão mútua para permitir o acoplamento físico da 5ª roda
+    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+        SetEntityNoCollisionEntity(truck, JobEntities.trailer, false)
+        SetEntityNoCollisionEntity(JobEntities.trailer, truck, false)
+    end
+
     PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
 
     -- Remove a seta do caminhão; seta verde flutuante passa para a carreta
@@ -2549,13 +2555,26 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
         if trailer and DoesEntityExist(trailer) then
             SetEntityVisible(trailer, true)
             ResetEntityAlpha(trailer)
-            SetVehicleOnGroundProperly(trailer)
+
+            -- Assentamento de Solo Autoritativo (Raycast Z): evita distorção de suspensão e queda Havok retardada
+            local trCoords = GetEntityCoords(trailer)
+            local foundGround, groundZ = GetGroundZFor_3dCoord(trCoords.x, trCoords.y, trCoords.z + 1.0, false)
+            if foundGround then
+                SetEntityCoordsNoOffset(trailer, trCoords.x, trCoords.y, groundZ + 0.15, false, false, false)
+            end
+
             SetEntityCollision(trailer, true, true)
             SetVehicleDoorsLocked(trailer, 1)
             SetVehicleDoorsLockedForAllPlayers(trailer, false)
             SetVehicleExplodesOnHighExplosionDamage(trailer, false)
             SetVehicleCanBeVisiblyDamaged(trailer, false)
             SetVehicleStrong(trailer, true)
+
+            -- Havok Shield Protetivo Inicial: anula choque violento no spawn se houver proximidade excessiva
+            if truck and DoesEntityExist(truck) then
+                SetEntityNoCollisionEntity(truck, trailer, true)
+                SetEntityNoCollisionEntity(trailer, truck, true)
+            end
         end
 
         -- 2. Resolução assíncrona não-bloqueante de maquinário secundário (Empilhadeira, Handler, Contêiner)
