@@ -1924,11 +1924,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
 
                     -- GATILHO DINÂMICO E REALISTA DE QUEDA DE CARGA:
                     -- Tolerância aumentada: exige inclinação severa (> 32° real de roll) OU curva em alta velocidade (> 55 km/h na faixa crítica)
+                    -- Blindagem Estrita: SÓ PODE DISPARAR DURANTE STEP_8_IN_TRANSIT (jamais no carregamento ou pátio)
                     local absRoll = math.abs(activeRoll)
                     local isSevereTilt = absRoll > 32.0
                     local isCentrifugalCritical = isCritical and speedKmh > 55.0
 
-                    if (isSevereTilt or isCentrifugalCritical) and (now - lastDropTime >= 4500) then
+                    if CurrentStage == 'STEP_8_IN_TRANSIT' and (isSevereTilt or isCentrifugalCritical) and (now - lastDropTime >= 4500) then
                         local candidatePallet = nil
 
                         -- 1. Prioridade absoluta para paletes com amarração frouxa

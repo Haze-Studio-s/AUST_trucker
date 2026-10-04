@@ -528,6 +528,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
     CurrentSlotIndex = 1
     local loadedCount = 0
     local awaitingForkliftDock = false
+    local isStowingPallet = false
 
     CreateThread(function()
         -- Lock 2: Coroutine Sequencial & Yield Bloqueante antes de Instanciar o Primeiro Fantasma
@@ -708,9 +709,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     local slotPalletCandidate = nil
                     local isCandidateInSlot = false
 
-                    if trailer and DoesEntityExist(trailer) then
+                    if trailer and DoesEntityExist(trailer) and not isStowingPallet then
                         local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
                         local ghostWorldCoords = GetOffsetFromEntityInWorldCoords(trailer, slotOffset.x, slotOffset.y, slotOffset.z)
+                        local trailerCoords = GetEntityCoords(trailer)
                         local trailerH = GetEntityHeading(trailer)
                         local targetHeading = (trailerH + (slotHeading or 0.0)) % 360
 
@@ -718,16 +720,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             if p and DoesEntityExist(p) and not IsEntityAttached(p) then
                                 local pCoords = GetEntityCoords(p)
                                 local dist3D = #(pCoords - ghostWorldCoords)
+                                local distToTrailer = #(pCoords - trailerCoords)
 
-                                local curH = GetEntityHeading(p)
-                                local diffAngle = math.abs((curH - targetHeading) % 180)
-                                if diffAngle > 90 then diffAngle = 180 - diffAngle end
+                                -- Blindagem Geográfica: O palete DEVE estar nas imediações do deck do reboque (< 5.0m)
+                                -- Isso impede que paletes no chão do pátio sejam avaliados como candidatos de drop-off
+                                if distToTrailer <= 5.0 then
+                                    local curH = GetEntityHeading(p)
+                                    local diffAngle = math.abs((curH - targetHeading) % 180)
+                                    if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                                local isNearDeck = math.abs(pCoords.z - ghostWorldCoords.z) <= 0.45
-                                if dist3D <= 0.85 and diffAngle <= 35.0 and isNearDeck then
-                                    slotPalletCandidate = p
-                                    isCandidateInSlot = true
-                                    break
+                                    local isNearDeck = math.abs(pCoords.z - ghostWorldCoords.z) <= 0.45
+                                    if dist3D <= 0.85 and diffAngle <= 35.0 and isNearDeck then
+                                        slotPalletCandidate = p
+                                        isCandidateInSlot = true
+                                        break
+                                    end
                                 end
                             end
                         end
@@ -747,7 +754,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     end
 
                     -- 3. Nova Lógica de Drop-Off: Acoplamento SOMENTE após a retirada completa dos garfos
-                    if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) then
+                    if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) and not isStowingPallet then
                         sleep = 0
                         local pCoords = GetEntityCoords(slotPalletCandidate)
                         local distForksToPallet = #(forkCoords - pCoords)
@@ -759,7 +766,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 TextUIShowing = 'retract_forks'
                             end
                         else
-                            -- GARFOS RETIRADOS POR COMPLETO (distância >= 1.85m)! Trava a estiva definitiva
+                            -- GARFOS RETIRADOS POR COMPLETO (distância >= 1.85m)! Trava atômica anti-overflow
+                            isStowingPallet = true
                             if TextUIShowing then
                                 lib.hideTextUI()
                                 TextUIShowing = nil
@@ -770,7 +778,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 SetEntityDrawOutline(ghost, false)
                             end
 
-                            local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(slotPalletCandidate, trailer, CurrentSlotIndex)
+                            local targetPalletToSnap = slotPalletCandidate
+                            local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(targetPalletToSnap, trailer, CurrentSlotIndex)
                             if ok then
                                 local stowedSlot = CurrentSlotIndex
                                 DetectedCarriedPallet = nil
@@ -780,17 +789,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
                                 PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
 
-                                local pNetId = NetworkGetEntityIsNetworked(slotPalletCandidate) and NetworkGetNetworkIdFromEntity(slotPalletCandidate) or nil
+                                local pNetId = NetworkGetEntityIsNetworked(targetPalletToSnap) and NetworkGetNetworkIdFromEntity(targetPalletToSnap) or nil
                                 TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, sOff, sHead)
 
                                 if onLoadedCb then
-                                    onLoadedCb('dropped', slotPalletCandidate, loadedCount, requiredCount, stowedSlot, sOff, sHead)
+                                    onLoadedCb('dropped', targetPalletToSnap, loadedCount, requiredCount, stowedSlot, sOff, sHead)
                                 end
 
                                 if loadedCount < requiredCount then
                                     local nextOffset, nextHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
                                     local nextGhostModel = ForkliftModule.GetGhostModelForSlot(trailer, CurrentSlotIndex)
                                     ForkliftModule.SpawnGhostProp(trailer, nextGhostModel, nextOffset, nextHeading)
+                                    CreateThread(function()
+                                        Wait(1500)
+                                        isStowingPallet = false
+                                    end)
                                 else
                                     local hasForklift = false
                                     if withForklift ~= nil then
@@ -821,6 +834,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         break
                                     end
                                 end
+                            else
+                                isStowingPallet = false
                             end
                         end
                     else
