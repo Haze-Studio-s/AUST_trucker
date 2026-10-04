@@ -584,16 +584,22 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
             local sleep = 250
             local forklift = ForkliftModule.GetPlayerForklift()
 
-            -- 1. Ativação da Física Havok sob Demanda por Proximidade (< 35m)
+            -- 1. Ativação Seletiva da Física Havok sob Demanda (Apenas no Palete Abordado pelos Garfos < 2.2m)
             local now = GetGameTimer()
-            if now - lastUnfreezeCheck > 400 then
+            if now - lastUnfreezeCheck > 250 then
                 lastUnfreezeCheck = now
-                local myPed = cache.ped or PlayerPedId()
-                local myPos = GetEntityCoords(myPed)
+                local forkCoords = nil
+                if forklift and DoesEntityExist(forklift) then
+                    forkCoords = GetForkliftForksCoords(forklift)
+                end
+
                 for _, p in pairs(ActiveMissionPallets) do
                     if p and DoesEntityExist(p) and not IsEntityAttached(p) then
                         local pPos = GetEntityCoords(p)
-                        if #(myPos - pPos) <= 35.0 then
+                        local distToForks = forkCoords and #(forkCoords - pPos) or 999.0
+
+                        if distToForks <= 2.2 then
+                            -- Palete sendo ativamente abordado ou carregado pelos garfos
                             if IsEntityPositionFrozen(p) then
                                 FreezeEntityPosition(p, false)
                                 SetEntityDynamic(p, true)
@@ -601,6 +607,17 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 SetEntityHasGravity(p, true)
                                 ActivatePhysics(p)
                                 SetEntityLodDist(p, 0xFFFF)
+                            end
+                        else
+                            -- Palete no chão longe da empilhadeira (> 2.8m): mantém 100% estável para impedir catapulta
+                            if not IsEntityPositionFrozen(p) and distToForks > 2.8 then
+                                local vel = GetEntityVelocity(p)
+                                local speed = #(vel)
+                                if speed < 0.25 then
+                                    FreezeEntityPosition(p, true)
+                                    SetEntityDynamic(p, false)
+                                    SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                end
                             end
                         end
                     end
