@@ -2684,19 +2684,32 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     -- Pré-carrega malha e colisão do terreno nas coordenadas do objeto
                     local pCoords = GetEntityCoords(ent)
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
+                    
+                    local loadTimeout = GetGameTimer() + 3000
+                    while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
+                        Wait(50)
+                    end
 
-                    -- Assentamento seguro com tolerância de solo (evita que a base penetre o asfalto)
-                    local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.0, false)
+                    -- Pausa obrigatória (Yielding) para garantir registro da entidade na engine e rede
+                    Wait(150)
+
+                    -- Cálculo exato da altura do solo (Ground Z)
+                    local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
                     if groundFound then
                         SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)
                     else
                         PlaceObjectOnGroundProperly(ent)
                     end
 
-                    -- Habilita colisão do prop e mantém ancorado no solo de forma sólida
+                    -- Pausa para assentar no chão antes da física ativa
+                    Wait(100)
+
+                    -- Física e massa nativas da Havok: palete solto no solo, estritamente dinâmico (FreezeEntityPosition PROIBIDO)
                     SetEntityCollision(ent, true, true)
+                    SetEntityDynamic(ent, true)
                     SetEntityHasGravity(ent, true)
-                    FreezeEntityPosition(ent, true)
+                    FreezeEntityPosition(ent, false)
+                    ActivatePhysics(ent)
 
                     table.insert(pallets, ent)
                 end
