@@ -130,12 +130,15 @@ check('MANIFEST shared antes do client', fx.index("'shared/pallet_sync_guard.lua
 
 # ---- Física inalterada (assinatura do bloco original) -------------------
 cm = open(os.path.join(ROOT, 'client/main.lua'), encoding='utf-8').read()
-for sig in ('SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)',
-            'SetEntityDynamic(ent, true)', 'SetEntityHasGravity(ent, true)', 'FreezeEntityPosition(ent, false)', 'ActivatePhysics(ent)'):
+for sig in ('SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)',
+            'SetEntityDynamic(ent, true)', 'SetEntityHasGravity(ent, true)', 'FreezeEntityPosition(ent, false)', 'ActivatePhysics(ent)',
+            'FreezeEntityPosition(ent, true)', 'SetEntityVelocity(ent, 0.0, 0.0, 0.0)'):
     check(f'FISICA preservada: {sig}', sig in cm)
 sm = open(os.path.join(ROOT, 'server/main.lua'), encoding='utf-8').read()
-check('FISICA servidor: spawn z+0.15 e Freeze(false) preservados',
-      'CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)' in sm and 'FreezeEntityPosition(pObj, false)' in sm)
+check('FISICA servidor: spawn z+0.15 e Freeze(true) da main preservados',
+      'CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)' in sm and 'FreezeEntityPosition(pObj, true)' in sm and 'FreezeEntityPosition(pObj, false)' not in sm.split('LogPalletSpawn')[1][:600])
+check('SYNC cliente usa os globais do módulo (sem guard local sombreando)',
+      'local PalletSyncGuard' not in cm and 'local PalletSyncState' not in cm)
 check('SYNC servidor envia jobId nos dois pontos', sm.count("polarixSyncPallets', src, palletNetIds, jobId)") == 1 and sm.count("polarixSyncPallets', src, lobby.palletNetIds, jobId)") == 1)
 
 w = max(len(n) for n, _, _ in results)

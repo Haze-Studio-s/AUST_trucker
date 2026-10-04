@@ -2682,11 +2682,6 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                 else
                     local ent = WaitForNetworkEntity(netId, 8000)
                     if ent and DoesEntityExist(ent) then
-
-                    end
-                else
-                    local ent = WaitForNetworkEntity(netId, 8000)
-                    if ent and DoesEntityExist(ent) then
                         applied = applied + 1
                         if Config.Debug and PalletDebug then
                             PalletDebug.OnSync(netId, ent, jobId, syncN, 'applied')
@@ -2697,94 +2692,103 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                         ResetEntityAlpha(ent)
 
                         -- Garante controle autoritativo local no OneSync e bloqueia migração
-                        NetworkRequestControlOfEntity(ent)
-                        SetNetworkIdCanMigrate(netId, false)
-
-                        -- 1. Ancoragem temporária de segurança imediata (impede queda inicial enquanto o piso carrega)
-                        FreezeEntityPosition(ent, true)
-
-                        local pCoords = GetEntityCoords(ent)
-                        local baseSpawnZ = pCoords.z
-
-                        -- 2. Pré-carrega colisão do terreno nas coordenadas do objeto
-                        RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
-                        local loadTimeout = GetGameTimer() + 3000
-                        while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
+                        local ctrlTimeout = GetGameTimer() + 2000
+                        while not NetworkHasControlOfEntity(ent) and GetGameTimer() < ctrlTimeout do
+                            NetworkRequestControlOfEntity(ent)
                             Wait(50)
                         end
+                        SetNetworkIdCanMigrate(netId, false)
 
-                        -- Pausa para propagação de colisão do interior/MLO
-                        Wait(150)
+                        -- Palete já preso/estivado (ex.: restart do client): não reposiciona
+                        if not IsEntityAttached(ent) then
+                            -- 1. Ancoragem temporária de segurança imediata (impede queda inicial enquanto o piso carrega)
+                            FreezeEntityPosition(ent, true)
 
-                        -- 3. ShapeTest / Raycast Vertical para baixo procurando piso sólido com tolerância
-                        local groundZ = baseSpawnZ
-                        local rayFound = false
+                            local pCoords = GetEntityCoords(ent)
+                            local baseSpawnZ = pCoords.z
 
-                        local raycastStart = vector3(pCoords.x, pCoords.y, pCoords.z + 1.5)
-                        local raycastEnd = vector3(pCoords.x, pCoords.y, pCoords.z - 4.0)
-                        local rayHandle = StartShapeTestRay(raycastStart.x, raycastStart.y, raycastStart.z, raycastEnd.x, raycastEnd.y, raycastEnd.z, 1 | 16, ent, 7)
-                        local _, hit, hitCoords = GetShapeTestResult(rayHandle)
-
-                        if hit and hit ~= 0 and hitCoords.z > (baseSpawnZ - 3.5) then
-                            groundZ = hitCoords.z
-                            rayFound = true
-                        else
-                            local gFound, gz = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
-                            if gFound and gz > (baseSpawnZ - 3.5) then
-                                groundZ = gz
-                                rayFound = true
+                            -- 2. Pré-carrega colisão do terreno nas coordenadas do objeto
+                            RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
+                            local loadTimeout = GetGameTimer() + 3500
+                            while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
+                                Wait(50)
                             end
-                        end
 
-                        if rayFound then
-                            SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
-                        else
-                            PlaceObjectOnGroundProperly(ent)
-                            local curC = GetEntityCoords(ent)
-                            groundZ = curC.z
-                        end
+                            -- Pausa para propagação de colisão do interior/MLO
+                            Wait(200)
 
-                        if Config.Debug and PalletDebug then
-                            PalletDebug.OnSnap(netId, ent, { preZ = pCoords.z, groundFound = rayFound, groundZ = groundZ, safeTargetZ = groundZ + 0.04 })
-                        end
+                            -- 3. ShapeTest / Raycast Vertical para baixo procurando piso sólido com tolerância
+                            local groundZ = baseSpawnZ
+                            local rayFound = false
 
-                        -- 4. Estabilização controlada de 300ms para o motor Havok registrar o contato com o piso
-                        Wait(300)
+                            local raycastStart = vector3(pCoords.x, pCoords.y, pCoords.z + 1.5)
+                            local raycastEnd = vector3(pCoords.x, pCoords.y, pCoords.z - 4.0)
+                            local rayHandle = StartShapeTestRay(raycastStart.x, raycastStart.y, raycastStart.z, raycastEnd.x, raycastEnd.y, raycastEnd.z, 1 | 16, ent, 7)
+                            local _, hit, hitCoords = GetShapeTestResult(rayHandle)
 
-                        -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
-                        SetEntityCollision(ent, true, true)
-                        SetEntityDynamic(ent, true)
-                        SetEntityHasGravity(ent, true)
-                        FreezeEntityPosition(ent, false)
-                        SetEntityVelocity(ent, 0.0, 0.0, 0.0)
-                        ActivatePhysics(ent)
-
-                        -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
-                        local safeTargetZ = groundZ + 0.04
-                        CreateThread(function()
-                            local palletEnt = ent
-                            local monitorExpiry = GetGameTimer() + 6000
-                            while DoesEntityExist(palletEnt) and GetGameTimer() < monitorExpiry do
-                                Wait(200)
-                                if not IsEntityAttached(palletEnt) then
-                                    local c = GetEntityCoords(palletEnt)
-                                    if c.z < (safeTargetZ - 1.8) then
-                                        -- Queda em falso piso detectada: resgate instantâneo
-                                        FreezeEntityPosition(palletEnt, true)
-                                        SetEntityCoordsNoOffset(palletEnt, pCoords.x, pCoords.y, safeTargetZ, false, false, false)
-                                        SetEntityVelocity(palletEnt, 0.0, 0.0, 0.0)
-                                        Wait(200)
-                                        FreezeEntityPosition(palletEnt, false)
-                                        SetEntityDynamic(palletEnt, true)
-                                        ActivatePhysics(palletEnt)
-                                    end
+                            if hit and hit ~= 0 and hitCoords.z > (baseSpawnZ - 3.5) then
+                                groundZ = hitCoords.z
+                                rayFound = true
+                            else
+                                local gFound, gz = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
+                                if gFound and gz > (baseSpawnZ - 3.5) then
+                                    groundZ = gz
+                                    rayFound = true
                                 end
                             end
-                        end)
+
+                            if rayFound then
+                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
+                            else
+                                PlaceObjectOnGroundProperly(ent)
+                                local curC = GetEntityCoords(ent)
+                                groundZ = curC.z
+                            end
+                            if Config.Debug and PalletDebug then
+                                PalletDebug.OnSnap(netId, ent, { preZ = baseSpawnZ, groundFound = rayFound, groundZ = groundZ })
+                            end
+
+                            -- 4. Estabilização controlada para o motor Havok registrar o contato com o piso
+                            Wait(250)
+
+                            -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
+                            SetEntityCollision(ent, true, true)
+                            SetEntityDynamic(ent, true)
+                            SetEntityHasGravity(ent, true)
+                            FreezeEntityPosition(ent, false)
+                            SetEntityVelocity(ent, 0.0, 0.0, 0.0)
+                            ActivatePhysics(ent)
+                            SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
+
+                            -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
+                            local safeTargetZ = groundZ + 0.04
+                            CreateThread(function()
+                                local palletEnt = ent
+                                local monitorExpiry = GetGameTimer() + 6000
+                                while DoesEntityExist(palletEnt) and GetGameTimer() < monitorExpiry do
+                                    Wait(200)
+                                    if not IsEntityAttached(palletEnt) then
+                                        local c = GetEntityCoords(palletEnt)
+                                        if c.z < (safeTargetZ - 1.8) then
+                                            -- Queda em falso piso detectada: resgate instantâneo
+                                            FreezeEntityPosition(palletEnt, true)
+                                            SetEntityCoordsNoOffset(palletEnt, pCoords.x, pCoords.y, safeTargetZ, false, false, false)
+                                            SetEntityVelocity(palletEnt, 0.0, 0.0, 0.0)
+                                            Wait(200)
+                                            FreezeEntityPosition(palletEnt, false)
+                                            SetEntityDynamic(palletEnt, true)
+                                            ActivatePhysics(palletEnt)
+                                        end
+                                    end
+                                end
+                            end)
+                        end
 
                         PalletSyncState.ents[netId] = ent
-                        table.insert(pallets, ent)
-
+                    else
+                        -- Entidade não apareceu: libera para um sync posterior tentar de novo
+                        PalletSyncGuard.Release(PalletSyncState, netId)
+                    end
                 end
             end
         end

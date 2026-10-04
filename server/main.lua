@@ -1038,7 +1038,7 @@ local function StartTruckDelivery(src, contractData)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(pObj) then
-                FreezeEntityPosition(pObj, false)
+                FreezeEntityPosition(pObj, true)
                 LockEntityNetworkOwner(pObj, src)
                 SetEntityDistanceCullingRadius(pObj, 0.0)
                 ignoreEntities[pObj] = true
@@ -1051,7 +1051,7 @@ local function StartTruckDelivery(src, contractData)
                 local fbTimer = GetGameTimer()
                 while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                 if DoesEntityExist(fallbackObj) then
-                    FreezeEntityPosition(fallbackObj, false)
+                    FreezeEntityPosition(fallbackObj, true)
                     LockEntityNetworkOwner(fallbackObj, src)
                     SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                     ignoreEntities[fallbackObj] = true
@@ -1078,7 +1078,7 @@ local function StartTruckDelivery(src, contractData)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
-                    FreezeEntityPosition(pObj, false)
+                    FreezeEntityPosition(pObj, true)
                     LockEntityNetworkOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 0.0)
                     ignoreEntities[pObj] = true
@@ -1090,7 +1090,7 @@ local function StartTruckDelivery(src, contractData)
                     local fbTimer = GetGameTimer()
                     while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                     if DoesEntityExist(fallbackObj) then
-                        FreezeEntityPosition(fallbackObj, false)
+                        FreezeEntityPosition(fallbackObj, true)
                         LockEntityNetworkOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                         ignoreEntities[fallbackObj] = true
