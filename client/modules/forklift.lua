@@ -634,38 +634,40 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     -- OPERAÇÃO FÍSICA REAL (Sem AttachEntityToEntity entre empilhadeira e paletes)
                     local forkCoords, forkBone = GetForkliftForksCoords(forklift)
 
-                    -- 1. Monitoramento da Carga, Descongelamento por Proximidade e Elevação Z
+                    -- 1. Monitoramento da Carga, Descongelamento Inteligente no Içamento e Elevação Z
                     local activeCarried = nil
                     for _, p in pairs(ActiveMissionPallets) do
                         if p and DoesEntityExist(p) and not IsEntityAttached(p) then
                             local pCoords = GetEntityCoords(p)
-                            local distForks = #(forkCoords - pCoords)
 
-                            -- Liberação dinâmica segura: ao se aproximar (< 3.5m), o palete é liberado para física Havok
-                            if distForks <= 3.5 then
-                                if not PalletBaseZ[p] then
-                                    PalletBaseZ[p] = pCoords.z
-                                end
-                                FreezeEntityPosition(p, false)
-                                SetEntityDynamic(p, true)
-                                SetEntityCollision(p, true, true)
-                                SetEntityHasGravity(p, true)
-                                ActivatePhysics(p)
+                            if not PalletBaseZ[p] then
+                                PalletBaseZ[p] = pCoords.z
                             end
 
                             local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
-                            -- Checagem física de posição sobre os garfos
-                            if math.abs(relP.x) <= 0.85 and (relP.y >= 0.5 and relP.y <= 2.8) then
-                                local forkRelP = GetOffsetFromEntityGivenWorldCoords(forklift, forkCoords.x, forkCoords.y, forkCoords.z)
-                                if math.abs(relP.z - forkRelP.z) <= 0.65 then
+                            local forkRelP = GetOffsetFromEntityGivenWorldCoords(forklift, forkCoords.x, forkCoords.y, forkCoords.z)
+
+                            -- Condição física: garfos posicionados longitudinal e transversalmente sob o vão da carga
+                            local isUnderPallet = math.abs(relP.x) <= 0.85 and (relP.y >= 0.5 and relP.y <= 2.8)
+                            local isForksLevelOrLifting = (forkRelP.z >= (relP.z - 0.40))
+
+                            if isUnderPallet then
+                                -- Se os garfos engataram sob a carga e o jogador acionou a elevação do mastro:
+                                -- Descongela a entidade no momento exato em que o peso da carga é assumido pelos garfos
+                                if isForksLevelOrLifting then
+                                    FreezeEntityPosition(p, false)
+                                    SetEntityDynamic(p, true)
+                                    SetEntityCollision(p, true, true)
+                                    SetEntityHasGravity(p, true)
+                                    ActivatePhysics(p)
                                     activeCarried = p
                                 end
                             end
 
-                            -- Se o palete subiu >= 0.12m do repouso ou está nos garfos
+                            -- Se o palete subiu >= 0.10m do repouso ou está ativo nos garfos
                             if PalletBaseZ[p] then
                                 local zLift = pCoords.z - PalletBaseZ[p]
-                                if (zLift >= 0.12 or activeCarried == p) and not activeCarried then
+                                if (zLift >= 0.10 or activeCarried == p) and not activeCarried then
                                     activeCarried = p
                                 end
                             end

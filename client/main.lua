@@ -2685,10 +2685,15 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     local pCoords = GetEntityCoords(ent)
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
 
-                    -- Assenta perfeitamente sobre a malha física do chão antes de ancorar
-                    PlaceObjectOnGroundProperly(ent)
+                    -- Assentamento seguro com tolerância de solo (evita que a base penetre o asfalto)
+                    local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.0, false)
+                    if groundFound then
+                        SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)
+                    else
+                        PlaceObjectOnGroundProperly(ent)
+                    end
 
-                    -- Habilita colisão do prop e mantém ancorado no solo até aproximação (< 3.5m)
+                    -- Habilita colisão do prop e mantém ancorado no solo de forma sólida
                     SetEntityCollision(ent, true, true)
                     SetEntityHasGravity(ent, true)
                     FreezeEntityPosition(ent, true)
