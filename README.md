@@ -1,6 +1,6 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.8.0-blue)
+![Version](https://img.shields.io/badge/version-20.9.0-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 
@@ -354,6 +354,7 @@ Consulte o arquivo `CHANGELOG.md` para o historico completo de versoes.
 
 | Versao | Descricao |
 |--------|-----------|
+| v20.9.0 | Módulo PropEditor 6DoF no /truckeradmin: Captura Visual 3D, Cache em RAM e Hot-Reload Instantâneo |
 | v20.8.0 | Auditoria Completa de Código: Fix CalcBonus, Reembolso de Saldo Empresarial na Venda & Otimização NUI Polling |
 | v20.6.0 | Sistema Visual de Cintas de Amarração 3D (DrawLine) & Texto Interativo [E] (DrawText3D) |
 | v20.5.0 | OneSync Observer Shield & Network Ownership Lock (Anti-Desync Proximidade) |

@@ -742,6 +742,24 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
     )) end
 end)
 
+RegisterNetEvent('aurp_trucker:client:adminSyncVehiclePropOffsets', function(rawMap, dualMap)
+    if not Config.VehiclePropOffsets then Config.VehiclePropOffsets = {} end
+    if dualMap then
+        Config.VehiclePropOffsets = dualMap
+    end
+
+    if rawMap then
+        SendNUIMessage({
+            action = 'admin_update_vehicle_prop_offsets',
+            offsets = rawMap
+        })
+    end
+
+    if Config.Debug then
+        print("^2[AUST_Trucker Client] Offsets do PropEditor (veículo <-> prop) sincronizados em tempo real sem restart!^7")
+    end
+end)
+
 RegisterNetEvent('aurp_trucker:client:adminSyncProps', function(propsList)
     SendNUIMessage({
         action = 'admin_update_props',
@@ -1168,6 +1186,371 @@ function OffsetEditor.StopPreview()
     SendNUIMessage({ action = 'admin_restore' })
     SetNuiFocus(true, true)
     lib.notify({ title = 'Preview Finalizado', description = 'Ambiente de teste encerrado com sucesso.', type = 'info' })
+end
+
+-- ============================================================
+-- SUBMÓDULO: PROP EDITOR (6 GRAUS DE LIBERDADE: X, Y, Z, P, R, Y)
+-- ============================================================
+local IsPropEditorActive = false
+local PropEditorVeh = nil
+local PropEditorProp = nil
+local PropEditorVehModel = nil
+local PropEditorPropModel = nil
+local PropEditorOffsets = { x = 0.0, y = 0.0, z = 0.0, pitch = 0.0, roll = 0.0, yaw = 0.0 }
+local PropEditorListenThread = false
+local PropEditorCam = nil
+local PropEditorGizmoActive = false
+
+-- 1. SPAWN DE ENTIDADES NO MUNDO COM FÍSICA E NETWORK
+RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
+    local vModel = data.vehicleModel and tostring(data.vehicleModel):lower()
+    local pModel = data.propModel and tostring(data.propModel):lower()
+
+    if not vModel or not pModel then
+        if cb then cb({ ok = false, error = 'Modelos inválidos' }) end
+        return
+    end
+
+    -- Limpa entidades anteriores se existirem
+    if PropEditorProp and DoesEntityExist(PropEditorProp) then DeleteEntity(PropEditorProp); PropEditorProp = nil end
+    if PropEditorVeh and DoesEntityExist(PropEditorVeh) then DeleteEntity(PropEditorVeh); PropEditorVeh = nil end
+
+    local ped = PlayerPedId()
+    local pCoords = GetEntityCoords(ped)
+    local pHeading = GetEntityHeading(ped)
+
+    -- Calcula spawn à frente do admin
+    local fwd = GetEntityForwardVector(ped)
+    local vehSpawnCoords = pCoords + (fwd * 6.0)
+    local propSpawnCoords = pCoords + (fwd * 12.0)
+
+    -- 1. Spawna Veículo
+    local vHash = joaat(vModel)
+    if not IsModelInCdimage(vHash) or not IsModelAVehicle(vHash) then
+        lib.notify({ title = 'PropEditor', description = 'Modelo de veículo não encontrado no jogo.', type = 'error' })
+        if cb then cb({ ok = false }) end
+        return
+    end
+    lib.requestModel(vHash, 5000)
+    local veh = CreateVehicle(vHash, vehSpawnCoords.x, vehSpawnCoords.y, vehSpawnCoords.z + 0.5, pHeading, true, false)
+    SetEntityAsMissionEntity(veh, true, true)
+    SetVehicleOnGroundProperly(veh)
+    SetVehicleDoorsLocked(veh, 1)
+
+    -- 2. Spawna Prop com física
+    local pHash = joaat(pModel)
+    if not IsModelInCdimage(pHash) then
+        lib.notify({ title = 'PropEditor', description = 'Modelo de prop não encontrado no jogo.', type = 'error' })
+        DeleteEntity(veh)
+        if cb then cb({ ok = false }) end
+        return
+    end
+    lib.requestModel(pHash, 5000)
+    local prop = CreateObject(pHash, propSpawnCoords.x, propSpawnCoords.y, propSpawnCoords.z + 0.5, true, false, false)
+    SetEntityAsMissionEntity(prop, true, true)
+    SetEntityDynamic(prop, true)
+    SetEntityHasGravity(prop, true)
+    SetEntityCollision(prop, true, true)
+    ActivatePhysics(prop)
+
+    PropEditorVeh = veh
+    PropEditorProp = prop
+    PropEditorVehModel = vModel
+    PropEditorPropModel = pModel
+    IsPropEditorActive = true
+    PropEditorGizmoActive = false
+
+    -- Minimiza o painel para permitir ao admin testar o engate no mundo
+    SetNuiFocus(false, false)
+    SendNUIMessage({
+        action = 'admin_propeditor_status',
+        text = 'Entidades no mundo! Aproxime o veículo do prop para engatar.',
+        type = 'waiting_attach'
+    })
+
+    lib.notify({
+        title = 'Entidades Geradas!',
+        description = ('Veículo (%s) e Prop (%s) gerados. Conduza e engate o prop para ativar o Gizmo!'):format(vModel, pModel),
+        type = 'info',
+        duration = 6000
+    })
+
+    -- 2. THREAD DE MONITORAMENTO DO ENGATE (FASE 2)
+    OffsetEditor.StartPropAttachListener()
+
+    if cb then cb({ ok = true }) end
+end)
+
+function OffsetEditor.StartPropAttachListener()
+    if PropEditorListenThread then return end
+    PropEditorListenThread = true
+
+    CreateThread(function()
+        while IsPropEditorActive and not PropEditorGizmoActive do
+            Wait(100)
+
+            if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
+                PropEditorListenThread = false
+                break
+            end
+
+            -- Intercepta o momento exato em que o prop é anexado ao veículo (engate orgânico)
+            if IsEntityAttachedToEntity(PropEditorProp, PropEditorVeh) then
+                PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                OffsetEditor.ActivatePropEditorGizmo()
+                break
+            end
+        end
+        PropEditorListenThread = false
+    end)
+end
+
+-- Fallback: Acoplar Manualmente
+RegisterNUICallback('adminPropEditorForceAttach', function(data, cb)
+    if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
+        if cb then cb({ ok = false }) end
+        return
+    end
+
+    -- Anexa provisoriamente na traseira do veículo
+    AttachEntityToEntity(
+        PropEditorProp, PropEditorVeh, 0,
+        0.0, -2.5, 0.5,
+        0.0, 0.0, 0.0,
+        false, false, false, false, 2, true
+    )
+
+    OffsetEditor.ActivatePropEditorGizmo()
+    if cb then cb({ ok = true }) end
+end)
+
+-- 3. FASE DE EDIÇÃO VISUAL COM GIZMO 3D (6DoF)
+function OffsetEditor.ActivatePropEditorGizmo()
+    if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then return end
+    PropEditorGizmoActive = true
+
+    -- Calcula offsets relativos iniciais
+    local pCoords = GetEntityCoords(PropEditorProp)
+    local relPos = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, pCoords.x, pCoords.y, pCoords.z)
+    local vRot = GetEntityRotation(PropEditorVeh, 2)
+    local pRot = GetEntityRotation(PropEditorProp, 2)
+
+    local relPitch = (pRot.x - vRot.x) % 360.0
+    local relRoll  = (pRot.y - vRot.y) % 360.0
+    local relYaw   = (pRot.z - vRot.z) % 360.0
+
+    PropEditorOffsets = {
+        x = tonumber(string.format("%.3f", relPos.x)),
+        y = tonumber(string.format("%.3f", relPos.y)),
+        z = tonumber(string.format("%.3f", relPos.z)),
+        pitch = tonumber(string.format("%.1f", relPitch)),
+        roll = tonumber(string.format("%.1f", relRoll)),
+        yaw = tonumber(string.format("%.1f", relYaw))
+    }
+
+    SendNUIMessage({
+        action = 'admin_propeditor_status',
+        text = 'Engate Validado! Gizmo 3D (6DoF) Ativo. Manipule e salve.',
+        type = 'attached'
+    })
+
+    SendNUIMessage({
+        action = 'admin_propeditor_update_values',
+        data = PropEditorOffsets
+    })
+
+    -- Abre o Gizmo Overlay Three.js com suporte a 6DoF
+    SendNUIMessage({
+        action = 'initGizmo',
+        data = {
+            context = 'propeditor',
+            position = { x = pCoords.x, y = pCoords.y, z = pCoords.z },
+            rotation = { x = pRot.x, y = pRot.y, z = pRot.z }
+        }
+    })
+
+    lib.notify({
+        title = 'Engate Detectado!',
+        description = 'Gizmo 3D 6DoF ativado no prop. Segure [ALT] para usar o cursor nos anéis ou eixos!',
+        type = 'success',
+        duration = 5000
+    })
+
+    -- Inicia o laço de controle de câmera / mouse para o Gizmo do prop
+    OffsetEditor.RunPropGizmoCameraLoop()
+end
+
+function OffsetEditor.RunPropGizmoCameraLoop()
+    CreateThread(function()
+        local isCursorActive = false
+
+        while IsPropEditorActive and PropEditorGizmoActive do
+            Wait(0)
+
+            -- Sincroniza a câmera do GTA com o Three.js
+            local camPos = GetFinalRenderedCamCoord()
+            local camRot = GetFinalRenderedCamRot(2)
+            SendNUIMessage({
+                action = 'setCameraPosition',
+                data = {
+                    position = { x = camPos.x, y = camPos.y, z = camPos.z },
+                    rotation = { x = camRot.x, y = camRot.y, z = camRot.z }
+                }
+            })
+
+            -- Tecla ALT (Control 19): Alterna cursor para manipular o Gizmo
+            if IsControlJustPressed(0, 19) or IsDisabledControlJustPressed(0, 19) then
+                isCursorActive = not isCursorActive
+                SetNuiFocus(isCursorActive, isCursorActive)
+                SetNuiFocusKeepInput(isCursorActive)
+                SendNUIMessage({ action = 'setGizmoCursor', data = { active = isCursorActive } })
+            end
+
+            -- Tecla T: Modo Translação (XYZ) | Tecla R: Modo Rotação (Pitch, Roll, Yaw)
+            if IsControlJustPressed(0, 245) or IsDisabledControlJustPressed(0, 245) then -- T
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'translate' } })
+            elseif IsControlJustPressed(0, 45) or IsDisabledControlJustPressed(0, 45) then -- R
+                SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'rotate' } })
+            end
+
+            -- Tecla BACKSPACE / ESC: Restaura painel completo
+            if IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 177) then
+                SetNuiFocus(true, true)
+                SetNuiFocusKeepInput(false)
+                break
+            end
+        end
+    end)
+end
+
+-- Callback acionado a cada alteração do Gizmo Three.js em tempo real
+RegisterNUICallback('moveGizmoPropOffset', function(data, cb)
+    if not IsPropEditorActive or not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
+        if cb then cb({ ok = false }) end
+        return
+    end
+
+    local worldPos = data.position
+    local worldRot = data.rotation
+
+    if worldPos and worldRot then
+        -- Converte coordenadas mundiais para offset e rotação relativa ao veículo
+        local relOffset = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, worldPos.x, worldPos.y, worldPos.z)
+        local vRot = GetEntityRotation(PropEditorVeh, 2)
+
+        local relPitch = (worldRot.x - vRot.x) % 360.0
+        local relRoll  = (worldRot.y - vRot.y) % 360.0
+        local relYaw   = (worldRot.z - vRot.z) % 360.0
+
+        PropEditorOffsets = {
+            x = tonumber(string.format("%.3f", relOffset.x)),
+            y = tonumber(string.format("%.3f", relOffset.y)),
+            z = tonumber(string.format("%.3f", relOffset.z)),
+            pitch = tonumber(string.format("%.1f", relPitch)),
+            roll = tonumber(string.format("%.1f", relRoll)),
+            yaw = tonumber(string.format("%.1f", relYaw))
+        }
+
+        -- Reanexa em tempo real com os novos offsets de 6 graus de liberdade
+        AttachEntityToEntity(
+            PropEditorProp, PropEditorVeh, 0,
+            PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
+            PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw,
+            false, false, false, false, 2, true
+        )
+
+        -- Atualiza valores numéricos na NUI
+        SendNUIMessage({
+            action = 'admin_propeditor_update_values',
+            data = PropEditorOffsets
+        })
+    end
+
+    if cb then cb({ ok = true }) end
+end)
+
+-- Callback quando o usuário digita nos inputs numéricos
+RegisterNUICallback('adminPropEditorManualChange', function(data, cb)
+    if not IsPropEditorActive or not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
+        if cb then cb({ ok = false }) end
+        return
+    end
+
+    PropEditorOffsets = {
+        x = tonumber(data.x) or 0.0,
+        y = tonumber(data.y) or 0.0,
+        z = tonumber(data.z) or 0.0,
+        pitch = tonumber(data.pitch) or 0.0,
+        roll = tonumber(data.roll) or 0.0,
+        yaw = tonumber(data.yaw) or 0.0
+    }
+
+    AttachEntityToEntity(
+        PropEditorProp, PropEditorVeh, 0,
+        PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
+        PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw,
+        false, false, false, false, 2, true
+    )
+
+    -- Atualiza posição do Gizmo Three.js
+    local pCoords = GetEntityCoords(PropEditorProp)
+    local pRot = GetEntityRotation(PropEditorProp, 2)
+    SendNUIMessage({
+        action = 'setGizmoEntity',
+        data = {
+            position = { x = pCoords.x, y = pCoords.y, z = pCoords.z },
+            rotation = { x = pRot.x, y = pRot.y, z = pRot.z }
+        }
+    })
+
+    if cb then cb({ ok = true }) end
+end)
+
+-- 4. FASE DE SALVAMENTO E SINCRONIZAÇÃO DEFINITIVA
+RegisterNUICallback('adminPropEditorSave', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminSaveVehiclePropOffset', {
+        vehicleModel = data.vehicleModel or PropEditorVehModel,
+        propModel = data.propModel or PropEditorPropModel,
+        x = tonumber(data.x) or PropEditorOffsets.x,
+        y = tonumber(data.y) or PropEditorOffsets.y,
+        z = tonumber(data.z) or PropEditorOffsets.z,
+        pitch = tonumber(data.pitch) or PropEditorOffsets.pitch,
+        roll = tonumber(data.roll) or PropEditorOffsets.roll,
+        yaw = tonumber(data.yaw) or PropEditorOffsets.yaw
+    })
+
+    SendNUIMessage({
+        action = 'admin_propeditor_status',
+        text = 'Offsets gravados permanentemente no banco!',
+        type = 'success'
+    })
+
+    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+    if cb then cb({ ok = true }) end
+end)
+
+-- Exclusão de offset
+RegisterNUICallback('adminDeleteVehiclePropOffset', function(data, cb)
+    TriggerServerEvent('aurp_trucker:server:adminDeleteVehiclePropOffset', data)
+    if cb then cb({ ok = true }) end
+end)
+
+-- Cancelamento da sessão
+RegisterNUICallback('adminPropEditorCancel', function(data, cb)
+    OffsetEditor.CancelPropEditorSession()
+    if cb then cb({ ok = true }) end
+end)
+
+function OffsetEditor.CancelPropEditorSession()
+    IsPropEditorActive = false
+    PropEditorGizmoActive = false
+
+    SendNUIMessage({ action = 'hideGizmo' })
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
+
+    if PropEditorProp and DoesEntityExist(PropEditorProp) then DeleteEntity(PropEditorProp); PropEditorProp = nil end
+    if PropEditorVeh and DoesEntityExist(PropEditorVeh) then DeleteEntity(PropEditorVeh); PropEditorVeh = nil end
 end
 
 -- Limpeza ao parar o resource: entidades fantasma, trailer de calibração, NPCs/blips admin, câmera e foco NUI

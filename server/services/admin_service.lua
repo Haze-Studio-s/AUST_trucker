@@ -6,6 +6,7 @@ AdminService = {}
 AdminService.CustomRoutes = {}
 AdminService.Spawns = {}
 AdminService.TrailerOffsets = {}
+AdminService.VehiclePropOffsets = {}
 AdminService.HomologatedProps = {}
 AdminService.NPCs = {}
 AdminService.Economy = {
@@ -300,6 +301,9 @@ function AdminService.LoadAll()
             end
         end
 
+        -- 7. Carrega Offsets de Veículos <-> Props (PropEditor)
+        AdminService.ReloadVehiclePropOffsets()
+
         local totalTrailers = 0
         for _ in pairs(offsetMap) do totalTrailers = totalTrailers + 1 end
 
@@ -402,6 +406,52 @@ function AdminService.ReloadTrailerOffsets()
     return dualMap, offsetMap
 end
 
+function AdminService.ReloadVehiclePropOffsets()
+    local rows = MySQL.query.await('SELECT * FROM aust_trucker_vehicle_prop_offsets') or {}
+    local rawMap = {}
+    local dualMap = {}
+
+    for _, row in ipairs(rows) do
+        local vModel = tostring(row.vehicle_model):lower()
+        local pModel = tostring(row.prop_model):lower()
+        local entry = {
+            id = row.id,
+            vehicle_model = vModel,
+            prop_model = pModel,
+            offset_x = tonumber(row.offset_x) or 0.0,
+            offset_y = tonumber(row.offset_y) or 0.0,
+            offset_z = tonumber(row.offset_z) or 0.0,
+            rot_pitch = tonumber(row.rot_pitch) or 0.0,
+            rot_roll = tonumber(row.rot_roll) or 0.0,
+            rot_yaw = tonumber(row.rot_yaw) or 0.0,
+            offset = vector3(tonumber(row.offset_x) or 0.0, tonumber(row.offset_y) or 0.0, tonumber(row.offset_z) or 0.0),
+            rotation = vector3(tonumber(row.rot_pitch) or 0.0, tonumber(row.rot_roll) or 0.0, tonumber(row.rot_yaw) or 0.0)
+        }
+
+        if not rawMap[vModel] then rawMap[vModel] = {} end
+        rawMap[vModel][pModel] = entry
+
+        -- Indexação dual no mapa de execução rápida (string, hash signed, unsigned)
+        local vHash = joaat(vModel)
+        local pHash = joaat(pModel)
+        local vUnsigned = vHash & 0xFFFFFFFF
+        local vSigned = (vUnsigned >= 0x80000000) and (vUnsigned - 0x100000000) or vUnsigned
+
+        local vKeys = { vModel, vHash, vUnsigned, vSigned, tostring(vHash), tostring(vUnsigned), tostring(vSigned) }
+        local pKeys = { pModel, pHash, pHash & 0xFFFFFFFF, tostring(pHash) }
+
+        for _, vk in ipairs(vKeys) do
+            if not dualMap[vk] then dualMap[vk] = {} end
+            for _, pk in ipairs(pKeys) do
+                dualMap[vk][pk] = entry
+            end
+        end
+    end
+
+    AdminService.VehiclePropOffsets = dualMap
+    return dualMap, rawMap
+end
+
 MySQL.ready(function()
     AdminService.LoadAll()
 end)
@@ -440,6 +490,7 @@ RegisterCommand('truckeradmin', function(source, args)
         npcs = AdminService.NPCs,
         economy = AdminService.Economy,
         defaultProps = Config.PalletProps or { 'hei_prop_carrier_cargo_04b' },
+        vehiclePropOffsets = (select(2, AdminService.ReloadVehiclePropOffsets())),
     }
 
     TriggerClientEvent('aurp_trucker:client:openAdminPanel', src, payload)
@@ -449,6 +500,7 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     if not AdminService.IsPlayerAdmin(source) then return nil end
     local currentOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
     local currentProps = AdminService.ReloadHomologatedProps()
+    local _, cleanVehProps = AdminService.ReloadVehiclePropOffsets()
     return {
         customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
@@ -460,6 +512,7 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
         npcs = AdminService.NPCs,
         economy = AdminService.Economy,
         defaultProps = Config.PalletProps or { 'hei_prop_carrier_cargo_04b' },
+        vehiclePropOffsets = cleanVehProps,
     }
 end)
 
@@ -716,6 +769,80 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOr
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
     TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel or '', slotIndex or 1, isForklift == true, vector3(0, 0, 0), 0.0, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Offset do trailer %s excluído com sucesso.'):format(tostring(trailerModel or id or '')), type = 'info' })
+end)
+
+-- 3.1. PROPE DITOR 6DoF: OFFSETS LIVRES VEÍCULO <-> PROP
+RegisterNetEvent('aurp_trucker:server:adminSaveVehiclePropOffset', function(data)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) or type(data) ~= 'table' then return end
+
+    local vehicleModel = CleanStr(data.vehicleModel, 50, nil)
+    local propModel = CleanStr(data.propModel, 100, nil)
+    if not vehicleModel or not propModel then return end
+
+    vehicleModel = vehicleModel:lower()
+    propModel = propModel:lower()
+
+    local ox = ClampNum(data.x, -50.0, 50.0, 0.0)
+    local oy = ClampNum(data.y, -50.0, 50.0, 0.0)
+    local oz = ClampNum(data.z, -50.0, 50.0, 0.0)
+
+    local rotPitch = ClampNum(data.pitch or data.rot_pitch or (data.rotation and data.rotation.x), -360.0, 360.0, 0.0)
+    local rotRoll  = ClampNum(data.roll  or data.rot_roll  or (data.rotation and data.rotation.y), -360.0, 360.0, 0.0)
+    local rotYaw   = ClampNum(data.yaw   or data.rot_yaw   or (data.rotation and data.rotation.z), -360.0, 360.0, 0.0)
+
+    MySQL.query.await([[
+        INSERT INTO aust_trucker_vehicle_prop_offsets
+        (vehicle_model, prop_model, offset_x, offset_y, offset_z, rot_pitch, rot_roll, rot_yaw)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+        offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
+        rot_pitch = VALUES(rot_pitch), rot_roll = VALUES(rot_roll), rot_yaw = VALUES(rot_yaw)
+    ]], {
+        vehicleModel, propModel, ox, oy, oz, rotPitch, rotRoll, rotYaw
+    })
+
+    AdminLog(src, 'adminSaveVehiclePropOffset', ('%s + %s: pos(%.2f, %.2f, %.2f) rot(%.1f, %.1f, %.1f)'):format(
+        vehicleModel, propModel, ox, oy, oz, rotPitch, rotRoll, rotYaw
+    ))
+
+    -- Recarrega o cache em memória RAM e notifica todos os clientes em tempo real (zero restarts)
+    local dualMap, rawMap = AdminService.ReloadVehiclePropOffsets()
+    TriggerClientEvent('aurp_trucker:client:adminSyncVehiclePropOffsets', -1, rawMap, dualMap)
+
+    TriggerClientEvent('ox_lib:notify', src, {
+        title = 'PropEditor Salvo',
+        description = ('Offset de %s + %s atualizado e sincronizado no servidor sem restart!'):format(vehicleModel, propModel),
+        type = 'success',
+        duration = 4500
+    })
+end)
+
+RegisterNetEvent('aurp_trucker:server:adminDeleteVehiclePropOffset', function(data)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) or not data then return end
+
+    local id = type(data) == 'table' and tonumber(data.id) or tonumber(data)
+    local vehicleModel = type(data) == 'table' and CleanStr(data.vehicleModel, 50, nil) or nil
+    local propModel = type(data) == 'table' and CleanStr(data.propModel, 100, nil) or nil
+
+    if id and id > 0 then
+        MySQL.query.await('DELETE FROM aust_trucker_vehicle_prop_offsets WHERE id = ?', { id })
+    elseif vehicleModel and propModel then
+        MySQL.query.await([[
+            DELETE FROM aust_trucker_vehicle_prop_offsets 
+            WHERE LOWER(vehicle_model) = ? AND LOWER(prop_model) = ?
+        ]], { vehicleModel:lower(), propModel:lower() })
+    end
+
+    local dualMap, rawMap = AdminService.ReloadVehiclePropOffsets()
+    TriggerClientEvent('aurp_trucker:client:adminSyncVehiclePropOffsets', -1, rawMap, dualMap)
+
+    TriggerClientEvent('ox_lib:notify', src, {
+        title = 'PropEditor',
+        description = 'Offset veículo/prop excluído com sucesso.',
+        type = 'info'
+    })
 end)
 
 -- 4. HOMOLOGAÇÃO DE CARGAS & PROPS

@@ -163,6 +163,18 @@
           renderPropsTab();
         }
         break;
+      case 'admin_update_vehicle_prop_offsets':
+        if (item.offsets) {
+          adminData.vehiclePropOffsets = item.offsets;
+          renderPropEditorTab();
+        }
+        break;
+      case 'admin_propeditor_status':
+        updatePropEditorStatus(item);
+        break;
+      case 'admin_propeditor_update_values':
+        updatePropEditorValues(item.data);
+        break;
       case 'admin_spawn_coords_calibrated':
         if (item.coords) {
           const sx = document.getElementById('spawn-form-x');
@@ -236,6 +248,7 @@
         customRoutes: data.customRoutes || data.routes || {},
         spawns: data.spawns || {},
         trailerOffsets: data.trailerOffsets || data.offsets || {},
+        vehiclePropOffsets: data.vehiclePropOffsets || {},
         npcs: data.npcs || {},
         economy: data.economy || {},
         homologatedProps: normalizeProps(data.homologatedProps || data.props || []),
@@ -340,6 +353,9 @@
         break;
       case 'offsets':
         renderOffsetsTab();
+        break;
+      case 'propeditor':
+        renderPropEditorTab();
         break;
       case 'economy':
         renderEconomyTab();
@@ -1345,6 +1361,228 @@
 
     const btnCapNPC = document.getElementById('btn-cap-npc');
     if (btnCapNPC) btnCapNPC.addEventListener('click', () => captureCoords('npc'));
+
+    // ============================================================
+    // CONTROLES DA ABA PROP EDITOR (6DoF)
+    // ============================================================
+    const btnPropSpawn = document.getElementById('btn-propeditor-spawn');
+    if (btnPropSpawn) {
+      btnPropSpawn.addEventListener('click', function () {
+        const vModel = (document.getElementById('propeditor-vehicle-model')?.value || '').trim();
+        const pModel = (document.getElementById('propeditor-prop-model')?.value || '').trim();
+
+        if (!vModel || !pModel) {
+          showAdminToast('Preencha os modelos do veículo e do prop.', 'error');
+          return;
+        }
+
+        updatePropEditorStatus({ text: 'Gerando entidades no mundo...', type: 'waiting_attach' });
+        postNUI('adminPropEditorSpawn', {
+          vehicleModel: vModel,
+          propModel: pModel
+        });
+      });
+    }
+
+    const btnPropForceAttach = document.getElementById('btn-propeditor-force-attach');
+    if (btnPropForceAttach) {
+      btnPropForceAttach.addEventListener('click', function () {
+        postNUI('adminPropEditorForceAttach', {});
+      });
+    }
+
+    const btnPropCancel = document.getElementById('btn-propeditor-cancel-session');
+    if (btnPropCancel) {
+      btnPropCancel.addEventListener('click', function () {
+        postNUI('adminPropEditorCancel', {});
+        updatePropEditorStatus({ text: 'Sessão cancelada.', type: 'info' });
+        const forceBtn = document.getElementById('btn-propeditor-force-attach');
+        const cancelBtn = document.getElementById('btn-propeditor-cancel-session');
+        if (forceBtn) forceBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+      });
+    }
+
+    const btnPropSave = document.getElementById('btn-propeditor-save');
+    if (btnPropSave) {
+      btnPropSave.addEventListener('click', function () {
+        const vModel = (document.getElementById('propeditor-vehicle-model')?.value || '').trim();
+        const pModel = (document.getElementById('propeditor-prop-model')?.value || '').trim();
+
+        if (!vModel || !pModel) {
+          showAdminToast('Modelos do veículo e do prop são obrigatórios.', 'error');
+          return;
+        }
+
+        const x = parseFloat(document.getElementById('propeditor-val-x')?.value) || 0.0;
+        const y = parseFloat(document.getElementById('propeditor-val-y')?.value) || 0.0;
+        const z = parseFloat(document.getElementById('propeditor-val-z')?.value) || 0.0;
+        const pitch = parseFloat(document.getElementById('propeditor-val-pitch')?.value) || 0.0;
+        const roll = parseFloat(document.getElementById('propeditor-val-roll')?.value) || 0.0;
+        const yaw = parseFloat(document.getElementById('propeditor-val-yaw')?.value) || 0.0;
+
+        postNUI('adminPropEditorSave', {
+          vehicleModel: vModel,
+          propModel: pModel,
+          x: x,
+          y: y,
+          z: z,
+          pitch: pitch,
+          roll: roll,
+          yaw: yaw
+        });
+
+        showAdminToast('Offsets de Prop enviados para gravação imediata no servidor!');
+      });
+    }
+
+    // Sincronização dos inputs numéricos em tempo real para o Gizmo Lua
+    ['propeditor-val-x', 'propeditor-val-y', 'propeditor-val-z', 'propeditor-val-pitch', 'propeditor-val-roll', 'propeditor-val-yaw'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('input', function () {
+          const x = parseFloat(document.getElementById('propeditor-val-x')?.value) || 0.0;
+          const y = parseFloat(document.getElementById('propeditor-val-y')?.value) || 0.0;
+          const z = parseFloat(document.getElementById('propeditor-val-z')?.value) || 0.0;
+          const pitch = parseFloat(document.getElementById('propeditor-val-pitch')?.value) || 0.0;
+          const roll = parseFloat(document.getElementById('propeditor-val-roll')?.value) || 0.0;
+          const yaw = parseFloat(document.getElementById('propeditor-val-yaw')?.value) || 0.0;
+
+          postNUI('adminPropEditorManualChange', {
+            x: x, y: y, z: z,
+            pitch: pitch, roll: roll, yaw: yaw
+          });
+        });
+      }
+    });
   });
+
+  // ============================================================
+  // FUNÇÕES DE STATUS E RENDERIZAÇÃO DA ABA PROP EDITOR
+  // ============================================================
+  function updatePropEditorStatus(statusObj) {
+    const badge = document.getElementById('propeditor-status-badge');
+    const forceBtn = document.getElementById('btn-propeditor-force-attach');
+    const cancelBtn = document.getElementById('btn-propeditor-cancel-session');
+
+    if (!badge) return;
+
+    const text = statusObj.text || statusObj.message || 'Pronto';
+    const type = statusObj.type || 'info';
+
+    if (type === 'waiting_attach') {
+      badge.style.background = 'rgba(234, 179, 8, 0.2)';
+      badge.style.borderColor = '#eab308';
+      badge.style.color = '#fef08a';
+      badge.innerHTML = `<i class="fas fa-link fa-spin"></i> ${text}`;
+      if (forceBtn) forceBtn.style.display = 'inline-flex';
+      if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+    } else if (type === 'attached' || type === 'success') {
+      badge.style.background = 'rgba(16, 185, 129, 0.2)';
+      badge.style.borderColor = '#10b981';
+      badge.style.color = '#6ee7b7';
+      badge.innerHTML = `<i class="fas fa-check-circle"></i> ${text}`;
+      if (forceBtn) forceBtn.style.display = 'none';
+      if (cancelBtn) cancelBtn.style.display = 'inline-flex';
+    } else if (type === 'error') {
+      badge.style.background = 'rgba(239, 68, 68, 0.2)';
+      badge.style.borderColor = '#ef4444';
+      badge.style.color = '#fca5a5';
+      badge.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${text}`;
+    } else {
+      badge.style.background = 'rgba(100, 116, 139, 0.2)';
+      badge.style.borderColor = '#64748b';
+      badge.style.color = '#94a3b8';
+      badge.innerHTML = `<i class="fas fa-info-circle"></i> ${text}`;
+    }
+  }
+
+  function updatePropEditorValues(data) {
+    if (!data) return;
+    const sx = document.getElementById('propeditor-val-x');
+    const sy = document.getElementById('propeditor-val-y');
+    const sz = document.getElementById('propeditor-val-z');
+    const sp = document.getElementById('propeditor-val-pitch');
+    const sr = document.getElementById('propeditor-val-roll');
+    const syaw = document.getElementById('propeditor-val-yaw');
+
+    if (sx && data.x != null) sx.value = parseFloat(data.x).toFixed(3);
+    if (sy && data.y != null) sy.value = parseFloat(data.y).toFixed(3);
+    if (sz && data.z != null) sz.value = parseFloat(data.z).toFixed(3);
+    if (sp && data.pitch != null) sp.value = parseFloat(data.pitch).toFixed(1);
+    if (sr && data.roll != null) sr.value = parseFloat(data.roll).toFixed(1);
+    if (syaw && data.yaw != null) syaw.value = parseFloat(data.yaw).toFixed(1);
+  }
+
+  function renderPropEditorTab() {
+    const tbody = document.getElementById('propeditor-table-body');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    const list = [];
+    const offsets = adminData.vehiclePropOffsets || {};
+
+    for (const vModel in offsets) {
+      const propGroup = offsets[vModel];
+      if (typeof propGroup === 'object') {
+        for (const pModel in propGroup) {
+          const entry = propGroup[pModel];
+          if (entry) {
+            list.push(entry);
+          }
+        }
+      }
+    }
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b; padding:24px;">Nenhum offset customizado de veículo/prop cadastrado ainda.</td></tr>`;
+      return;
+    }
+
+    list.sort((a, b) => (a.vehicle_model || '').localeCompare(b.vehicle_model || ''));
+
+    list.forEach(item => {
+      const tr = document.createElement('tr');
+      const x = parseFloat(item.offset_x || 0).toFixed(2);
+      const y = parseFloat(item.offset_y || 0).toFixed(2);
+      const z = parseFloat(item.offset_z || 0).toFixed(2);
+      const p = parseFloat(item.rot_pitch || 0).toFixed(1);
+      const r = parseFloat(item.rot_roll || 0).toFixed(1);
+      const yw = parseFloat(item.rot_yaw || 0).toFixed(1);
+
+      tr.innerHTML = `
+        <td style="font-weight:600; color:#cbd5e1;">#${item.id || '-'}</td>
+        <td style="color:#38bdf8; font-weight:600;"><i class="fas fa-truck"></i> ${item.vehicle_model}</td>
+        <td style="color:#f59e0b; font-weight:600;"><i class="fas fa-box"></i> ${item.prop_model}</td>
+        <td><code>X: ${x} | Y: ${y} | Z: ${z}</code></td>
+        <td><code>P: ${p}° | R: ${r}° | Y: ${yw}°</code></td>
+        <td>
+          <button class="admin-btn admin-btn-outline" style="padding:4px 8px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})">
+            <i class="fas fa-edit"></i> Carregar
+          </button>
+          <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  window.loadPropEditorData = function (vModel, pModel, x, y, z, p, r, yw) {
+    const vm = document.getElementById('propeditor-vehicle-model');
+    const pm = document.getElementById('propeditor-prop-model');
+    if (vm) vm.value = vModel;
+    if (pm) pm.value = pModel;
+
+    updatePropEditorValues({ x: x, y: y, z: z, pitch: p, roll: r, yaw: yw });
+    showAdminToast(`Offset ${vModel} + ${pModel} carregado nos controles.`);
+  };
+
+  window.deletePropEditorData = function (id, vModel, pModel) {
+    if (!confirm(`Deseja excluir o offset de ${vModel} + ${pModel}?`)) return;
+    postNUI('adminDeleteVehiclePropOffset', { id: id, vehicleModel: vModel, propModel: pModel });
+    showAdminToast('Solicitação de exclusão enviada.');
+  };
 
 })();

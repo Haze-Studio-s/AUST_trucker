@@ -132,6 +132,44 @@ local function GetTrailerHashKeys(trailer)
     return { raw, u, s, tostring(raw), tostring(u), tostring(s) }
 end
 
+-- ============================================================
+-- HELPER GLOBAL E EXPORT: OFFSETS DO PROPEDITOR (6DoF)
+-- ============================================================
+function GetVehiclePropOffset(vehicle, propModel)
+    if not vehicle or not DoesEntityExist(vehicle) or not propModel then return nil, nil end
+    local vHash = GetEntityModel(vehicle)
+    local pHash = type(propModel) == 'number' and propModel or joaat(tostring(propModel):lower())
+
+    if Config and Config.VehiclePropOffsets then
+        local vUnsigned = vHash & 0xFFFFFFFF
+        local vSigned = (vUnsigned >= 0x80000000) and (vUnsigned - 0x100000000) or vUnsigned
+        local pUnsigned = pHash & 0xFFFFFFFF
+
+        local vKeys = { vHash, vUnsigned, vSigned, tostring(vHash), tostring(vUnsigned) }
+        local pKeys = { pHash, pUnsigned, tostring(pHash), tostring(propModel):lower() }
+
+        for _, vk in ipairs(vKeys) do
+            local vehGroup = Config.VehiclePropOffsets[vk]
+            if vehGroup then
+                for _, pk in ipairs(pKeys) do
+                    local entry = vehGroup[pk]
+                    if entry then
+                        local pos = vector3(entry.offset_x or (entry.offset and entry.offset.x) or 0.0,
+                                            entry.offset_y or (entry.offset and entry.offset.y) or 0.0,
+                                            entry.offset_z or (entry.offset and entry.offset.z) or 0.0)
+                        local rot = vector3(entry.rot_pitch or (entry.rotation and entry.rotation.x) or 0.0,
+                                            entry.rot_roll  or (entry.rotation and entry.rotation.y) or 0.0,
+                                            entry.rot_yaw   or (entry.rotation and entry.rotation.z) or 0.0)
+                        return pos, rot
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+exports('GetVehiclePropOffset', GetVehiclePropOffset)
+
 function ForkliftModule.GetSlotOffset(trailer, slotIndex)
     local keys = GetTrailerHashKeys(trailer)
     if Config and Config.TrailerSlots then
@@ -340,6 +378,17 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
     slotHeading = slotHeading or (type(slotOffset) == 'table' and slotOffset.heading) or 0.0
 
+    -- Integração com o PropEditor (6DoF): se existir calibração customizada para este par, sobrepõe com prioridade máxima
+    local customPropOffset, customPropRot = GetVehiclePropOffset(targetTrailer, GetEntityModel(palletEntity))
+    local finalX, finalY, finalZ = slotOffset.x, slotOffset.y, slotOffset.z
+    local finalPitch, finalRoll, finalYaw = 0.0, 0.0, slotHeading
+    if customPropOffset then
+        finalX, finalY, finalZ = customPropOffset.x, customPropOffset.y, customPropOffset.z
+        if customPropRot then
+            finalPitch, finalRoll, finalYaw = customPropRot.x, customPropRot.y, customPropRot.z
+        end
+    end
+
     -- Controle de rede antes do acoplamento
     local timeout = 1500
     while not NetworkHasControlOfEntity(palletEntity) and timeout > 0 do
@@ -358,8 +407,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     SetEntityVelocity(palletEntity, 0.0, 0.0, 0.0)
     AttachEntityToEntity(
         palletEntity, targetTrailer, 0,
-        slotOffset.x, slotOffset.y, slotOffset.z,
-        0.0, 0.0, slotHeading,
+        finalX, finalY, finalZ,
+        finalPitch, finalRoll, finalYaw,
         false, false, false, false, 2, true
     )
 

@@ -1,5 +1,15 @@
 # Changelog — AUST_trucker
 
+## [20.9.0] — 2026-10-04 — Módulo PropEditor 6DoF (/truckeradmin)
+
+### Adicionado
+- **Módulo PropEditor:** Nova aba integrada ao painel `/truckeradmin` para calibração, manipulação visual, captura e persistência de offsets entre qualquer modelo de veículo e prop de carga.
+- **Tabela Dedicada MySQL:** `aust_trucker_vehicle_prop_offsets` com índice único `(vehicle_model, prop_model)` e colunas para 6 graus de liberdade ($X, Y, Z, Pitch, Roll, Yaw$).
+- **Cache em Memória RAM & Hot-Reload:** `AdminService.VehiclePropOffsets` com mapeamento dual-indexado (strings, hashes signed e unsigned); sincronização de rede em tempo real sem qualquer necessidade de reiniciar o servidor (`adminSyncVehiclePropOffsets`).
+- **Detecção Orgânica de Engate:** Loop de escuta local interceptando o momento exato em que `IsEntityAttachedToEntity(prop, veh)` se torna verdadeiro, ativando automaticamente o manipulador 3D.
+- **Gizmo 3D 6DoF (Three.js & TransformControls):** Suporte completo à rotação tridimensional Euler nos anéis Pitch, Roll e Yaw via `[R]` e translação $X, Y, Z$ via `[T]`, com controle de mouse via `[ALT]`.
+- **Integração no Gameplay Principal:** Helper e export universal `GetVehiclePropOffset(vehicle, propModel)` com sobreposição de prioridade máxima no assentamento de cargas (`SnapPalletToCurrentSlot`).
+
 ## [20.8.0] — 2026-10-04 — Auditoria Completa de Código, Fix CalcBonus & Otimização NUI
 
 ### Correções Críticas

@@ -1017,6 +1017,9 @@
 					<button class="admin-tab-btn" data-tab="offsets">
 						<i class="fas fa-truck-loading"></i> Offsets Trailer 3D
 					</button>
+					<button class="admin-tab-btn" data-tab="propeditor">
+						<i class="fas fa-cube"></i> Prop Editor (6DoF)
+					</button>
 					<button class="admin-tab-btn" data-tab="economy">
 						<i class="fas fa-chart-line"></i> Economia & XP
 					</button>
@@ -1492,6 +1495,124 @@
 									<input type="checkbox" id="npc-form-target" checked> Habilitar Interação via ox_target
 								</label>
 								<button id="btn-save-npc" class="admin-btn admin-btn-primary"><i class="fas fa-save"></i> Salvar e Spawnar NPC</button>
+							</div>
+						</div>
+					</div>
+
+					<!-- ABA 7: PROP EDITOR (6DoF) -->
+					<div id="admin-tab-propeditor" class="admin-tab-pane">
+						<div class="admin-card">
+							<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+								<span class="admin-card-title"><i class="fas fa-cube"></i> Calibração Livre de Props e Cargas (6 Graus de Liberdade)</span>
+								<span class="admin-badge badge-active" style="background: rgba(16,185,129,0.2); color:#10b981; border:1px solid #10b981;"><i class="fas fa-bolt"></i> Hot-Reload Ativo</span>
+							</div>
+							<p style="font-size: 13px; color: #94a3b8; margin: 0 0 16px 0; line-height: 1.5;">
+								Calibre os offsets de posição (X, Y, Z) e rotação tridimensional (Pitch, Roll, Yaw) para qualquer combinação de veículo e prop de carga. Ambas as entidades são spawnadas no mundo para você realizar o procedimento normal de engate. Assim que o engate for validado, o Gizmo 3D é ativado automaticamente.
+							</p>
+
+							<!-- Formulário de Seleção e Geração -->
+							<div class="admin-grid-2" style="margin-bottom: 16px;">
+								<div class="admin-form-group">
+									<label><i class="fas fa-truck"></i> Modelo do Veículo (Hash / String) <span style="color:#ef4444;">*</span></label>
+									<input type="text" id="propeditor-vehicle-model" class="admin-input" placeholder="ex: flatbed, hauler, packer, bison" value="flatbed">
+								</div>
+								<div class="admin-form-group">
+									<label><i class="fas fa-box"></i> Modelo do Prop de Carga <span style="color:#ef4444;">*</span></label>
+									<input type="text" id="propeditor-prop-model" class="admin-input" placeholder="ex: hei_prop_carrier_cargo_04b, prop_pallet_01a" value="hei_prop_carrier_cargo_04b">
+								</div>
+							</div>
+
+							<!-- Painel de Controles de Ação -->
+							<div style="background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 16px; margin-bottom: 16px;">
+								<div style="display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;">
+									<div style="display: flex; gap: 10px; align-items: center;">
+										<button id="btn-propeditor-spawn" class="admin-btn admin-btn-primary" style="padding: 10px 20px; font-weight: 600;">
+											<i class="fas fa-magic"></i> 1. Gerar Entidades no Mundo
+										</button>
+										<button id="btn-propeditor-force-attach" class="admin-btn admin-btn-outline" style="padding: 10px 16px; display: none;">
+											<i class="fas fa-link"></i> Acoplar Manualmente
+										</button>
+										<button id="btn-propeditor-cancel-session" class="admin-btn admin-btn-danger" style="padding: 10px 16px; display: none;">
+											<i class="fas fa-times"></i> Cancelar Sessão
+										</button>
+									</div>
+
+									<div id="propeditor-status-badge" style="display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 8px; background: rgba(100,116,139,0.2); border: 1px solid #64748b; font-size: 12px; font-weight: 600; color: #94a3b8;">
+										<i class="fas fa-circle-notch fa-spin"></i> Pronto para iniciar
+									</div>
+								</div>
+							</div>
+
+							<!-- Visualizador / Ajuste Fino dos 6 Eixos de Liberdade -->
+							<div style="background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 16px; margin-bottom: 20px;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+									<span style="font-size: 13px; font-weight: 600; color: #38bdf8;"><i class="fas fa-arrows-alt"></i> Offsets Relativos em Tempo Real (6 Graus de Liberdade)</span>
+									<span style="font-size: 11px; color: #64748b;">Tracionados pelo Gizmo 3D ou Editáveis</span>
+								</div>
+
+								<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px;">
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Offset X (Lateral)</label>
+										<input type="number" step="0.01" id="propeditor-val-x" class="admin-input" value="0.00">
+									</div>
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Offset Y (Frente / Trás)</label>
+										<input type="number" step="0.01" id="propeditor-val-y" class="admin-input" value="0.00">
+									</div>
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Offset Z (Altura)</label>
+										<input type="number" step="0.01" id="propeditor-val-z" class="admin-input" value="0.00">
+									</div>
+								</div>
+
+								<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Pitch / Inclinação (Rot X)</label>
+										<input type="number" step="0.5" id="propeditor-val-pitch" class="admin-input" value="0.0">
+									</div>
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Roll / Rolagem (Rot Y)</label>
+										<input type="number" step="0.5" id="propeditor-val-roll" class="admin-input" value="0.0">
+									</div>
+									<div class="admin-form-group" style="margin: 0;">
+										<label style="font-size: 11px; color:#cbd5e1;">Yaw / Direção (Rot Z)</label>
+										<input type="number" step="0.5" id="propeditor-val-yaw" class="admin-input" value="0.0">
+									</div>
+								</div>
+							</div>
+
+							<!-- Botão de Gravação Definitiva -->
+							<div style="display: flex; justify-content: flex-end; gap: 12px; align-items: center;">
+								<span style="font-size: 12px; color: #94a3b8;">A gravação atualiza a memória e entra em vigor no gameplay no mesmo segundo.</span>
+								<button id="btn-propeditor-save" class="admin-btn admin-btn-success" style="padding: 12px 28px; font-size: 14px; font-weight: 700;">
+									<i class="fas fa-save"></i> 2. Salvar Offsets Definitivos
+								</button>
+							</div>
+						</div>
+
+						<!-- Tabela de Offsets Cadastrados -->
+						<div class="admin-card" style="margin-top: 16px;">
+							<div class="admin-card-header">
+								<span class="admin-card-title"><i class="fas fa-database"></i> Pares Veículo <-> Prop Gravados no Servidor</span>
+							</div>
+							<div class="admin-table-container">
+								<table class="admin-table" id="propeditor-table">
+									<thead>
+										<tr>
+											<th>ID</th>
+											<th>Veículo</th>
+											<th>Prop</th>
+											<th>Posição (X, Y, Z)</th>
+											<th>Rotação (P, R, Y)</th>
+											<th>Ações</th>
+										</tr>
+									</thead>
+									<tbody id="propeditor-table-body">
+										<tr>
+											<td colspan="6" style="text-align:center; color:#64748b; padding:24px;">Carregando offsets de props salvos...</td>
+										</tr>
+									</tbody>
+								</table>
 							</div>
 						</div>
 					</div>
