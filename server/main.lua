@@ -1306,7 +1306,7 @@ local function StartTruckDelivery(src, contractData)
     ActiveSpawningPlayers[citizenId] = nil
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
-    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds)
+    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds, jobId)
 
     -- Inicia o First Step Timer anti-griefing de pátio (6 minutos)
     local yardLoc = chosenTruckCoord and vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z) or (wh and wh.TruckSpawnCoords and vector3(wh.TruckSpawnCoords.x, wh.TruckSpawnCoords.y, wh.TruckSpawnCoords.z))
