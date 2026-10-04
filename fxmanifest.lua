@@ -18,6 +18,8 @@ shared_scripts {
     'config/config.lua',
     'config/logistics_config.lua',
     'shared/config.lua',
+    'shared/pallet_spawn_validation.lua',
+    'shared/pallet_sync_guard.lua',
     'lang/br.lua',
     'lang/en.lua',
     'lang/locale.lua',
@@ -27,6 +29,7 @@ server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/framework.lua',     -- Framework abstraction (QBX/QBCore/ESX)
     'server/database.lua',      -- Schema (SchemaService) + todos os helpers de DB
+    'server/pallet_registry.lua', -- regras puras de registro de palete (antes de main.lua)
     'server/main.lua',
     'server/services/company_service.lua',
     'server/services/party_service.lua',
@@ -62,6 +65,7 @@ server_scripts {
 }
 
 client_scripts {
+    'client/modules/pallet_debug.lua',         -- Telemetria de pallets (só ativa com Config.Debug)
     'client/modules/forklift.lua',
     'client/modules/reach_stacker.lua',
     'client/modules/adr_hazard.lua',

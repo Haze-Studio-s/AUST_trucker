@@ -26,6 +26,7 @@ local JobEntities = {
     pallets = {}
 }
 _G.JobEntities = JobEntities
+PalletSyncState = PalletSyncGuard.New()  -- global de propósito: evita estourar o limite de locals do chunk
 _G.ActiveJob = ActiveJob
 
 local ActiveDeliveryPoint = nil
@@ -359,6 +360,7 @@ local function CleanupCurrentJob()
     LoadedPalletData = LoadedPallets
     Config.LoadedPallets = LoadedPallets
     JobEntities = { truck = nil, trailer = nil, forklift = nil, handler = nil, container = nil, pallets = {} }
+    if PalletSyncState then PalletSyncGuard.Reset(PalletSyncState) end
     SetWaypointOff()
 end
 
@@ -2665,58 +2667,88 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 end)
 
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
-RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
+-- Idempotente (PalletSyncState, definido no topo): o servidor envia a lista mais de uma vez por job.
+-- Só o primeiro sync por netId faz snap de solo e liga a física; os demais não reposicionam.
+RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
+    local syncN = PalletSyncGuard.Begin(PalletSyncState, jobId)
     CreateThread(function()
-        local pallets = {}
+        local applied = 0
         for _, netId in ipairs(palletNetIds) do
             if netId and netId ~= 0 then
-                local ent = WaitForNetworkEntity(netId, 8000)
-                if ent and DoesEntityExist(ent) then
-                    SetEntityAsMissionEntity(ent, true, true)
-                    SetEntityLodDist(ent, 0xFFFF)
-                    SetEntityVisible(ent, true)
-                    ResetEntityAlpha(ent)
-
-                    -- Garante controle autoritativo local no OneSync e bloqueia migração
-                    NetworkRequestControlOfEntity(ent)
-                    SetNetworkIdCanMigrate(netId, false)
-
-                    -- Pré-carrega malha e colisão do terreno nas coordenadas do objeto
-                    local pCoords = GetEntityCoords(ent)
-                    RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
-                    
-                    local loadTimeout = GetGameTimer() + 3000
-                    while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
-                        Wait(50)
+                if not PalletSyncGuard.Claim(PalletSyncState, netId) then
+                    if Config.Debug and PalletDebug then
+                        PalletDebug.OnSync(netId, PalletSyncState.ents[netId], jobId, syncN, 'skipped (já sincronizado)')
                     end
+                else
+                    local ent = WaitForNetworkEntity(netId, 8000)
+                    if ent and DoesEntityExist(ent) then
+                        applied = applied + 1
+                        if Config.Debug and PalletDebug then
+                            PalletDebug.OnSync(netId, ent, jobId, syncN, 'applied')
+                        end
+                        SetEntityAsMissionEntity(ent, true, true)
+                        SetEntityLodDist(ent, 0xFFFF)
+                        SetEntityVisible(ent, true)
+                        ResetEntityAlpha(ent)
 
-                    -- Pausa obrigatória (Yielding) para garantir registro da entidade na engine e rede
-                    Wait(150)
+                        -- Garante controle autoritativo local no OneSync e bloqueia migração
+                        NetworkRequestControlOfEntity(ent)
+                        SetNetworkIdCanMigrate(netId, false)
 
-                    -- Cálculo exato da altura do solo (Ground Z)
-                    local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
-                    if groundFound then
-                        SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)
+                        -- Pré-carrega malha e colisão do terreno nas coordenadas do objeto
+                        local pCoords = GetEntityCoords(ent)
+                        RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
+
+                        local loadTimeout = GetGameTimer() + 3000
+                        while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
+                            Wait(50)
+                        end
+
+                        -- Pausa obrigatória (Yielding) para garantir registro da entidade na engine e rede
+                        Wait(150)
+
+                        -- Palete já preso/estivado (ex.: restart do client): não reposiciona
+                        if not IsEntityAttached(ent) then
+                            -- Cálculo exato da altura do solo (Ground Z)
+                            local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
+                            if groundFound then
+                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)
+                            else
+                                PlaceObjectOnGroundProperly(ent)
+                            end
+                            if Config.Debug and PalletDebug then
+                                PalletDebug.OnSnap(netId, ent, { preZ = pCoords.z, groundFound = groundFound, groundZ = groundZ })
+                            end
+
+                            -- Pausa para assentar no chão antes da física ativa
+                            Wait(100)
+
+                            -- Física e massa nativas da Havok: palete solto no solo, estritamente dinâmico (FreezeEntityPosition PROIBIDO)
+                            SetEntityCollision(ent, true, true)
+                            SetEntityDynamic(ent, true)
+                            SetEntityHasGravity(ent, true)
+                            FreezeEntityPosition(ent, false)
+                            ActivatePhysics(ent)
+                        end
+
+                        PalletSyncState.ents[netId] = ent
                     else
-                        PlaceObjectOnGroundProperly(ent)
+                        -- Entidade não apareceu: libera para um sync posterior tentar de novo
+                        PalletSyncGuard.Release(PalletSyncState, netId)
                     end
-
-                    -- Pausa para assentar no chão antes da física ativa
-                    Wait(100)
-
-                    -- Física e massa nativas da Havok: palete solto no solo, estritamente dinâmico (FreezeEntityPosition PROIBIDO)
-                    SetEntityCollision(ent, true, true)
-                    SetEntityDynamic(ent, true)
-                    SetEntityHasGravity(ent, true)
-                    FreezeEntityPosition(ent, false)
-                    ActivatePhysics(ent)
-
-                    table.insert(pallets, ent)
                 end
             end
         end
-        JobEntities.pallets = pallets
-        ForkliftModule.SetMissionPallets(pallets)
+
+        if applied > 0 then
+            local pallets = {}
+            for _, netId in ipairs(palletNetIds) do
+                local ent = PalletSyncState.ents[netId]
+                if ent and DoesEntityExist(ent) then table.insert(pallets, ent) end
+            end
+            JobEntities.pallets = pallets
+            ForkliftModule.SetMissionPallets(pallets)
+        end
     end)
 end)
 

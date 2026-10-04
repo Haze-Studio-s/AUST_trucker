@@ -7,6 +7,8 @@
 Config = Config or {}
 
 Config.Polarix = {
+    -- Distância máxima (m) entre o pallet e a carreta no servidor ao registrar o palete (anti-remoto)
+    PalletTrailerMaxDist = 60.0,
     Framework = 'qbox',
     Target = 'ox_target',
     Debug = false,
@@ -78,6 +80,14 @@ Config.Polarix = {
         LoadingBayCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
         PalletStagingAnchor = vector3(1272.00, -3182.00, 5.90),
         PalletStagingHeading = 180.0,
+
+        -- Validação dos spawns de pallet (config e banco). Ver shared/pallet_spawn_validation.lua
+        PalletSpawnRules = {
+            maxCount   = 16,
+            exactDup   = 0.01,
+            nearDup    = 0.5,
+            minSpacing = 1.5,
+        },
     },
 
     LoadingBayCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
