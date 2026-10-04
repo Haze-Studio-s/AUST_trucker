@@ -276,6 +276,20 @@ local function EnterLoadingStage(lobby)
     return false
 end
 
+-- Recusas de eventos do Polarix eram silenciosas (`return` sem log): quando uma validação recusava um evento
+-- legítimo, o client seguia normalmente (o snap do palete é local) e o job travava sem nenhuma pista.
+-- Agora cada recusa registra evento, job, estágio e motivo (no máx. 1 linha por chave a cada 5 s).
+local _polarixRejectAt = {}
+local function PolarixReject(event, jobId, lobby, reason)
+    local key = ('%s:%s:%s'):format(event, tostring(jobId), reason)
+    local now = GetGameTimer()
+    if _polarixRejectAt[key] and (now - _polarixRejectAt[key]) < 5000 then return end
+    _polarixRejectAt[key] = now
+    print(('[AUST_Trucker Polarix] %s recusado (job %s, stage=%s, loaded=%s/%s): %s'):format(
+        event, tostring(jobId), tostring(lobby and lobby.stage), tostring(lobby and lobby.loadedCount),
+        tostring(lobby and lobby.requiredCount), reason))
+end
+
 -- Exposto a outros arquivos server-side (events.lua): a entidade pertence ao lobby ativo do jogador?
 -- Retorna hasLobby (jogador tem lobby Polarix ativo), matches (entidade registrada pelo servidor no lobby)
 function PolarixOwnsEntity(citizenId, ent)
@@ -1377,8 +1391,14 @@ end)
 -- ETAPA 3: Acomodação do Palete na Carreta (Carga Seca)
 local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then return end
-    if lobby.cargoType ~= 'dry' then return end
+    if not lobby or lobby.src ~= src then
+        PolarixReject('palletLoaded', jobId, lobby, 'lobby inexistente ou de outro jogador')
+        return
+    end
+    if lobby.cargoType ~= 'dry' then
+        PolarixReject('palletLoaded', jobId, lobby, 'cargoType ' .. tostring(lobby.cargoType) .. ' não é dry')
+        return
+    end
 
     local required = lobby.requiredCount or 0
 
@@ -1391,23 +1411,45 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
     end
 
     -- Máquina de estados: palete só é aceito durante o carregamento e até o total exigido
-    if not EnterLoadingStage(lobby) then return end
-    if (lobby.loadedCount or 0) >= required then return end
+    if not EnterLoadingStage(lobby) then
+        PolarixReject('palletLoaded', jobId, lobby, 'estágio não permite carregamento')
+        return
+    end
+    if (lobby.loadedCount or 0) >= required then
+        PolarixReject('palletLoaded', jobId, lobby, 'todos os paletes já foram contados')
+        return
+    end
 
     -- Valida distância do jogador até a carreta (anti-spam remoto)
     local ped = GetPlayerPed(src)
-    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
-    if #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer)) > 40.0 then return end
+    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then
+        PolarixReject('palletLoaded', jobId, lobby, 'ped ou carreta inexistente no servidor')
+        return
+    end
+    local trailerDist = #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer))
+    if trailerDist > 40.0 then
+        PolarixReject('palletLoaded', jobId, lobby, ('jogador a %.1fm da carreta (máx 40)'):format(trailerDist))
+        return
+    end
 
     -- Rate limit leve por lobby (um palete a cada 1s no mínimo)
     local nowMs = GetGameTimer()
-    if lobby.lastPalletAt and (nowMs - lobby.lastPalletAt) < 1000 then return end
+    if lobby.lastPalletAt and (nowMs - lobby.lastPalletAt) < 1000 then
+        PolarixReject('palletLoaded', jobId, lobby, 'rate limit (1 palete/s)')
+        return
+    end
 
     -- Slot: inteiro dentro do total e ainda não utilizado
     slotIndex = tonumber(slotIndex)
-    if slotIndex and (slotIndex ~= slotIndex or slotIndex < 1 or slotIndex > required or slotIndex % 1 ~= 0) then return end
+    if slotIndex and (slotIndex ~= slotIndex or slotIndex < 1 or slotIndex > required or slotIndex % 1 ~= 0) then
+        PolarixReject('palletLoaded', jobId, lobby, 'slot ' .. tostring(slotIndex) .. ' fora de 1..' .. tostring(required))
+        return
+    end
     lobby.usedSlots = lobby.usedSlots or {}
-    if slotIndex and lobby.usedSlots[slotIndex] then return end
+    if slotIndex and lobby.usedSlots[slotIndex] then
+        PolarixReject('palletLoaded', jobId, lobby, 'slot ' .. tostring(slotIndex) .. ' já usado')
+        return
+    end
 
     -- netId do palete: precisa ser um dos paletes gerados pelo servidor para este lobby
     if palletNetId ~= nil then
@@ -1415,7 +1457,10 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
         for _, nid in ipairs(lobby.palletNetIds or {}) do
             if nid == palletNetId then found = true break end
         end
-        if not found then return end
+        if not found then
+            PolarixReject('palletLoaded', jobId, lobby, 'netId ' .. tostring(palletNetId) .. ' não é palete deste lobby')
+            return
+        end
     end
 
     -- Offset/heading vêm do cliente: saneia e limita
@@ -1651,22 +1696,37 @@ end)
 RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then return end
+    if not lobby or lobby.src ~= src then
+        PolarixReject('strappingCompleted', jobId, lobby, 'lobby inexistente ou de outro jogador')
+        return
+    end
 
     -- Máquina de estados: cintas só após todos os paletes (dry) ou, nos demais tipos de carga
     -- carregados sem paletes (ADR/cegonha), durante o carregamento
     if lobby.cargoType == 'dry' then
-        if lobby.stage ~= 'STEP_STRAPPING' or (lobby.loadedCount or 0) < (lobby.requiredCount or 1) then return end
+        if lobby.stage ~= 'STEP_STRAPPING' or (lobby.loadedCount or 0) < (lobby.requiredCount or 1) then
+            PolarixReject('strappingCompleted', jobId, lobby, 'dry exige STEP_STRAPPING com todos os paletes contados pelo servidor')
+            return
+        end
     elseif lobby.cargoType == 'liquid' or lobby.cargoType == 'heavy' then
+        PolarixReject('strappingCompleted', jobId, lobby, lobby.cargoType .. ' usa evento próprio')
         return -- têm eventos próprios (disconnectHose / heavyContainerLoaded)
     elseif not EnterLoadingStage(lobby) then
+        PolarixReject('strappingCompleted', jobId, lobby, 'estágio não permite cintas')
         return
     end
 
     -- Proximidade da carreta
     local ped = GetPlayerPed(src)
-    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
-    if #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer)) > 60.0 then return end
+    if not ped or ped == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then
+        PolarixReject('strappingCompleted', jobId, lobby, 'ped ou carreta inexistente no servidor')
+        return
+    end
+    local strapDist = #(GetEntityCoords(ped) - GetEntityCoords(lobby.trailer))
+    if strapDist > 60.0 then
+        PolarixReject('strappingCompleted', jobId, lobby, ('jogador a %.1fm da carreta (máx 60)'):format(strapDist))
+        return
+    end
 
     -- Prevenção de Deadlock: assegura contagem e transição de estado garantida
     lobby.loadedCount = math.max(lobby.loadedCount or 0, lobby.requiredCount or 1)
@@ -1760,15 +1820,24 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local citizenId = Framework.GetCitizenId(Player)
 
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.citizenId ~= citizenId then return end
-    if lobby.stage ~= 'STATUS_IN_TRANSIT' then return end
+    if not lobby or lobby.citizenId ~= citizenId then
+        PolarixReject('completePolarixDelivery', jobId, lobby, 'lobby inexistente ou de outro jogador')
+        return
+    end
+    if lobby.stage ~= 'STATUS_IN_TRANSIT' then
+        PolarixReject('completePolarixDelivery', jobId, lobby, 'só conclui em STATUS_IN_TRANSIT (cintas/carga não confirmadas pelo servidor?)')
+        return
+    end
 
     -- BLINDAGEM 1: Validação autoritativa de distância até o destino
     local ped = GetPlayerPed(src)
     if not ped or ped == 0 then return end
     local pedCoords = GetEntityCoords(ped)
     local dest = lobby.deliveryCoords
-    if not dest then return end
+    if not dest then
+        PolarixReject('completePolarixDelivery', jobId, lobby, 'lobby sem deliveryCoords')
+        return
+    end
     local destVec = vector3(dest.x, dest.y, dest.z)
     local dist = #(pedCoords - destVec)
     if dist > 35.0 then
