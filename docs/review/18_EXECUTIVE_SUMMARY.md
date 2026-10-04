@@ -43,7 +43,7 @@
 
 ## TrueMaps — referência de GAMEPLAY (vídeo; sem código)
 
-**TrueMaps does not provide source-code evidence in this study.** Foi usado como **GAMEPLAY DESIGN REFERENCE ONLY** (vídeo/brief; a sessão não conseguiu acessar o vídeo, então o conteúdo "observado" precisa ser conferido por J2). Implementação, autoridade de servidor, segurança, OneSync, banco, desempenho e manutenção são **UNKNOWN** e nada disso foi inferido.
+**TrueMaps does not provide source-code evidence in this study.** Foi usado como **GAMEPLAY DESIGN REFERENCE ONLY**, com base na **transcrição da narração** (legenda automática, fornecida pelo usuário) e na brief; a sessão não acessa o vídeo, e o que depende só de imagem (portas traseiras, direção agressiva/raspagem, túnel/raio) **não está confirmado**. Implementação, autoridade de servidor, segurança, OneSync, banco, desempenho e manutenção são **UNKNOWN** e nada disso foi inferido.
 
 Seu principal valor: mostrar como o trucking pode virar uma **profissão logística física** em vez de um loop A→B — carregamento em doca (portas, liftgate, pallet jack), courier com scanner, integridade de carga, transporte oversized, escolta ativa e docking de precisão.
 

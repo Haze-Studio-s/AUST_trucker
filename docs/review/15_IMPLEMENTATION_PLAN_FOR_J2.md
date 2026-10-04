@@ -113,19 +113,19 @@ Observação: nenhum desses verificadores detectaria o `SetInterval` com argumen
 
 ## Gameplay Study Wave (STUDY ONLY — referência TrueMaps, sem código)
 
-> Inserida **antes da Onda 7** (refatoração estrutural), **depois da Onda 6**; **a ordem existente não foi alterada**. Justificativa: são itens de **estudo** sem código, podem rodar em paralelo às ondas 3–6, mas qualquer implementação decorrente só faz sentido **depois** de W1 (pallet), W3 (autoridade), W4 (rede) e do estudo de dispositivos. TrueMaps é **referência de gameplay (vídeo/brief), sem código**; nada de arquitetura é inferido dele. Detalhes em `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.
+> Inserida **antes da Onda 7** (refatoração estrutural), **depois da Onda 6**; **a ordem existente não foi alterada**. Justificativa: são itens de **estudo** sem código, podem rodar em paralelo às ondas 3–6, mas qualquer implementação decorrente só faz sentido **depois** de W1 (pallet), W3 (autoridade), W4 (rede) e do estudo de dispositivos. TrueMaps é **referência de gameplay (narração do vídeo via transcrição fornecida + brief; sem código)**; nada de arquitetura é inferido dele. Detalhes em `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.
 
 Todos os itens: **STUDY ONLY · J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO** · opções de decisão **APPROVE / DEFER / REJECT**. Todos: **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**.
 
 | ID | Título | Prioridade | Estudo (resumo) | Depende de (para um futuro) |
 |---|---|---|---|---|
-| GPLAY-01 | Pallet Jack | ALTA | modelo de interação, claim, colisão, movimento, animação, autoridade de rede, ownership, zonas de carga, baia do caminhão, observador; comparar com forklift/reach stacker; **J2 escolhe A) pallet em rede · B) assisted attach · C) representation swap · D) híbrido** | W1-03/W1-05, W4-05 |
-| GPLAY-02 | Hydraulic Liftgate / Cargo Doors | ALTA | portas, liftgate, rampas, permissão de carga; estado, dono, replicação, desconexão | W4-02 |
+| GPLAY-01 | Pallet Jack (+ descarga em local designado) | ALTA | modelo de interação, claim, colisão, movimento, animação, autoridade de rede, ownership, zonas de carga, baia do caminhão, observador; comparar com forklift/reach stacker; **J2 escolhe A) pallet em rede · B) assisted attach · C) representation swap · D) híbrido** | W1-03/W1-05, W4-05 |
+| GPLAY-02 | Hydraulic Liftgate / Cargo Doors | ALTA | rampa/liftgate (**narrado**), portas (**só brief**), permissão de carga; estado, dono, replicação, desconexão | W4-02 |
 | GPLAY-03 | Courier Package Scanner | ALTA | identidade de pacote, parada, barcode, scanner, pacote errado/correto, assinatura; **servidor decide pacote × parada** | W3-07 |
-| GPLAY-04 | Cargo Integrity | ALTA | impacto, velocidade, velocidade angular, tipo de carga, acúmulo; **sem confiar em dano arbitrário do cliente**; RUNTIME PROOF REQUIRED | W3-10 |
+| GPLAY-04 | Cargo Integrity | ALTA | impacto, velocidade, velocidade angular, tipo de carga, acúmulo; **sem confiar em dano arbitrário do cliente** (vídeo narra colisão/dano → pagamento); RUNTIME PROOF REQUIRED | W3-10 |
 | GPLAY-05 | Precision Docking | ALTA | `dockScore` do XS como referência técnica; cálculo no servidor; saída score/bônus/XP/rating | W3-01 |
-| GPLAY-06 | Active Escort Gameplay | ALTA | pilot car, luzes, scout, obstáculo, controle temporário de via, suporte ao comboio (Heavy RP: VERY HIGH) | W3-05, W4-02 |
-| GPLAY-07 | Oversized Route Restrictions | MÉDIA | dimensões, túneis, pontes, curvas, obstruções (fonte de dados de mapa **UNKNOWN**) | GPLAY-06 |
+| GPLAY-06 | Active Escort Gameplay | ALTA | (**narrado**: garantir rota, ajudar a manobrar, remover obstáculos) pilot car, luzes, scout, obstáculo, controle temporário de via, suporte ao comboio (Heavy RP: VERY HIGH) | W3-05, W4-02 |
+| GPLAY-07 | Oversized Route Restrictions | MÉDIA | dimensões, **pontes (narrado)**, túneis (só brief), curvas, obstruções; planejamento de rota pelo motorista (narrado); fonte de dados de mapa **UNKNOWN** | GPLAY-06 |
 | GPLAY-08 | Road Obstacle Interaction | MÉDIA | criar/remover obstáculo de via; ciclo de vida e limpeza | GPLAY-06, W4-02 |
 | GPLAY-09 | Special Transport Convoy | MÉDIA | oversized + escolta ativa + pilot car sobre o convoy atual | GPLAY-06/07 |
 

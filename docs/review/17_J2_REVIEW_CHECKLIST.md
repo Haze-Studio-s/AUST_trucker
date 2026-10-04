@@ -127,7 +127,7 @@
 
 ## Checklists dos itens GPLAY (STUDY ONLY; **CODE CHANGE: NO**; J2 APPROVAL REQUIRED: YES)
 
-Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **APPROVE / DEFER / REJECT**. Origem: referência de **gameplay** (vídeo/brief), **sem código**; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**. **Route Builder permanece ADMIN ONLY** (nenhum GPLAY o expõe a jogadores).
+Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **APPROVE / DEFER / REJECT**. Origem: referência de **gameplay** (narração do vídeo via transcrição + brief), **sem código**; itens **[BRIEF ONLY]** exigem conferência na imagem; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**. **Route Builder permanece ADMIN ONLY** (nenhum GPLAY o expõe a jogadores).
 
 ### GPLAY-01 — Pallet Jack
 
@@ -137,7 +137,7 @@ Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **A
 ### GPLAY-02 — Hydraulic Liftgate / Cargo Doors
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
-- *Fatos para a revisão:* Estado de porta/liftgate novo; lifecycle e desconexão em aberto (docs 06/11). Dependência de rede.
+- *Fatos para a revisão:* Rampa narrada; **portas traseiras só na brief** (conferir na imagem). Estado de porta/liftgate novo; lifecycle e desconexão em aberto (docs 06/11). Dependência de rede.
 
 ### GPLAY-03 — Courier Package Scanner
 
@@ -147,7 +147,7 @@ Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **A
 ### GPLAY-04 — Cargo Integrity
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
-- *Fatos para a revisão:* Sobreposição: integridade reportada pelo cliente (`truck_simulation_service.lua:103-108`). **Não confiar em dano do cliente.** RUNTIME PROOF REQUIRED.
+- *Fatos para a revisão:* Sobreposição: integridade reportada pelo cliente (`truck_simulation_service.lua:103-108`). **Não confiar em dano do cliente.** Vídeo narra colisão/dano → pagamento; direção agressiva/raspagem só na brief. RUNTIME PROOF REQUIRED.
 
 ### GPLAY-05 — Precision Docking
 
@@ -157,12 +157,12 @@ Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **A
 ### GPLAY-06 — Active Escort Gameplay
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
-- *Fatos para a revisão:* Sobreposição: convoy/`escort` citado em `convoy.client.lua:180`. Heavy RP VERY HIGH; ciclo de vida de entidades de escolta novo.
+- *Fatos para a revisão:* Sobreposição: convoy/`escort` citado em `convoy.client.lua:180`. Escolta ativa **narrada** (garantir rota, ajudar a manobrar, remover obstáculos); Heavy RP VERY HIGH; ciclo de vida de entidades de escolta novo.
 
 ### GPLAY-07 — Oversized Route Restrictions
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
-- *Fatos para a revisão:* Fonte de dados de mapa para túneis/pontes **UNKNOWN**.
+- *Fatos para a revisão:* Pontes e planejamento de rota narrados; túnel/raio só na brief; fonte de dados de mapa **UNKNOWN**.
 
 ### GPLAY-08 — Road Obstacle Interaction
 

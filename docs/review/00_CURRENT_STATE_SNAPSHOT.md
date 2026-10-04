@@ -121,4 +121,4 @@ Nas 24 h anteriores à análise a `main` recebeu **mais de 30 commits** do J2KGO
 |---|---|---|
 | V1 | `c9d9187` (código) → docs até `3a89631` | documentos 00–18 e adendo `08b` (parcial) |
 | **V2** | `3a89631` | estudo completo do XS-Trucking (server/client/bridge/NUI/tools); atualizações de 08, 08b, 09, 14, 15, 16, 17, 18; novo `19_AUST_DEVICE_ECOSYSTEM_INTEGRATION.md`. **Nenhum código alterado**; o código do AUST em `3a89631` é idêntico ao de `c9d9187`. |
-| **V2+TrueMaps** | `3a89631` (docs até `94f336b`) | adendo de **gameplay** TrueMaps (vídeo/brief, sem código): `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`, referência M no doc 08, linhas no doc 09, **GPLAY-01…09** nos docs 15/16/17/18. **Nenhum código alterado.** |
+| **V2+TrueMaps** | `3a89631` (docs até `94f336b`) | adendo de **gameplay** TrueMaps (narração do vídeo via transcrição + brief, sem código; confirmação item a item no doc 20 §2): `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`, referência M no doc 08, linhas no doc 09, **GPLAY-01…09** nos docs 15/16/17/18. **Nenhum código alterado.** |

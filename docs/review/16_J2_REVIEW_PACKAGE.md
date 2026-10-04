@@ -120,17 +120,17 @@ Arquivos de corpo não lidos estão listados em `01_…`/`13_…` §5. Subagente
 
 ## 12. NOVA REFERÊNCIA DE GAMEPLAY — TrueMaps Advanced Trucker Job (vídeo)
 
-**NEW GAMEPLAY REFERENCE: TrueMaps Advanced Trucker Job video** (https://youtu.be/9hNLhOnFLL8). **Não há código** nesta referência: é **GAMEPLAY DESIGN REFERENCE ONLY**; implementação, autoridade de servidor, segurança, OneSync, banco e desempenho são **UNKNOWN**. A sessão **não conseguiu acessar o vídeo**; o conteúdo "observado" vem da brief e **precisa ser conferido por J2**. Detalhes: `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.
+**NEW GAMEPLAY REFERENCE: TrueMaps Advanced Trucker Job video** (https://youtu.be/9hNLhOnFLL8, 3:54). **Não há código** nesta referência: é **GAMEPLAY DESIGN REFERENCE ONLY**; implementação, autoridade de servidor, segurança, OneSync, banco e desempenho são **UNKNOWN**. Evidência: **transcrição da narração** fornecida pelo usuário (legenda automática; sem a parte só visual) + brief. A sessão não acessa o vídeo. Itens **[BRIEF ONLY]** (portas traseiras, direção agressiva/raspagem, túnel/raio, "hidráulico") **não** estão na transcrição e precisam ser conferidos na imagem. Detalhes e confirmação item a item: `20_TRUEMAPS_GAMEPLAY_REFERENCE.md` §2.
 
-**Ideias mais fortes (todas [AUST DESIGN PROPOSAL] sobre gameplay reportado):**
+**Ideias mais fortes (todas [AUST DESIGN PROPOSAL] sobre gameplay narrado):**
 
-1. carregamento físico em doca;
+1. carregamento físico (pallet jack + descarga em local designado);
 2. pallet jack (GPLAY-01);
-3. liftgate / portas de carga (GPLAY-02);
+3. rampa/liftgate (GPLAY-02);
 4. scanner de courier (GPLAY-03);
 5. integridade de carga (GPLAY-04);
 6. escolta ativa (GPLAY-06);
-7. rotas de carga oversized (GPLAY-07);
+7. rotas oversized com restrição de pontes (GPLAY-07);
 8. docking de precisão (GPLAY-05).
 
-**Pergunta para J2: quais destes devem entrar no roadmap do AUST?** — **APPROVE / DEFER / REJECT por GPLAY ID** (`17_J2_REVIEW_CHECKLIST.md`). Perguntas adicionais: Pallet Jack deve usar **A** pallet físico em rede, **B** assisted attach, **C** representation swap ou **D** híbrido? (sem decisão automática). **Route Builder permanece ADMIN ONLY.**
+**Pergunta para J2: quais destes devem entrar no roadmap do AUST?** — **APPROVE / DEFER / REJECT por GPLAY ID** (`17_J2_REVIEW_CHECKLIST.md`). Adicional: Pallet Jack com **A** pallet físico em rede, **B** assisted attach, **C** representation swap ou **D** híbrido (sem decisão automática). **Route Builder permanece ADMIN ONLY.**

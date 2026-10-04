@@ -337,7 +337,7 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 
 **SOURCE TYPE:** VIDEO GAMEPLAY REFERENCE · **SOURCE:** https://youtu.be/9hNLhOnFLL8 · **DEVELOPER:** TrueMaps / TRUE. · **CLASSIFICATION:** **GAMEPLAY REFERENCE — NOT a SOURCE CODE REFERENCE.**
 
-**FILES READ:** **nenhum** (sem código). O vídeo **não pôde ser acessado por esta sessão** (`youtu.be` bloqueado pelo proxy de saída); o conteúdo "observado" vem da **descrição fornecida na brief da missão** e **não foi verificado de forma independente**. Tags usadas nos documentos: **[VIDEO OBSERVED]**, **[SECONDARY REPORT]**, **[AUST DESIGN PROPOSAL]** (nunca misturadas).
+**FILES READ:** **nenhum** (sem código). A sessão **não acessa o vídeo** (`youtu.be` bloqueado pelo proxy). Evidência usada: **transcrição da narração** (legenda automática em inglês do YouTube, 3:54, fornecida pelo usuário; pode ter erros; **não inclui o que aparece só na imagem**) **+ brief da missão**. Tags: **[VIDEO OBSERVED — NARRATED]** (confirmado pela transcrição), **[VIDEO OBSERVED — BRIEF ONLY]** (só na brief; imagem não verificada), **[SECONDARY REPORT]**, **[AUST DESIGN PROPOSAL]** (nunca misturadas). A narração é material de divulgação: confirma o que o produto **afirma**, não como funciona.
 
 | Aspecto | Status |
 |---|---|
@@ -349,9 +349,9 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 | PERFORMANCE | **UNKNOWN** |
 | MAINTAINABILITY | **UNKNOWN** |
 
-**Só avaliado (gameplay, por observação reportada):** GAMEPLAY 9 · JOB VARIETY 9 · HEAVY RP VALUE 9 · PHYSICAL INTERACTION 9 · COOP VALUE 8 · **AUST RELEVANCE 8**.
+**Só avaliado (gameplay, confiança MÉDIA — narração do desenvolvedor):** GAMEPLAY 9 · JOB VARIETY 9 · HEAVY RP VALUE 9 · PHYSICAL INTERACTION 9 · COOP VALUE 9 · **AUST RELEVANCE 8**.
 
-**Gameplay reportado (ver doc 20):** carregamento físico em doca (portas, liftgate hidráulico, **pallet jack**), **courier com scanner de etiqueta**, **integridade de carga**, **carga oversized**, **escolta ativa** (conforme a brief, "aparentemente"), **estacionamento de precisão**; **[SECONDARY REPORT]** repartição de receita da empresa (percentual **não copiado**).
+**Gameplay confirmado pela narração (ver doc 20 §2):** 12 tipos de job · carregamento com **pallet jack** · **rampa de carga** (abrir/subir/baixar) · descarga em local designado · estacionamento de precisão · **courier** (achar o pacote certo, escanear etiquetas, entregar na porta) · 8 trailers customizados · oversized com **restrição de pontes** e planejamento de rota · **escolta ativa** (≥ 2 jogadores; garante rota, ajuda a manobrar, remove obstáculos como postes) · colisão/dano afetam o **pagamento** · jobs de 30+ min · **modo empresa** (afirma **10%** automático à conta da empresa; **não copiado**) e **modo job padrão**. **Só na brief (não narrado):** portas traseiras, direção agressiva/raspagem/curva brusca, túnel/raio de curva, "hidráulico".
 
 **Ideias para o AUST (todas [AUST DESIGN PROPOSAL], itens de estudo GPLAY-01…09):** pallet jack · cargo access (portas/liftgate) · scanner de courier · cargo integrity · docking quality · escolta ativa · restrições de rota oversized · obstáculos de via · comboio de transporte especial.
 
@@ -364,7 +364,7 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 | SERVER AUTHORITY | UNKNOWN |
 | ONESYNC | UNKNOWN |
 | PERFORMANCE | UNKNOWN |
-| GAMEPLAY | 9 (reportado) |
+| GAMEPLAY | 9 (narrado) |
 | MAINTAINABILITY | UNKNOWN |
 | **AUST RELEVANCE** | **8 (gameplay)** |
 
@@ -388,9 +388,9 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 | L1 ox_lib | 8 | 7 | 6 | n/a | 8 | n/a | 8 | 9 |
 | L2 ox_inventory | 7 | 8 | 9 | n/a | 7 | n/a | 6 | 8 |
 | L3 ox_target | 8 | 5 | 2 | n/a | 9 | n/a | 8 | 6 |
-| **M TrueMaps (só gameplay)** | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | **9** (reportado) | UNKNOWN | **8** (gameplay) |
+| **M TrueMaps (só gameplay)** | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | **9** (narrado) | UNKNOWN | **8** (gameplay) |
 
-**M (TrueMaps)** só tem critérios de gameplay (fonte: vídeo/brief, não verificada); os demais são **UNKNOWN**, **não** zero.
+**M (TrueMaps)** só tem critérios de gameplay (fonte: narração do vídeo via transcrição fornecida + brief; imagem não verificada); os demais são **UNKNOWN**, **não** zero.
 
 Pontuações de B, C, D e A são **minhas** (leitura direta); E–L foram produzidas a partir de relatórios de leitura de subagentes (arquivos e faixas listados acima) e conferidas por amostragem de licença e commit.
 
