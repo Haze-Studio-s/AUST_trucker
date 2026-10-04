@@ -1246,12 +1246,11 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
         return
     end
     lib.requestModel(pHash, 5000)
-    local prop = CreateObject(pHash, propSpawnCoords.x, propSpawnCoords.y, propSpawnCoords.z + 0.5, true, false, false)
+    local prop = CreateObject(pHash, vehSpawnCoords.x, vehSpawnCoords.y, vehSpawnCoords.z + 1.0, true, false, false)
     SetEntityAsMissionEntity(prop, true, true)
-    SetEntityDynamic(prop, true)
-    SetEntityHasGravity(prop, true)
-    SetEntityCollision(prop, true, true)
-    ActivatePhysics(prop)
+    SetEntityDynamic(prop, false)
+    SetEntityHasGravity(prop, false)
+    SetEntityCollision(prop, false, false)
 
     PropEditorVeh = veh
     PropEditorProp = prop
@@ -1260,67 +1259,38 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
     IsPropEditorActive = true
     PropEditorGizmoActive = false
 
-    -- Minimiza o painel para permitir ao admin testar o engate no mundo
-    SetNuiFocus(false, false)
-    SendNUIMessage({
-        action = 'admin_propeditor_status',
-        text = 'Entidades no mundo! Aproxime o veículo do prop para engatar.',
-        type = 'waiting_attach'
-    })
+    -- 3. FASE 1: ACOPLAMENTO AUTOMÁTICO IMEDIATO NO SURGIMENTO
+    -- Verifica se já existe offset prévio salvo no banco para carregar; caso contrário, acopla no centro/traseira padrão
+    local prevOffset, prevRot = GetVehiclePropOffset(veh, pHash)
+    local initX, initY, initZ = 0.0, 0.0, 0.5
+    local initPitch, initRoll, initYaw = 0.0, 0.0, 0.0
 
-    lib.notify({
-        title = 'Entidades Geradas!',
-        description = ('Veículo (%s) e Prop (%s) gerados. Conduza e engate o prop para ativar o Gizmo!'):format(vModel, pModel),
-        type = 'info',
-        duration = 6000
-    })
-
-    -- 2. THREAD DE MONITORAMENTO DO ENGATE (FASE 2)
-    OffsetEditor.StartPropAttachListener()
-
-    if cb then cb({ ok = true }) end
-end)
-
-function OffsetEditor.StartPropAttachListener()
-    if PropEditorListenThread then return end
-    PropEditorListenThread = true
-
-    CreateThread(function()
-        while IsPropEditorActive and not PropEditorGizmoActive do
-            Wait(100)
-
-            if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
-                PropEditorListenThread = false
-                break
-            end
-
-            -- Intercepta o momento exato em que o prop é anexado ao veículo (engate orgânico)
-            if IsEntityAttachedToEntity(PropEditorProp, PropEditorVeh) then
-                PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
-                OffsetEditor.ActivatePropEditorGizmo()
-                break
-            end
+    if prevOffset then
+        initX, initY, initZ = prevOffset.x, prevOffset.y, prevOffset.z
+        if prevRot then
+            initPitch, initRoll, initYaw = prevRot.x, prevRot.y, prevRot.z
         end
-        PropEditorListenThread = false
-    end)
-end
-
--- Fallback: Acoplar Manualmente
-RegisterNUICallback('adminPropEditorForceAttach', function(data, cb)
-    if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then
-        if cb then cb({ ok = false }) end
-        return
     end
 
-    -- Anexa provisoriamente na traseira do veículo
     AttachEntityToEntity(
-        PropEditorProp, PropEditorVeh, 0,
-        0.0, -2.5, 0.5,
-        0.0, 0.0, 0.0,
+        prop, veh, 0,
+        initX, initY, initZ,
+        initPitch, initRoll, initYaw,
         false, false, false, false, 2, true
     )
 
+    PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+
+    -- 4. FASE 2: ATIVAÇÃO VISUAL IMEDIATA DO GIZMO 3D (6DoF)
     OffsetEditor.ActivatePropEditorGizmo()
+
+    lib.notify({
+        title = 'Acoplamento Automático!',
+        description = ('Veículo (%s) e Prop (%s) gerados e acoplados! Gizmo 3D (6DoF) ativado imediatamente.'):format(vModel, pModel),
+        type = 'success',
+        duration = 5000
+    })
+
     if cb then cb({ ok = true }) end
 end)
 

@@ -1376,7 +1376,7 @@
           return;
         }
 
-        updatePropEditorStatus({ text: 'Gerando entidades no mundo...', type: 'waiting_attach' });
+        updatePropEditorStatus({ text: 'Gerando, acoplando e ativando Gizmo 3D...', type: 'attached' });
         postNUI('adminPropEditorSpawn', {
           vehicleModel: vModel,
           propModel: pModel
