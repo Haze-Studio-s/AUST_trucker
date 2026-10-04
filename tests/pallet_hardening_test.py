@@ -130,10 +130,11 @@ check('MANIFEST shared antes do client', fx.index("'shared/pallet_sync_guard.lua
 
 # ---- Física inalterada (assinatura do bloco original) -------------------
 cm = open(os.path.join(ROOT, 'client/main.lua'), encoding='utf-8').read()
-for sig in ('SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)',
-            'SetEntityDynamic(ent, true)', 'SetEntityHasGravity(ent, true)', 'FreezeEntityPosition(ent, false)', 'ActivatePhysics(ent)',
-            'FreezeEntityPosition(ent, true)', 'SetEntityVelocity(ent, 0.0, 0.0, 0.0)'):
-    check(f'FISICA preservada: {sig}', sig in cm)
+for sig in ('SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, finalRestZ, false, false, false)',
+            'local finalRestZ = groundZ + bottomOffset + 0.02',
+            'SetEntityDynamic(ent, false)', 'SetEntityHasGravity(ent, false)', 'FreezeEntityPosition(ent, true)',
+            'SetEntityVelocity(ent, 0.0, 0.0, 0.0)'):
+    check(f'FISICA da main preservada: {sig}', sig in cm)
 sm = open(os.path.join(ROOT, 'server/main.lua'), encoding='utf-8').read()
 check('FISICA servidor: spawn z+0.15 e Freeze(true) da main preservados',
       'CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)' in sm and 'FreezeEntityPosition(pObj, true)' in sm and 'FreezeEntityPosition(pObj, false)' not in sm.split('LogPalletSpawn')[1][:600])

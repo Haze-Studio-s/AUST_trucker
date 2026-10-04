@@ -2667,41 +2667,42 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 end)
 
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
--- Idempotente (PalletSyncState, definido no topo): o servidor envia a lista mais de uma vez por job.
--- Só o primeiro sync por netId faz snap de solo e liga a física; os demais não reposicionam.
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
     local syncN = PalletSyncGuard.Begin(PalletSyncState, jobId)
     CreateThread(function()
-        local applied = 0
+        local pallets = {}
         for _, netId in ipairs(palletNetIds) do
             if netId and netId ~= 0 then
                 if not PalletSyncGuard.Claim(PalletSyncState, netId) then
+                    local existingEnt = PalletSyncState.ents[netId]
                     if Config.Debug and PalletDebug then
-                        PalletDebug.OnSync(netId, PalletSyncState.ents[netId], jobId, syncN, 'skipped (já sincronizado)')
+                        PalletDebug.OnSync(netId, existingEnt, jobId, syncN, 'skipped (já sincronizado)')
+                    end
+                    if existingEnt and DoesEntityExist(existingEnt) then
+                        table.insert(pallets, existingEnt)
                     end
                 else
-                    local ent = WaitForNetworkEntity(netId, 8000)
-                    if ent and DoesEntityExist(ent) then
-                        applied = applied + 1
-                        if Config.Debug and PalletDebug then
-                            PalletDebug.OnSync(netId, ent, jobId, syncN, 'applied')
-                        end
-                        SetEntityAsMissionEntity(ent, true, true)
-                        SetEntityLodDist(ent, 0xFFFF)
-                        SetEntityVisible(ent, true)
-                        ResetEntityAlpha(ent)
+                    -- Processamento paralelo e atômico para cada palete (evita que o loop sequencial atrase os demais)
+                    CreateThread(function()
+                        local ent = WaitForNetworkEntity(netId, 8000)
+                        if ent and DoesEntityExist(ent) then
+                            if Config.Debug and PalletDebug then
+                                PalletDebug.OnSync(netId, ent, jobId, syncN, 'applied')
+                            end
+                            SetEntityAsMissionEntity(ent, true, true)
+                            SetEntityLodDist(ent, 0xFFFF)
+                            SetEntityVisible(ent, true)
+                            ResetEntityAlpha(ent)
 
-                        -- Garante controle autoritativo local no OneSync e bloqueia migração
-                        local ctrlTimeout = GetGameTimer() + 2000
-                        while not NetworkHasControlOfEntity(ent) and GetGameTimer() < ctrlTimeout do
-                            NetworkRequestControlOfEntity(ent)
-                            Wait(50)
-                        end
-                        SetNetworkIdCanMigrate(netId, false)
+                            -- Garante controle autoritativo local no OneSync e bloqueia migração
+                            local ctrlTimeout = GetGameTimer() + 2000
+                            while not NetworkHasControlOfEntity(ent) and GetGameTimer() < ctrlTimeout do
+                                NetworkRequestControlOfEntity(ent)
+                                Wait(50)
+                            end
+                            SetNetworkIdCanMigrate(netId, false)
 
-                        -- Palete já preso/estivado (ex.: restart do client): não reposiciona
-                        if not IsEntityAttached(ent) then
-                            -- 1. Ancoragem temporária de segurança imediata (impede queda inicial enquanto o piso carrega)
+                            -- 1. Ancoragem de segurança inicial
                             FreezeEntityPosition(ent, true)
 
                             local pCoords = GetEntityCoords(ent)
@@ -2737,71 +2738,55 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                                 end
                             end
 
+                            -- Cálculo do offset vertical inferior da bounding box do modelo
+                            local minDim, _ = GetModelDimensions(GetEntityModel(ent))
+                            local bottomOffset = math.abs(minDim.z)
+                            local finalRestZ = groundZ + bottomOffset + 0.02
+
                             if rayFound then
-                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
+                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, finalRestZ, false, false, false)
                             else
                                 PlaceObjectOnGroundProperly(ent)
                                 local curC = GetEntityCoords(ent)
-                                groundZ = curC.z
+                                finalRestZ = curC.z
                             end
+
                             if Config.Debug and PalletDebug then
                                 PalletDebug.OnSnap(netId, ent, { preZ = baseSpawnZ, groundFound = rayFound, groundZ = groundZ })
                             end
 
-                            -- 4. Estabilização controlada para o motor Havok registrar o contato com o piso
-                            Wait(250)
-
-                            -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
+                            -- 4. Estabilização e salvaguarda permanente em repouso:
+                            -- O palete DEVE permanecer CONGELADO (FreezeEntityPosition = true) no staging!
+                            -- Isso impede completamente o afundamento / tunelamento da Havok na malha do MLO.
                             SetEntityCollision(ent, true, true)
-                            SetEntityDynamic(ent, true)
-                            SetEntityHasGravity(ent, true)
-                            FreezeEntityPosition(ent, false)
+                            SetEntityDynamic(ent, false)
+                            SetEntityHasGravity(ent, false)
+                            FreezeEntityPosition(ent, true)
                             SetEntityVelocity(ent, 0.0, 0.0, 0.0)
-                            ActivatePhysics(ent)
-                            SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
 
-                            -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
-                            local safeTargetZ = groundZ + 0.04
-                            CreateThread(function()
-                                local palletEnt = ent
-                                local monitorExpiry = GetGameTimer() + 6000
-                                while DoesEntityExist(palletEnt) and GetGameTimer() < monitorExpiry do
-                                    Wait(200)
-                                    if not IsEntityAttached(palletEnt) then
-                                        local c = GetEntityCoords(palletEnt)
-                                        if c.z < (safeTargetZ - 1.8) then
-                                            -- Queda em falso piso detectada: resgate instantâneo
-                                            FreezeEntityPosition(palletEnt, true)
-                                            SetEntityCoordsNoOffset(palletEnt, pCoords.x, pCoords.y, safeTargetZ, false, false, false)
-                                            SetEntityVelocity(palletEnt, 0.0, 0.0, 0.0)
-                                            Wait(200)
-                                            FreezeEntityPosition(palletEnt, false)
-                                            SetEntityDynamic(palletEnt, true)
-                                            ActivatePhysics(palletEnt)
-                                        end
-                                    end
-                                end
-                            end)
+                            PalletSyncState.ents[netId] = ent
+                        else
+                            PalletSyncGuard.Release(PalletSyncState, netId)
                         end
-
-                        PalletSyncState.ents[netId] = ent
-                    else
-                        -- Entidade não apareceu: libera para um sync posterior tentar de novo
-                        PalletSyncGuard.Release(PalletSyncState, netId)
-                    end
+                    end)
                 end
             end
         end
 
-        if applied > 0 then
-            local pallets = {}
-            for _, netId in ipairs(palletNetIds) do
-                local ent = PalletSyncState.ents[netId]
-                if ent and DoesEntityExist(ent) then table.insert(pallets, ent) end
+        -- Coleta entidades registradas com tolerância para abastecer o módulo da empilhadeira
+        CreateThread(function()
+            local waitTime = GetGameTimer() + 4000
+            while GetGameTimer() < waitTime and #pallets < #palletNetIds do
+                pallets = {}
+                for _, netId in ipairs(palletNetIds) do
+                    local ent = PalletSyncState.ents[netId]
+                    if ent and DoesEntityExist(ent) then table.insert(pallets, ent) end
+                end
+                Wait(200)
             end
             JobEntities.pallets = pallets
             ForkliftModule.SetMissionPallets(pallets)
-        end
+        end)
     end)
 end)
 
