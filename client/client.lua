@@ -600,15 +600,7 @@ RegisterNUICallback('post', function(body, cb)
             local isAlive = (lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck)) or (lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer))
             if not isAlive then
                 lcActiveJob = nil
-            else
-                if Config.Debug then print("^3[AUST_Trucker DEBUG] startContract ignorado: lcActiveJob já ativo! Digite /clearjob se estiver travado.^7") end
-                lib.notify({ title = 'Entrega em Andamento', description = 'Você já possui uma entrega ativa! Conclua-a ou digite /clearjob.', type = 'warning' })
-                return cb(200)
             end
-        end
-        if isStartingJob then
-            if Config.Debug then print("^3[AUST_Trucker DEBUG] startContract ignorado: cooldown ativo.^7") end
-            return cb(200)
         end
         isStartingJob = true
         SetTimeout(4000, function() isStartingJob = false end)
