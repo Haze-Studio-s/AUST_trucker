@@ -26,6 +26,7 @@ local JobEntities = {
     pallets = {}
 }
 _G.JobEntities = JobEntities
+PalletSyncState = PalletSyncGuard.New()  -- global de propósito: evita estourar o limite de locals do chunk
 _G.ActiveJob = ActiveJob
 
 local ActiveDeliveryPoint = nil
@@ -359,6 +360,7 @@ local function CleanupCurrentJob()
     LoadedPalletData = LoadedPallets
     Config.LoadedPallets = LoadedPallets
     JobEntities = { truck = nil, trailer = nil, forklift = nil, handler = nil, container = nil, pallets = {} }
+    if PalletSyncState then PalletSyncGuard.Reset(PalletSyncState) end
     SetWaypointOff()
 end
 
@@ -2664,40 +2666,18 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     end)
 end)
 
--- Guarda de idempotência de sincronização de paletes (Cliente)
-local PalletSyncState = { jobId = nil, claimed = {}, ents = {} }
-local PalletSyncGuard = {
-    Begin = function(state, jId)
-        if state.jobId ~= jId then
-            state.jobId = jId
-            state.claimed = {}
-            state.ents = {}
-        end
-    end,
-    Claim = function(state, netId)
-        if state.claimed[netId] then return false end
-        state.claimed[netId] = true
-        return true
-    end,
-    Release = function(state, netId)
-        state.claimed[netId] = nil
-    end,
-    Reset = function(state)
-        state.jobId = nil
-        state.claimed = {}
-        state.ents = {}
-    end
-}
-
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
-    PalletSyncGuard.Begin(PalletSyncState, jobId)
+    local syncN = PalletSyncGuard.Begin(PalletSyncState, jobId)
     CreateThread(function()
         local pallets = {}
         for _, netId in ipairs(palletNetIds) do
             if netId and netId ~= 0 then
                 if not PalletSyncGuard.Claim(PalletSyncState, netId) then
                     local existingEnt = PalletSyncState.ents[netId]
+                    if Config.Debug and PalletDebug then
+                        PalletDebug.OnSync(netId, existingEnt, jobId, syncN, 'skipped (já sincronizado)')
+                    end
                     if existingEnt and DoesEntityExist(existingEnt) then
                         table.insert(pallets, existingEnt)
                     end
@@ -2706,6 +2686,9 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     CreateThread(function()
                         local ent = WaitForNetworkEntity(netId, 8000)
                         if ent and DoesEntityExist(ent) then
+                            if Config.Debug and PalletDebug then
+                                PalletDebug.OnSync(netId, ent, jobId, syncN, 'applied')
+                            end
                             SetEntityAsMissionEntity(ent, true, true)
                             SetEntityLodDist(ent, 0xFFFF)
                             SetEntityVisible(ent, true)
@@ -2766,6 +2749,10 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                                 PlaceObjectOnGroundProperly(ent)
                                 local curC = GetEntityCoords(ent)
                                 finalRestZ = curC.z
+                            end
+
+                            if Config.Debug and PalletDebug then
+                                PalletDebug.OnSnap(netId, ent, { preZ = baseSpawnZ, groundFound = rayFound, groundZ = groundZ })
                             end
 
                             -- 4. Estabilização e salvaguarda permanente em repouso:

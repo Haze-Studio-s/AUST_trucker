@@ -282,6 +282,8 @@ end
 -- legítimo, o client seguia normalmente (o snap do palete é local) e o job travava sem nenhuma pista.
 -- Agora cada recusa registra evento, job, estágio e motivo (no máx. 1 linha por chave a cada 5 s).
 local _polarixRejectAt = {}
+local PalletSpawnLogged = {}
+
 local function PolarixReject(event, jobId, lobby, reason)
     local key = ('%s:%s:%s'):format(event, tostring(jobId), reason)
     local now = GetGameTimer()
@@ -945,16 +947,34 @@ local function StartTruckDelivery(src, contractData)
         end
 
         -- Spawn de Paletes Pré-Gerados (Polarix com Suporte a Props Customizados do Admin)
-        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
-        local rawPalletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
-        local palletSpawns = {}
-        for _, rawC in ipairs(rawPalletSpawns) do
-            local px = tonumber(rawC.x)
-            local py = tonumber(rawC.y)
-            local pz = tonumber(rawC.z)
-            if px and py and pz then
-                table.insert(palletSpawns, vector3(px, py, pz))
+        -- Config e banco passam pela mesma validação (finitos, duplicata, espaçamento, máximo).
+        -- O banco nunca é alterado: entradas inválidas só deixam de ser usadas (fail-closed + log).
+        local function ValidatedPalletSpawns(origin, raw)
+            local accepted, rejected = PalletSpawnValidation.Validate(raw, wh.PalletSpawnRules)
+            for _, r in ipairs(rejected) do
+                local key = ('%s:%s:%s:%s:%s'):format(origin, r.index, r.reason, tostring(r.x), tostring(r.y))
+                if not PalletSpawnLogged[key] then
+                    PalletSpawnLogged[key] = true
+                    print(("[AUST_Trucker] Spawn de palete (%s) #%d rejeitado: %s (%s, %s, %s)"):format(
+                        origin, r.index, r.reason, tostring(r.x), tostring(r.y), tostring(r.z)))
+                end
             end
+            return accepted
+        end
+
+        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
+        local palletSpawns = {}
+        if #dynamicPalletSpawns > 0 then
+            palletSpawns = ValidatedPalletSpawns('db', dynamicPalletSpawns)
+        end
+        if #palletSpawns == 0 then
+            if #dynamicPalletSpawns > 0 then
+                print("[AUST_Trucker] Nenhum spawn de palete válido no banco; usando o config.")
+            end
+            palletSpawns = ValidatedPalletSpawns('config', wh.PalletSpawns or {})
+        end
+        for i, c in ipairs(palletSpawns) do
+            palletSpawns[i] = vector3(c.x, c.y, c.z)
         end
 
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
@@ -1001,6 +1021,15 @@ local function StartTruckDelivery(src, contractData)
             return finalHash
         end
 
+        local function LogPalletSpawn(tag, obj, coord)
+            if not Config.Debug then return end
+            local okOwner, owner = pcall(NetworkGetEntityOwner, obj)
+            print(("[AUST PALLET DEBUG] server spawn %s job=%s netId=%s owner=%s model=%s req=(%.2f, %.2f, %.2f) spawnZ=%.2f frozen=%s t=%d"):format(
+                tag, tostring(jobId), tostring(NetworkGetNetworkIdFromEntity(obj)), tostring(okOwner and owner or 'n/a'),
+                tostring(GetEntityModel(obj)), coord.x, coord.y, coord.z, coord.z + 0.15,
+                tostring(IsEntityPositionFrozen(obj)), GetGameTimer()))
+        end
+
         for _, coord in ipairs(palletSpawns) do
             if #pallets >= reqPallets then break end
             local slotTargetIdx = #pallets + 1
@@ -1015,6 +1044,7 @@ local function StartTruckDelivery(src, contractData)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
                 table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                LogPalletSpawn('spawnpoint', pObj, coord)
             else
                 -- Fallback imediato com prop nativo padrão caso o prop customizado falhe no streaming do servidor
                 local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.15, true, true, false)
@@ -1054,6 +1084,7 @@ local function StartTruckDelivery(src, contractData)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
+                    LogPalletSpawn('staging', pObj, pos)
                 else
                     local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.15, true, true, false)
                     local fbTimer = GetGameTimer()
@@ -1391,7 +1422,7 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
 
     local truckNetId = NetworkGetNetworkIdFromEntity(lobby.truck)
     TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId, lobby.truckPlate, truckNetId, lobby.forkliftPlate)
-    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds)
+    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds, jobId)
 end)
 
 -- ETAPA 3: Acomodação do Palete na Carreta (Carga Seca)
@@ -1415,6 +1446,23 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
         end
         return
     end
+
+    -- Registro: netId bem formado e do lobby, um palete = um slot, um slot = um palete.
+    -- Reenvio legítimo (mesmo palete, mesmo slot) é reconhecido sem contar de novo.
+    local verdict, vReason, vNid, vSlot = PalletRegistry.Evaluate(lobby, slotIndex, palletNetId)
+    if verdict == 'reject' then
+        PolarixReject('palletLoaded', jobId, lobby, vReason)
+        return
+    end
+    if verdict == 'retry' then
+        if Config.Debug then
+            print(("[AUST PALLET DEBUG] server palletLoaded RETRY job=%s netId=%s slot=%s (sem recontagem)"):format(tostring(jobId), tostring(vNid), tostring(vSlot)))
+        end
+        TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount or 0, lobby.requiredCount)
+        TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount or 0, lobby.requiredCount)
+        return
+    end
+    slotIndex, palletNetId = vSlot, vNid
 
     -- Máquina de estados: palete só é aceito durante o carregamento e até o total exigido
     if not EnterLoadingStage(lobby) then
@@ -1445,26 +1493,32 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
         return
     end
 
-    -- Slot: inteiro dentro do total e ainda não utilizado
-    slotIndex = tonumber(slotIndex)
-    if slotIndex and (slotIndex ~= slotIndex or slotIndex < 1 or slotIndex > required or slotIndex % 1 ~= 0) then
-        PolarixReject('palletLoaded', jobId, lobby, 'slot ' .. tostring(slotIndex) .. ' fora de 1..' .. tostring(required))
-        return
-    end
-    lobby.usedSlots = lobby.usedSlots or {}
-    if slotIndex and lobby.usedSlots[slotIndex] then
-        PolarixReject('palletLoaded', jobId, lobby, 'slot ' .. tostring(slotIndex) .. ' já usado')
-        return
+    -- Plausibilidade pallet↔carreta (posição do palete no servidor)
+    if palletNetId then
+        local pEnt = NetworkGetEntityFromNetworkId(palletNetId)
+        local pDist = nil
+        if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
+            pDist = #(GetEntityCoords(pEnt) - GetEntityCoords(lobby.trailer))
+        end
+        local maxD = (Config.Polarix and Config.Polarix.PalletTrailerMaxDist) or 60.0
+        local okPlace, placeReason = PalletRegistry.CheckPlacement(pDist, maxD)
+        if not okPlace then
+            PolarixReject('palletLoaded', jobId, lobby, placeReason)
+            return
+        end
+        if Config.Debug then
+            print(("[AUST PALLET DEBUG] server palletLoaded job=%s netId=%s slot=%s palletToTrailer=%.2fm"):format(tostring(jobId), tostring(palletNetId), tostring(slotIndex), pDist))
+        end
     end
 
-    -- netId do palete: precisa ser um dos paletes gerados pelo servidor para este lobby
-    if palletNetId ~= nil then
-        local found = false
-        for _, nid in ipairs(lobby.palletNetIds or {}) do
-            if nid == palletNetId then found = true break end
-        end
-        if not found then
-            PolarixReject('palletLoaded', jobId, lobby, 'netId ' .. tostring(palletNetId) .. ' não é palete deste lobby')
+    -- Estado lógico: com o levantamento cinemático ligado, só entra no trailer o pallet que ESTE jogador
+    -- reivindicou (CLAIMED) e está carregando (CARRIED). O visual do cliente nunca decide progresso sozinho.
+    local kl = Config.Polarix and Config.Polarix.KinematicLift
+    local klActive = kl and kl.Enabled and not lobby.kinematicOff
+    if klActive and kl.RequireClaim then
+        local okS, whyS = PalletRegistry.CanStow(lobby, palletNetId, src, true)
+        if not okS then
+            PolarixReject('palletLoaded', jobId, lobby, whyS)
             return
         end
     end
@@ -1482,11 +1536,14 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
     slotHeading = clampN(slotHeading, 360.0, 0.0)
 
     lobby.lastPalletAt = nowMs
-    if slotIndex then lobby.usedSlots[slotIndex] = true end
     lobby.loadedCount = (lobby.loadedCount or 0) + 1
+    PalletRegistry.Commit(lobby, palletNetId, slotIndex, lobby.loadedCount)
+    PalletRegistry.MarkStowed(lobby, palletNetId, slotIndex)
     lobby.current_object = slotIndex
 
-    if lobby.pallets then
+    -- Fluxo legado: descongelava TODOS os pallets do lobby a cada estiva, inclusive os ainda parados no chão
+    -- (voltavam a ficar sujeitos à Havok). Com o levantamento cinemático o pallet só sai do frozen no attach.
+    if not klActive and lobby.pallets then
         for _, pObj in ipairs(lobby.pallets) do
             if DoesEntityExist(pObj) then
                 FreezeEntityPosition(pObj, false)
@@ -1535,6 +1592,138 @@ end
 
 RegisterNetEvent('aurp_trucker:server:polarixPalletLoaded', function(jobId, slotIndex, palletNetId, slotOffset, slotHeading)
     HandlePalletLoaded(source, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
+end)
+
+-- ---------------------------------------------------------------------------
+-- Estado lógico do pallet nos garfos (STAGED -> CLAIMED -> CARRIED -> STOWED, RECOVERY).
+-- O cliente pede; o servidor decide (dono do lobby, forklift do jogador, distância, 1 pallet por vez, CAS).
+-- ---------------------------------------------------------------------------
+local function KinematicCfg()
+    local k = Config.Polarix and Config.Polarix.KinematicLift
+    if k and k.Enabled then return k end
+    return nil
+end
+
+local function KLLobby(src, jobId, event)
+    local lobby = PolarixLobbies[jobId]
+    if not lobby or lobby.src ~= src then
+        PolarixReject(event, jobId, lobby, 'lobby inexistente ou de outro jogador')
+        return nil
+    end
+    if lobby.cargoType ~= 'dry' then
+        PolarixReject(event, jobId, lobby, 'cargoType ' .. tostring(lobby.cargoType) .. ' não é dry')
+        return nil
+    end
+    return lobby
+end
+
+lib.callback.register('aurp_trucker:server:palletClaim', function(src, jobId, netId, reqId)
+    local kl = KinematicCfg()
+    if not kl then return false, 'levantamento cinemático desativado' end
+    local lobby = KLLobby(src, jobId, 'palletClaim')
+    if not lobby then return false, 'lobby inválido' end
+    if type(reqId) ~= 'string' or #reqId == 0 or #reqId > 64 then
+        PolarixReject('palletClaim', jobId, lobby, 'reqId inválido')
+        return false, 'reqId inválido'
+    end
+    if not EnterLoadingStage(lobby) then
+        PolarixReject('palletClaim', jobId, lobby, 'estágio não permite carregamento')
+        return false, 'estágio inválido'
+    end
+    if (lobby.loadedCount or 0) >= (lobby.requiredCount or 0) then
+        return false, 'todos os paletes já foram contados'
+    end
+
+    local nid = PalletRegistry.ParseNetId(netId)
+    local pEnt = nid and NetworkGetEntityFromNetworkId(nid) or nil
+    if not pEnt or pEnt == 0 or not DoesEntityExist(pEnt) then
+        PolarixReject('palletClaim', jobId, lobby, 'palete inexistente no servidor')
+        return false, 'palete inexistente'
+    end
+
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false, 'ped inexistente' end
+    local pCoords = GetEntityCoords(pEnt)
+    local maxD = kl.ClaimMaxDist or 12.0
+    if #(GetEntityCoords(ped) - pCoords) > maxD then
+        PolarixReject('palletClaim', jobId, lobby, ('jogador a mais de %.0fm do palete'):format(maxD))
+        return false, 'palete longe'
+    end
+    if lobby.forklift and DoesEntityExist(lobby.forklift) then
+        if GetVehiclePedIsIn(ped, false) ~= lobby.forklift then
+            PolarixReject('palletClaim', jobId, lobby, 'jogador não está na empilhadeira do lobby')
+            return false, 'fora da empilhadeira'
+        end
+        if #(GetEntityCoords(lobby.forklift) - pCoords) > maxD then
+            PolarixReject('palletClaim', jobId, lobby, ('empilhadeira a mais de %.0fm do palete'):format(maxD))
+            return false, 'empilhadeira longe'
+        end
+    end
+
+    local now = GetGameTimer()
+    PalletRegistry.ExpireClaims(lobby, now, kl.ClaimLeaseMs or 10000)
+    local ok, why, rec, idem = PalletRegistry.Claim(lobby, nid, src, reqId, now, { maxCarried = kl.MaxCarried or 1 })
+    if not ok then
+        PolarixReject('palletClaim', jobId, lobby, why)
+        return false, why
+    end
+    if Config.Debug then
+        print(("[AUST PALLET DEBUG] server palletClaim job=%s netId=%s src=%s state=%s v=%s%s"):format(
+            tostring(jobId), tostring(nid), tostring(src), rec.state, tostring(rec.version), idem and ' (idempotente)' or ''))
+    end
+    return true
+end)
+
+RegisterNetEvent('aurp_trucker:server:palletConfirmCarry', function(jobId, netId, reqId)
+    local src = source
+    if not KinematicCfg() then return end
+    local lobby = KLLobby(src, jobId, 'palletConfirmCarry')
+    if not lobby then return end
+    local ok, why, rec = PalletRegistry.ConfirmCarry(lobby, netId, src, reqId)
+    if not ok then PolarixReject('palletConfirmCarry', jobId, lobby, why) return end
+    if Config.Debug then
+        print(("[AUST PALLET DEBUG] server palletConfirmCarry job=%s netId=%s state=%s v=%s"):format(
+            tostring(jobId), tostring(netId), rec.state, tostring(rec.version)))
+    end
+end)
+
+RegisterNetEvent('aurp_trucker:server:palletRelease', function(jobId, netId, reqId)
+    local src = source
+    if not KinematicCfg() then return end
+    local lobby = KLLobby(src, jobId, 'palletRelease')
+    if not lobby then return end
+    local ok, why, rec = PalletRegistry.Release(lobby, netId, src, reqId)
+    if not ok then PolarixReject('palletRelease', jobId, lobby, why) return end
+    if Config.Debug then
+        print(("[AUST PALLET DEBUG] server palletRelease job=%s netId=%s state=%s v=%s"):format(
+            tostring(jobId), tostring(netId), rec.state, tostring(rec.version)))
+    end
+end)
+
+-- O cliente avisa que o levantamento cinemático falhou repetidamente (geometria do osso) e voltou ao fluxo
+-- legado: sem isso a exigência de claim recusaria toda estiva. Só rebaixa ESTE lobby ao nível de validação
+-- que existia antes (registro de slot/distância); registra no log.
+RegisterNetEvent('aurp_trucker:server:palletKinematicOff', function(jobId, reason)
+    local src = source
+    local lobby = KLLobby(src, jobId, 'palletKinematicOff')
+    if not lobby then return end
+    lobby.kinematicOff = true
+    print(('[AUST_Trucker Polarix] levantamento cinemático desligado no lobby %s pelo cliente %s: %s'):format(
+        tostring(jobId), tostring(src), tostring(reason):sub(1, 120)))
+end)
+
+-- Queda do carregador: CLAIMED/CARRIED vão para RECOVERY (o lobby do jogador é limpo pelos handlers existentes).
+AddEventHandler('playerDropped', function()
+    local src = source
+    for jobId, lobby in pairs(PolarixLobbies) do
+        if lobby.src == src and lobby.palletStates then
+            local freed = PalletRegistry.Recover(lobby, src)
+            if #freed > 0 and Config.Debug then
+                print(("[AUST PALLET DEBUG] playerDropped src=%s job=%s: %d palete(s) em RECOVERY"):format(
+                    tostring(src), tostring(jobId), #freed))
+            end
+        end
+    end
 end)
 
 RegisterNetEvent('aurp_trucker:server:attachPalletToTrailer', function(jobId, slotIndex, palletNetId, slotOffset, slotHeading)
