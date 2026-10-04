@@ -2,7 +2,7 @@
 
 **ANALYZED HEAD: `c9d9187` (revisão V2 sobre a base documental `3a89631`). CODE CHANGED: NO. IMPLEMENTATION PERFORMED: NO.**
 
-- **O que é:** pacote documental (21 arquivos em `docs/review/`: 00–19 + 08b) para J2 e sua IA aprovarem ou rejeitarem cada proposta antes de qualquer alteração de código.
+- **O que é:** pacote documental (22 arquivos em `docs/review/`: 00–20 + 08b) para J2 e sua IA aprovarem ou rejeitarem cada proposta antes de qualquer alteração de código.
 - **Estado:** AUST é um recurso FiveM grande (≈70 Lua carregados) com três sistemas de job paralelos, dois sistemas de forklift e controles de dinheiro sólidos no servidor.
 - **Segurança:** P0 = 0; P1 = 8; P2 = 14; P3 = 12 (`12_…`). Principal classe: "teleport + timer" e confiança em estado escrito pelo cliente.
 - **Dívida técnica:** P1 = 9, P2 = 31, P3 = 11 (`14_…`; a V2 adicionou TD-42…TD-45).
@@ -40,3 +40,13 @@
 **Route Builder = ADMIN ONLY.** Jogador comum = sem acesso (requisito do projeto; o XS confirma que o desenho é viável em 3 camadas).
 
 **Licença:** XS-Trucking é **ALL RIGHTS RESERVED** → **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**; nenhum código foi copiado.
+
+## TrueMaps — referência de GAMEPLAY (vídeo; sem código)
+
+**TrueMaps does not provide source-code evidence in this study.** Foi usado como **GAMEPLAY DESIGN REFERENCE ONLY** (vídeo/brief; a sessão não conseguiu acessar o vídeo, então o conteúdo "observado" precisa ser conferido por J2). Implementação, autoridade de servidor, segurança, OneSync, banco, desempenho e manutenção são **UNKNOWN** e nada disso foi inferido.
+
+Seu principal valor: mostrar como o trucking pode virar uma **profissão logística física** em vez de um loop A→B — carregamento em doca (portas, liftgate, pallet jack), courier com scanner, integridade de carga, transporte oversized, escolta ativa e docking de precisão.
+
+**Alvo do AUST (proposta):** combinar **arquitetura do XS** + **arquitetura de carga do Polarix** + **profundidade de gameplay do TrueMaps** + **sistemas existentes do AUST**, **sem copiar código proprietário**, mantendo autoridade do servidor, robustez de OneSync, Heavy RP e o backend canônico planejado. **O AUST não deve copiar um único recurso de trucking:** usar referências por domínio.
+
+Backlog de estudo **GPLAY-01…09** (STUDY ONLY; J2 aprova/adia/rejeita cada um); **Route Builder = ADMIN ONLY**; **PHONE ≠ TABLET ≠ NEXUSOS** (scanner/manifesto no tablet, planejamento no NexusOS, alerta de escolta no phone).

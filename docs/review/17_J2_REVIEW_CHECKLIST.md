@@ -81,8 +81,17 @@
 | W7-02 | Registro único de job | sim | ondas 1–5 | ☐ | |
 | W7-03 | Fusão dos forklifts | sim | W1-* | ☐ | |
 | W8-01 | Remover órfãos provados | sim | — | ☐ | |
+| GPLAY-01 | Pallet Jack — **STUDY ONLY** | sim (rede) | W1, W4-05 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-02 | Hydraulic Liftgate / Cargo Doors — **STUDY ONLY** | sim (rede) | W4-02 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-03 | Courier Package Scanner — **STUDY ONLY** | sim | W3-07 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-04 | Cargo Integrity — **STUDY ONLY** | **sim (RUNTIME PROOF REQUIRED)** | W3-10 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-05 | Precision Docking — **STUDY ONLY** | sim | W3-01 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-06 | Active Escort Gameplay — **STUDY ONLY** | sim | W3-05, W4-02 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-07 | Oversized Route Restrictions — **STUDY ONLY** | sim | GPLAY-06 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-08 | Road Obstacle Interaction — **STUDY ONLY** | sim | GPLAY-06 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-09 | Special Transport Convoy — **STUDY ONLY** | sim | GPLAY-06/07 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 
-**Total: 49 PLAN IDs** (W0-04 tem 8 sub-tarefas decididas separadamente, linhas `↳`). Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6 e as decisões da V2 (dispositivos/Route Builder) em §8.
+**Total: 49 PLAN IDs + 9 GPLAY (estudo)** (W0-04 tem 8 sub-tarefas decididas separadamente, linhas `↳`). Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6 e as decisões da V2 (dispositivos/Route Builder) em §8.
 
 ## Checklists específicos (revisão V2)
 
@@ -115,3 +124,52 @@
 - [ ] a proposta parte do **comportamento descrito em `08b`**, não de arquivos do XS abertos ao lado (prática *clean-room*)
 - [ ] nenhum trecho, estrutura de tabela ou texto do XS entra no AUST
 - [ ] o AUST tem `DESCRICAO_VENDA.md`: confirmar a política de licenciamento (W0-01) antes de qualquer reimplementação
+
+## Checklists dos itens GPLAY (STUDY ONLY; **CODE CHANGE: NO**; J2 APPROVAL REQUIRED: YES)
+
+Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **APPROVE / DEFER / REJECT**. Origem: referência de **gameplay** (vídeo/brief), **sem código**; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**. **Route Builder permanece ADMIN ONLY** (nenhum GPLAY o expõe a jogadores).
+
+### GPLAY-01 — Pallet Jack
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Sobreposição conhecida: forklift (`client/modules/forklift.lua`, `forklift.client.lua`) e reach stacker. Decisão de modelo A/B/C/D pendente de J2. Licença: TrueMaps **sem código** (IDEA ONLY).
+
+### GPLAY-02 — Hydraulic Liftgate / Cargo Doors
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Estado de porta/liftgate novo; lifecycle e desconexão em aberto (docs 06/11). Dependência de rede.
+
+### GPLAY-03 — Courier Package Scanner
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Sobreposição: parcel atual (`parcel_service`, `parcel_delivery`). **Servidor decide pacote × parada.** Dispositivo: TABLET.
+
+### GPLAY-04 — Cargo Integrity
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Sobreposição: integridade reportada pelo cliente (`truck_simulation_service.lua:103-108`). **Não confiar em dano do cliente.** RUNTIME PROOF REQUIRED.
+
+### GPLAY-05 — Precision Docking
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Sobreposição: prova de entrega (W3-01). Cálculo no servidor sempre que possível. Referência técnica: dockScore do XS (**IDEA ONLY**).
+
+### GPLAY-06 — Active Escort Gameplay
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Sobreposição: convoy/`escort` citado em `convoy.client.lua:180`. Heavy RP VERY HIGH; ciclo de vida de entidades de escolta novo.
+
+### GPLAY-07 — Oversized Route Restrictions
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Fonte de dados de mapa para túneis/pontes **UNKNOWN**.
+
+### GPLAY-08 — Road Obstacle Interaction
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Obstáculos de via: ciclo de vida/limpeza na desconexão; risco de grief.
+
+### GPLAY-09 — Special Transport Convoy
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* Depende de GPLAY-06/07 e do convoy atual.

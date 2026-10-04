@@ -111,6 +111,26 @@ Observação: nenhum desses verificadores detectaria o `SetInterval` com argumen
 | W6-07 | **Camada de integration bridges** (framework/fuel/inventory/keys/target/dispatch) | TD-42, `08b` §6 | CONFIG → autodetecção/força de provedor → API canônica → domínio; fallback próprio quando o provedor falha; registry de target com limpeza; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION** |
 | W6-08 | **Padrão de NPCs de segurança criados no servidor** (ilegal/escolta) | `08b` §5, XR-17 | **estudo apenas** (**IDEA ONLY — INDEPENDENT REIMPLEMENTATION**): `SERVER STATE → NETWORK OWNER → CLIENT AI EXECUTION`; **não implementar** |
 
+## Gameplay Study Wave (STUDY ONLY — referência TrueMaps, sem código)
+
+> Inserida **antes da Onda 7** (refatoração estrutural), **depois da Onda 6**; **a ordem existente não foi alterada**. Justificativa: são itens de **estudo** sem código, podem rodar em paralelo às ondas 3–6, mas qualquer implementação decorrente só faz sentido **depois** de W1 (pallet), W3 (autoridade), W4 (rede) e do estudo de dispositivos. TrueMaps é **referência de gameplay (vídeo/brief), sem código**; nada de arquitetura é inferido dele. Detalhes em `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.
+
+Todos os itens: **STUDY ONLY · J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO** · opções de decisão **APPROVE / DEFER / REJECT**. Todos: **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**.
+
+| ID | Título | Prioridade | Estudo (resumo) | Depende de (para um futuro) |
+|---|---|---|---|---|
+| GPLAY-01 | Pallet Jack | ALTA | modelo de interação, claim, colisão, movimento, animação, autoridade de rede, ownership, zonas de carga, baia do caminhão, observador; comparar com forklift/reach stacker; **J2 escolhe A) pallet em rede · B) assisted attach · C) representation swap · D) híbrido** | W1-03/W1-05, W4-05 |
+| GPLAY-02 | Hydraulic Liftgate / Cargo Doors | ALTA | portas, liftgate, rampas, permissão de carga; estado, dono, replicação, desconexão | W4-02 |
+| GPLAY-03 | Courier Package Scanner | ALTA | identidade de pacote, parada, barcode, scanner, pacote errado/correto, assinatura; **servidor decide pacote × parada** | W3-07 |
+| GPLAY-04 | Cargo Integrity | ALTA | impacto, velocidade, velocidade angular, tipo de carga, acúmulo; **sem confiar em dano arbitrário do cliente**; RUNTIME PROOF REQUIRED | W3-10 |
+| GPLAY-05 | Precision Docking | ALTA | `dockScore` do XS como referência técnica; cálculo no servidor; saída score/bônus/XP/rating | W3-01 |
+| GPLAY-06 | Active Escort Gameplay | ALTA | pilot car, luzes, scout, obstáculo, controle temporário de via, suporte ao comboio (Heavy RP: VERY HIGH) | W3-05, W4-02 |
+| GPLAY-07 | Oversized Route Restrictions | MÉDIA | dimensões, túneis, pontes, curvas, obstruções (fonte de dados de mapa **UNKNOWN**) | GPLAY-06 |
+| GPLAY-08 | Road Obstacle Interaction | MÉDIA | criar/remover obstáculo de via; ciclo de vida e limpeza | GPLAY-06, W4-02 |
+| GPLAY-09 | Special Transport Convoy | MÉDIA | oversized + escolta ativa + pilot car sobre o convoy atual | GPLAY-06/07 |
+
+**Dispositivos (proposta):** nenhuma UI isolada nova; scanner e manifesto → TABLET; planejamento → NEXUSOS; alerta de escolta → PHONE; **Route Builder = ADMIN ONLY** (ver doc 19/20). Dependência dos itens de UI: **STUDY-DEVICE-01**.
+
 ## Onda 7 — Refatoração estrutural (só após ondas 1–5 estáveis)
 
 | ID | Título | Origem |
@@ -135,8 +155,9 @@ W1-01, W1-03, W1-05, W2-01…W2-06, W3-01, W3-02, W3-03, W3-09, W4-01…W4-05, W
 
 ## Dependências críticas
 
-W1-03 → W1-02 e W1-01; W1-05 → W1-03; W3-01 → W3-09; W3-05 → W2-03; W3-10 → W3-01; **W6-06 → STUDY-DEVICE-01**; W6-06 usa W0-04C; W7-* → ondas 1–5.
+W1-03 → W1-02 e W1-01; W1-05 → W1-03; W3-01 → W3-09; W3-05 → W2-03; W3-10 → W3-01; **W6-06 → STUDY-DEVICE-01**; W6-06 usa W0-04C; GPLAY-* só viram implementação após W1/W3/W4 e STUDY-DEVICE-01; W7-* → ondas 1–5.
 
 ## Índice de PLAN IDs (revisão V2)
 
-**49 PLAN IDs:** W0-01…W0-04 (4; W0-04 com sub-tarefas A–H) · STUDY-DEVICE-01 (1) · W1-01…W1-05 (5) · W2-01…W2-06 (6) · W3-01…W3-10 (10) · W4-01…W4-05 (5) · W5-01…W5-06 (6) · W6-01…W6-08 (8) · W7-01…W7-03 (3) · W8-01 (1). **Novos na V2:** STUDY-DEVICE-01, W3-10, W4-05, W5-06, W6-06, W6-07, W6-08 (e o detalhamento A–H de W0-04). Nenhum foi executado.
+**58 IDs (49 PLAN IDs + 9 GPLAY de estudo):** W0-01…W0-04 (4; W0-04 com sub-tarefas A–H) · STUDY-DEVICE-01 (1) · W1-01…W1-05 (5) · W2-01…W2-06 (6) · W3-01…W3-10 (10) · W4-01…W4-05 (5) · W5-01…W5-06 (6) · W6-01…W6-08 (8) · W7-01…W7-03 (3) · W8-01 (1). **Novos na V2:** STUDY-DEVICE-01, W3-10, W4-05, W5-06, W6-06, W6-07, W6-08 (e o detalhamento A–H de W0-04). Nenhum foi executado.
+**Adicionados na revisão TrueMaps (STUDY ONLY):** GPLAY-01…GPLAY-09. Nenhum foi executado; dependências em `Gameplay Study Wave`.

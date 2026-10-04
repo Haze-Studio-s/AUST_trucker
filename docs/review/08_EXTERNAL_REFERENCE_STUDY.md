@@ -22,6 +22,7 @@
 | L1 | overextended/ox_lib | `66906c5` (v3.40.0) | 2026-10-03 | LGPL-3.0 | — |
 | L2 | overextended/ox_inventory | `488aa6d` (v2.48.0) | 2026-10-03 | GPL-3.0 | — |
 | L3 | overextended/ox_target | `bf03d52` | 2026-06-09 (só README; atividade de código **UNKNOWN**) | MIT | — |
+| **M** | TrueMaps / TRUE. — Advanced Trucker Job (**vídeo**) | **sem commit (sem código)** | **UNKNOWN** | **UNKNOWN** (sem acesso ao código; tratar como proprietário) | ESX/QBCore/QBOX (**SECONDARY REPORT**: título do produto) |
 
 ---
 
@@ -332,6 +333,43 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 
 ---
 
+## REFERENCE M — TrueMaps Advanced Trucker Job  *(adendo de GAMEPLAY — detalhes em `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`)*
+
+**SOURCE TYPE:** VIDEO GAMEPLAY REFERENCE · **SOURCE:** https://youtu.be/9hNLhOnFLL8 · **DEVELOPER:** TrueMaps / TRUE. · **CLASSIFICATION:** **GAMEPLAY REFERENCE — NOT a SOURCE CODE REFERENCE.**
+
+**FILES READ:** **nenhum** (sem código). O vídeo **não pôde ser acessado por esta sessão** (`youtu.be` bloqueado pelo proxy de saída); o conteúdo "observado" vem da **descrição fornecida na brief da missão** e **não foi verificado de forma independente**. Tags usadas nos documentos: **[VIDEO OBSERVED]**, **[SECONDARY REPORT]**, **[AUST DESIGN PROPOSAL]** (nunca misturadas).
+
+| Aspecto | Status |
+|---|---|
+| IMPLEMENTATION DETAILS | **UNKNOWN** |
+| SERVER AUTHORITY | **UNKNOWN** |
+| SECURITY | **UNKNOWN** |
+| ONESYNC | **UNKNOWN** |
+| DATABASE DESIGN | **UNKNOWN** |
+| PERFORMANCE | **UNKNOWN** |
+| MAINTAINABILITY | **UNKNOWN** |
+
+**Só avaliado (gameplay, por observação reportada):** GAMEPLAY 9 · JOB VARIETY 9 · HEAVY RP VALUE 9 · PHYSICAL INTERACTION 9 · COOP VALUE 8 · **AUST RELEVANCE 8**.
+
+**Gameplay reportado (ver doc 20):** carregamento físico em doca (portas, liftgate hidráulico, **pallet jack**), **courier com scanner de etiqueta**, **integridade de carga**, **carga oversized**, **escolta ativa** (conforme a brief, "aparentemente"), **estacionamento de precisão**; **[SECONDARY REPORT]** repartição de receita da empresa (percentual **não copiado**).
+
+**Ideias para o AUST (todas [AUST DESIGN PROPOSAL], itens de estudo GPLAY-01…09):** pallet jack · cargo access (portas/liftgate) · scanner de courier · cargo integrity · docking quality · escolta ativa · restrições de rota oversized · obstáculos de via · comboio de transporte especial.
+
+**NÃO inferir nem atribuir ao TrueMaps:** arquitetura interna, SQL, eventos/callbacks, autoridade de servidor, OneSync, desempenho. **DO NOT COPY:** nenhum código/UI/asset (licença **UNKNOWN**). **IDEA ONLY — INDEPENDENT REIMPLEMENTATION.**
+
+| LAST ACTIVITY | UNKNOWN |
+|---|---|
+| CODE QUALITY | UNKNOWN |
+| SECURITY | UNKNOWN |
+| SERVER AUTHORITY | UNKNOWN |
+| ONESYNC | UNKNOWN |
+| PERFORMANCE | UNKNOWN |
+| GAMEPLAY | 9 (reportado) |
+| MAINTAINABILITY | UNKNOWN |
+| **AUST RELEVANCE** | **8 (gameplay)** |
+
+---
+
 ## SCORECARD — resumo
 
 | Ref | Qualidade | Segurança | Autoridade servidor | OneSync | Performance | Gameplay | Manutenção | Relevância AUST |
@@ -350,6 +388,9 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 | L1 ox_lib | 8 | 7 | 6 | n/a | 8 | n/a | 8 | 9 |
 | L2 ox_inventory | 7 | 8 | 9 | n/a | 7 | n/a | 6 | 8 |
 | L3 ox_target | 8 | 5 | 2 | n/a | 9 | n/a | 8 | 6 |
+| **M TrueMaps (só gameplay)** | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | UNKNOWN | **9** (reportado) | UNKNOWN | **8** (gameplay) |
+
+**M (TrueMaps)** só tem critérios de gameplay (fonte: vídeo/brief, não verificada); os demais são **UNKNOWN**, **não** zero.
 
 Pontuações de B, C, D e A são **minhas** (leitura direta); E–L foram produzidas a partir de relatórios de leitura de subagentes (arquivos e faixas listados acima) e conferidas por amostragem de licença e commit.
 
@@ -370,6 +411,9 @@ Pontuações de B, C, D e A são **minhas** (leitura direta); E–L foram produz
 | Flatbed / reboque | **Tow (J)** só para offsets por modelo; o AUST já supera o resto | |
 | Parcel / depósito | **ESX Deliveries (K)** (conceito) | UX de depósito/carry; sem enforcement |
 | Cleanup / validação | **ox_lib / ox_inventory (L)** | padrões de callback, locks e hooks |
+| **Profundidade de gameplay físico** (portas/liftgate, pallet jack, courier com scanner, escolta ativa, oversized, docking de precisão) | **TrueMaps (M)** — **só gameplay (vídeo/brief)** | nenhuma inferência de implementação; ver doc 20 |
 
 
 > Adendo: aprofundamento do XS-Trucking em `08b_XS_TRUCKING_DEEP_DIVE.md`.
+
+> Adendo: referência de gameplay TrueMaps em `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.

@@ -14,7 +14,7 @@
 | 05 | 19 fluxos de gameplay e defeitos verificados |
 | 06 | Ciclo de vida das entidades |
 | 07 | Forklift/pallet: reconstrução dos commits e física |
-| 08 | 12 referências externas, licenças, scorecard |
+| 08 | 13 referências (12 de código + **M TrueMaps: só gameplay/vídeo**), licenças, scorecard |
 | 08b | **XS-Trucking V2**: leitura completa (server/client/bridge/NUI/tools), autoridade híbrida, bridges, NUI/RPC, builder admin-only, tooling A–H, errata da v1 |
 | 09 | Matriz comparativa por domínio |
 | 10 | Opções de arquitetura de pallet (A, B, C, D-H, D-K) |
@@ -22,9 +22,10 @@
 | 12 | Segurança/autoridade (P0 0, P1 8, P2 14, P3 12) |
 | 13 | Desempenho (top 15 hotspots) |
 | 14 | Registro de dívida técnica (P1 9, P2 31, P3 11; V2 adicionou TD-42…TD-45) |
-| 15 | Plano de implementação (**49 PLAN IDs**, ondas 0–8 + estudos; W0-04 com sub-tarefas A–H) |
+| 15 | Plano de implementação (**49 PLAN IDs** + **9 GPLAY (estudo)**, ondas 0–8 + *Gameplay Study Wave*; W0-04 com sub-tarefas A–H) |
 | 17 | Checklist de revisão por PLAN ID |
 | 18 | Resumo executivo |
+| **20** | **Adendo TrueMaps Advanced Trucker Job** — referência de **GAMEPLAY** (vídeo/brief, **sem código**); loop físico, courier, integridade, oversized, escolta ativa, docking; backlog **GPLAY-01…09** |
 | **19** | **AUST × ecossistema de dispositivos** (NexusOS · vp_tablet · vp_phone) — **ARCHITECTURE PENDING SOURCE REVIEW**; Route Builder = ADMIN ONLY |
 
 ## 2. Resumo
@@ -116,3 +117,20 @@ Arquivos de corpo não lidos estão listados em `01_…`/`13_…` §5. Subagente
 | Nenhum teste em jogo; nenhum checker do XS executado | toda afirmação de runtime é RUNTIME_UNVERIFIED |
 | Versões de ox_lib/oxmysql do servidor não consultadas | afeta XR-15 e semântica de `await` |
 | Comparação com `vinicius3232/aust_trucker` bloqueada | fora desta missão |
+
+## 12. NOVA REFERÊNCIA DE GAMEPLAY — TrueMaps Advanced Trucker Job (vídeo)
+
+**NEW GAMEPLAY REFERENCE: TrueMaps Advanced Trucker Job video** (https://youtu.be/9hNLhOnFLL8). **Não há código** nesta referência: é **GAMEPLAY DESIGN REFERENCE ONLY**; implementação, autoridade de servidor, segurança, OneSync, banco e desempenho são **UNKNOWN**. A sessão **não conseguiu acessar o vídeo**; o conteúdo "observado" vem da brief e **precisa ser conferido por J2**. Detalhes: `20_TRUEMAPS_GAMEPLAY_REFERENCE.md`.
+
+**Ideias mais fortes (todas [AUST DESIGN PROPOSAL] sobre gameplay reportado):**
+
+1. carregamento físico em doca;
+2. pallet jack (GPLAY-01);
+3. liftgate / portas de carga (GPLAY-02);
+4. scanner de courier (GPLAY-03);
+5. integridade de carga (GPLAY-04);
+6. escolta ativa (GPLAY-06);
+7. rotas de carga oversized (GPLAY-07);
+8. docking de precisão (GPLAY-05).
+
+**Pergunta para J2: quais destes devem entrar no roadmap do AUST?** — **APPROVE / DEFER / REJECT por GPLAY ID** (`17_J2_REVIEW_CHECKLIST.md`). Perguntas adicionais: Pallet Jack deve usar **A** pallet físico em rede, **B** assisted attach, **C** representation swap ou **D** híbrido? (sem decisão automática). **Route Builder permanece ADMIN ONLY.**
