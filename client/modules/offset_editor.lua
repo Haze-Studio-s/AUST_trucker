@@ -1475,14 +1475,21 @@ function OffsetEditor.RunPropGizmoCameraLoop(propCam)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
-            -- 5. TECLA ENTER: CONFIRMAÇÃO E SALVAMENTO IMEDIATO NO BANCO
-            if IsDisabledControlJustPressed(0, 18) or IsControlJustPressed(0, 18) then -- ENTER
+            -- 5. SALVAMENTO ESTRITAMENTE VIA TECLADO ENTER (191)
+            -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar durante arrasto do Gizmo
+            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
+                and not IsDisabledControlPressed(0, 24)
+                and not IsDisabledControlJustPressed(0, 24)
+                and not IsDisabledControlPressed(0, 18)
+                and not IsDisabledControlJustPressed(0, 18)
+
+            if isKeyboardEnter then
                 OffsetEditor.ConfirmPropEditorSlot()
                 break
             end
 
             -- 6. TECLA ESC OU BACKSPACE: FINALIZAR / CANCELAR E RESTAURAR
-            if IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) then -- ESC / Backspace
+            if IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
                 OffsetEditor.CancelPropEditorSession()
                 break
             end
