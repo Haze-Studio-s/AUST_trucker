@@ -111,7 +111,7 @@ end)
 RegisterNUICallback('confirmGizmoSlot', function(data, cb)
     if IsCalibrating then
         OffsetEditor.ConfirmCurrentSlot()
-    elseif IsPropEditorActive and PropEditorGizmoActive then
+    elseif IsPropEditorActive then
         OffsetEditor.ConfirmPropEditorSlot()
     end
     if cb then cb({ ok = true }) end
@@ -1475,13 +1475,13 @@ function OffsetEditor.RunPropGizmoCameraLoop(propCam)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
-            -- 5. SALVAMENTO ESTRITAMENTE VIA TECLADO ENTER (191)
-            -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar durante arrasto do Gizmo
-            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
+            -- 5. SALVAMENTO VIA TECLADO ENTER (Controles FiveM 201, 191, 176 - INPUT_FRONTEND_ACCEPT / RDOWN / CELLPHONE_SELECT)
+            -- Exclui clique esquerdo do mouse (controle 24) para evitar salvamento involuntário durante o arrasto do Gizmo
+            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201)
+                or IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191)
+                or IsDisabledControlJustPressed(0, 176) or IsControlJustPressed(0, 176))
                 and not IsDisabledControlPressed(0, 24)
                 and not IsDisabledControlJustPressed(0, 24)
-                and not IsDisabledControlPressed(0, 18)
-                and not IsDisabledControlJustPressed(0, 18)
 
             if isKeyboardEnter then
                 OffsetEditor.ConfirmPropEditorSlot()
@@ -1502,15 +1502,15 @@ function OffsetEditor.RunPropGizmoCameraLoop(propCam)
                 'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~\n' ..
                 'Rotação: ~y~Pitch: %.1f°  |  Roll: %.1f°  |  Yaw: %.1f°~s~\n' ..
                 '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
-                '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
+                '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo / Clicar\n' ..
                 '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
                 '~g~[ENTER ou Botão] Salvar no Banco~s~  |  ~r~[ESC] Finalizar~s~'):format(
                 modeStatus,
                 PropEditorVehModel or 'desconhecido',
                 PropEditorPropModel or 'desconhecido',
                 gizmoModeLabel,
-                PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
-                PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw
+                PropEditorOffsets.x or 0.0, PropEditorOffsets.y or 0.0, PropEditorOffsets.z or 0.0,
+                PropEditorOffsets.pitch or 0.0, PropEditorOffsets.roll or 0.0, PropEditorOffsets.yaw or 0.0
             )
 
             SetTextFont(0)
@@ -1531,21 +1531,50 @@ end
 function OffsetEditor.ConfirmPropEditorSlot()
     if not IsPropEditorActive then return end
 
-    -- Salva no banco de dados
-    TriggerServerEvent('aurp_trucker:server:adminSaveVehiclePropOffset', {
+    -- Garante cálculo atualizado se PropEditorOffsets estiver vazio ou desatualizado
+    if PropEditorVeh and DoesEntityExist(PropEditorVeh) and PropEditorProp and DoesEntityExist(PropEditorProp) then
+        local pCoords = GetEntityCoords(PropEditorProp)
+        local relPos = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, pCoords.x, pCoords.y, pCoords.z)
+        local vRot = GetEntityRotation(PropEditorVeh, 2)
+        local pRot = GetEntityRotation(PropEditorProp, 2)
+
+        local relPitch = (pRot.x - vRot.x) % 360.0
+        local relRoll  = (pRot.y - vRot.y) % 360.0
+        local relYaw   = (pRot.z - vRot.z) % 360.0
+
+        PropEditorOffsets = PropEditorOffsets or {}
+        PropEditorOffsets.x = tonumber(string.format("%.3f", relPos.x))
+        PropEditorOffsets.y = tonumber(string.format("%.3f", relPos.y))
+        PropEditorOffsets.z = tonumber(string.format("%.3f", relPos.z))
+        PropEditorOffsets.pitch = tonumber(string.format("%.1f", relPitch))
+        PropEditorOffsets.roll = tonumber(string.format("%.1f", relRoll))
+        PropEditorOffsets.yaw = tonumber(string.format("%.1f", relYaw))
+    end
+
+    local payload = {
         vehicleModel = PropEditorVehModel,
         propModel = PropEditorPropModel,
-        x = PropEditorOffsets.x,
-        y = PropEditorOffsets.y,
-        z = PropEditorOffsets.z,
-        pitch = PropEditorOffsets.pitch,
-        roll = PropEditorOffsets.roll,
-        yaw = PropEditorOffsets.yaw
-    })
+        x = (PropEditorOffsets and PropEditorOffsets.x) or 0.0,
+        y = (PropEditorOffsets and PropEditorOffsets.y) or 0.0,
+        z = (PropEditorOffsets and PropEditorOffsets.z) or 0.0,
+        pitch = (PropEditorOffsets and PropEditorOffsets.pitch) or 0.0,
+        roll = (PropEditorOffsets and PropEditorOffsets.roll) or 0.0,
+        yaw = (PropEditorOffsets and PropEditorOffsets.yaw) or 0.0
+    }
+
+    -- Dispara evento de gravação no banco de dados
+    TriggerServerEvent('aurp_trucker:server:adminSaveVehiclePropOffset', payload)
 
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
-    -- Encerra Gizmo e FreeCam, restaura ped e painel
+    lib.notify({
+        title = 'PropEditor',
+        description = ('Offset de %s + %s salvo com sucesso!'):format(tostring(payload.vehicleModel), tostring(payload.propModel)),
+        type = 'success',
+        duration = 4000
+    })
+
+    -- Encerra Gizmo e FreeCam, restaura ped e painel administrativo
     OffsetEditor.CancelPropEditorSession()
 end
 
