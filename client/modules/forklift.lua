@@ -392,16 +392,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
     slotHeading = slotHeading or (type(slotOffset) == 'table' and slotOffset.heading) or 0.0
 
-    -- Integração com o PropEditor (6DoF): se existir calibração customizada para este par, sobrepõe com prioridade máxima
-    local customPropOffset, customPropRot = GetVehiclePropOffset(targetTrailer, GetEntityModel(palletEntity))
     local finalX, finalY, finalZ = slotOffset.x, slotOffset.y, slotOffset.z
     local finalPitch, finalRoll, finalYaw = 0.0, 0.0, slotHeading
-    if customPropOffset then
-        finalX, finalY, finalZ = customPropOffset.x, customPropOffset.y, customPropOffset.z
-        if customPropRot then
-            finalPitch, finalRoll, finalYaw = customPropRot.x, customPropRot.y, customPropRot.z
-        end
-    end
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -751,12 +743,22 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             SetEntityDynamic(p, false)
                                             SetEntityHasGravity(p, false)
 
-                                            -- AttachEntityToEntity no bone dos garfos (Decisão A2)
-                                            -- Offset relativo aos garfos: vector3(0.0, 0.95, -0.05) com rotação zero
+                                            -- AttachEntityToEntity no bone dos garfos com Autoridade Suprema do 6DOF
+                                            local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
+                                            local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
+
+                                            local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
+                                            if customForkOff then
+                                                forkOffX, forkOffY, forkOffZ = customForkOff.x, customForkOff.y, customForkOff.z
+                                                if customForkRot then
+                                                    forkPitch, forkRoll, forkYaw = customForkRot.x, customForkRot.y, customForkRot.z
+                                                end
+                                            end
+
                                             AttachEntityToEntity(
                                                 p, forklift, forkBone,
-                                                0.0, 0.95, -0.05,
-                                                0.0, 0.0, 0.0,
+                                                forkOffX, forkOffY, forkOffZ,
+                                                forkPitch, forkRoll, forkYaw,
                                                 false, false, false, false, 2, true
                                             )
 

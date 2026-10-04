@@ -75,13 +75,25 @@ local function AttachContainerToHandler(handlerVeh, container)
 
     local _, boneIndex = GetHandlerSpreaderCoords(handlerVeh)
     local offset = Config.Polarix.Handler.AttachOffset or { x = 0.0, y = 1.78, z = -2.5, rx = 0.0, ry = 0.0, rz = 90.0 }
+    local hOffX, hOffY, hOffZ = offset.x, offset.y, offset.z
+    local hPitch, hRoll, hYaw = offset.rx or 0.0, offset.ry or 0.0, offset.rz or 90.0
+
+    if GetVehiclePropOffset then
+        local customOff, customRot = GetVehiclePropOffset(handlerVeh, GetEntityModel(container))
+        if customOff then
+            hOffX, hOffY, hOffZ = customOff.x, customOff.y, customOff.z
+            if customRot then
+                hPitch, hRoll, hYaw = customRot.x, customRot.y, customRot.z
+            end
+        end
+    end
 
     AttachEntityToEntity(
         container,
         handlerVeh,
         boneIndex,
-        offset.x, offset.y, offset.z,
-        offset.rx, offset.ry, offset.rz,
+        hOffX, hOffY, hOffZ,
+        hPitch, hRoll, hYaw,
         false, false, true, false, 0, true
     )
     return true

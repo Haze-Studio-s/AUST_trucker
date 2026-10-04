@@ -1590,16 +1590,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     SetEntityNoCollisionEntity(JobEntities.truck, pEnt, false)
                 end
 
-                -- Reforço imediato de ancoragem na malha do trailer (Bone 0) sem soft-pinning com suporte a 6DoF
-                local off = pData.relOffset
-                local rot = pData.relRot
-                if not rot or not off then
-                    local customOff, customRot = GetVehiclePropOffset(trailer, GetEntityModel(pEnt))
-                    if customOff then off = customOff end
-                    if customRot then rot = customRot end
-                end
-                off = off or vector3(0.0, 0.0, 0.35)
-                rot = rot or vector3(0.0, 0.0, pData.relHeading or 0.0)
+                -- Reforço imediato de ancoragem na malha do trailer (Bone 0) sem soft-pinning
+                local off = pData.relOffset or vector3(0.0, 0.0, 0.35)
+                local rot = pData.relRot or vector3(0.0, 0.0, pData.relHeading or 0.0)
 
                 AttachEntityToEntity(
                     pEnt, trailer, 0,
@@ -1818,15 +1811,8 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                         SetEntityNoCollisionEntity(pEnt, tr, false)
                                         SetEntityNoCollisionEntity(tr, pEnt, false)
                                     end
-                                    local off = pData.relOffset
-                                    local rot = pData.relRot
-                                    if not rot or not off then
-                                        local customOff, customRot = GetVehiclePropOffset(tr, GetEntityModel(pEnt))
-                                        if customOff then off = customOff end
-                                        if customRot then rot = customRot end
-                                    end
-                                    off = off or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
-                                    rot = rot or vector3(0.0, 0.0, pData.relHeading or (type(off) == 'table' and off.heading) or 0.0)
+                                    local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
+                                    local rot = pData.relRot or vector3(0.0, 0.0, pData.relHeading or (type(off) == 'table' and off.heading) or 0.0)
 
                                     AttachEntityToEntity(
                                         pEnt, tr, 0,
@@ -2404,11 +2390,6 @@ lib.onCache('vehicle', function(veh)
                         sRot = defHead
                     end
                     if not sOffset then sOffset = vector3(0.0, 0.0, 0.35) end
-
-                    -- Verifica se existe rotação customizada do PropEditor (6DoF)
-                    local customPropOffset, customPropRot = GetVehiclePropOffset(JobEntities.trailer, GetEntityModel(palletEnt))
-                    if customPropOffset then sOffset = customPropOffset end
-                    if customPropRot then sRot = customPropRot end
 
                     local finalRot = type(sRot) == 'vector3' and sRot or vector3(0.0, 0.0, tonumber(sRot) or (type(sOffset) == 'table' and sOffset.heading) or 0.0)
 

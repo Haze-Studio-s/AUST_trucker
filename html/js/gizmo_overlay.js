@@ -33,12 +33,16 @@
     function initButtons() {
         if (btnConfirm) {
             btnConfirm.onclick = function (e) {
+                e.preventDefault();
                 e.stopPropagation();
+                btnConfirm.style.transform = 'scale(0.95)';
+                setTimeout(() => { if (btnConfirm) btnConfirm.style.transform = 'none'; }, 150);
                 sendCallback('confirmGizmoSlot');
             };
         }
         if (btnMode) {
             btnMode.onclick = function (e) {
+                e.preventDefault();
                 e.stopPropagation();
                 const newMode = currentMode === 'translate' ? 'rotate' : 'translate';
                 setGizmoMode(newMode);
@@ -46,12 +50,14 @@
         }
         if (btnCopy) {
             btnCopy.onclick = function (e) {
+                e.preventDefault();
                 e.stopPropagation();
                 sendCallback('copyGizmoSlot');
             };
         }
         if (btnCancel) {
             btnCancel.onclick = function (e) {
+                e.preventDefault();
                 e.stopPropagation();
                 sendCallback('cancelGizmo');
             };
@@ -61,9 +67,15 @@
             if (!isActive) return;
             if (e.key === 'Enter') {
                 e.preventDefault();
+                e.stopPropagation();
+                if (btnConfirm) {
+                    btnConfirm.style.transform = 'scale(0.95)';
+                    setTimeout(() => { if (btnConfirm) btnConfirm.style.transform = 'none'; }, 150);
+                }
                 sendCallback('confirmGizmoSlot');
             } else if (e.key === 'Escape') {
                 e.preventDefault();
+                e.stopPropagation();
                 sendCallback('cancelGizmo');
             } else if (e.key === 't' || e.key === 'T') {
                 setGizmoMode('translate');

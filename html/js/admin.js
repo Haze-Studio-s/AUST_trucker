@@ -33,9 +33,15 @@
     const overlay = document.createElement('div');
     overlay.id = 'admin-confirm-modal';
     overlay.className = 'admin-modal-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '10000000';
+    overlay.style.display = 'flex';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
 
     overlay.innerHTML = `
-      <div class="admin-modal-box">
+      <div class="admin-modal-box" style="z-index: 10000001; pointer-events: auto;">
         <div class="admin-modal-header">
           <i class="fas fa-exclamation-triangle"></i>
           <span>${escapeHtml(title || 'Confirmação')}</span>
@@ -50,17 +56,27 @@
       </div>
     `;
 
-    overlay.querySelector('.btn-modal-cancel').addEventListener('click', () => {
+    const closeFn = () => {
+      window.removeEventListener('keydown', keyFn);
       overlay.remove();
-    });
+    };
+
+    const keyFn = (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        closeFn();
+      }
+    };
+
+    overlay.querySelector('.btn-modal-cancel').addEventListener('click', closeFn);
 
     overlay.querySelector('.btn-modal-confirm').addEventListener('click', () => {
-      overlay.remove();
+      closeFn();
       if (typeof onConfirm === 'function') onConfirm();
     });
 
-    const panel = document.getElementById('admin-panel') || document.body;
-    panel.appendChild(overlay);
+    window.addEventListener('keydown', keyFn);
+    document.body.appendChild(overlay);
   }
 
   function showPromptModal(title, placeholder, onConfirm) {

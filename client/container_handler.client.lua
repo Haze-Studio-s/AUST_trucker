@@ -245,11 +245,23 @@ CreateThread(function()
                             ShowHint(Config.ContainerHandler.PromptAttach, true)
 
                             if IsControlJustPressed(0, 47) then  -- G / INPUT_DETONATE
-                                -- Acoplar contêiner na grua
+                                -- Acoplar contêiner na grua com suporte a 6DoF
+                                local chOffX, chOffY, chOffZ = 0.0, 1.78, -2.5
+                                local chPitch, chRoll, chYaw = 0.0, 0.0, 90.0
+                                if GetVehiclePropOffset then
+                                    local customOff, customRot = GetVehiclePropOffset(veh, GetEntityModel(chContainer))
+                                    if customOff then
+                                        chOffX, chOffY, chOffZ = customOff.x, customOff.y, customOff.z
+                                        if customRot then
+                                            chPitch, chRoll, chYaw = customRot.x, customRot.y, customRot.z
+                                        end
+                                    end
+                                end
+
                                 AttachEntityToEntity(
                                     chContainer, veh, bone,
-                                    0, 1.78, -2.5,
-                                    0, 0, 90.0,
+                                    chOffX, chOffY, chOffZ,
+                                    chPitch, chRoll, chYaw,
                                     false, false, true, false, 0, true
                                 )
 

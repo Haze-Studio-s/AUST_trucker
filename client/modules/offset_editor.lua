@@ -1200,10 +1200,51 @@ local PropEditorVeh = nil
 local PropEditorProp = nil
 local PropEditorVehModel = nil
 local PropEditorPropModel = nil
+local PropEditorBoneIndex = 0
 local PropEditorOffsets = { x = 0.0, y = 0.0, z = 0.0, pitch = 0.0, roll = 0.0, yaw = 0.0 }
 local PropEditorListenThread = false
 local PropEditorCam = nil
 local PropEditorGizmoActive = false
+
+-- Determina o Bone Index adequado para o veículo de carregamento
+local function GetVehicleLoadingBoneIndex(vehicle)
+    if not vehicle or not DoesEntityExist(vehicle) then return 0 end
+    local vModel = GetEntityModel(vehicle)
+    local forkHash = joaat('forklift')
+    local handlerHash = joaat('handler')
+
+    if vModel == forkHash then
+        local bIdx = GetEntityBoneIndexByName(vehicle, 'forks')
+        if bIdx == -1 then bIdx = GetEntityBoneIndexByName(vehicle, 'forks_attach') end
+        if bIdx == -1 and Config and Config.Polarix and Config.Polarix.Forklift then
+            bIdx = Config.Polarix.Forklift.ForkBoneIndex or 3
+        end
+        return (bIdx ~= -1 and bIdx) or 0
+    elseif vModel == handlerHash then
+        local craneBoneName = (Config and Config.ContainerHandler and Config.ContainerHandler.CraneBone) or 'frame_2'
+        local bIdx = GetEntityBoneIndexByName(vehicle, craneBoneName)
+        return (bIdx ~= -1 and bIdx) or 0
+    end
+    return 0
+end
+
+-- Calcula posição relativa ao Bone Index (se for 0 usa GetOffsetFromEntityGivenWorldCoords)
+local function GetOffsetFromBoneGivenWorldCoords(vehicle, boneIndex, wx, wy, wz)
+    if not vehicle or not DoesEntityExist(vehicle) then return vector3(0.0, 0.0, 0.0) end
+    if not boneIndex or boneIndex == 0 then
+        return GetOffsetFromEntityGivenWorldCoords(vehicle, wx, wy, wz)
+    end
+    local bCoords = GetWorldPositionOfEntityBone(vehicle, boneIndex)
+    if bCoords == vector3(0.0, 0.0, 0.0) then
+        return GetOffsetFromEntityGivenWorldCoords(vehicle, wx, wy, wz)
+    end
+    local vFwd, vRight, vUp, _ = GetEntityMatrix(vehicle)
+    local d = vector3(wx, wy, wz) - bCoords
+    local rx = (d.x * vRight.x) + (d.y * vRight.y) + (d.z * vRight.z)
+    local ry = (d.x * vFwd.x) + (d.y * vFwd.y) + (d.z * vFwd.z)
+    local rz = (d.x * vUp.x) + (d.y * vUp.y) + (d.z * vUp.z)
+    return vector3(rx, ry, rz)
+end
 
 -- 1. SPAWN DE ENTIDADES NO MUNDO COM FÍSICA E NETWORK
 RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
@@ -1267,10 +1308,12 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
     IsPropEditorActive = true
     PropEditorGizmoActive = false
 
+    PropEditorBoneIndex = GetVehicleLoadingBoneIndex(veh)
+
     -- 3. FASE 1: ACOPLAMENTO AUTOMÁTICO IMEDIATO NO SURGIMENTO
-    -- Verifica se já existe offset prévio salvo no banco para carregar; caso contrário, acopla no centro/traseira padrão
+    -- Verifica se já existe offset prévio salvo no banco para carregar; caso contrário, acopla no centro/garfos padrão
     local prevOffset, prevRot = GetVehiclePropOffset(veh, pHash)
-    local initX, initY, initZ = 0.0, 0.0, 0.5
+    local initX, initY, initZ = 0.0, 0.0, 0.0
     local initPitch, initRoll, initYaw = 0.0, 0.0, 0.0
 
     if prevOffset then
@@ -1278,10 +1321,23 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
         if prevRot then
             initPitch, initRoll, initYaw = prevRot.x, prevRot.y, prevRot.z
         end
+    else
+        -- Valores default ergonômicos conforme o veículo de carregamento
+        if vHash == joaat('forklift') then
+            initX, initY, initZ = 0.0, 0.95, -0.05
+        elseif vHash == joaat('handler') then
+            local defH = (Config and Config.ContainerHandler and Config.ContainerHandler.AttachOffset)
+                or (Config and Config.Polarix and Config.Polarix.Handler and Config.Polarix.Handler.AttachOffset)
+                or { x = 0.0, y = 1.78, z = -2.5, rx = 0.0, ry = 0.0, rz = 90.0 }
+            initX, initY, initZ = defH.x or 0.0, defH.y or 1.78, defH.z or -2.5
+            initPitch, initRoll, initYaw = defH.rx or 0.0, defH.ry or 0.0, defH.rz or 90.0
+        else
+            initZ = 0.5
+        end
     end
 
     AttachEntityToEntity(
-        prop, veh, 0,
+        prop, veh, PropEditorBoneIndex,
         initX, initY, initZ,
         initPitch, initRoll, initYaw,
         false, false, false, false, 2, true
@@ -1294,7 +1350,7 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
 
     lib.notify({
         title = 'Acoplamento Automático!',
-        description = ('Veículo (%s) e Prop (%s) gerados e acoplados! Gizmo 3D (6DoF) ativado imediatamente.'):format(vModel, pModel),
+        description = ('Veículo (%s) e Prop (%s) gerados e acoplados no Bone %d! Gizmo 3D (6DoF) ativado.'):format(vModel, pModel, PropEditorBoneIndex),
         type = 'success',
         duration = 5000
     })
@@ -1336,9 +1392,9 @@ function OffsetEditor.ActivatePropEditorGizmo()
     RenderScriptCams(true, false, 0, true, true)
     PropEditorCam = propCam
 
-    -- Calcula offsets relativos iniciais
+    -- Calcula offsets relativos iniciais baseados no Bone correto
     local pCoords = GetEntityCoords(PropEditorProp)
-    local relPos = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, pCoords.x, pCoords.y, pCoords.z)
+    local relPos = GetOffsetFromBoneGivenWorldCoords(PropEditorVeh, PropEditorBoneIndex, pCoords.x, pCoords.y, pCoords.z)
     local vRot = GetEntityRotation(PropEditorVeh, 2)
     local pRot = GetEntityRotation(PropEditorProp, 2)
 
@@ -1357,7 +1413,7 @@ function OffsetEditor.ActivatePropEditorGizmo()
 
     SendNUIMessage({
         action = 'admin_propeditor_status',
-        text = 'Gizmo 3D (6DoF) Ativo! Use FreeCam e Gizmo.',
+        text = ('Gizmo 3D (6DoF) Ativo no Bone %d! Use FreeCam e Gizmo.'):format(PropEditorBoneIndex),
         type = 'attached'
     })
 
@@ -1538,7 +1594,7 @@ function OffsetEditor.ConfirmPropEditorSlot()
     -- Garante cálculo atualizado se PropEditorOffsets estiver vazio ou desatualizado
     if PropEditorVeh and DoesEntityExist(PropEditorVeh) and PropEditorProp and DoesEntityExist(PropEditorProp) then
         local pCoords = GetEntityCoords(PropEditorProp)
-        local relPos = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, pCoords.x, pCoords.y, pCoords.z)
+        local relPos = GetOffsetFromBoneGivenWorldCoords(PropEditorVeh, PropEditorBoneIndex, pCoords.x, pCoords.y, pCoords.z)
         local vRot = GetEntityRotation(PropEditorVeh, 2)
         local pRot = GetEntityRotation(PropEditorProp, 2)
 
@@ -1573,7 +1629,7 @@ function OffsetEditor.ConfirmPropEditorSlot()
 
     lib.notify({
         title = 'PropEditor',
-        description = ('Offset de %s + %s salvo com sucesso!'):format(tostring(payload.vehicleModel), tostring(payload.propModel)),
+        description = ('Offset de %s + %s salvo com sucesso no Bone %d!'):format(tostring(payload.vehicleModel), tostring(payload.propModel), PropEditorBoneIndex),
         type = 'success',
         duration = 4000
     })
@@ -1593,8 +1649,8 @@ RegisterNUICallback('moveGizmoPropOffset', function(data, cb)
     local worldRot = data.rotation
 
     if worldPos and worldRot then
-        -- Converte coordenadas mundiais para offset e rotação relativa ao veículo
-        local relOffset = GetOffsetFromEntityGivenWorldCoords(PropEditorVeh, worldPos.x, worldPos.y, worldPos.z)
+        -- Converte coordenadas mundiais para offset e rotação relativa ao Bone do veículo
+        local relOffset = GetOffsetFromBoneGivenWorldCoords(PropEditorVeh, PropEditorBoneIndex, worldPos.x, worldPos.y, worldPos.z)
         local vRot = GetEntityRotation(PropEditorVeh, 2)
 
         local relPitch = (worldRot.x - vRot.x) % 360.0
@@ -1610,9 +1666,9 @@ RegisterNUICallback('moveGizmoPropOffset', function(data, cb)
             yaw = tonumber(string.format("%.1f", relYaw))
         }
 
-        -- Reanexa em tempo real com os novos offsets de 6 graus de liberdade
+        -- Reanexa em tempo real com os novos offsets de 6 graus de liberdade no Bone correto
         AttachEntityToEntity(
-            PropEditorProp, PropEditorVeh, 0,
+            PropEditorProp, PropEditorVeh, PropEditorBoneIndex,
             PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
             PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw,
             false, false, false, false, 2, true
@@ -1645,7 +1701,7 @@ RegisterNUICallback('adminPropEditorManualChange', function(data, cb)
     }
 
     AttachEntityToEntity(
-        PropEditorProp, PropEditorVeh, 0,
+        PropEditorProp, PropEditorVeh, PropEditorBoneIndex,
         PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
         PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw,
         false, false, false, false, 2, true
