@@ -111,6 +111,8 @@ end)
 RegisterNUICallback('confirmGizmoSlot', function(data, cb)
     if IsCalibrating then
         OffsetEditor.ConfirmCurrentSlot()
+    elseif IsPropEditorActive and PropEditorGizmoActive then
+        OffsetEditor.ConfirmPropEditorSlot()
     end
     if cb then cb({ ok = true }) end
 end)
@@ -125,6 +127,8 @@ end)
 RegisterNUICallback('cancelGizmo', function(data, cb)
     if IsCalibrating then
         OffsetEditor.CancelCalibration()
+    elseif IsPropEditorActive then
+        OffsetEditor.CancelPropEditorSession()
     end
     if cb then cb({ ok = true }) end
 end)
@@ -1294,10 +1298,39 @@ RegisterNUICallback('adminPropEditorSpawn', function(data, cb)
     if cb then cb({ ok = true }) end
 end)
 
--- 3. FASE DE EDIÇÃO VISUAL COM GIZMO 3D (6DoF)
+-- 3. FASE DE EDIÇÃO VISUAL COM GIZMO 3D (6DoF) COM FREECAM 1:1 IDÊNTICA AO TRAILER 3D
 function OffsetEditor.ActivatePropEditorGizmo()
     if not PropEditorVeh or not DoesEntityExist(PropEditorVeh) or not PropEditorProp or not DoesEntityExist(PropEditorProp) then return end
     PropEditorGizmoActive = true
+
+    -- Minimiza o painel administrativo principal estilo Offsets Trailer 3D
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'admin_minimize' })
+
+    local ped = cache.ped or PlayerPedId()
+    -- Protege e oculta o ped durante a calibração
+    FreezeEntityPosition(ped, true)
+    SetEntityVisible(ped, false, false)
+    SetEntityCollision(ped, false, false)
+
+    -- Configuração e ativação da Câmera Livre (Scripted Camera) focada no veículo e prop
+    local vCoords = GetEntityCoords(PropEditorVeh)
+    local vHeadingRad = math.rad(GetEntityHeading(PropEditorVeh))
+    local camX = vCoords.x - math.sin(vHeadingRad) * 8.5
+    local camY = vCoords.y - math.cos(vHeadingRad) * 8.5
+    local camZ = vCoords.z + 3.8
+    local camRot = vector3(-15.0, 0.0, GetEntityHeading(PropEditorVeh))
+
+    if PropEditorCam and DoesCamExist(PropEditorCam) then
+        DestroyCam(PropEditorCam, false)
+        PropEditorCam = nil
+    end
+
+    local propCam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', camX, camY, camZ, camRot.x, camRot.y, camRot.z, 55.0, true, 2)
+    SetCamActive(propCam, true)
+    RenderScriptCams(true, false, 0, true, true)
+    PropEditorCam = propCam
 
     -- Calcula offsets relativos iniciais
     local pCoords = GetEntityCoords(PropEditorProp)
@@ -1320,7 +1353,7 @@ function OffsetEditor.ActivatePropEditorGizmo()
 
     SendNUIMessage({
         action = 'admin_propeditor_status',
-        text = 'Engate Validado! Gizmo 3D (6DoF) Ativo. Manipule e salve.',
+        text = 'Gizmo 3D (6DoF) Ativo! Use FreeCam e Gizmo.',
         type = 'attached'
     })
 
@@ -1340,26 +1373,29 @@ function OffsetEditor.ActivatePropEditorGizmo()
     })
 
     lib.notify({
-        title = 'Engate Detectado!',
-        description = 'Gizmo 3D 6DoF ativado no prop. Segure [ALT] para usar o cursor nos anéis ou eixos!',
-        type = 'success',
-        duration = 5000
+        title = 'Gizmo 3D PropEditor Ativo!',
+        description = 'WASD: Voo Livre.\nSegure [ALT] para liberar o mouse e arrastar o Gizmo.\n[ENTER]: Salvar  |  [ESC]: Finalizar.',
+        type = 'info',
+        duration = 8000
     })
 
-    -- Inicia o laço de controle de câmera / mouse para o Gizmo do prop
-    OffsetEditor.RunPropGizmoCameraLoop()
+    -- Inicia o laço de controle de câmera / mouse / teclado idêntico a Offsets Trailer 3D
+    OffsetEditor.RunPropGizmoCameraLoop(propCam)
 end
 
-function OffsetEditor.RunPropGizmoCameraLoop()
+function OffsetEditor.RunPropGizmoCameraLoop(propCam)
     CreateThread(function()
         local isCursorActive = false
 
-        while IsPropEditorActive and PropEditorGizmoActive do
+        while IsPropEditorActive and PropEditorGizmoActive and propCam and DoesCamExist(propCam) do
             Wait(0)
 
-            -- Sincroniza a câmera do GTA com o Three.js
-            local camPos = GetFinalRenderedCamCoord()
-            local camRot = GetFinalRenderedCamRot(2)
+            -- Desabilita ações normais do jogo (isolamento total)
+            DisableAllControlActions(0)
+
+            -- 1. SINCRONIZAÇÃO DA CÂMERA COM O THREE.JS
+            local camPos = GetCamCoord(propCam)
+            local camRot = GetCamRot(propCam, 2)
             SendNUIMessage({
                 action = 'setCameraPosition',
                 data = {
@@ -1368,29 +1404,142 @@ function OffsetEditor.RunPropGizmoCameraLoop()
                 }
             })
 
-            -- Tecla ALT (Control 19): Alterna cursor para manipular o Gizmo
-            if IsControlJustPressed(0, 19) or IsDisabledControlJustPressed(0, 19) then
-                isCursorActive = not isCursorActive
-                SetNuiFocus(isCursorActive, isCursorActive)
-                SetNuiFocusKeepInput(isCursorActive)
-                SendNUIMessage({ action = 'setGizmoCursor', data = { active = isCursorActive } })
+            -- 2. ALTERNÂNCIA DE CURSOR VS MOUSE LOOK VIA TECLA ALT (HOLD) — IDÊNTICO AO TRAILER 3D
+            local isAltHeld = IsDisabledControlPressed(0, 19) or IsControlPressed(0, 19)
+            if isAltHeld then
+                if not isCursorActive then
+                    isCursorActive = true
+                    SetNuiFocus(true, true)
+                    SetNuiFocusKeepInput(true)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = true } })
+                end
+            else
+                if isCursorActive then
+                    isCursorActive = false
+                    SetNuiFocus(false, false)
+                    SetNuiFocusKeepInput(false)
+                    SendNUIMessage({ action = 'setGizmoCursor', data = { active = false } })
+                end
+
+                -- Rotação de câmera suave pelo mouse (somente quando ALT não estiver segurado)
+                local mouseX = GetDisabledControlNormal(0, 1)
+                local mouseY = GetDisabledControlNormal(0, 2)
+                if mouseX ~= 0.0 or mouseY ~= 0.0 then
+                    local camSens = 4.0
+                    camRot = vector3(
+                        math.max(-85.0, math.min(85.0, camRot.x - mouseY * camSens)),
+                        0.0,
+                        (camRot.z - mouseX * camSens) % 360.0
+                    )
+                    SetCamRot(propCam, camRot.x, camRot.y, camRot.z, 2)
+                end
             end
 
-            -- Tecla T: Modo Translação (XYZ) | Tecla R: Modo Rotação (Pitch, Roll, Yaw)
-            if IsControlJustPressed(0, 245) or IsDisabledControlJustPressed(0, 245) then -- T
+            -- 3. VOO LIVRE DA CÂMERA (WASD / Space / LCtrl / Shift) — IDÊNTICO AO TRAILER 3D
+            local radX = math.rad(camRot.x)
+            local radZ = math.rad(camRot.z)
+            local cosX = math.cos(radX)
+            local sinX = math.sin(radX)
+            local cosZ = math.cos(radZ)
+            local sinZ = math.sin(radZ)
+
+            local fwd = vector3(-sinZ * cosX, cosZ * cosX, sinX)
+            local rgt = vector3(cosZ, sinZ, 0.0)
+            local up  = vector3(0.0, 0.0, 1.0)
+
+            local camSpeed = 0.16
+            if IsDisabledControlPressed(0, 21) then camSpeed = 0.45 end -- LShift (Turbo)
+
+            local cPos = GetCamCoord(propCam)
+            local camMoved = false
+
+            if IsDisabledControlPressed(0, 32) then cPos = cPos + fwd * camSpeed; camMoved = true end -- W
+            if IsDisabledControlPressed(0, 33) then cPos = cPos - fwd * camSpeed; camMoved = true end -- S
+            if IsDisabledControlPressed(0, 34) then cPos = cPos - rgt * camSpeed; camMoved = true end -- A
+            if IsDisabledControlPressed(0, 35) then cPos = cPos + rgt * camSpeed; camMoved = true end -- D
+            if IsDisabledControlPressed(0, 22) then cPos = cPos + up  * camSpeed; camMoved = true end -- Space
+            if IsDisabledControlPressed(0, 36) then cPos = cPos - up  * camSpeed; camMoved = true end -- LCtrl
+
+            if camMoved then
+                SetCamCoord(propCam, cPos.x, cPos.y, cPos.z)
+            end
+
+            -- 4. ALTERNÂNCIA DE MODO DO GIZMO COM AS TECLAS T E R
+            if IsDisabledControlJustPressed(0, 245) or IsControlJustPressed(0, 245) then -- T
+                CurrentGizmoMode = 'translate'
                 SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'translate' } })
-            elseif IsControlJustPressed(0, 45) or IsDisabledControlJustPressed(0, 45) then -- R
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Translação (Setas)', type = 'info', duration = 1200 })
+            elseif IsDisabledControlJustPressed(0, 45) or IsControlJustPressed(0, 45) then -- R
+                CurrentGizmoMode = 'rotate'
                 SendNUIMessage({ action = 'setGizmoMode', data = { mode = 'rotate' } })
+                lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
-            -- Tecla BACKSPACE / ESC: Restaura painel completo
-            if IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 177) then
-                SetNuiFocus(true, true)
-                SetNuiFocusKeepInput(false)
+            -- 5. TECLA ENTER: CONFIRMAÇÃO E SALVAMENTO IMEDIATO NO BANCO
+            if IsDisabledControlJustPressed(0, 18) or IsControlJustPressed(0, 18) then -- ENTER
+                OffsetEditor.ConfirmPropEditorSlot()
                 break
             end
+
+            -- 6. TECLA ESC OU BACKSPACE: FINALIZAR / CANCELAR E RESTAURAR
+            if IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) then -- ESC / Backspace
+                OffsetEditor.CancelPropEditorSession()
+                break
+            end
+
+            -- 7. HUD FLUTUANTE EM TEMPO REAL ESTILO OFFSETS TRAILER 3D
+            local modeStatus = isCursorActive and '~g~[CURSOR GIZMO ATIVO]~s~' or '~b~[CÂMERA LIVRE]~s~'
+            local gizmoModeLabel = CurrentGizmoMode == 'translate' and '~w~Translação (Setas)~s~' or '~w~Rotação (Anéis)~s~'
+            local hudText = ('~g~[PROP EDITOR 6DoF]~s~ %s\n' ..
+                'Veículo: ~w~%s~s~  |  Prop: ~y~%s~s~  |  Modo: %s\n' ..
+                'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~\n' ..
+                'Rotação: ~y~Pitch: %.1f°  |  Roll: %.1f°  |  Yaw: %.1f°~s~\n' ..
+                '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
+                '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
+                '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
+                '~g~[ENTER ou Botão] Salvar no Banco~s~  |  ~r~[ESC] Finalizar~s~'):format(
+                modeStatus,
+                PropEditorVehModel or 'desconhecido',
+                PropEditorPropModel or 'desconhecido',
+                gizmoModeLabel,
+                PropEditorOffsets.x, PropEditorOffsets.y, PropEditorOffsets.z,
+                PropEditorOffsets.pitch, PropEditorOffsets.roll, PropEditorOffsets.yaw
+            )
+
+            SetTextFont(0)
+            SetTextProportional(1)
+            SetTextScale(0.34, 0.34)
+            SetTextColour(255, 255, 255, 255)
+            SetTextDropshadow(0, 0, 0, 0, 255)
+            SetTextEdge(1, 0, 0, 0, 205)
+            SetTextDropShadow()
+            SetTextOutline()
+            SetTextEntry("STRING")
+            AddTextComponentString(hudText)
+            DrawText(0.015, 0.02)
         end
     end)
+end
+
+function OffsetEditor.ConfirmPropEditorSlot()
+    if not IsPropEditorActive then return end
+
+    -- Salva no banco de dados
+    TriggerServerEvent('aurp_trucker:server:adminSaveVehiclePropOffset', {
+        vehicleModel = PropEditorVehModel,
+        propModel = PropEditorPropModel,
+        x = PropEditorOffsets.x,
+        y = PropEditorOffsets.y,
+        z = PropEditorOffsets.z,
+        pitch = PropEditorOffsets.pitch,
+        roll = PropEditorOffsets.roll,
+        yaw = PropEditorOffsets.yaw
+    })
+
+    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+    -- Encerra Gizmo e FreeCam, restaura ped e painel
+    OffsetEditor.CancelPropEditorSession()
 end
 
 -- Callback acionado a cada alteração do Gizmo Three.js em tempo real
@@ -1516,8 +1665,23 @@ function OffsetEditor.CancelPropEditorSession()
     PropEditorGizmoActive = false
 
     SendNUIMessage({ action = 'hideGizmo' })
+    SendNUIMessage({ action = 'admin_restore' })
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
+
+    -- Destrói câmera livre e restaura câmera do ped
+    if PropEditorCam and DoesCamExist(PropEditorCam) then
+        DestroyCam(PropEditorCam, false)
+        PropEditorCam = nil
+    end
+    RenderScriptCams(false, false, 0, true, true)
+
+    -- Restaura ped do jogador
+    local ped = cache.ped or PlayerPedId()
+    FreezeEntityPosition(ped, false)
+    SetEntityVisible(ped, true, false)
+    SetEntityCollision(ped, true, true)
+    SetPlayerControl(PlayerId(), true, 0)
 
     if PropEditorProp and DoesEntityExist(PropEditorProp) then DeleteEntity(PropEditorProp); PropEditorProp = nil end
     if PropEditorVeh and DoesEntityExist(PropEditorVeh) then DeleteEntity(PropEditorVeh); PropEditorVeh = nil end
@@ -1536,6 +1700,8 @@ AddEventHandler('onResourceStop', function(resourceName)
     SavedGhosts = {}
     delEnt(CalibTrailer); CalibTrailer = nil
     delEnt(SpawnGhostEnt); SpawnGhostEnt = nil
+    delEnt(PropEditorProp); PropEditorProp = nil
+    delEnt(PropEditorVeh); PropEditorVeh = nil
     for _, e in ipairs(ActivePreviewEntities) do delEnt(e) end
     ActivePreviewEntities = {}
 
@@ -1550,7 +1716,10 @@ AddEventHandler('onResourceStop', function(resourceName)
 
     if ActiveCalibCam and DoesCamExist(ActiveCalibCam) then DestroyCam(ActiveCalibCam, false) end
     ActiveCalibCam = nil
-    if IsCalibrating or IsCalibratingSpawn or IsPreviewActive then
+    if PropEditorCam and DoesCamExist(PropEditorCam) then DestroyCam(PropEditorCam, false) end
+    PropEditorCam = nil
+
+    if IsCalibrating or IsCalibratingSpawn or IsPreviewActive or IsPropEditorActive then
         RenderScriptCams(false, false, 0, true, true)
         SetNuiFocus(false, false)
         SetNuiFocusKeepInput(false)
@@ -1560,5 +1729,5 @@ AddEventHandler('onResourceStop', function(resourceName)
         SetEntityVisible(ped, true, false)
         SetPlayerControl(PlayerId(), true, 0)
     end
-    IsCalibrating, IsCalibratingSpawn, IsPreviewActive = false, false, false
+    IsCalibrating, IsCalibratingSpawn, IsPreviewActive, IsPropEditorActive, PropEditorGizmoActive = false, false, false, false, false
 end)
