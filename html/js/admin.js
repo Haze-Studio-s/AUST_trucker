@@ -1580,9 +1580,14 @@
   };
 
   window.deletePropEditorData = function (id, vModel, pModel) {
-    if (!confirm(`Deseja excluir o offset de ${vModel} + ${pModel}?`)) return;
-    postNUI('adminDeleteVehiclePropOffset', { id: id, vehicleModel: vModel, propModel: pModel });
-    showAdminToast('Solicitação de exclusão enviada.');
+    showConfirmModal(
+      'Excluir Offset 6DOF',
+      `Deseja excluir o offset de ${vModel} + ${pModel}?`,
+      () => {
+        postNUI('adminDeleteVehiclePropOffset', { id: id, vehicleModel: vModel, propModel: pModel });
+        showAdminToast('Solicitação de exclusão enviada.');
+      }
+    );
   };
 
 })();
