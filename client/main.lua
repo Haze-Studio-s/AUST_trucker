@@ -2243,6 +2243,17 @@ local function StartTruckEnterWatcher(truck)
             local ped = cache.ped or PlayerPedId()
             local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
             local targetTruck = (truck and DoesEntityExist(truck)) and truck or JobEntities.truck
+
+            if (not targetTruck or not DoesEntityExist(targetTruck)) and ActiveJob and ActiveJob.truckNetId then
+                if NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
+                    local resolved = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
+                    if resolved ~= 0 and DoesEntityExist(resolved) then
+                        targetTruck = resolved
+                        JobEntities.truck = resolved
+                    end
+                end
+            end
+
             if veh ~= 0 and targetTruck and DoesEntityExist(targetTruck) and veh == targetTruck then
                 local seat = GetPedInVehicleSeat(veh, -1)
                 if seat == ped or seat == cache.ped then
@@ -2501,21 +2512,28 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             end)
         end)
 
-        -- 1. Resolução dos veículos primários essenciais (Caminhão e Carreta) com tolerância OneSync
-        local truck = WaitForNetworkEntity(payload.truckNetId, 12000)
-        local trailer = WaitForNetworkEntity(payload.trailerNetId, 12000)
+        -- 1. Resolução dos veículos primários (Caminhão e Carreta) com tolerância OneSync e Fallback resiliente
+        local truck = WaitForNetworkEntity(payload.truckNetId, 8000)
+        local trailer = WaitForNetworkEntity(payload.trailerNetId, 8000)
 
-        if not truck or not DoesEntityExist(truck) or not trailer or not DoesEntityExist(trailer) then
-            if Config.Debug then print(("^1[AUST_Trucker DEBUG - ETAPA 1] ERRO: Truck (%s) ou Trailer (%s) não puderam ser sincronizados no cliente! Cancelando job...^7"):format(
-                tostring(truck), tostring(trailer)
-            )) end
-            SendMissionNotify('Falha de Streaming', 'Não foi possível sincronizar os veículos da missão no cliente.', 'error')
-            TriggerServerEvent('aurp_trucker:server:cancelDelivery', payload.jobId, 'Falha de streaming de veículos no cliente')
-            CleanupCurrentJob()
-            return
+        -- Se o OneSync não resolveu o handle de imediato (ex: distância > streaming culling), não cancela! Mantém referências via NetId/Coords
+        if not truck or not DoesEntityExist(truck) then
+            if payload.truckNetId and NetworkDoesNetworkIdExist(payload.truckNetId) then
+                local ent = NetworkGetEntityFromNetworkId(payload.truckNetId)
+                if ent ~= 0 and DoesEntityExist(ent) then truck = ent end
+            end
         end
 
-        if Config.Debug then print(("^2[AUST_Trucker DEBUG - ETAPA 1] Caminhão e Carreta sincronizados! Iniciando StartMissionStep1 para Job %s^7"):format(tostring(payload.jobId))) end
+        if not trailer or not DoesEntityExist(trailer) then
+            if payload.trailerNetId and NetworkDoesNetworkIdExist(payload.trailerNetId) then
+                local ent = NetworkGetEntityFromNetworkId(payload.trailerNetId)
+                if ent ~= 0 and DoesEntityExist(ent) then trailer = ent end
+            end
+        end
+
+        print(("^2[AUST_Trucker] Job iniciado! JobID: %s | Truck: %s (NetId: %s) | Trailer: %s (NetId: %s)^7"):format(
+            tostring(payload.jobId), tostring(truck), tostring(payload.truckNetId), tostring(trailer), tostring(payload.trailerNetId)
+        ))
 
         local playerPed = cache.ped or PlayerPedId()
         SetEntityVisible(playerPed, true)
