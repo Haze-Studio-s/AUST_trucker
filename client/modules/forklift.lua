@@ -636,8 +636,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                     -- 1. Gerenciamento Físico de Elevação: Garfos da empilhadeira
                     local activeCarried = nil
-                    -- Controles de elevação de garfo na empilhadeira (Shift padrão: 60 = INPUT_VEH_FLY_PITCH_UP, 62 = INPUT_VEH_SUB_PITCH_UP)
-                    local isLiftingInputActive = IsControlPressed(0, 60) or IsDisabledControlPressed(0, 60) or IsControlPressed(0, 62) or IsDisabledControlPressed(0, 62)
 
                     for _, p in pairs(ActiveMissionPallets) do
                         if p and DoesEntityExist(p) and not IsEntityAttached(p) then
@@ -652,30 +650,33 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
 
                             if isEngagedWithForks then
-                                -- O palete SÓ descongela se o motorista iniciar a elevação mecânica no eixo Z!
-                                -- Apenas aproximar a empilhadeira ou inserir os garfos mantém o palete 100% congelado no chão.
+                                -- Transição Cinemática: descongela no toque para não atuar como parede sólida contra os garfos
                                 if IsEntityPositionFrozen(p) then
-                                    if isLiftingInputActive then
-                                        FreezeEntityPosition(p, false)
-                                        SetEntityDynamic(p, true)
-                                        SetEntityHasGravity(p, true)
-                                        ActivatePhysics(p)
-                                    end
+                                    FreezeEntityPosition(p, false)
+                                    SetEntityDynamic(p, true)
+                                    SetEntityHasGravity(p, false) -- Gravidade OFF enquanto em repouso no chão para não tunelar
+                                    ActivatePhysics(p)
                                 end
 
                                 local zLift = pCoords.z - PalletBaseZ[p]
-                                if zLift >= 0.10 then
+                                if zLift >= 0.08 then
+                                    -- Carga içada da base: ativa gravidade plena para peso real sobre os garfos
+                                    SetEntityHasGravity(p, true)
                                     activeCarried = p
+                                else
+                                    -- Previne qualquer vetor negativo de descida acidental no chão
+                                    local vel = GetEntityVelocity(p)
+                                    if vel.z < 0.0 then
+                                        SetEntityVelocity(p, vel.x, vel.y, 0.0)
+                                    end
                                 end
                             else
-                                -- Fora dos garfos e em repouso no chão: recongela imediatamente para blindar contra qualquer afundamento
-                                if not IsEntityPositionFrozen(p) and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.08 then
-                                    local vel = GetEntityVelocity(p)
-                                    if #(vel) < 0.15 then
-                                        FreezeEntityPosition(p, true)
-                                        SetEntityDynamic(p, false)
-                                        SetEntityHasGravity(p, false)
-                                    end
+                                -- Empilhadeira recuou ou garfos fora do vão: recongela no chão
+                                if not IsEntityPositionFrozen(p) and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
+                                    FreezeEntityPosition(p, true)
+                                    SetEntityDynamic(p, false)
+                                    SetEntityHasGravity(p, false)
+                                    SetEntityVelocity(p, 0.0, 0.0, 0.0)
                                 end
                             end
                         end
