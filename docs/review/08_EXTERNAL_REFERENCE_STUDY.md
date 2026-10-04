@@ -364,3 +364,6 @@ Pontuações de B, C, D e A são **minhas** (leitura direta); E–L foram produz
 | Flatbed / reboque | **Tow (J)** só para offsets por modelo; o AUST já supera o resto | |
 | Parcel / depósito | **ESX Deliveries (K)** (conceito) | UX de depósito/carry; sem enforcement |
 | Cleanup / validação | **ox_lib / ox_inventory (L)** | padrões de callback, locks e hooks |
+
+
+> Adendo: aprofundamento do XS-Trucking em `08b_XS_TRUCKING_DEEP_DIVE.md`.

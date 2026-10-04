@@ -15,13 +15,14 @@
 | 06 | Ciclo de vida das entidades |
 | 07 | Forklift/pallet: reconstrução dos commits e física |
 | 08 | 12 referências externas, licenças, scorecard |
+| 08b | XS-Trucking: aprofundamento (CI estático, docking, orphan mode, settings) |
 | 09 | Matriz comparativa por domínio |
 | 10 | Opções de arquitetura de pallet (A, B, C, D-H, D-K) |
 | 11 | Revisão OneSync/rede |
 | 12 | Segurança/autoridade (P0 0, P1 8, P2 14, P3 12) |
 | 13 | Desempenho (top 15 hotspots) |
 | 14 | Registro de dívida técnica (P1 9, P2 28, P3 10) |
-| 15 | Plano de implementação (40 itens, ondas 0–8) |
+| 15 | Plano de implementação (42 itens, ondas 0–8) |
 | 17 | Checklist de revisão por PLAN ID |
 | 18 | Resumo executivo |
 
@@ -57,7 +58,7 @@ W1-01 (telemetria) → W1-03 (Modelo D-K, rede opção A) → W3-01/W3-09 (prova
 
 ## 6. Primeira onda e perguntas abertas
 
-**Primeira onda:** Onda 0 + W2-01…W2-03 + W1-01 (ver `15_…`).
+**Primeira onda:** Onda 0 (inclui W0-04, verificadores de CI) + W2-01…W2-03 + W1-01 (ver `15_…`).
 
 **Perguntas para J2:**
 1. Autoriza editar `fxmanifest.lua` (1 linha) e `client/modules/forklift.lua`, ou prefere receber o diff? (W1-02/W1-03)

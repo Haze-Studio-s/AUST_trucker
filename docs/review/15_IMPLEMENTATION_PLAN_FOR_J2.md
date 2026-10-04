@@ -10,6 +10,7 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 |---|---|---|---|---|---|---|---|---|---|
 | W0-01 | LICENSE/NOTICE e política de referências | LEGAL-01/02 | `LICENSE`, `NOTICE` (novos) | aviso MIT do Polarix; decisão da licença do AUST; regra "só ideias" para refs sem licença compatível | `08_…` §licenças | — | nenhum | revisão jurídica do dono | remover arquivos |
 | W0-02 | Alinhar versão | DOC-01 | `fxmanifest.lua`, README, CHANGELOG | uma versão única | — | — | baixo | grep de versão | reverter |
+| W0-04 | Verificadores estáticos de CI (ideia do XS-Trucking, reimplementada) | `08b_…` | `tools/` (novo, Node; fora do runtime do jogo) | manifest × pasta, eventos duplicados/sem handler, NUI × callbacks, natives, `os`/`io` no cliente; só relatam | XS (ideia; licença fechada) | — | baixo | rodar no CI e listar achados (sem corrigir) | remover `tools/` |
 | W0-03 | Plano de testes de runtime | `11_…` §5 | `docs/` | executar a matriz de testes multi-jogador como linha de base **antes** das mudanças | — | — | nenhum | planilha de resultados | — |
 
 ## Onda 1 — Forklift / pallet (Fase 2A já tem base atrás de flag; **2B não inicia sem aprovação**)
@@ -66,6 +67,7 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 | W5-02 | Join tardio de offsets | TD-41 | enviar offsets no join |
 | W5-03 | Hotspots top 15 (`13_…` §4) | TD-32..36 | começar pelos 3 maiores (escudo Havok, cintas, HUD); medir com `resmon` antes/depois |
 | W5-04 | Leaderboard e cache de offsets | TD-08, TD-09 | corrigir tabela; usar cache |
+| W5-05 | Settings ao vivo no painel admin (opcional) | `08b_…` | schema declarativo com min/max, fallback no `Config`; persistência em tabela nova (**migração revisada**) |
 
 ## Onda 6 — Consolidações (maior risco de dados; sempre com migração revisada)
 

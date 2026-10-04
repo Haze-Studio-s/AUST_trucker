@@ -27,6 +27,7 @@
 | W0-01 | LICENSE/NOTICE | não | — | ☐ | |
 | W0-02 | Alinhar versão | não | — | ☐ | |
 | W0-03 | Plano de testes runtime | — | — | ☐ | |
+| W0-04 | Verificadores estáticos de CI | não | — | ☐ | |
 | W1-01 | Telemetria do pallet | sim | W0-03 | ☐ | |
 | W1-02 | Carregar `fork_lift.lua` | não | — | ☐ | |
 | W1-03 | Patch cinemático cliente | sim | W1-01/02 | ☐ | |
@@ -55,6 +56,7 @@
 | W5-02 | Join tardio de offsets | não | — | ☐ | |
 | W5-03 | Hotspots | sim (profiler) | — | ☐ | |
 | W5-04 | Leaderboard/cache | não | — | ☐ | |
+| W5-05 | Settings ao vivo (opcional) | não | — | ☐ | |
 | W6-01 | Pilha de NUI | não | — | ☐ | |
 | W6-02 | Ledger de empresa | não | — | ☐ | |
 | W6-03 | Modelo único de frota | sim | — | ☐ | |
@@ -65,4 +67,4 @@
 | W7-03 | Fusão dos forklifts | sim | W1-* | ☐ | |
 | W8-01 | Remover órfãos provados | sim | — | ☐ | |
 
-**Total: 40 PLAN IDs.** Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6.
+**Total: 42 PLAN IDs.** Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6.
