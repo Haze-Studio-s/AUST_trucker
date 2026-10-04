@@ -578,6 +578,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
         end
 
         local PalletBaseZ = {} -- Mapeia o Z de descanso inicial de cada palete
+        local PalletPhysState = {} -- Controla transições atômicas para blindar contra Reliable network event overflow
 
         while OperationActive do
             local sleep = 150
@@ -649,34 +650,44 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             -- Garfos encaixados geometricamente no vão do palete
                             local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
 
+                            local pState = PalletPhysState[p] or 'frozen'
+
                             if isEngagedWithForks then
                                 -- Transição Cinemática: descongela no toque para não atuar como parede sólida contra os garfos
-                                if IsEntityPositionFrozen(p) then
+                                if pState == 'frozen' then
                                     FreezeEntityPosition(p, false)
                                     SetEntityDynamic(p, true)
                                     SetEntityHasGravity(p, false) -- Gravidade OFF enquanto em repouso no chão para não tunelar
                                     ActivatePhysics(p)
+                                    PalletPhysState[p] = 'ground_engaged'
                                 end
 
                                 local zLift = pCoords.z - PalletBaseZ[p]
                                 if zLift >= 0.08 then
-                                    -- Carga içada da base: ativa gravidade plena para peso real sobre os garfos
-                                    SetEntityHasGravity(p, true)
+                                    -- Carga içada da base: ativa gravidade plena para peso real sobre os garfos (apenas na transição)
+                                    if pState ~= 'lifted' then
+                                        SetEntityHasGravity(p, true)
+                                        PalletPhysState[p] = 'lifted'
+                                    end
                                     activeCarried = p
                                 else
-                                    -- Previne qualquer vetor negativo de descida acidental no chão
+                                    if pState == 'lifted' then
+                                        SetEntityHasGravity(p, false)
+                                        PalletPhysState[p] = 'ground_engaged'
+                                    end
                                     local vel = GetEntityVelocity(p)
-                                    if vel.z < 0.0 then
+                                    if vel.z < -0.05 then
                                         SetEntityVelocity(p, vel.x, vel.y, 0.0)
                                     end
                                 end
                             else
                                 -- Empilhadeira recuou ou garfos fora do vão: recongela no chão
-                                if not IsEntityPositionFrozen(p) and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
+                                if pState ~= 'frozen' and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
                                     FreezeEntityPosition(p, true)
                                     SetEntityDynamic(p, false)
                                     SetEntityHasGravity(p, false)
                                     SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                    PalletPhysState[p] = 'frozen'
                                 end
                             end
                         end
