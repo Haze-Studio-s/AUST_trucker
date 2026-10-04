@@ -1,5 +1,14 @@
 # Changelog — AUST_trucker
 
+## [20.9.1] — 2026-10-04 — Sincronização 6DoF com Bones Reais e Blindagem In-Game (CEF)
+
+### Corrigido & Aprimorado
+- **Sincronização Dinâmica de Bones no PropEditor (`offset_editor.lua`):** O PropEditor agora detecta automaticamente o bone de trabalho do veículo de carregamento (`forks` / `forks_attach` para empilhadeiras e `frame_2` para reach stacker/handler), calculando matrizes relativas (`GetOffsetFromBoneGivenWorldCoords`) em vez de forçar o Bone 0 (Root/Chassi).
+- **Autoridade Suprema do 6DoF no Gameplay (`forklift.lua`, `reach_stacker.lua`, `container_handler.client.lua`):** Ao acoplar a carga nos garfos da empilhadeira ou no spreader da grua, o sistema consulta `GetVehiclePropOffset(veh, prop)` e sobrepõe os offsets padrão com prioridade máxima.
+- **Isolamento de Slots da Carreta (`forklift.lua`, `main.lua`):** Removida a sobreposição indevida do PropEditor nos slots de paletes do reboque (`slotOffset`), mantendo a distribuição física longitudinal e lateral de cada carga individual na carreta.
+- **Fluxo do Botão Confirmar Posição e Tecla ENTER (`gizmo_overlay.js`):** Blindagem contra cliques duplos, feedback visual de escala e sonoro, com liberação e reset imediato do foco NUI (`SetNuiFocus(false, false)`).
+- **Modais de Confirmação 100% In-Game (`admin.js`, `admin.css`):** O modal de confirmação de exclusão de offsets agora utiliza renderização in-game com `position: fixed`, `z-index: 10000000` e atalho `ESC`, eliminando janelas e alertas pop-up nativos fora do jogo no CEF do FiveM.
+
 ## [20.9.0] — 2026-10-04 — Módulo PropEditor 6DoF (/truckeradmin)
 
 ### Adicionado
