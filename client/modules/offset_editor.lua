@@ -111,7 +111,7 @@ end)
 RegisterNUICallback('confirmGizmoSlot', function(data, cb)
     if IsCalibrating then
         OffsetEditor.ConfirmCurrentSlot()
-    elseif IsPropEditorActive and PropEditorGizmoActive then
+    elseif IsPropEditorActive then
         OffsetEditor.ConfirmPropEditorSlot()
     end
     if cb then cb({ ok = true }) end
@@ -1475,21 +1475,21 @@ function OffsetEditor.RunPropGizmoCameraLoop(propCam)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
-            -- 5. SALVAMENTO ESTRITAMENTE VIA TECLADO ENTER (191)
-            -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar durante arrasto do Gizmo
-            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
-                and not IsDisabledControlPressed(0, 24)
-                and not IsDisabledControlJustPressed(0, 24)
-                and not IsDisabledControlPressed(0, 18)
-                and not IsDisabledControlJustPressed(0, 18)
+            -- 5. SALVAMENTO ESTRITAMENTE VIA TECLADO ENTER (201 / 191 / 176)
+            local isEnterKeyPressed = IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201)
+                or IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191)
+                or IsDisabledControlJustPressed(0, 176) or IsControlJustPressed(0, 176)
 
-            if isKeyboardEnter then
+            -- Não aciona se o usuário estiver ativamente clicando com o mouse para arrastar o Gizmo (24)
+            local isMouseClicking = IsDisabledControlPressed(0, 24) or IsControlPressed(0, 24)
+
+            if isEnterKeyPressed and not isMouseClicking then
                 OffsetEditor.ConfirmPropEditorSlot()
                 break
             end
 
             -- 6. TECLA ESC OU BACKSPACE: FINALIZAR / CANCELAR E RESTAURAR
-            if IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
+            if IsDisabledControlJustPressed(0, 177) or IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) or IsControlJustPressed(0, 194) then
                 OffsetEditor.CancelPropEditorSession()
                 break
             end
