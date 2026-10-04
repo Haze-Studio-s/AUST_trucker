@@ -209,29 +209,31 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 
 ---
 
-## REFERENCE H — XS-Trucking
+## REFERENCE H — XS-Trucking  *(REVISÃO V2 — detalhes em `08b_XS_TRUCKING_DEEP_DIVE.md`)*
 
-**FILES READ:** `fxmanifest.lua`, `LICENSE`, `server/main.lua` (1–43), `server/db.lua` (1–409), `server/jobs.lua` (1–1326), `server/callbacks.lua` (1–287), `server/progress.lua` (1–252), `server/business.lua` (1–591), `server/garage.lua` (1–486), `server/coop.lua` (1–252), `server/spots.lua` (1–343), `server/admin.lua` (1–120 de 354), `client/job.lua` (195–275), `client/guards.lua` (55–72), `bridge/framework.lua` (parcial), `config.lua` (1–60 + greps). **NOT READ:** `server/settings.lua`, `client/ui.lua`, `client/main.lua`, `html/*`, `tools/*`, README/CHANGELOG.
+**FILES READ (FULL):** server 11/11 (`main, db, jobs, callbacks, progress, business, garage, coop, spots, settings, admin`), client 6/6 (`job, main, placement, ui, builder, guards`), `config.lua`, bridge 6/6 (`framework, fuel, inventory, keys, target, dispatch`), `shared/util.lua`, NUI 18/18 (`index.html`, `js/*` ×16, `css/cabos.css`), tools 10/10 (`check-*.mjs` + `check-all.mjs`), `README`, `CHANGELOG`, `LICENSE`, `fxmanifest.lua`, 2 workflows. **PARTIAL:** `tools/.natives-cache.json` (início; arquivo de dados). **NOT READ:** `html/vendor/leaflet/*`, `html/assets/maps/tiles/*.webp`. Nada foi executado.
 
-- **Servidor cria os veículos** (`CreateVehicleServerSetter`, `jobs.lua:38`), guarda handles por job, marca statebag `xsTrucking`; cliente é "renderizador fino" com callbacks; **único evento cliente→servidor** (`guardsAlarm`) validado.
-- `Jobs.Deliver` valida estágio, **trailer do servidor** a ≤ `deliverRadius` da parada, caminhão a ≤ 20 m do trailer, jogador perto; `finish()` limpa `Jobs.active[src]` **antes** de pagar (sem pagamento duplo); dano = saúde do veículo lida no servidor; watchdog de 5 s.
-- Empresa de jogador com banco, ranks, corte do motorista, ledger e `Charge` atômico (`bank >= ?`); frota; co-op com presença medida; tabela de auditoria `xs_trucking_deliveries`.
-- Falhas: `Garage.Collect`/`Sell`/`BuySkill` com check-then-act não atômico; hitch só validado no cliente; combustível do cliente.
-- **Possível derivação de "Cipher-Trucking"** (importador `cipher_trucking_*`); licença do upstream **UNKNOWN**.
+- **Servidor cria os veículos** (`CreateVehicleServerSetter` + `SetEntityOrphanMode(…,2)`, `jobs.lua:37-47`) e os guardas (`CreatePed` + orphan mode, `:649`); marca statebags `xsTrucking`/`xsGuard` **no servidor**; o cliente é renderizador fino via callbacks (o servidor registra **um único** `RegisterNetEvent`, `guardsAlarm`).
+- `Jobs.Deliver` valida estágio, **trailer do servidor** na zona, caminhão ≤ 20 m do trailer, jogador perto; `finish()`/`drop()` limpam `Jobs.active[src]` **antes** de pagar (sem pagamento duplo); dano = saúde lida no servidor; watchdog de 5 s.
+- **Autoridade HÍBRIDA, não 100%:** o **hitch** é detectado no cliente e o servidor só confere distância; **combustível** (devolução) e **hora do relógio** vêm do cliente (clamp 0..100 só no combustível).
+- Empresa de jogador com banco, ranks hierárquicos, corte do motorista, ledger e `Charge` atômico (`bank >= ?`); frota com reserva; co-op (convoy/escort/co-driver); auditoria em `xs_trucking_deliveries` e `xs_trucking_admin_log`; admin sempre por `guarded()`.
+- Falhas: janelas **check-then-act** (`Garage.Collect/Sell`, `BuySkill`, `BuySlots`, `Jobs.Take`, `Coop.Start` — RUNTIME_UNVERIFIED), liquidação **não transacional**, débito antes da escrita, jobs só em memória, sem rate limit, sem testes. Detalhes e evidência em `08b` §4 e §11.
+- **Diferenciais para o AUST (ideias):** camada de **bridges** (framework/fuel/inventory/keys/target/dispatch), **ferramentas estáticas** (9 verificadores locais), **NUI modular** com contrato RPC, **painel admin** com auditoria e **settings ao vivo**, **Placement** (footprint/piso/água), padrão `takeControl` limitado.
+- **Possível derivação de "Cipher-Trucking"** (importador `cipher_trucking_*`, `db.lua:321`); licença do upstream **UNKNOWN**.
 
 | LAST ACTIVITY | 2026-09-30 |
 |---|---|
-| CODE QUALITY | 7 |
+| CODE QUALITY | 8 |
 | SECURITY | 7 |
-| SERVER AUTHORITY | 9 |
-| ONESYNC | 9 |
-| PERFORMANCE | 6 |
-| GAMEPLAY | 8 |
-| MAINTAINABILITY | 7 |
-| **AUST RELEVANCE** | **8** |
+| SERVER AUTHORITY | 8,5 |
+| ONESYNC | 8,5 |
+| PERFORMANCE | 7 |
+| GAMEPLAY | 9 |
+| MAINTAINABILITY | 8 |
+| **AUST RELEVANCE** | **8,5** |
 
-**TRANSFERABLE (ideias, não código):** veículos criados no servidor com statebag e registro por job; watchdog; `finish()` que apaga o estado antes de pagar; `lockReason()`; ledger e auditoria por entrega; tabela de settings ajustáveis; normalização/clamp de rotas do builder.
-**DO NOT COPY:** licença proíbe redistribuição de código original ou modificado; `Collect`/`Sell` não atômicos.
+**TRANSFERABLE (ideias, não código):** veículos criados no servidor com statebag e registro por job; watchdog; `finish()` que apaga o estado antes de pagar; `lockReason()`; ledger e auditoria por entrega; settings ajustáveis; normalização/clamp de rotas; bridges; verificadores estáticos; `takeControl` limitado; contrato `UI RPC allowlist + server authority`.
+**DO NOT COPY:** licença **ALL RIGHTS RESERVED** (sem redistribuição de original ou derivado, sem venda); `Collect`/`Sell`/`BuySkill` não atômicos; combustível/hora do cliente. **IDEA ONLY — INDEPENDENT REIMPLEMENTATION.**
 
 ---
 
@@ -341,7 +343,7 @@ Detalhe completo (call-flow por etapa) em `AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY
 | E qb-truckerjob | 4 | 2 | 1 | 2 | 5 | 4 | 4 | 5 |
 | F qbx_core | 7 | 7 | 8 | 8 | 7 | n/a | 6 | 6 |
 | G ls_trucking | 6 | 6 | 5 | 6 | 6 | 7 | 4 | 4 |
-| H XS-Trucking | 7 | 7 | **9** | **9** | 6 | 8 | 7 | **8** |
+| H XS-Trucking (v2) | 8 | 7 | **8,5** | **8,5** | 7 | **9** | 8 | **8,5** |
 | I fiji-oil | 7 | 7 | 7 | 6 | 7 | 6 | 6 | 5 |
 | J Tow | 6 | 2 | 3 | 4 | 6 | 5 | 6 | 5 |
 | K ESX Deliveries | 4 | 0 | 0 | 2 | 3 | 6 | 4 | 6 |
@@ -357,8 +359,12 @@ Pontuações de B, C, D e A são **minhas** (leitura direta); E–L foram produz
 |---|---|---|
 | Forklift / pickup | **Polarix (A)** | swap de representação; chão frozen |
 | Colisão a distância | **Mobius (C)** | único que nomeia e mitiga o modo de falha |
-| OneSync / ownership / statebag | **Don (B)** + **XS-Trucking (H)** | dono em statebag e remoção validada; veículos criados no servidor com watchdog |
-| Core trucking | **XS-Trucking (H)** | autoridade total, empresa, frota, convoy, auditoria |
+| OneSync / ownership / statebag | **Don (B)** + **XS-Trucking (H)** | dono em statebag e remoção validada; veículos/guardas criados no servidor com orphan mode, statebags do servidor e `takeControl` limitado |
+| Core trucking | **XS-Trucking (H)** | autoridade **majoritária** (hitch, combustível e hora ainda vêm do cliente), empresa, frota, convoy, auditoria |
+| Integration bridges | **XS-Trucking (H)** | autodetecção/força de provedor + API canônica (framework, fuel, inventory, keys, target, dispatch) |
+| Ferramentas estáticas FiveM | **XS-Trucking (H)** | 9 verificadores locais (manifest, eventos, NUI, natives, netIds, runtime, multi-retorno, sintaxe) |
+| Arquitetura de NUI de trucking | **XS-Trucking (H)** | NUI modular + contrato RPC; **não** replicar o laptop (ver doc 19) |
+| Admin / Route Builder | **XS Builder + PropEditor do AUST** | builder admin-only com auditoria; PropEditor para offsets; **ADMIN ONLY** |
 | Segurança de mutação | **fiji-oil (I)** + **qbx_core (F)** | locks, claim atômico, API de mutação só no servidor |
 | Petróleo | **fiji-oil (I)** | cadeia de suprimento e refino com estado no servidor |
 | Flatbed / reboque | **Tow (J)** só para offsets por modelo; o AUST já supera o resto | |

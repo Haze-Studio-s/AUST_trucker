@@ -1,6 +1,8 @@
 # 15 — Implementation Plan for J2 (PROPOSTA — nada implementado)
 
-**ANALYZED HEAD: `c9d9187`.** Este plano é **proposta para revisão**. **Nenhum item foi implementado por este pacote.** Todo item exige **J2 APPROVAL REQUIRED: YES** antes de qualquer alteração de código (ver `17_J2_REVIEW_CHECKLIST.md`). Ordem das ondas = ordem de risco crescente; cada onda só começa depois do aceite da anterior.
+**ANALYZED HEAD: `c9d9187`** (revisão V2 sobre a base documental `3a89631`; código idêntico). Este plano é **proposta para revisão**. **Nenhum item foi implementado por este pacote.** Todo item exige **J2 APPROVAL REQUIRED: YES** antes de qualquer alteração de código (ver `17_J2_REVIEW_CHECKLIST.md`). Ordem das ondas = ordem de risco crescente; cada onda só começa depois do aceite da anterior.
+
+**Opções de decisão por item (J2):** `APPROVE` · `APPROVE WITH CHANGES` · `REJECT` · `DEFER` · `NEEDS RUNTIME PROOF` · `NEEDS MORE ANALYSIS`. Itens derivados do XS-Trucking trazem **IDEA ONLY — INDEPENDENT REIMPLEMENTATION** (licença *all rights reserved*).
 
 Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis · Proposta · Referência · Depende de · Risco · Aceite / prova de runtime · Rollback**. Todos: *J2 approval required = YES; flag/feature-toggle quando houver mudança de comportamento.*
 
@@ -10,8 +12,32 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 |---|---|---|---|---|---|---|---|---|---|
 | W0-01 | LICENSE/NOTICE e política de referências | LEGAL-01/02 | `LICENSE`, `NOTICE` (novos) | aviso MIT do Polarix; decisão da licença do AUST; regra "só ideias" para refs sem licença compatível | `08_…` §licenças | — | nenhum | revisão jurídica do dono | remover arquivos |
 | W0-02 | Alinhar versão | DOC-01 | `fxmanifest.lua`, README, CHANGELOG | uma versão única | — | — | baixo | grep de versão | reverter |
-| W0-04 | Verificadores estáticos de CI (ideia do XS-Trucking, reimplementada) | `08b_…` | `tools/` (novo, Node; fora do runtime do jogo) | manifest × pasta, eventos duplicados/sem handler, NUI × callbacks, natives, `os`/`io` no cliente; só relatam | XS (ideia; licença fechada) | — | baixo | rodar no CI e listar achados (sem corrigir) | remover `tools/` |
+| W0-04 | Verificadores estáticos FiveM (ideia do XS-Trucking, **reimplementação independente**; sub-tarefas A–H abaixo) | `08b_…` §10, TD-43 | `tools/` (novo, Node; fora do runtime do jogo) + opcional passo de validação antes do deploy | verificadores heurísticos que **só relatam**; cada sub-tarefa é aprovável isoladamente | XS (**IDEA ONLY**) | — | baixo | rodar localmente e listar achados (sem corrigir); decisão separada para plugar no `deploy.yml` | remover `tools/` |
 | W0-03 | Plano de testes de runtime | `11_…` §5 | `docs/` | executar a matriz de testes multi-jogador como linha de base **antes** das mudanças | — | — | nenhum | planilha de resultados | — |
+
+
+### W0-04 — sub-tarefas (documentadas sem criar 8 PLAN IDs; J2 pode aprovar todas, algumas ou só as de prioridade)
+
+> **IDEA ONLY — INDEPENDENT REIMPLEMENTATION.** Não copiar o source do XS (licença *all rights reserved*). Cada sub-tarefa parte do **comportamento descrito em `08b` §10**, não dos arquivos do XS. Todos só **reportam**; nenhum corrige código.
+
+| Sub-ID | Verificador | Defeitos reais do AUST que ajuda a revelar | Prioridade sugerida |
+|---|---|---|---|
+| W0-04A | Manifest ↔ disco (+ HTML/`files{}`/glob) | `shared/fork_lift.lua` fora do manifest (W1-02), órfãos (TD-07), deriva de versão (DOC-01) | **alta** |
+| W0-04B | Eventos/callbacks (duplicado, sem handler, `await` sem registro) | `playerDropped` conflitante (TD-27), eventos NO CONSUMER (doc 04), `VP_Trucker` indefinido (TD-12) | **alta** |
+| W0-04C | Contrato NUI (POST ↔ `RegisterNUICallback`; RPC ↔ allowlist ↔ callback; sem host fixo) | acoplamento NUI (TD-07); base para futuros dispositivos (doc 19) | **alta** |
+| W0-04D | Validade de natives (lista oficial) | chamadas só quebram em runtime | média |
+| W0-04E | Guarda de netId no cliente (`NetworkDoesNetworkIdExist`) | `WaitForNetworkEntity` sem retry/entidade `nil` (TD-31), spam de console em late join | média |
+| W0-04F | Compatibilidade de lado (`os`/`io` no cliente; natives de cliente em `shared`) | arquivos `shared/*` | média |
+| W0-04G | Multi-retorno Lua (`return s:gsub(...)`) | classe de erro de parâmetros no oxmysql | média |
+| W0-04H | Sintaxe JS (sem executar) | páginas NUI que não carregam | média |
+
+Observação: nenhum desses verificadores detectaria o `SetInterval` com argumentos trocados (TD-13); isso exige checagem de assinatura própria.
+
+## Estudos (sem código)
+
+| ID | Título | Origem | Escopo | Risco | Decisão |
+|---|---|---|---|---|---|
+| **STUDY-DEVICE-01** | Auditar a capacidade de integração de **NexusOS / vp_tablet / vp_phone** | doc 19 | ler `Haze-Studio-s/nexus_os`, `vp_tablet`, `vp_phone` e mapear: registro de apps, exports, eventos, callbacks, notificações, deep links, badges, permissões, eventos em segundo plano, comunicação NUI, ciclo de vida do resource. Entregável: documento de **fatos** (arquivo/função). | **NONE — STUDY ONLY** | **J2 APPROVAL REQUIRED: YES** (inclui autorizar acesso de leitura aos três repositórios) · APPROVE / REJECT / DEFER |
 
 ## Onda 1 — Forklift / pallet (Fase 2A já tem base atrás de flag; **2B não inicia sem aprovação**)
 
@@ -40,7 +66,7 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 
 | ID | Título | Origem | Proposta | Ref. | Dep. | Risco | Aceite / prova |
 |---|---|---|---|---|---|---|---|
-| W3-01 | Prova de entrega por entidade | TD-02, TD-21 (SEC-02) | no `complete`, verificar no servidor posição do caminhão/trailer e carga (`GetEntityCoords` das entidades registradas), não só ped+tempo | H (`Jobs.Deliver`), G | W3-09 | ALTO | **runtime:** teleport+timer deve falhar; entrega legítima passa |
+| W3-01 | Prova de entrega por entidade (+ ideia de **docking score** do XS: distância 2D e heading do trailer medidos no servidor; **IDEA ONLY**) | TD-02, TD-21 (SEC-02) | no `complete`, verificar no servidor posição do caminhão/trailer e carga (`GetEntityCoords` das entidades registradas), não só ped+tempo | H (`Jobs.Deliver`), G | W3-09 | ALTO | **runtime:** teleport+timer deve falhar; entrega legítima passa |
 | W3-02 | Flatbed/repo/aluguel: papel e limpeza | TD-17, TD-18, TD-23 | restringir attach a missão/papel; liberar ordem de repo em queda; apagar forklift/handler na conclusão; corrigir reembolso do aluguel | G, J | — | MÉD | cenários de queda e de abuso |
 | W3-03 | Spawn point e trailer | TD-19 | `IsSpawnPointClear` não apaga veículos de terceiros (só os do próprio job); validar posição do trailer no servidor | H | — | MÉD | spawn com carro de terceiro no ponto |
 | W3-04 | Contratos | TD-15, TD-24 | UPDATE no cancelamento LC; rate limit em `Negotiate`; prova de carga | G | — | MÉD | cancelar contrato → banco consistente |
@@ -49,15 +75,17 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 | W3-07 | Parcel | `05_…` | cancelar no servidor em recusa; cooldown no start | G | — | BAIXO | recusa libera estado |
 | W3-08 | Export de petróleo | TD-24 | validar `qty/price` no servidor; retorno de barris no stop | I | — | MÉD | valores forjados rejeitados |
 | W3-09 | Registro de entidades | TD-20 (SEC-01) | `validateJobEntity`: provar que a entidade foi criada pelo servidor para este job; dois clientes não registram o mesmo carro | F | — | MÉD | **runtime:** 2 clientes, mesmo carro |
+| W3-10 | Política para **entradas do cliente consumidas pelo servidor** | `08b` XR-02/XR-03 (contraexemplos), TD-21/TD-22 | todo dado vindo do cliente que o servidor consome (ex.: combustível, hora, estado de hitch) deve ser **clampado, limitado em impacto e documentado**; preferir derivar no servidor quando possível; checklist de revisão para fluxos novos | XS (**IDEA ONLY**, como contraexemplo) | W3-01 | BAIXO | documento de política aprovado; aplicado primeiro ao PR #9 e aos novos fluxos |
 
 ## Onda 4 — OneSync / rede (exige prova de runtime antes de decidir)
 
 | ID | Título | Origem | Proposta | Risco | Aceite / prova |
 |---|---|---|---|---|---|
-| W4-01 | Orphan mode | TD-26 | testar o comportamento padrão; se necessário aplicar `SetEntityOrphanMode` por tipo de entidade | MÉD | queda do dono com pallet/trailer |
+| W4-01 | Orphan mode (referência: XS usa `SetEntityOrphanMode` em veículos/guardas criados no servidor; **IDEA ONLY**) | TD-26 | testar o comportamento padrão; se necessário aplicar `SetEntityOrphanMode` por tipo de entidade | MÉD | queda do dono com pallet/trailer |
 | W4-02 | Queda/reconexão | TD-27, TD-28, TD-31 | unificar os handlers de `playerDropped`; limpeza de entidades de cliente; retry de `WaitForNetworkEntity` | MÉD | queda, reconexão, streaming lento |
-| W4-03 | Statebags escritas pelo cliente | TD-22 | mover a escrita para o servidor (`loadedSlots`, `forklift_owner`, flatbed) | MÉD | cliente adulterado não altera |
+| W4-03 | Statebags escritas pelo cliente (referência: XS escreve `xsTrucking`/`xsGuard` só no servidor; **IDEA ONLY**) | TD-22 | mover a escrita para o servidor (`loadedSlots`, `forklift_owner`, flatbed) | MÉD | cliente adulterado não altera |
 | W4-04 | Resource stop | TD-30 | limitar a varredura a entidades marcadas pelo recurso | MÉD | restart com 2 jogadores |
+| W4-05 | Helper de **controle de rede limitado e confirmado** no cliente | TD-45, `08b` §5 | padrão `REQUEST → RETRY BOUNDED → CONFIRM → MUTATE` para `NetworkRequestControlOfEntity` (tentativas e tempo limitados; só muta se o controle foi confirmado); **IDEA ONLY — INDEPENDENT REIMPLEMENTATION** | BAIXO | **runtime:** 2 clientes disputando o mesmo pallet/trailer |
 
 ## Onda 5 — Admin e desempenho
 
@@ -68,16 +96,20 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 | W5-03 | Hotspots top 15 (`13_…` §4) | TD-32..36 | começar pelos 3 maiores (escudo Havok, cintas, HUD); medir com `resmon` antes/depois |
 | W5-04 | Leaderboard e cache de offsets | TD-08, TD-09 | corrigir tabela; usar cache |
 | W5-05 | Settings ao vivo no painel admin (opcional) | `08b_…` | schema declarativo com min/max, fallback no `Config`; persistência em tabela nova (**migração revisada**) |
+| W5-06 | **Validação de posicionamento** em ferramentas admin (footprint do modelo, piso, água, sobreposição) | `08b` §8.3 | **estudo apenas** (**IDEA ONLY — INDEPENDENT REIMPLEMENTATION**): avaliar se uma checagem de footprint/piso/água agregaria ao PropEditor 6DoF; **não substitui** o PropEditor e **não cria Route Builder**; qualquer ferramenta resultante é **ADMIN ONLY** |
 
 ## Onda 6 — Consolidações (maior risco de dados; sempre com migração revisada)
 
-| ID | Título | Origem |
-|---|---|---|
-| W6-01 | Decidir pilha de NUI (jQuery × React) | TD-07 |
-| W6-02 | Ledger de empresa e limpeza na venda | TD-40 |
-| W6-03 | Modelo único de frota | TD-37 |
-| W6-04 | Fonte única de nível/progressão | TD-38 |
-| W6-05 | Separar sistemas de NPC driver; atomizar reserva | TD-39 |
+| ID | Título | Origem | Proposta / notas |
+|---|---|---|---|
+| W6-01 | Decidir pilha de NUI (jQuery × React) | TD-07 | — |
+| W6-02 | Ledger de empresa e limpeza na venda | TD-40 | — |
+| W6-03 | Modelo único de frota | TD-37 | — |
+| W6-04 | Fonte única de nível/progressão | TD-38 | — |
+| W6-05 | Separar sistemas de NPC driver; atomizar reserva | TD-39 | — |
+| W6-06 | **Integração unificada de dispositivos do AUST** (NexusOS = gestão · vp_tablet = operação · vp_phone = notificações · AUST = backend canônico · Route Builder = **ADMIN ONLY**) | doc 19, TD-44 | **depende de STUDY-DEVICE-01**; UX por dispositivo **sem duplicar regra de negócio** (decisões só no servidor do AUST); **não implementar até revisão** de J2 e do código dos três resources |
+| W6-07 | **Camada de integration bridges** (framework/fuel/inventory/keys/target/dispatch) | TD-42, `08b` §6 | CONFIG → autodetecção/força de provedor → API canônica → domínio; fallback próprio quando o provedor falha; registry de target com limpeza; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION** |
+| W6-08 | **Padrão de NPCs de segurança criados no servidor** (ilegal/escolta) | `08b` §5, XR-17 | **estudo apenas** (**IDEA ONLY — INDEPENDENT REIMPLEMENTATION**): `SERVER STATE → NETWORK OWNER → CLIENT AI EXECUTION`; **não implementar** |
 
 ## Onda 7 — Refatoração estrutural (só após ondas 1–5 estáveis)
 
@@ -95,12 +127,16 @@ Campos por item: **ID · Título · Origem (TD/SEC/doc) · Arquivos prováveis �
 
 ## Primeira onda recomendada
 
-**Onda 0 + Onda 2 (W2-01…W2-03) + medição W1-01.** Razão: risco baixo, defeitos verificados por leitura, nenhuma mudança de física/rede/economia, e a telemetria (W1-01) é o dado que falta para decidir a Onda 1 com evidência. W1-02/W1-03 só quando houver autorização explícita.
+**Onda 0 (começando por W0-04A–C) + Onda 2 (W2-01…W2-03) + medição W1-01; STUDY-DEVICE-01 em paralelo (somente leitura, após autorização).** Razão: risco baixo, defeitos verificados por leitura, nenhuma mudança de física/rede/economia, e a telemetria (W1-01) é o dado que falta para decidir a Onda 1 com evidência. W1-02/W1-03 só quando houver autorização explícita.
 
 ## Itens de prova de runtime exigidos
 
-W1-01, W1-03, W1-05, W2-01…W2-06, W3-01, W3-02, W3-03, W3-09, W4-01…W4-04, W5-03 (profiler).
+W1-01, W1-03, W1-05, W2-01…W2-06, W3-01, W3-02, W3-03, W3-09, W4-01…W4-05, W5-03 (profiler), W6-07 (provedores reais).
 
 ## Dependências críticas
 
-W1-03 → W1-02 e W1-01; W1-05 → W1-03; W3-01 → W3-09; W3-05 → W2-03; W7-* → ondas 1–5.
+W1-03 → W1-02 e W1-01; W1-05 → W1-03; W3-01 → W3-09; W3-05 → W2-03; W3-10 → W3-01; **W6-06 → STUDY-DEVICE-01**; W6-06 usa W0-04C; W7-* → ondas 1–5.
+
+## Índice de PLAN IDs (revisão V2)
+
+**49 PLAN IDs:** W0-01…W0-04 (4; W0-04 com sub-tarefas A–H) · STUDY-DEVICE-01 (1) · W1-01…W1-05 (5) · W2-01…W2-06 (6) · W3-01…W3-10 (10) · W4-01…W4-05 (5) · W5-01…W5-06 (6) · W6-01…W6-08 (8) · W7-01…W7-03 (3) · W8-01 (1). **Novos na V2:** STUDY-DEVICE-01, W3-10, W4-05, W5-06, W6-06, W6-07, W6-08 (e o detalhamento A–H de W0-04). Nenhum foi executado.

@@ -114,3 +114,10 @@ Nas 24 h anteriores à análise a `main` recebeu **mais de 30 commits** do J2KGO
 ## 7. Como ler este pacote
 
 `16_J2_REVIEW_PACKAGE.md` é o índice executivo; `18_EXECUTIVE_SUMMARY.md` resume tudo em uma página; `17_J2_REVIEW_CHECKLIST.md` permite aprovar/rejeitar cada PLAN ID individualmente.
+
+## Revisões do pacote documental
+
+| Revisão | Commit documental base | Conteúdo |
+|---|---|---|
+| V1 | `c9d9187` (código) → docs até `3a89631` | documentos 00–18 e adendo `08b` (parcial) |
+| **V2** | `3a89631` | estudo completo do XS-Trucking (server/client/bridge/NUI/tools); atualizações de 08, 08b, 09, 14, 15, 16, 17, 18; novo `19_AUST_DEVICE_ECOSYSTEM_INTEGRATION.md`. **Nenhum código alterado**; o código do AUST em `3a89631` é idêntico ao de `c9d9187`. |
