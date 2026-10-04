@@ -2681,35 +2681,83 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     NetworkRequestControlOfEntity(ent)
                     SetNetworkIdCanMigrate(netId, false)
 
-                    -- Pré-carrega malha e colisão do terreno nas coordenadas do objeto
+                    -- 1. Ancoragem temporária de segurança imediata (impede queda inicial enquanto o piso carrega)
+                    FreezeEntityPosition(ent, true)
+
                     local pCoords = GetEntityCoords(ent)
+                    local baseSpawnZ = pCoords.z
+
+                    -- 2. Pré-carrega colisão do terreno nas coordenadas do objeto
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
-                    
                     local loadTimeout = GetGameTimer() + 3000
                     while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
                         Wait(50)
                     end
 
-                    -- Pausa obrigatória (Yielding) para garantir registro da entidade na engine e rede
+                    -- Pausa para propagação de colisão do interior/MLO
                     Wait(150)
 
-                    -- Cálculo exato da altura do solo (Ground Z)
-                    local groundFound, groundZ = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
-                    if groundFound then
-                        SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.05, false, false, false)
+                    -- 3. ShapeTest / Raycast Vertical para baixo procurando piso sólido com tolerância
+                    local groundZ = baseSpawnZ
+                    local rayFound = false
+
+                    local raycastStart = vector3(pCoords.x, pCoords.y, pCoords.z + 1.5)
+                    local raycastEnd = vector3(pCoords.x, pCoords.y, pCoords.z - 4.0)
+                    local rayHandle = StartShapeTestRay(raycastStart.x, raycastStart.y, raycastStart.z, raycastEnd.x, raycastEnd.y, raycastEnd.z, 1 | 16, ent, 7)
+                    local _, hit, hitCoords = GetShapeTestResult(rayHandle)
+
+                    if hit and hit ~= 0 and hitCoords.z > (baseSpawnZ - 3.5) then
+                        groundZ = hitCoords.z
+                        rayFound = true
                     else
-                        PlaceObjectOnGroundProperly(ent)
+                        local gFound, gz = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
+                        if gFound and gz > (baseSpawnZ - 3.5) then
+                            groundZ = gz
+                            rayFound = true
+                        end
                     end
 
-                    -- Pausa para assentar no chão antes da física ativa
-                    Wait(100)
+                    if rayFound then
+                        SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
+                    else
+                        PlaceObjectOnGroundProperly(ent)
+                        local curC = GetEntityCoords(ent)
+                        groundZ = curC.z
+                    end
 
-                    -- Física e massa nativas da Havok: palete solto no solo, estritamente dinâmico (FreezeEntityPosition PROIBIDO)
+                    -- 4. Estabilização controlada de 300ms para o motor Havok registrar o contato com o piso
+                    Wait(300)
+
+                    -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
                     SetEntityCollision(ent, true, true)
                     SetEntityDynamic(ent, true)
                     SetEntityHasGravity(ent, true)
                     FreezeEntityPosition(ent, false)
+                    SetEntityVelocity(ent, 0.0, 0.0, 0.0)
                     ActivatePhysics(ent)
+
+                    -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
+                    local safeTargetZ = groundZ + 0.04
+                    CreateThread(function()
+                        local palletEnt = ent
+                        local monitorExpiry = GetGameTimer() + 6000
+                        while DoesEntityExist(palletEnt) and GetGameTimer() < monitorExpiry do
+                            Wait(200)
+                            if not IsEntityAttached(palletEnt) then
+                                local c = GetEntityCoords(palletEnt)
+                                if c.z < (safeTargetZ - 1.8) then
+                                    -- Queda em falso piso detectada: resgate instantâneo
+                                    FreezeEntityPosition(palletEnt, true)
+                                    SetEntityCoordsNoOffset(palletEnt, pCoords.x, pCoords.y, safeTargetZ, false, false, false)
+                                    SetEntityVelocity(palletEnt, 0.0, 0.0, 0.0)
+                                    Wait(200)
+                                    FreezeEntityPosition(palletEnt, false)
+                                    SetEntityDynamic(palletEnt, true)
+                                    ActivatePhysics(palletEnt)
+                                end
+                            end
+                        end
+                    end)
 
                     table.insert(pallets, ent)
                 end
