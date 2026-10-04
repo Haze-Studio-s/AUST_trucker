@@ -636,6 +636,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                     -- 1. Gerenciamento Físico de Elevação: Garfos da empilhadeira
                     local activeCarried = nil
+                    -- Controles de elevação de garfo na empilhadeira (Shift padrão: 60 = INPUT_VEH_FLY_PITCH_UP, 62 = INPUT_VEH_SUB_PITCH_UP)
+                    local isLiftingInputActive = IsControlPressed(0, 60) or IsDisabledControlPressed(0, 60) or IsControlPressed(0, 62) or IsDisabledControlPressed(0, 62)
+
                     for _, p in pairs(ActiveMissionPallets) do
                         if p and DoesEntityExist(p) and not IsEntityAttached(p) then
                             local pCoords = GetEntityCoords(p)
@@ -645,15 +648,19 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             end
 
                             local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
+                            -- Garfos encaixados geometricamente no vão do palete
                             local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
 
                             if isEngagedWithForks then
-                                -- Garfos encaixados: descongela para permitir levantamento físico pela Havok
+                                -- O palete SÓ descongela se o motorista iniciar a elevação mecânica no eixo Z!
+                                -- Apenas aproximar a empilhadeira ou inserir os garfos mantém o palete 100% congelado no chão.
                                 if IsEntityPositionFrozen(p) then
-                                    FreezeEntityPosition(p, false)
-                                    SetEntityDynamic(p, true)
-                                    SetEntityHasGravity(p, true)
-                                    ActivatePhysics(p)
+                                    if isLiftingInputActive then
+                                        FreezeEntityPosition(p, false)
+                                        SetEntityDynamic(p, true)
+                                        SetEntityHasGravity(p, true)
+                                        ActivatePhysics(p)
+                                    end
                                 end
 
                                 local zLift = pCoords.z - PalletBaseZ[p]
@@ -661,7 +668,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     activeCarried = p
                                 end
                             else
-                                -- Fora dos garfos e em repouso no chão: se estiver parado perto do chão, recongela para blindar contra afundamento
+                                -- Fora dos garfos e em repouso no chão: recongela imediatamente para blindar contra qualquer afundamento
                                 if not IsEntityPositionFrozen(p) and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.08 then
                                     local vel = GetEntityVelocity(p)
                                     if #(vel) < 0.15 then
