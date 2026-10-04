@@ -2771,10 +2771,11 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                         end
                     end)
 
-                    table.insert(pallets, ent)
-                    PalletSyncState.ents[netId] = ent
-                else
-                    PalletSyncGuard.Release(PalletSyncState, netId)
+                        table.insert(pallets, ent)
+                        PalletSyncState.ents[netId] = ent
+                    else
+                        PalletSyncGuard.Release(PalletSyncState, netId)
+                    end
                 end
             end
         end
