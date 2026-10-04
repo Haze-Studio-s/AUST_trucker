@@ -2664,7 +2664,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     end)
 end)
 
--- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Freeze / Sem Limbo)
+-- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Assentamento Seguro)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
     CreateThread(function()
         local pallets = {}
@@ -2681,11 +2681,18 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     NetworkRequestControlOfEntity(ent)
                     SetNetworkIdCanMigrate(netId, false)
 
-                    -- Física Havok 100% ativa e solta (Sem FreezeEntityPosition)
-                    FreezeEntityPosition(ent, false)
-                    SetEntityDynamic(ent, true)
+                    -- Pré-carrega colisão do terreno nas coordenadas do objeto
+                    local pCoords = GetEntityCoords(ent)
+                    RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
+
+                    -- Assenta perfeitamente sobre a malha física do chão (evita colisão subterrânea)
+                    PlaceObjectOnGroundProperly(ent)
+
+                    -- Configuração física de contato com solo sem atravessar mapa
                     SetEntityCollision(ent, true, true)
                     SetEntityHasGravity(ent, true)
+                    SetEntityDynamic(ent, true)
+                    FreezeEntityPosition(ent, false)
                     ActivatePhysics(ent)
 
                     table.insert(pallets, ent)
