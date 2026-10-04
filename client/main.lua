@@ -2665,11 +2665,18 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 end)
 
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
-RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
+RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
+    local syncN = PalletSyncGuard.Begin(PalletSyncState, jobId)
     CreateThread(function()
         local pallets = {}
         for _, netId in ipairs(palletNetIds) do
             if netId and netId ~= 0 then
+                if not PalletSyncGuard.Claim(PalletSyncState, netId) then
+                    local existingEnt = PalletSyncState.ents[netId]
+                    if existingEnt and DoesEntityExist(existingEnt) then
+                        table.insert(pallets, existingEnt)
+                    end
+                else
                 local ent = WaitForNetworkEntity(netId, 8000)
                 if ent and DoesEntityExist(ent) then
                     SetEntityAsMissionEntity(ent, true, true)
@@ -2678,7 +2685,11 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     ResetEntityAlpha(ent)
 
                     -- Garante controle autoritativo local no OneSync e bloqueia migração
-                    NetworkRequestControlOfEntity(ent)
+                    local ctrlTimeout = GetGameTimer() + 2000
+                    while not NetworkHasControlOfEntity(ent) and GetGameTimer() < ctrlTimeout do
+                        NetworkRequestControlOfEntity(ent)
+                        Wait(50)
+                    end
                     SetNetworkIdCanMigrate(netId, false)
 
                     -- 1. Ancoragem temporária de segurança imediata (impede queda inicial enquanto o piso carrega)
@@ -2689,13 +2700,13 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
 
                     -- 2. Pré-carrega colisão do terreno nas coordenadas do objeto
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
-                    local loadTimeout = GetGameTimer() + 3000
+                    local loadTimeout = GetGameTimer() + 3500
                     while not HasCollisionLoadedAroundEntity(ent) and GetGameTimer() < loadTimeout do
                         Wait(50)
                     end
 
                     -- Pausa para propagação de colisão do interior/MLO
-                    Wait(150)
+                    Wait(200)
 
                     -- 3. ShapeTest / Raycast Vertical para baixo procurando piso sólido com tolerância
                     local groundZ = baseSpawnZ
@@ -2725,8 +2736,8 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                         groundZ = curC.z
                     end
 
-                    -- 4. Estabilização controlada de 300ms para o motor Havok registrar o contato com o piso
-                    Wait(300)
+                    -- 4. Estabilização controlada para o motor Havok registrar o contato com o piso
+                    Wait(250)
 
                     -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
                     SetEntityCollision(ent, true, true)
@@ -2735,6 +2746,7 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     FreezeEntityPosition(ent, false)
                     SetEntityVelocity(ent, 0.0, 0.0, 0.0)
                     ActivatePhysics(ent)
+                    SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
 
                     -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
                     local safeTargetZ = groundZ + 0.04
@@ -2760,6 +2772,9 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     end)
 
                     table.insert(pallets, ent)
+                    PalletSyncState.ents[netId] = ent
+                else
+                    PalletSyncGuard.Release(PalletSyncState, netId)
                 end
             end
         end
