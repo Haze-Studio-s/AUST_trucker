@@ -2755,48 +2755,27 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                                 end
                             end
 
+                            -- Cálculo do offset vertical inferior da bounding box do modelo
+                            local minDim, _ = GetModelDimensions(GetEntityModel(ent))
+                            local bottomOffset = math.abs(minDim.z)
+                            local finalRestZ = groundZ + bottomOffset + 0.02
+
                             if rayFound then
-                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
+                                SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, finalRestZ, false, false, false)
                             else
                                 PlaceObjectOnGroundProperly(ent)
                                 local curC = GetEntityCoords(ent)
-                                groundZ = curC.z
+                                finalRestZ = curC.z
                             end
 
-                            -- 4. Estabilização antes de liberar a dinâmica
-                            Wait(250)
-
-                            -- 5. Liberação da física nativa: palete 100% dinâmico e solto no solo
+                            -- 4. Estabilização e salvaguarda permanente em repouso:
+                            -- O palete DEVE permanecer CONGELADO (FreezeEntityPosition = true) no staging!
+                            -- Isso impede completamente o afundamento / tunelamento da Havok na malha do MLO.
                             SetEntityCollision(ent, true, true)
-                            SetEntityDynamic(ent, true)
-                            SetEntityHasGravity(ent, true)
-                            FreezeEntityPosition(ent, false)
+                            SetEntityDynamic(ent, false)
+                            SetEntityHasGravity(ent, false)
+                            FreezeEntityPosition(ent, true)
                             SetEntityVelocity(ent, 0.0, 0.0, 0.0)
-                            ActivatePhysics(ent)
-                            SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, groundZ + 0.04, false, false, false)
-
-                            -- 6. Salvaguarda Anti-Limbo (Monitora Z nos primeiros 6 segundos)
-                            local safeTargetZ = groundZ + 0.04
-                            CreateThread(function()
-                                local palletEnt = ent
-                                local monitorExpiry = GetGameTimer() + 6000
-                                while DoesEntityExist(palletEnt) and GetGameTimer() < monitorExpiry do
-                                    Wait(200)
-                                    if not IsEntityAttached(palletEnt) then
-                                        local c = GetEntityCoords(palletEnt)
-                                        if c.z < (safeTargetZ - 1.8) then
-                                            -- Queda em falso piso detectada: resgate instantâneo
-                                            FreezeEntityPosition(palletEnt, true)
-                                            SetEntityCoordsNoOffset(palletEnt, pCoords.x, pCoords.y, safeTargetZ, false, false, false)
-                                            SetEntityVelocity(palletEnt, 0.0, 0.0, 0.0)
-                                            Wait(200)
-                                            FreezeEntityPosition(palletEnt, false)
-                                            SetEntityDynamic(palletEnt, true)
-                                            ActivatePhysics(palletEnt)
-                                        end
-                                    end
-                                end
-                            end)
 
                             PalletSyncState.ents[netId] = ent
                         else

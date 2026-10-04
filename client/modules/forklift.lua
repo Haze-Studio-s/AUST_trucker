@@ -634,7 +634,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     -- OPERAÇÃO FÍSICA REAL (Sem AttachEntityToEntity entre empilhadeira e paletes)
                     local forkCoords, forkBone = GetForkliftForksCoords(forklift)
 
-                    -- 1. Monitoramento Passivo da Elevação Z (Sem alterar colisão nem dinâmica por proximidade)
+                    -- 1. Gerenciamento Físico de Elevação: Garfos da empilhadeira
                     local activeCarried = nil
                     for _, p in pairs(ActiveMissionPallets) do
                         if p and DoesEntityExist(p) and not IsEntityAttached(p) then
@@ -644,13 +644,32 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 PalletBaseZ[p] = pCoords.z
                             end
 
-                            -- Detecção passiva: palete erguido fisicamente pelos garfos da empilhadeira (>= 0.12m do repouso)
-                            local zLift = pCoords.z - PalletBaseZ[p]
                             local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
-                            local isNearForks = math.abs(relP.x) <= 1.2 and (relP.y >= 0.2 and relP.y <= 3.2)
+                            local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
 
-                            if zLift >= 0.12 and isNearForks then
-                                activeCarried = p
+                            if isEngagedWithForks then
+                                -- Garfos encaixados: descongela para permitir levantamento físico pela Havok
+                                if IsEntityPositionFrozen(p) then
+                                    FreezeEntityPosition(p, false)
+                                    SetEntityDynamic(p, true)
+                                    SetEntityHasGravity(p, true)
+                                    ActivatePhysics(p)
+                                end
+
+                                local zLift = pCoords.z - PalletBaseZ[p]
+                                if zLift >= 0.10 then
+                                    activeCarried = p
+                                end
+                            else
+                                -- Fora dos garfos e em repouso no chão: se estiver parado perto do chão, recongela para blindar contra afundamento
+                                if not IsEntityPositionFrozen(p) and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.08 then
+                                    local vel = GetEntityVelocity(p)
+                                    if #(vel) < 0.15 then
+                                        FreezeEntityPosition(p, true)
+                                        SetEntityDynamic(p, false)
+                                        SetEntityHasGravity(p, false)
+                                    end
+                                end
                             end
                         end
                     end
