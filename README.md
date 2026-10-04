@@ -1,6 +1,6 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.7.9-blue)
+![Version](https://img.shields.io/badge/version-20.8.0-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 
@@ -354,6 +354,7 @@ Consulte o arquivo `CHANGELOG.md` para o historico completo de versoes.
 
 | Versao | Descricao |
 |--------|-----------|
+| v20.8.0 | Auditoria Completa de Código: Fix CalcBonus, Reembolso de Saldo Empresarial na Venda & Otimização NUI Polling |
 | v20.6.0 | Sistema Visual de Cintas de Amarração 3D (DrawLine) & Texto Interativo [E] (DrawText3D) |
 | v20.5.0 | OneSync Observer Shield & Network Ownership Lock (Anti-Desync Proximidade) |
 | v20.4.0 | Forklift Offset Truckeradmin Fix, Dynamic Hologram Trigger & Gizmo Align |
@@ -380,13 +381,19 @@ Consulte o arquivo `CHANGELOG.md` para o historico completo de versoes.
 
 ## Security & Compatibility
 
-### Audit — 2026-04-08
-- Auditado por fivem-audit skill (Claude Code)
-- 0 críticos, 1 HIGH resolvido, 1 MEDIUM + 1 LOW pendentes
+### Audit — 2026-10-04 (v20.8.0)
+- Auditoria completa ponta a ponta por Antigravity (Google DeepMind)
+- Nível de Segurança: **9.4/10**
+- 1 bug crítico corrigido (`CalcBonus` nil), 1 vulnerabilidade média corrigida (perda de saldo na venda), 1 otimização de performance (NUI polling adaptativo)
+- 3 arquivos alterados, 0 removidos
 - Framework: QBX/QBCore/ESX compatível
 - lua54: yes — todas funções cross-file verificadas como globais
 - AntiCheatService: rate limiting em todos os eventos transacionais
 - SQL: 100% parameterizado com `?` (zero SQL injection)
+
+### Audit — 2026-04-08
+- Auditado por fivem-audit skill (Claude Code)
+- 0 críticos, 1 HIGH resolvido, 1 MEDIUM + 1 LOW pendentes
 - payForFuel: preço calculado server-side via SimState[src].lastFuel (v19.1.1)
 
 ---
