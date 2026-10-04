@@ -49,9 +49,11 @@ end
 
 -- Helper OneSync: Trava autoritativa de propriedade de rede no motorista (Anti-Desync de Proximidade / Observers)
 function LockEntityNetworkOwner(entity, src)
-    if not entity or not DoesEntityExist(entity) then return end
+    if not entity or not DoesEntityExist(entity) or not src then return end
     pcall(function()
-        if SetEntityOwner then
+        if NetworkSetEntityOwner then
+            NetworkSetEntityOwner(entity, src)
+        elseif rawget(_G, 'SetEntityOwner') then
             SetEntityOwner(entity, src)
         end
     end)
@@ -1008,7 +1010,7 @@ local function StartTruckDelivery(src, contractData)
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(pObj) then
                 FreezeEntityPosition(pObj, false)
-                SetEntityOwner(pObj, src)
+                LockEntityNetworkOwner(pObj, src)
                 SetEntityDistanceCullingRadius(pObj, 0.0)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
@@ -1020,7 +1022,7 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                 if DoesEntityExist(fallbackObj) then
                     FreezeEntityPosition(fallbackObj, false)
-                    SetEntityOwner(fallbackObj, src)
+                    LockEntityNetworkOwner(fallbackObj, src)
                     SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                     ignoreEntities[fallbackObj] = true
                     table.insert(pallets, fallbackObj)
@@ -1047,7 +1049,7 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
                     FreezeEntityPosition(pObj, false)
-                    SetEntityOwner(pObj, src)
+                    LockEntityNetworkOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 0.0)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
@@ -1058,7 +1060,7 @@ local function StartTruckDelivery(src, contractData)
                     while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                     if DoesEntityExist(fallbackObj) then
                         FreezeEntityPosition(fallbackObj, false)
-                        SetEntityOwner(fallbackObj, src)
+                        LockEntityNetworkOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                         ignoreEntities[fallbackObj] = true
                         table.insert(pallets, fallbackObj)
