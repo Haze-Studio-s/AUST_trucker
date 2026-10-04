@@ -126,6 +126,24 @@ function PalletDebug.OnSnap(netId, ent, info)
         info.groundFound and 'SetEntityCoordsNoOffset' or 'PlaceObjectOnGroundProperly'))
 end
 
+-- Transição de estado do levantamento cinemático (frozen -> claiming -> attached_to_forks ...).
+function PalletDebug.OnState(netId, from, to, info)
+    entry(netId)
+    print(('%s state netId=%s %s -> %s %s'):format(TAG, tostring(netId), tostring(from), tostring(to), info and ('(' .. tostring(info) .. ')') or ''))
+end
+
+-- Telemetria de elevação (no máximo 1 linha por 250 ms por pallet; sempre imprime engage/intent/disengage).
+-- liftDelta = subida do osso dos garfos no referencial do forklift; é a medida que decide o attach.
+local lastLift = {}
+function PalletDebug.OnLift(netId, ev, delta, minZ, speed, aligned)
+    local t = now()
+    if ev == 'none' and (lastLift[netId] and (t - lastLift[netId]) < 250) then return end
+    if ev == 'none' and not aligned then return end
+    lastLift[netId] = t
+    print(('%s lift netId=%s ev=%s liftDelta=%s boneMinZ=%s forkliftSpeed=%s aligned=%s'):format(
+        TAG, tostring(netId), ev, fmt(delta), fmt(minZ), fmt(speed, 2), tostring(aligned)))
+end
+
 CreateThread(function()
     while true do
         if tracked and known[tracked] then

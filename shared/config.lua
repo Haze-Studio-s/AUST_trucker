@@ -114,8 +114,36 @@ Config.Polarix = {
         SpawnOffset = { x = 0.0, y = -10.5, z = 0.0 },
         InteractionRadiusFoot = 3.0,
         InteractionRadiusVehicle = 5.5,
-        MaxLiftTolerance = 0.35,
+        MaxLiftTolerance = 0.35, -- legado: nenhum código usa; o limiar real está em KinematicLift.LiftThreshold
     },
+
+    -- Levantamento cinemático (estudo AUST_TRUCKER_FORKLIFT_REFERENCE_STUDY.md, modelo D-K).
+    -- O pallet permanece FROZEN até o attach; a elevação é lida no osso dos garfos (referencial do forklift).
+    -- Enabled = false restaura exatamente o fluxo anterior (unfreeze ao encostar + attach a 0,35 m).
+    -- Limiares são ponto de partida: validar com /palletdebug (liftDelta) antes de apertar.
+    KinematicLift = {
+        Enabled = false,            -- só ligar depois que o cliente (forklift.lua) e o fxmanifest carregarem o módulo novo
+
+        LiftThreshold = 0.08,       -- m de subida do osso dos garfos para configurar "intenção de levantar"
+        LiftHysteresis = 0.03,      -- só reinicia a contagem se a subida cair abaixo de (limiar - histerese)
+        LiftDwellMs = 150,          -- tempo sustentado acima do limiar
+        MaxForkliftSpeed = 1.5,     -- m/s; acima disso não engata
+        HeadingTolerance = 25.0,    -- graus (módulo 180) entre forklift e pallet
+        Align = { xMax = 1.3, yMin = 0.1, yMax = 3.5, zMax = 0.9 }, -- caixa no referencial do forklift (mesma do fluxo anterior)
+        NearRange = 6.0,            -- m do osso dos garfos: abaixo disso o laço roda por frame
+        AttachMaxError = 0.12,      -- m; erro de posição tolerado no attach (acima, desfaz e libera)
+        BlendMs = 200,              -- assenta no perfil calibrado, se houver
+        ClaimCooldownMs = 2500,     -- espera após claim recusado antes de nova tentativa
+        ClaimMaxDist = 12.0,        -- m (servidor): jogador/forklift até o pallet
+        ClaimLeaseMs = 10000,       -- CLAIMED sem confirmação volta a STAGED
+        MaxCarried = 1,             -- um forklift carrega um pallet por vez
+        RequireClaim = true,        -- servidor só aceita estiva de pallet CARRIED pelo mesmo jogador
+    },
+
+    -- Perfil de attach forklift <-> pallet, por combinação. Separado dos offsets de trailer.
+    -- ForkliftAttachProfiles['forklift']['hei_prop_carrier_cargo_04b'] = { bone='forks', x=,y=,z=,pitch=,roll=,yaw= }
+    -- Sem perfil: o attach preserva a pose que o pallet tinha no instante da elevação (sem snap).
+    ForkliftAttachProfiles = {},
 
     -- Configuração do Handler de Contêineres
     Handler = {
