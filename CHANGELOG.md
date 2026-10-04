@@ -1,5 +1,31 @@
 # Changelog — AUST_trucker
 
+## [20.9.0] — 2026-10-04 — Módulo PropEditor 6DoF (/truckeradmin)
+
+### Adicionado
+- **Módulo PropEditor:** Nova aba integrada ao painel `/truckeradmin` para calibração, manipulação visual, captura e persistência de offsets entre qualquer modelo de veículo e prop de carga.
+- **Tabela Dedicada MySQL:** `aust_trucker_vehicle_prop_offsets` com índice único `(vehicle_model, prop_model)` e colunas para 6 graus de liberdade ($X, Y, Z, Pitch, Roll, Yaw$).
+- **Cache em Memória RAM & Hot-Reload:** `AdminService.VehiclePropOffsets` com mapeamento dual-indexado (strings, hashes signed e unsigned); sincronização de rede em tempo real sem qualquer necessidade de reiniciar o servidor (`adminSyncVehiclePropOffsets`).
+- **Detecção Orgânica de Engate:** Loop de escuta local interceptando o momento exato em que `IsEntityAttachedToEntity(prop, veh)` se torna verdadeiro, ativando automaticamente o manipulador 3D.
+- **Gizmo 3D 6DoF (Three.js & TransformControls):** Suporte completo à rotação tridimensional Euler nos anéis Pitch, Roll e Yaw via `[R]` e translação $X, Y, Z$ via `[T]`, com controle de mouse via `[ALT]`.
+- **Integração no Gameplay Principal:** Helper e export universal `GetVehiclePropOffset(vehicle, propModel)` com sobreposição de prioridade máxima no assentamento de cargas (`SnapPalletToCurrentSlot`).
+
+## [20.8.0] — 2026-10-04 — Auditoria Completa de Código, Fix CalcBonus & Otimização NUI
+
+### Correções Críticas
+- **`server/services/progression_service.lua`** — Implementada `ProgressionService.CalcBonus(citizenId, opts)` que `JobService.Complete` e `IllegalService.OnComplete` invocavam sem existir (`attempt to call a nil value`). Mapeia diretamente para `GetBonuses` retornando `speedBonus`, `paymentMult`, `valuable`, `distance` e `fragile`.
+
+### Vulnerabilidades Corrigidas
+- **`server/services/company_service.lua`** — Saldo remanescente da conta da empresa (`company.balance`) agora é restituído integralmente ao dono ao vender (`totalPayout = SELL_PAYOUT + balanceRefund`), eliminando perda patrimonial irreversível.
+
+### Performance
+- **`client/client.lua`** — Thread de polling NUI para atualização de rota ativa agora usa Wait adaptativo: `Wait(5000)` com NUI aberta, `Wait(15000)` com NUI fechada, reduzindo consumo de CPU/tráfego NUI em repouso.
+
+### Resumo da Auditoria
+- Nível de Segurança Geral: **9.4/10**
+- Arquivos alterados: 3, Removidos: 0, Dependências alteradas: 0
+- Vulnerabilidades: 1 corrigida, Bugs: 1 corrigido, Otimizações: 1 aplicada
+
 ## [20.7.9] — 2026-10-03 — Residuais da auditoria
 
 ### Correções

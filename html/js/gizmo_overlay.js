@@ -137,6 +137,8 @@
         renderer.render(scene, camera);
     }
 
+    let gizmoContext = 'trailer'; // 'trailer' | 'spawn' | 'propeditor'
+
     function sendOffsetUpdate() {
         const now = performance.now();
         if (now - lastSentTime < 14) return; // Limite de ~60 fps para tráfego leve
@@ -156,7 +158,11 @@
             }
         };
 
-        sendCallback('moveGizmoOffset', payload);
+        if (gizmoContext === 'propeditor') {
+            sendCallback('moveGizmoPropOffset', payload);
+        } else {
+            sendCallback('moveGizmoOffset', payload);
+        }
     }
 
     // ====================================================================
@@ -166,6 +172,7 @@
     function initGizmo(data) {
         initThree();
         isActive = true;
+        gizmoContext = (data && data.context) ? data.context : 'trailer';
 
         if (container) {
             container.style.display = 'block';

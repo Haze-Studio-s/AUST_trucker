@@ -329,15 +329,18 @@ local function SellUnlocked(companyId, src)
         return false, 'A empresa possui empréstimo ativo. Quite-o antes de vender.'
     end
 
+    local balanceRefund = math.max(0, tonumber(company.balance) or 0)
+    local totalPayout = SELL_PAYOUT + balanceRefund
+
     -- Limpar cache de todos os membros
     for _, member in ipairs(members) do
         VP_Trucker.PlayerCompanies[member.citizenid] = nil
     end
     VP_Trucker.Companies[companyId] = nil
 
-    if not Framework.AddMoney(Player, 'cash', SELL_PAYOUT, 'company-sale') then
+    if not Framework.AddMoney(Player, 'cash', totalPayout, 'company-sale') then
         print(('[aurp_trucker] ERRO: empresa %s vendida mas pagamento de $%d falhou para %s'):format(
-            tostring(companyId), SELL_PAYOUT, tostring(company.owner_citizenid)))
+            tostring(companyId), totalPayout, tostring(company.owner_citizenid)))
     end
     return true, nil
 end

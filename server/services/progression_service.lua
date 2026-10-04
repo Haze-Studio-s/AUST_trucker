@@ -309,6 +309,18 @@ function ProgressionService.GetBonuses(citizenId)
     }
 end
 
+-- Compatibilidade unificada com JobService e IllegalService (v13/v15/v20)
+function ProgressionService.CalcBonus(citizenId, opts)
+    local bonuses = ProgressionService.GetBonuses(citizenId)
+    return {
+        speedBonus  = bonuses.speed or 0.0,
+        paymentMult = bonuses.paymentMult or 1.0,
+        valuable    = bonuses.valuable or 0.0,
+        distance    = bonuses.distance or 0.0,
+        fragile     = bonuses.fragile or 0.0,
+    }
+end
+
 -- Compra um nível de skill gastando 1 skill point
 -- Retorna: true | false, motivo (string)
 local function PurchaseSkillUnlocked(src, citizenId, skillType)

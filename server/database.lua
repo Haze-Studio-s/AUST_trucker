@@ -469,6 +469,22 @@ local TABLES = {
         UNIQUE KEY `uq_trailer_slot` (`trailer_model`, `slot_index`, `is_forklift`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Módulo Administrativo: Offsets Livres Veículo <-> Prop (PropEditor 6DoF)
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_vehicle_prop_offsets` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `vehicle_model` VARCHAR(50) NOT NULL,
+        `prop_model` VARCHAR(100) NOT NULL,
+        `offset_x` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_y` FLOAT NOT NULL DEFAULT 0.0,
+        `offset_z` FLOAT NOT NULL DEFAULT 0.0,
+        `rot_pitch` FLOAT NOT NULL DEFAULT 0.0,
+        `rot_roll` FLOAT NOT NULL DEFAULT 0.0,
+        `rot_yaw` FLOAT NOT NULL DEFAULT 0.0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY `uq_veh_prop` (`vehicle_model`, `prop_model`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     -- Módulo Administrativo: Props de Cargas Homologados
     [[CREATE TABLE IF NOT EXISTS `aust_trucker_homologated_props` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
