@@ -2681,17 +2681,19 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     NetworkRequestControlOfEntity(ent)
                     SetNetworkIdCanMigrate(netId, false)
 
-                    -- Pré-carrega colisão do terreno nas coordenadas do objeto
+                    -- Pré-carrega malha e colisão do terreno nas coordenadas do objeto
                     local pCoords = GetEntityCoords(ent)
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
 
-                    -- Assenta perfeitamente sobre a malha física do chão (evita colisão subterrânea)
+                    -- Assenta perfeitamente sobre a malha física do chão antes de ativar gravidade
                     PlaceObjectOnGroundProperly(ent)
 
-                    -- Configuração física de contato com solo sem atravessar mapa
+                    -- Habilita colisão mútua e com o mundo
                     SetEntityCollision(ent, true, true)
                     SetEntityHasGravity(ent, true)
                     SetEntityDynamic(ent, true)
+                    
+                    -- Descongela com segurança uma vez que o cliente calculou a colisão local
                     FreezeEntityPosition(ent, false)
                     ActivatePhysics(ent)
 
