@@ -2664,9 +2664,34 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     end)
 end)
 
+-- Guarda de idempotência de sincronização de paletes (Cliente)
+local PalletSyncState = { jobId = nil, claimed = {}, ents = {} }
+local PalletSyncGuard = {
+    Begin = function(state, jId)
+        if state.jobId ~= jId then
+            state.jobId = jId
+            state.claimed = {}
+            state.ents = {}
+        end
+    end,
+    Claim = function(state, netId)
+        if state.claimed[netId] then return false end
+        state.claimed[netId] = true
+        return true
+    end,
+    Release = function(state, netId)
+        state.claimed[netId] = nil
+    end,
+    Reset = function(state)
+        state.jobId = nil
+        state.claimed = {}
+        state.ents = {}
+    end
+}
+
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
-    local syncN = PalletSyncGuard.Begin(PalletSyncState, jobId)
+    PalletSyncGuard.Begin(PalletSyncState, jobId)
     CreateThread(function()
         local pallets = {}
         for _, netId in ipairs(palletNetIds) do
