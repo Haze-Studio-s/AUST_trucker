@@ -2632,7 +2632,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     end)
 end)
 
--- Sincronização dos Paletes e Garantia de Física Estática (Anti-Limbo)
+-- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Freeze / Sem Limbo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
     CreateThread(function()
         local pallets = {}
@@ -2644,9 +2644,18 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     SetEntityLodDist(ent, 0xFFFF)
                     SetEntityVisible(ent, true)
                     ResetEntityAlpha(ent)
-                    PlaceObjectOnGroundProperly(ent)
+
+                    -- Garante controle autoritativo local no OneSync e bloqueia migração
+                    NetworkRequestControlOfEntity(ent)
+                    SetNetworkIdCanMigrate(netId, false)
+
+                    -- Física Havok 100% ativa e solta (Sem FreezeEntityPosition)
+                    FreezeEntityPosition(ent, false)
+                    SetEntityDynamic(ent, true)
                     SetEntityCollision(ent, true, true)
-                    FreezeEntityPosition(ent, true)
+                    SetEntityHasGravity(ent, true)
+                    ActivatePhysics(ent)
+
                     table.insert(pallets, ent)
                 end
             end

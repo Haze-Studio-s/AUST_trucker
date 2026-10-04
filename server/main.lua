@@ -976,22 +976,24 @@ local function StartTruckDelivery(src, contractData)
             if #pallets >= reqPallets then break end
             local slotTargetIdx = #pallets + 1
             local pModel = ResolveCargoPropHash(slotTargetIdx)
-            local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.1, true, true, false)
+            local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)
             local waitTimer = GetGameTimer()
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(pObj) then
-                FreezeEntityPosition(pObj, true)
+                FreezeEntityPosition(pObj, false)
+                SetEntityOwner(pObj, src)
                 SetEntityDistanceCullingRadius(pObj, 0.0)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
                 table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
             else
                 -- Fallback imediato com prop nativo padrão caso o prop customizado falhe no streaming do servidor
-                local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.1, true, true, false)
+                local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.15, true, true, false)
                 local fbTimer = GetGameTimer()
                 while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                 if DoesEntityExist(fallbackObj) then
-                    FreezeEntityPosition(fallbackObj, true)
+                    FreezeEntityPosition(fallbackObj, false)
+                    SetEntityOwner(fallbackObj, src)
                     SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                     ignoreEntities[fallbackObj] = true
                     table.insert(pallets, fallbackObj)
@@ -1013,21 +1015,23 @@ local function StartTruckDelivery(src, contractData)
                 local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
 
                 local pModel = ResolveCargoPropHash(i)
-                local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.1, true, true, false)
+                local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.15, true, true, false)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
-                    FreezeEntityPosition(pObj, true)
+                    FreezeEntityPosition(pObj, false)
+                    SetEntityOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 0.0)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
                 else
-                    local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.1, true, true, false)
+                    local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.15, true, true, false)
                     local fbTimer = GetGameTimer()
                     while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                     if DoesEntityExist(fallbackObj) then
-                        FreezeEntityPosition(fallbackObj, true)
+                        FreezeEntityPosition(fallbackObj, false)
+                        SetEntityOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 0.0)
                         ignoreEntities[fallbackObj] = true
                         table.insert(pallets, fallbackObj)
