@@ -330,6 +330,9 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     -- Persistência de Memória & LOD Máximo (impede descarte e sumiço ao se aproximar)
     SetEntityAsMissionEntity(ghost, true, true)
     SetEntityLodDist(ghost, 0xFFFF)
+    SetEntityVisible(ghost, true)
+    ResetEntityAlpha(ghost)
+    DisableCamCollisionForEntity(ghost)
 
     -- Holograma Fantasma: semi-transparente, sem colisão, invencível e imune
     SetEntityAlpha(ghost, 150, false)
@@ -338,12 +341,23 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     SetCanClimbOnEntity(ghost, false)
     FreezeEntityPosition(ghost, true)
 
-    local finalH = heading or (type(offset) == 'table' and offset.heading) or 0.0
+    local finalOff = offset
+    local finalPitch, finalRoll = 0.0, 0.0
+    local finalYaw = heading or (type(offset) == 'table' and offset.heading) or 0.0
+
+    -- Integração 6DoF: Se houver offset personalizado para o modelo do veículo e modelo do prop
+    local customPropOffset, customPropRot = GetVehiclePropOffset(trailer, modelHash)
+    if customPropOffset then
+        finalOff = customPropOffset
+        if customPropRot then
+            finalPitch, finalRoll, finalYaw = customPropRot.x, customPropRot.y, customPropRot.z
+        end
+    end
 
     AttachEntityToEntity(
         ghost, trailer, 0,
-        offset.x, offset.y, offset.z,
-        0.0, 0.0, finalH,
+        finalOff.x, finalOff.y, finalOff.z,
+        finalPitch, finalRoll, finalYaw,
         false, false, false, false, 0, true
     )
 
@@ -418,6 +432,9 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- Mantém a carga imóvel relativamente ao reboque via Dynamic/Gravity false sem afetar a suspensão.
     SetEntityAsMissionEntity(palletEntity, true, true)
     SetEntityLodDist(palletEntity, 0xFFFF)
+    SetEntityVisible(palletEntity, true)
+    ResetEntityAlpha(palletEntity)
+    DisableCamCollisionForEntity(palletEntity)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
@@ -474,21 +491,25 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEntity), false)
     end
 
+    local finalOffsetVec = vector3(finalX, finalY, finalZ)
+    local finalRotVec = vector3(finalPitch, finalRoll, finalYaw)
+
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
         local pNet = NetworkGetNetworkIdFromEntity(palletEntity)
         local curSlots = Entity(targetTrailer).state.loadedSlots or {}
         curSlots[tostring(slotIndex)] = {
             palletNet = pNet,
-            offset = { x = slotOffset.x, y = slotOffset.y, z = slotOffset.z },
-            heading = slotHeading
+            offset = { x = finalX, y = finalY, z = finalZ },
+            heading = finalYaw,
+            rotation = { pitch = finalPitch, roll = finalRoll, yaw = finalYaw }
         }
         Entity(targetTrailer).state:set('loadedSlots', curSlots, true)
     end
 
     -- Deleta o holograma do slot recém-ocupado
     ForkliftModule.DeleteGhostProp()
-    return true, slotOffset, slotHeading
+    return true, finalOffsetVec, finalRotVec
 end
 
 function ForkliftModule.SnapForkliftToSlot(forkliftEntity, trailer)

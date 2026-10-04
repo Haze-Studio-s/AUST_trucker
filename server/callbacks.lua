@@ -1735,3 +1735,9 @@ lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(
     end
     return { all = offsets, specific = specific }
 end)
+
+lib.callback.register('aurp_trucker:server:getVehiclePropOffsets', function(source)
+    local dualMap, rawMap = (AdminService and AdminService.ReloadVehiclePropOffsets and AdminService.ReloadVehiclePropOffsets()) or {}
+    return { dualMap = dualMap, rawMap = rawMap }
+end)
+

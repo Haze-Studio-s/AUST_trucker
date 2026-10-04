@@ -1265,7 +1265,9 @@ exports.ox_target:addModel(PalletPropModels, {
                         matchedPData.isSecured = true
                         matchedPData.riskLevel = 0
                         matchedPData.relOffset = snappedOffset
-                        matchedPData.relHeading = snappedHeading
+                        local finalRot = type(snappedHeading) == 'vector3' and snappedHeading or vector3(0.0, 0.0, tonumber(snappedHeading) or 0.0)
+                        matchedPData.relHeading = finalRot.z
+                        matchedPData.relRot = finalRot
                     end
 
                     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
@@ -1573,6 +1575,9 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 end
                 SetEntityAsMissionEntity(pEnt, true, true)
                 SetEntityLodDist(pEnt, 0xFFFF)
+                SetEntityVisible(pEnt, true)
+                ResetEntityAlpha(pEnt)
+                DisableCamCollisionForEntity(pEnt)
                 FreezeEntityPosition(pEnt, false)
                 SetEntityDynamic(pEnt, false)
                 SetEntityHasGravity(pEnt, false)
@@ -1585,15 +1590,23 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     SetEntityNoCollisionEntity(JobEntities.truck, pEnt, false)
                 end
 
-                -- Reforço imediato de ancoragem na malha do trailer (Bone 0) sem soft-pinning
-                if pData.relOffset then
-                    AttachEntityToEntity(
-                        pEnt, trailer, 0,
-                        pData.relOffset.x, pData.relOffset.y, pData.relOffset.z,
-                        0.0, 0.0, pData.relHeading or 0.0,
-                        false, false, false, false, 2, true
-                    )
+                -- Reforço imediato de ancoragem na malha do trailer (Bone 0) sem soft-pinning com suporte a 6DoF
+                local off = pData.relOffset
+                local rot = pData.relRot
+                if not rot or not off then
+                    local customOff, customRot = GetVehiclePropOffset(trailer, GetEntityModel(pEnt))
+                    if customOff then off = customOff end
+                    if customRot then rot = customRot end
                 end
+                off = off or vector3(0.0, 0.0, 0.35)
+                rot = rot or vector3(0.0, 0.0, pData.relHeading or 0.0)
+
+                AttachEntityToEntity(
+                    pEnt, trailer, 0,
+                    off.x, off.y, off.z,
+                    rot.x, rot.y, rot.z,
+                    false, false, false, false, 2, true
+                )
             end
         end
 
@@ -1789,6 +1802,10 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                     if NetworkGetEntityIsNetworked(pEnt) and NetworkHasControlOfEntity(pEnt) then
                                         SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(pEnt), false)
                                     end
+                                    SetEntityLodDist(pEnt, 0xFFFF)
+                                    SetEntityVisible(pEnt, true)
+                                    ResetEntityAlpha(pEnt)
+                                    DisableCamCollisionForEntity(pEnt)
                                     FreezeEntityPosition(pEnt, false)
                                     SetEntityDynamic(pEnt, false)
                                     SetEntityHasGravity(pEnt, false)
@@ -1801,12 +1818,20 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                                         SetEntityNoCollisionEntity(pEnt, tr, false)
                                         SetEntityNoCollisionEntity(tr, pEnt, false)
                                     end
-                                    local off = pData.relOffset or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
-                                    local pHead = pData.relHeading or (type(off) == 'table' and off.heading) or 0.0
+                                    local off = pData.relOffset
+                                    local rot = pData.relRot
+                                    if not rot or not off then
+                                        local customOff, customRot = GetVehiclePropOffset(tr, GetEntityModel(pEnt))
+                                        if customOff then off = customOff end
+                                        if customRot then rot = customRot end
+                                    end
+                                    off = off or (ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(tr, pData.slotIndex or _)) or vector3(0.0, 0.0, 0.35)
+                                    rot = rot or vector3(0.0, 0.0, pData.relHeading or (type(off) == 'table' and off.heading) or 0.0)
+
                                     AttachEntityToEntity(
                                         pEnt, tr, 0,
                                         off.x, off.y, off.z,
-                                        0.0, 0.0, pHead,
+                                        rot.x, rot.y, rot.z,
                                         false, false, false, false, 2, true
                                     )
                                 end
@@ -2371,12 +2396,21 @@ lib.onCache('vehicle', function(veh)
                     end
                 elseif action == 'dropped' then
                     -- Registra o palete carregado com os dados exatos do slot para a amarração individual
-                    local sOffset, sHead = slotOffset, slotHeading
+                    local sOffset = slotOffset
+                    local sRot = slotHeading
                     if not sOffset and ForkliftModule.GetSlotOffset then
-                        sOffset, sHead = ForkliftModule.GetSlotOffset(JobEntities.trailer, stowedSlot or loaded)
+                        local defOff, defHead = ForkliftModule.GetSlotOffset(JobEntities.trailer, stowedSlot or loaded)
+                        sOffset = defOff
+                        sRot = defHead
                     end
                     if not sOffset then sOffset = vector3(0.0, 0.0, 0.35) end
-                    local finalH = sHead or (type(sOffset) == 'table' and sOffset.heading) or 0.0
+
+                    -- Verifica se existe rotação customizada do PropEditor (6DoF)
+                    local customPropOffset, customPropRot = GetVehiclePropOffset(JobEntities.trailer, GetEntityModel(palletEnt))
+                    if customPropOffset then sOffset = customPropOffset end
+                    if customPropRot then sRot = customPropRot end
+
+                    local finalRot = type(sRot) == 'vector3' and sRot or vector3(0.0, 0.0, tonumber(sRot) or (type(sOffset) == 'table' and sOffset.heading) or 0.0)
 
                     table.insert(LoadedPallets, {
                         entity = palletEnt,
@@ -2385,7 +2419,8 @@ lib.onCache('vehicle', function(veh)
                         lost = false,
                         slotIndex = stowedSlot or loaded,
                         relOffset = sOffset,
-                        relHeading = finalH
+                        relHeading = finalRot.z,
+                        relRot = finalRot
                     })
 
                     if loaded < total then
@@ -2710,6 +2745,7 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             SetEntityLodDist(ent, 0xFFFF)
                             SetEntityVisible(ent, true)
                             ResetEntityAlpha(ent)
+                            DisableCamCollisionForEntity(ent)
 
                             -- Garante controle autoritativo local no OneSync e bloqueia migração
                             local ctrlTimeout = GetGameTimer() + 2000
@@ -3308,6 +3344,19 @@ CreateThread(function()
                 end
             end
             if Config.Debug then print("^2[AUST_Trucker] Sincronização inicial de offsets de reboques concluída com sucesso!^7") end
+        end
+
+        -- Sincronização inicial dos offsets 6DoF do PropEditor (veículo <-> prop)
+        local vpRes = lib.callback.await('aurp_trucker:server:getVehiclePropOffsets', false)
+        if vpRes and vpRes.dualMap then
+            Config.VehiclePropOffsets = vpRes.dualMap
+            if vpRes.rawMap then
+                SendNUIMessage({
+                    action = 'admin_update_vehicle_prop_offsets',
+                    offsets = vpRes.rawMap
+                })
+            end
+            if Config.Debug then print("^2[AUST_Trucker] Sincronização inicial de VehiclePropOffsets (6DoF) concluída!^7") end
         end
     end)
 end)

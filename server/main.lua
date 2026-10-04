@@ -1011,7 +1011,7 @@ local function StartTruckDelivery(src, contractData)
             if DoesEntityExist(pObj) then
                 FreezeEntityPosition(pObj, true)
                 LockEntityNetworkOwner(pObj, src)
-                SetEntityDistanceCullingRadius(pObj, 0.0)
+                SetEntityDistanceCullingRadius(pObj, 450.0)
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
                 table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
@@ -1023,7 +1023,7 @@ local function StartTruckDelivery(src, contractData)
                 if DoesEntityExist(fallbackObj) then
                     FreezeEntityPosition(fallbackObj, true)
                     LockEntityNetworkOwner(fallbackObj, src)
-                    SetEntityDistanceCullingRadius(fallbackObj, 0.0)
+                    SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                     ignoreEntities[fallbackObj] = true
                     table.insert(pallets, fallbackObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
@@ -1050,7 +1050,7 @@ local function StartTruckDelivery(src, contractData)
                 if DoesEntityExist(pObj) then
                     FreezeEntityPosition(pObj, true)
                     LockEntityNetworkOwner(pObj, src)
-                    SetEntityDistanceCullingRadius(pObj, 0.0)
+                    SetEntityDistanceCullingRadius(pObj, 450.0)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                     table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
@@ -1061,7 +1061,7 @@ local function StartTruckDelivery(src, contractData)
                     if DoesEntityExist(fallbackObj) then
                         FreezeEntityPosition(fallbackObj, true)
                         LockEntityNetworkOwner(fallbackObj, src)
-                        SetEntityDistanceCullingRadius(fallbackObj, 0.0)
+                        SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                         ignoreEntities[fallbackObj] = true
                         table.insert(pallets, fallbackObj)
                         table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
