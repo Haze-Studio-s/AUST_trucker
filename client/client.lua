@@ -2134,11 +2134,9 @@ CreateThread(function()
     end
 end)
 
--- Thread para atualizar trabalho ativo na NUI
+-- Thread para atualizar trabalho ativo na NUI (otimizada com Wait adaptativo)
 CreateThread(function()
     while true do
-        Wait(5000) -- Atualizar a cada 5 segundos
-
         if isNUIOpen and activeJob then
             local currentActiveJob = {
                 id = activeJob.id,
@@ -2157,6 +2155,9 @@ CreateThread(function()
                 action = 'updateActiveJob',
                 activeJob = currentActiveJob
             })
+            Wait(5000)
+        else
+            Wait(15000) -- Repouso prolongado enquanto a NUI estiver fechada
         end
     end
 end)

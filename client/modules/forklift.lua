@@ -632,69 +632,90 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
                 else
-                    -- OPERAÇÃO FÍSICA REAL (Sem AttachEntityToEntity entre empilhadeira e paletes)
+                    -- OPERAÇÃO COM ACOPLAMENTO TEMPORÁRIO NOS GARFOS (Blindagem Anti-Overflow de Rede)
                     local forkCoords, forkBone = GetForkliftForksCoords(forklift)
 
-                    -- 1. Gerenciamento Físico de Elevação: Garfos da empilhadeira
+                    -- 1. Gerenciamento de Acoplamento Temporário por Altura (Z >= 0.35m)
                     local activeCarried = nil
 
                     for _, p in pairs(ActiveMissionPallets) do
-                        if p and DoesEntityExist(p) and not IsEntityAttached(p) then
+                        if p and DoesEntityExist(p) then
                             local pCoords = GetEntityCoords(p)
 
                             if not PalletBaseZ[p] then
                                 PalletBaseZ[p] = pCoords.z
                             end
 
-                            local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
-                            -- Garfos encaixados geometricamente no vão do palete
-                            local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
-
                             local pState = PalletPhysState[p] or 'frozen'
 
-                            if isEngagedWithForks then
-                                -- Transição Cinemática: descongela no toque para não atuar como parede sólida contra os garfos
-                                if pState == 'frozen' then
-                                    FreezeEntityPosition(p, false)
-                                    SetEntityDynamic(p, true)
-                                    SetEntityHasGravity(p, false) -- Gravidade OFF enquanto em repouso no chão para não tunelar
-                                    ActivatePhysics(p)
-                                    PalletPhysState[p] = 'ground_engaged'
-                                end
-
-                                local zLift = pCoords.z - PalletBaseZ[p]
-                                if zLift >= 0.08 then
-                                    -- Carga içada da base: ativa gravidade plena para peso real sobre os garfos (apenas na transição)
-                                    if pState ~= 'lifted' then
-                                        SetEntityHasGravity(p, true)
-                                        PalletPhysState[p] = 'lifted'
-                                    end
-                                    activeCarried = p
-                                else
-                                    if pState == 'lifted' then
-                                        SetEntityHasGravity(p, false)
-                                        PalletPhysState[p] = 'ground_engaged'
-                                    end
-                                    local vel = GetEntityVelocity(p)
-                                    if vel.z < -0.05 then
-                                        SetEntityVelocity(p, vel.x, vel.y, 0.0)
-                                    end
-                                end
+                            if pState == 'attached_to_forks' then
+                                activeCarried = p
                             else
-                                -- Empilhadeira recuou ou garfos fora do vão: recongela no chão
-                                if pState ~= 'frozen' and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
-                                    FreezeEntityPosition(p, true)
-                                    SetEntityDynamic(p, false)
-                                    SetEntityHasGravity(p, false)
-                                    SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                    PalletPhysState[p] = 'frozen'
+                                -- Só processa engate se a carga não estiver estivada no reboque
+                                if not IsEntityAttached(p) then
+                                    local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
+                                    -- Garfos posicionados geometricamente sob o vão do palete
+                                    local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
+
+                                    if isEngagedWithForks then
+                                        -- Transição Cinemática: descongela temporariamente no chão sem gravidade para permitir subida mecânica
+                                        if pState == 'frozen' then
+                                            FreezeEntityPosition(p, false)
+                                            SetEntityDynamic(p, true)
+                                            SetEntityHasGravity(p, false)
+                                            ActivatePhysics(p)
+                                            PalletPhysState[p] = 'ground_engaged'
+                                        end
+
+                                        local zLift = pCoords.z - PalletBaseZ[p]
+                                        -- GATILHO ATÔMICO DE ACOPLAMENTO TEMPORÁRIO (Decisão A1: Z >= 0.35m)
+                                        if zLift >= 0.35 then
+                                            -- Solicita controle pontual se networked
+                                            if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
+                                                NetworkRequestControlOfEntity(p)
+                                            end
+
+                                            -- Acopla rigidamente aos garfos da empilhadeira
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                            FreezeEntityPosition(p, false)
+                                            SetEntityDynamic(p, false)
+                                            SetEntityHasGravity(p, false)
+
+                                            -- AttachEntityToEntity no bone dos garfos (Decisão A2)
+                                            -- Offset relativo aos garfos: vector3(0.0, 0.95, -0.05) com rotação zero
+                                            AttachEntityToEntity(
+                                                p, forklift, forkBone,
+                                                0.0, 0.95, -0.05,
+                                                0.0, 0.0, 0.0,
+                                                false, false, false, false, 2, true
+                                            )
+
+                                            PalletPhysState[p] = 'attached_to_forks'
+                                            activeCarried = p
+                                        else
+                                            -- Se ainda não atingiu a altura mínima, cancela acelerações para baixo
+                                            local vel = GetEntityVelocity(p)
+                                            if vel.z < -0.05 then
+                                                SetEntityVelocity(p, vel.x, vel.y, 0.0)
+                                            end
+                                        end
+                                    else
+                                        -- Garfos longe da carga: recongela no chão
+                                        if pState ~= 'frozen' and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
+                                            FreezeEntityPosition(p, true)
+                                            SetEntityDynamic(p, false)
+                                            SetEntityHasGravity(p, false)
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                            PalletPhysState[p] = 'frozen'
+                                        end
+                                    end
                                 end
                             end
                         end
                     end
                     DetectedCarriedPallet = activeCarried
 
-                    -- GATILHO DO FANTASMA: Só instancia quando a palete for levantada da terra
+                    -- GATILHO DO FANTASMA: Instancia assim que o palete for acoplado aos garfos
                     if trailer and DoesEntityExist(trailer) then
                         if DetectedCarriedPallet then
                             local carriedModel = GetEntityModel(DetectedCarriedPallet)
@@ -708,7 +729,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
 
-                    -- 2. Varredura de Alinhamento no Slot do Reboque
+                    -- 2. Varredura de Alinhamento e Desacoplamento no Slot do Reboque
                     local slotPalletCandidate = nil
                     local isCandidateInSlot = false
 
@@ -720,21 +741,35 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         local targetHeading = (trailerH + (slotHeading or 0.0)) % 360
 
                         for _, p in pairs(ActiveMissionPallets) do
-                            if p and DoesEntityExist(p) and not IsEntityAttached(p) then
+                            if p and DoesEntityExist(p) then
                                 local pCoords = GetEntityCoords(p)
                                 local dist3D = #(pCoords - ghostWorldCoords)
                                 local distToTrailer = #(pCoords - trailerCoords)
+                                local pState = PalletPhysState[p] or 'frozen'
 
-                                -- Tolerância de 1.10m em relação ao slot no deck do reboque
+                                -- Tolerância em relação ao slot no deck do reboque
                                 if distToTrailer <= 5.5 then
                                     local curH = GetEntityHeading(p)
                                     local diffAngle = math.abs((curH - targetHeading) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
                                     local isNearDeck = math.abs(pCoords.z - ghostWorldCoords.z) <= 0.45
-                                    if dist3D <= 1.10 and diffAngle <= 35.0 and isNearDeck then
+                                    if dist3D <= 1.20 and diffAngle <= 35.0 and isNearDeck then
                                         slotPalletCandidate = p
                                         isCandidateInSlot = true
+
+                                        -- GATILHO DE DESACOPLAMENTO (Decisão A3):
+                                        -- Se o palete ainda estiver anexado aos garfos e for abaixado próximo à base do holograma
+                                        if pState == 'attached_to_forks' and (pCoords.z - ghostWorldCoords.z) <= 0.15 then
+                                            DetachEntity(p, true, true)
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                            SetEntityDynamic(p, false)
+                                            SetEntityHasGravity(p, false)
+                                            FreezeEntityPosition(p, true) -- Congela temporariamente sobre a chapa para repouso perfeito
+                                            PalletPhysState[p] = 'detached_at_ghost'
+                                            DetectedCarriedPallet = nil
+                                        end
+
                                         break
                                     end
                                 end
@@ -755,7 +790,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
 
-                    -- 3. Nova Lógica de Snap (Fixação no Reboque) com Estabilização Havok Wait(500)
+                    -- 3. Snap Definitivo (Fixação no Reboque) ao Recuar os Garfos (dist >= 1.80m)
                     if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) and not isStowingPallet then
                         sleep = 0
                         local pCoords = GetEntityCoords(slotPalletCandidate)
@@ -780,14 +815,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 SetEntityDrawOutline(ghost, false)
                             end
 
-                            -- AGUARDA 500ms PARA A FÍSICA HAVOK ESTABILIZAR ANTES DO ATTACH DEFINITIVO
-                            Wait(500)
+                            -- AGUARDA 300ms PARA ESTABILIZAÇÃO ANTES DO ATTACH DEFINITIVO
+                            Wait(300)
 
                             local targetPalletToSnap = slotPalletCandidate
                             if DoesEntityExist(targetPalletToSnap) then
                                 local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(targetPalletToSnap, trailer, CurrentSlotIndex)
                                 if ok then
                                     local stowedSlot = CurrentSlotIndex
+                                    PalletPhysState[targetPalletToSnap] = 'stowed'
                                     DetectedCarriedPallet = nil
                                     loadedCount = loadedCount + 1
                                     CurrentSlotIndex = CurrentSlotIndex + 1
