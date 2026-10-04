@@ -2664,7 +2664,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     end)
 end)
 
--- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Assentamento Seguro)
+-- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds)
     CreateThread(function()
         local pallets = {}
@@ -2685,17 +2685,13 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                     local pCoords = GetEntityCoords(ent)
                     RequestCollisionAtCoord(pCoords.x, pCoords.y, pCoords.z)
 
-                    -- Assenta perfeitamente sobre a malha física do chão antes de ativar gravidade
+                    -- Assenta perfeitamente sobre a malha física do chão antes de ancorar
                     PlaceObjectOnGroundProperly(ent)
 
-                    -- Habilita colisão mútua e com o mundo
+                    -- Habilita colisão do prop e mantém ancorado no solo até aproximação (< 3.5m)
                     SetEntityCollision(ent, true, true)
                     SetEntityHasGravity(ent, true)
-                    SetEntityDynamic(ent, true)
-                    
-                    -- Descongela com segurança uma vez que o cliente calculou a colisão local
-                    FreezeEntityPosition(ent, false)
-                    ActivatePhysics(ent)
+                    FreezeEntityPosition(ent, true)
 
                     table.insert(pallets, ent)
                 end

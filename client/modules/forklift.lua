@@ -634,15 +634,23 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     -- OPERAÇÃO FÍSICA REAL (Sem AttachEntityToEntity entre empilhadeira e paletes)
                     local forkCoords, forkBone = GetForkliftForksCoords(forklift)
 
-                    -- 1. Monitoramento da Carga e Elevação Z (Gatilho Dinâmico do Fantasma)
+                    -- 1. Monitoramento da Carga, Descongelamento por Proximidade e Elevação Z
                     local activeCarried = nil
                     for _, p in pairs(ActiveMissionPallets) do
                         if p and DoesEntityExist(p) and not IsEntityAttached(p) then
                             local pCoords = GetEntityCoords(p)
-                            
-                            -- Registra Z de repouso no solo na primeira leitura
-                            if not PalletBaseZ[p] then
-                                PalletBaseZ[p] = pCoords.z
+                            local distForks = #(forkCoords - pCoords)
+
+                            -- Liberação dinâmica segura: ao se aproximar (< 3.5m), o palete é liberado para física Havok
+                            if distForks <= 3.5 then
+                                if not PalletBaseZ[p] then
+                                    PalletBaseZ[p] = pCoords.z
+                                end
+                                FreezeEntityPosition(p, false)
+                                SetEntityDynamic(p, true)
+                                SetEntityCollision(p, true, true)
+                                SetEntityHasGravity(p, true)
+                                ActivatePhysics(p)
                             end
 
                             local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
@@ -655,9 +663,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             end
 
                             -- Se o palete subiu >= 0.12m do repouso ou está nos garfos
-                            local zLift = pCoords.z - PalletBaseZ[p]
-                            if (zLift >= 0.12 or activeCarried == p) and not activeCarried then
-                                activeCarried = p
+                            if PalletBaseZ[p] then
+                                local zLift = pCoords.z - PalletBaseZ[p]
+                                if (zLift >= 0.12 or activeCarried == p) and not activeCarried then
+                                    activeCarried = p
+                                end
                             end
                         end
                     end
