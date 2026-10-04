@@ -82,16 +82,18 @@
 | W7-03 | Fusão dos forklifts | sim | W1-* | ☐ | |
 | W8-01 | Remover órfãos provados | sim | — | ☐ | |
 | GPLAY-01 | Pallet Jack — **STUDY ONLY** | sim (rede) | W1, W4-05 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
-| GPLAY-02 | Hydraulic Liftgate / Cargo Doors — **STUDY ONLY** | sim (rede) | W4-02 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-02 | Cargo Ramp / Liftgate (+ portas) — **STUDY ONLY** | sim (rede) | W4-02 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-03 | Courier Package Scanner — **STUDY ONLY** | sim | W3-07 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-04 | Cargo Integrity — **STUDY ONLY** | **sim (RUNTIME PROOF REQUIRED)** | W3-10 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-05 | Precision Docking — **STUDY ONLY** | sim | W3-01 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-06 | Active Escort Gameplay — **STUDY ONLY** | sim | W3-05, W4-02 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
-| GPLAY-07 | Oversized Route Restrictions — **STUDY ONLY** | sim | GPLAY-06 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-07 | Oversized Route Clearance — **STUDY ONLY** | sim | GPLAY-06 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-08 | Road Obstacle Interaction — **STUDY ONLY** | sim | GPLAY-06 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 | GPLAY-09 | Special Transport Convoy — **STUDY ONLY** | sim | GPLAY-06/07 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-10 | Long-form logistics jobs — **STUDY ONLY** | sim | W4-02, W3-10 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
+| GPLAY-11 | Trailer dimensional route constraints — **STUDY ONLY** | sim | GPLAY-07 | ☐ APPROVE ☐ DEFER ☐ REJECT | |
 
-**Total: 49 PLAN IDs + 9 GPLAY (estudo)** (W0-04 tem 8 sub-tarefas decididas separadamente, linhas `↳`). Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6 e as decisões da V2 (dispositivos/Route Builder) em §8.
+**Total: 49 PLAN IDs + 11 GPLAY (estudo)** (W0-04 tem 8 sub-tarefas decididas separadamente, linhas `↳`). Perguntas gerais de J2 estão em `16_J2_REVIEW_PACKAGE.md` §6 e as decisões da V2 (dispositivos/Route Builder) em §8.
 
 ## Checklists específicos (revisão V2)
 
@@ -127,14 +129,14 @@
 
 ## Checklists dos itens GPLAY (STUDY ONLY; **CODE CHANGE: NO**; J2 APPROVAL REQUIRED: YES)
 
-Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **APPROVE / DEFER / REJECT**. Origem: referência de **gameplay** (narração do vídeo via transcrição + brief), **sem código**; itens **[BRIEF ONLY]** exigem conferência na imagem; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**. **Route Builder permanece ADMIN ONLY** (nenhum GPLAY o expõe a jogadores).
+Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **APPROVE / DEFER / REJECT**. Origem: referência de **gameplay** (transcrição da narração + brief), **sem código**, em 4 níveis de evidência (VIDEO NARRATION CONFIRMED · VIDEO VISUAL OBSERVED · SECONDARY REPORT · AUST DESIGN PROPOSAL); itens **SECONDARY REPORT** exigem conferência na imagem (VIDEO VISUAL OBSERVED); **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**. **Route Builder permanece ADMIN ONLY** (nenhum GPLAY o expõe a jogadores).
 
 ### GPLAY-01 — Pallet Jack
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
 - *Fatos para a revisão:* Sobreposição conhecida: forklift (`client/modules/forklift.lua`, `forklift.client.lua`) e reach stacker. Decisão de modelo A/B/C/D pendente de J2. Licença: TrueMaps **sem código** (IDEA ONLY).
 
-### GPLAY-02 — Hydraulic Liftgate / Cargo Doors
+### GPLAY-02 — Cargo Ramp / Liftgate (+ portas)
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
 - *Fatos para a revisão:* Rampa narrada; **portas traseiras só na brief** (conferir na imagem). Estado de porta/liftgate novo; lifecycle e desconexão em aberto (docs 06/11). Dependência de rede.
@@ -159,7 +161,7 @@ Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **A
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
 - *Fatos para a revisão:* Sobreposição: convoy/`escort` citado em `convoy.client.lua:180`. Escolta ativa **narrada** (garantir rota, ajudar a manobrar, remover obstáculos); Heavy RP VERY HIGH; ciclo de vida de entidades de escolta novo.
 
-### GPLAY-07 — Oversized Route Restrictions
+### GPLAY-07 — Oversized Route Clearance
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
 - *Fatos para a revisão:* Pontes e planejamento de rota narrados; túnel/raio só na brief; fonte de dados de mapa **UNKNOWN**.
@@ -173,3 +175,13 @@ Cada item: marcar `[x]` ou anotar ao avaliar. Opções de decisão por item: **A
 
 - [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
 - *Fatos para a revisão:* Depende de GPLAY-06/07 e do convoy atual.
+
+### GPLAY-10 — Long-form logistics jobs
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* evidência **VIDEO NARRATION CONFIRMED** (jobs complexos de 30+ min). Meta: jobs **mais profundos, não só mais longos**. Sobreposição: registro de job/recuperação de queda e restart (TD-02, TD-27, W4-02); progresso parcial e desconexão em aberto. Implementação do TrueMaps: **UNKNOWN**.
+
+### GPLAY-11 — Trailer dimensional route constraints
+
+- [ ] gameplay value · [ ] Heavy RP value · [ ] overlaps existing AUST system? · [ ] needs new entity lifecycle? · [ ] needs DB? · [ ] needs server authority? · [ ] OneSync risk? · [ ] performance risk? · [ ] player count requirement? · [ ] device UI? · [ ] runtime proof? · [ ] source/license concern? · [ ] implementation approved?
+- *Fatos para a revisão:* evidência **VIDEO NARRATION CONFIRMED** (8 trailers de dimensões diferentes; restrição de ponte). Metadados de folga seriam **criados por admin**; **Route Builder = ADMIN ONLY** (jogadores só **planejam**). Depende de GPLAY-07; algoritmo do TrueMaps: **UNKNOWN**.

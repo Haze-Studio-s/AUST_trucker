@@ -43,10 +43,10 @@
 
 ## TrueMaps — referência de GAMEPLAY (vídeo; sem código)
 
-**TrueMaps does not provide source-code evidence in this study.** Foi usado como **GAMEPLAY DESIGN REFERENCE ONLY**, com base na **transcrição da narração** (legenda automática, fornecida pelo usuário) e na brief; a sessão não acessa o vídeo, e o que depende só de imagem (portas traseiras, direção agressiva/raspagem, túnel/raio) **não está confirmado**. Implementação, autoridade de servidor, segurança, OneSync, banco, desempenho e manutenção são **UNKNOWN** e nada disso foi inferido.
+**TrueMaps does not provide source-code evidence in this study.** Foi usado como **GAMEPLAY DESIGN REFERENCE ONLY**, com base na **transcrição da narração** (legenda automática, fornecida pelo usuário) e na brief; a sessão não acessa o vídeo, e o que depende só de imagem (portas traseiras, direção agressiva/raspagem, túnel/raio) está como **SECONDARY REPORT**; nenhum item está em **VIDEO VISUAL OBSERVED**. **TECHNICAL IMPLEMENTATION UNKNOWN.** Implementação, autoridade de servidor, segurança, OneSync, banco, desempenho e manutenção são **UNKNOWN** e nada disso foi inferido.
 
 Seu principal valor: mostrar como o trucking pode virar uma **profissão logística física** em vez de um loop A→B — carregamento em doca (portas, liftgate, pallet jack), courier com scanner, integridade de carga, transporte oversized, escolta ativa e docking de precisão.
 
 **Alvo do AUST (proposta):** combinar **arquitetura do XS** + **arquitetura de carga do Polarix** + **profundidade de gameplay do TrueMaps** + **sistemas existentes do AUST**, **sem copiar código proprietário**, mantendo autoridade do servidor, robustez de OneSync, Heavy RP e o backend canônico planejado. **O AUST não deve copiar um único recurso de trucking:** usar referências por domínio.
 
-Backlog de estudo **GPLAY-01…09** (STUDY ONLY; J2 aprova/adia/rejeita cada um); **Route Builder = ADMIN ONLY**; **PHONE ≠ TABLET ≠ NEXUSOS** (scanner/manifesto no tablet, planejamento no NexusOS, alerta de escolta no phone).
+Backlog de estudo **GPLAY-01…11** (inclui jobs longos e restrições dimensionais de rota) (STUDY ONLY; J2 aprova/adia/rejeita cada um); **Route Builder = ADMIN ONLY**; **PHONE ≠ TABLET ≠ NEXUSOS** (scanner/manifesto no tablet, planejamento no NexusOS, alerta de escolta no phone).

@@ -25,7 +25,7 @@
 | 15 | Plano de implementação (**49 PLAN IDs** + **9 GPLAY (estudo)**, ondas 0–8 + *Gameplay Study Wave*; W0-04 com sub-tarefas A–H) |
 | 17 | Checklist de revisão por PLAN ID |
 | 18 | Resumo executivo |
-| **20** | **Adendo TrueMaps Advanced Trucker Job** — referência de **GAMEPLAY** (vídeo/brief, **sem código**); loop físico, courier, integridade, oversized, escolta ativa, docking; backlog **GPLAY-01…09** |
+| **20** | **Adendo TrueMaps Advanced Trucker Job** — referência de **GAMEPLAY** (vídeo/brief, **sem código**); loop físico, courier, integridade, oversized, escolta ativa, docking; backlog **GPLAY-01…11** |
 | **19** | **AUST × ecossistema de dispositivos** (NexusOS · vp_tablet · vp_phone) — **ARCHITECTURE PENDING SOURCE REVIEW**; Route Builder = ADMIN ONLY |
 
 ## 2. Resumo
@@ -120,7 +120,7 @@ Arquivos de corpo não lidos estão listados em `01_…`/`13_…` §5. Subagente
 
 ## 12. NOVA REFERÊNCIA DE GAMEPLAY — TrueMaps Advanced Trucker Job (vídeo)
 
-**NEW GAMEPLAY REFERENCE: TrueMaps Advanced Trucker Job video** (https://youtu.be/9hNLhOnFLL8, 3:54). **Não há código** nesta referência: é **GAMEPLAY DESIGN REFERENCE ONLY**; implementação, autoridade de servidor, segurança, OneSync, banco e desempenho são **UNKNOWN**. Evidência: **transcrição da narração** fornecida pelo usuário (legenda automática; sem a parte só visual) + brief. A sessão não acessa o vídeo. Itens **[BRIEF ONLY]** (portas traseiras, direção agressiva/raspagem, túnel/raio, "hidráulico") **não** estão na transcrição e precisam ser conferidos na imagem. Detalhes e confirmação item a item: `20_TRUEMAPS_GAMEPLAY_REFERENCE.md` §2.
+**NEW GAMEPLAY REFERENCE: TrueMaps Advanced Trucker Job video** (https://youtu.be/9hNLhOnFLL8, 3:54). **Não há código** nesta referência: é **GAMEPLAY DESIGN REFERENCE ONLY**; implementação, autoridade de servidor, segurança, OneSync, banco e desempenho são **UNKNOWN**. Evidência: **transcrição da narração** fornecida pelo usuário (legenda automática, 3:54; sem a parte só visual) + brief, em **4 níveis de evidência** (VIDEO NARRATION CONFIRMED · VIDEO VISUAL OBSERVED · SECONDARY REPORT · AUST DESIGN PROPOSAL). **Nenhum item está em VIDEO VISUAL OBSERVED** (sem confirmação visual). A sessão não acessa o vídeo. Itens **[SECONDARY REPORT]** (portas traseiras, direção agressiva/raspagem, túnel/raio, "hidráulico") **não** estão na transcrição e precisam ser conferidos na imagem. Detalhes e confirmação item a item: `20_TRUEMAPS_GAMEPLAY_REFERENCE.md` §2.
 
 **Ideias mais fortes (todas [AUST DESIGN PROPOSAL] sobre gameplay narrado):**
 
@@ -131,6 +131,8 @@ Arquivos de corpo não lidos estão listados em `01_…`/`13_…` §5. Subagente
 5. integridade de carga (GPLAY-04);
 6. escolta ativa (GPLAY-06);
 7. rotas oversized com restrição de pontes (GPLAY-07);
-8. docking de precisão (GPLAY-05).
+8. docking de precisão (GPLAY-05);
+9. jobs longos mais profundos, 30+ min (GPLAY-10);
+10. restrições dimensionais de rota por trailer, com metadados de folga criados por admin (GPLAY-11).
 
-**Pergunta para J2: quais destes devem entrar no roadmap do AUST?** — **APPROVE / DEFER / REJECT por GPLAY ID** (`17_J2_REVIEW_CHECKLIST.md`). Adicional: Pallet Jack com **A** pallet físico em rede, **B** assisted attach, **C** representation swap ou **D** híbrido (sem decisão automática). **Route Builder permanece ADMIN ONLY.**
+**Pergunta para J2: quais destes devem entrar no roadmap do AUST?** — **APPROVE / DEFER / REJECT por GPLAY ID (01–11)** (`17_J2_REVIEW_CHECKLIST.md`). Adicional: Pallet Jack com **A** pallet físico em rede, **B** assisted attach, **C** representation swap ou **D** híbrido (sem decisão automática). **Route Builder permanece ADMIN ONLY.**

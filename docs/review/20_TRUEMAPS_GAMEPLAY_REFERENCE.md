@@ -15,29 +15,38 @@
 
 > **PROVENIÊNCIA.** A sessão **não acessa o vídeo** (`youtu.be` bloqueado pelo proxy). A v1 deste adendo usava só a brief. Esta revisão **confronta cada item com a transcrição fornecida**. A narração é **marketing do desenvolvedor**: confirma que a mecânica **é apresentada**, não como é implementada. **O que depende de imagem (sem fala) continua não verificado.**
 
-## 0. Etiquetas de confiança (nunca misturar)
+## 0. Classificação de evidência (4 níveis — nunca misturar)
 
-| Tag | Significado |
-|---|---|
-| **[VIDEO OBSERVED — NARRATED]** | dito na narração (confirmado pela transcrição fornecida) |
-| **[VIDEO OBSERVED — BRIEF ONLY]** | consta na brief como visto no vídeo, **mas não aparece na transcrição**; depende de imagem; **não verificado** |
-| **[SECONDARY REPORT]** | informação externa (ex.: título/compatibilidade), não observada no conteúdo |
-| **[AUST DESIGN PROPOSAL]** | ideia de desenho do AUST: **não** é afirmação sobre o TrueMaps |
+| # | Tag | Significado | Uso neste estudo |
+|---|---|---|---|
+| 1 | **VIDEO NARRATION CONFIRMED** | declarado diretamente pela narração/transcrição | todas as mecânicas dos tempos [0:00]–[3:34+] listadas na §2 |
+| 2 | **VIDEO VISUAL OBSERVED** | visível no gameplay, não necessariamente narrado | **nenhum item confirmado**: esta sessão não vê a imagem e ninguém forneceu confirmação visual; **candidatos** estão na §2 (itens marcados SECONDARY REPORT que podem aparecer só na imagem) |
+| 3 | **SECONDARY REPORT** | informado por análise externa, sem confirmação direta | itens da brief que **não** aparecem na transcrição (portas traseiras, direção agressiva/raspagem/curva brusca, túnel/raio de curva, "hidráulico", sequência completa de doca) e a compatibilidade ESX/QBCore/QBOX (título) |
+| 4 | **AUST DESIGN PROPOSAL** | ideia nossa derivada da referência | estados de acesso à carga, modelo de dados de pacote, fórmula de dano, faixas de docking, tarefas de escolta além das narradas |
 
-## 1. O que é DESCONHECIDO (não inferir)
+**TECHNICAL IMPLEMENTATION UNKNOWN** para tudo que não é gameplay (ver §1). Fonte da evidência 1: **transcrição temporal** (legenda automática em inglês do YouTube, 3:54, fornecida pelo usuário; **pode conter erros de reconhecimento**; não inclui o que aparece só na imagem).
+
+## 1. TECHNICAL IMPLEMENTATION UNKNOWN (não inferir)
 
 | Aspecto | Status |
 |---|---|
-| IMPLEMENTATION DETAILS | **UNKNOWN** |
-| SERVER AUTHORITY | **UNKNOWN** |
-| SECURITY | **UNKNOWN** |
-| ONESYNC | **UNKNOWN** |
-| DATABASE DESIGN | **UNKNOWN** |
-| PERFORMANCE | **UNKNOWN** |
-| MAINTAINABILITY | **UNKNOWN** |
-| Licença / código | **UNKNOWN** (tratar como proprietário; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**, sem copiar código nem UI) |
+| Arquitetura do código-fonte | **UNKNOWN** |
+| Esquema de banco de dados | **UNKNOWN** |
+| Divisão servidor/cliente | **UNKNOWN** |
+| Autoridade do servidor (SERVER AUTHORITY) | **UNKNOWN** |
+| Ownership OneSync | **UNKNOWN** |
+| Ciclo de vida de entidades | **UNKNOWN** |
+| Design de eventos/callbacks | **UNKNOWN** |
+| Estratégia anti-exploit / segurança | **UNKNOWN** |
+| Persistência | **UNKNOWN** |
+| Desempenho / manutenção | **UNKNOWN** |
+| Fórmulas exatas (pontuação de estacionamento, dano) | **UNKNOWN** |
+| Implementação exata do scanner | **UNKNOWN** |
+| Algoritmo exato de folga de ponte | **UNKNOWN** |
+| Implementação exata da remoção de obstáculos | **UNKNOWN** |
+| Licença / código | **UNKNOWN** (tratar como proprietário; **IDEA ONLY — INDEPENDENT REIMPLEMENTATION**) |
 
-Nenhum SQL, evento, callback, função, esquema ou desenho de rede é atribuído ao TrueMaps. A transcrição **não** informa nada disso.
+Nenhum SQL, evento, callback, função, esquema ou desenho de rede é atribuído ao TrueMaps.
 
 ## 2. Confirmação item a item (brief × transcrição)
 
@@ -45,30 +54,30 @@ Legenda de resultado: **CONFIRMADO** (na narração) · **PARCIAL** · **NÃO CO
 
 | # | Item | Resultado | Trecho da transcrição | Tag |
 |---|---|---|---|---|
-| 1 | 12 tipos de job (de courier a oversized/especial) | **CONFIRMADO** | [0:08–0:16] "as many as 12 different job types, ranging from courier deliveries to oversized and special cargo transportation" | NARRATED |
-| 2 | Carregar com **pallet jack** | **CONFIRMADO** | [0:16–0:24] "load cargo using a pallet jack" | NARRATED |
-| 3 | **Rampa de carga do caminhão** (abrir, subir, baixar conforme a situação) | **CONFIRMADO** (como "loading ramp") | [0:40] "operate the truck's loading ramp, deploying it, raising it, and lowering it" | NARRATED |
-| 4 | Liftgate **hidráulico** | **PARCIAL** — a narração diz "loading ramp"; a palavra "hydraulic" **não** aparece | — | NARRATED (rampa) / BRIEF ONLY ("hidráulico") |
-| 5 | **Abrir portas traseiras**; sair do veículo; interagir com a área traseira | **NÃO CONFIRMADO** | não mencionado | BRIEF ONLY |
-| 6 | Posicionar o caminhão no ponto de carga (veículo longo, correções constantes) | **CONFIRMADO** | [0:57–1:14] "position yourself perfectly at the loading point while controlling an extremely long vehicle" | NARRATED |
-| 7 | Descarga: colocar a mercadoria no **local designado** | **NOVO / CONFIRMADO** | [0:32] "carefully place the goods in the correct designated location" | NARRATED |
-| 8 | **Estacionamento de precisão** em ré, ruas estreitas | **CONFIRMADO** | [0:24–0:30] "parking situations where every inch matters"; [1:14–1:38] "narrow streets…reverse into the designated parking area…near-perfect positioning" | NARRATED |
-| 9 | **Courier**: entrar na carroceria, achar a encomenda certa (só uma), **escanear etiquetas**, entregar na porta, seguir para o próximo ponto | **CONFIRMADO** | [1:38–1:54] | NARRATED |
-| 10 | Carregar o pacote até o destinatário | **CONFIRMADO** ("deliver it straight to the customer's door") | [1:54] | NARRATED |
+| 1 | 12 tipos de job (de courier a oversized/especial) | **CONFIRMADO** | [0:08–0:16] "as many as 12 different job types, ranging from courier deliveries to oversized and special cargo transportation" | VIDEO NARRATION CONFIRMED |
+| 2 | Carregar com **pallet jack** | **CONFIRMADO** | [0:16–0:24] "load cargo using a pallet jack" | VIDEO NARRATION CONFIRMED |
+| 3 | **Rampa de carga do caminhão** (abrir, subir, baixar conforme a situação) | **CONFIRMADO** (como "loading ramp") | [0:40] "operate the truck's loading ramp, deploying it, raising it, and lowering it" | VIDEO NARRATION CONFIRMED |
+| 4 | Liftgate **hidráulico** | **PARCIAL** — a narração diz "loading ramp"; a palavra "hydraulic" **não** aparece | — | VIDEO NARRATION CONFIRMED (rampa) / SECONDARY REPORT ("hidráulico") |
+| 5 | **Abrir portas traseiras**; sair do veículo; interagir com a área traseira | **NÃO CONFIRMADO** | não mencionado | SECONDARY REPORT |
+| 6 | Posicionar o caminhão no ponto de carga (veículo longo, correções constantes) | **CONFIRMADO** | [0:57–1:14] "position yourself perfectly at the loading point while controlling an extremely long vehicle" | VIDEO NARRATION CONFIRMED |
+| 7 | Descarga: colocar a mercadoria no **local designado** | **NOVO / CONFIRMADO** | [0:32] "carefully place the goods in the correct designated location" | VIDEO NARRATION CONFIRMED |
+| 8 | **Estacionamento de precisão** em ré, ruas estreitas | **CONFIRMADO** | [0:24–0:30] "parking situations where every inch matters"; [1:14–1:38] "narrow streets…reverse into the designated parking area…near-perfect positioning" | VIDEO NARRATION CONFIRMED |
+| 9 | **Courier**: entrar na carroceria, achar a encomenda certa (só uma), **escanear etiquetas**, entregar na porta, seguir para o próximo ponto | **CONFIRMADO** | [1:38–1:54] | VIDEO NARRATION CONFIRMED |
+| 10 | Carregar o pacote até o destinatário | **CONFIRMADO** ("deliver it straight to the customer's door") | [1:54] | VIDEO NARRATION CONFIRMED |
 | 11 | Dados de pacote (assinatura, prioridade, destinatário nomeado etc.) | **NÃO CONFIRMADO** | não mencionado | — (apenas **[AUST DESIGN PROPOSAL]**) |
-| 12 | **Integridade da carga**: colisão/dano afetam o **pagamento final** | **CONFIRMADO** | [0:24–0:32] "take proper care of the condition of their cargo"; [2:40–2:47] "Every collision and every bit of damage can directly affect the final payout" | NARRATED |
-| 13 | Direção agressiva, raspagem, curva brusca afetam a carga | **NÃO CONFIRMADO** (só "collision" e "damage" são ditos; os demais podem estar na imagem; a brief já dizia "possivelmente" para curva brusca) | — | BRIEF ONLY |
-| 14 | **8 trailers customizados** com dimensões diferentes | **NOVO / CONFIRMADO** | [2:08] "eight custom trailers, each with different dimensions, widths, and overall sizes" | NARRATED |
-| 15 | Oversized **não passa em toda ponte**; planejar rota | **CONFIRMADO** | [2:15–2:24] | NARRATED |
-| 16 | Folga de **túnel**, raio de curva, obstrução de via como fatores | **PARCIAL** — narração fala de **pontes** e de **larguras/dimensões** de trailer; **túnel** e **raio de curva** não são ditos | — | NARRATED (pontes/dimensões) / BRIEF ONLY (túnel, raio) |
-| 17 | **Escolta ativa**: segundo jogador garante a rota, ajuda nas manobras e **remove obstáculos** (ex.: postes de luz) | **CONFIRMADO** (a narração é explícita; a v1 dizia "aparentemente") | [2:24–2:40] "at least two players…escort, securing the route, helping the driver maneuver…removing roadside obstacles such as lamps" | NARRATED |
+| 12 | **Integridade da carga**: colisão/dano afetam o **pagamento final** | **CONFIRMADO** | [0:24–0:32] "take proper care of the condition of their cargo"; [2:40–2:47] "Every collision and every bit of damage can directly affect the final payout" | VIDEO NARRATION CONFIRMED |
+| 13 | Direção agressiva, raspagem, curva brusca afetam a carga | **NÃO CONFIRMADO** (só "collision" e "damage" são ditos; os demais podem estar na imagem; a brief já dizia "possivelmente" para curva brusca) | — | SECONDARY REPORT |
+| 14 | **8 trailers customizados** com dimensões diferentes | **NOVO / CONFIRMADO** | [2:08] "eight custom trailers, each with different dimensions, widths, and overall sizes" | VIDEO NARRATION CONFIRMED |
+| 15 | Oversized **não passa em toda ponte**; planejar rota | **CONFIRMADO** | [2:15–2:24] | VIDEO NARRATION CONFIRMED |
+| 16 | Folga de **túnel**, raio de curva, obstrução de via como fatores | **PARCIAL** — narração fala de **pontes** e de **larguras/dimensões** de trailer; **túnel** e **raio de curva** não são ditos | — | VIDEO NARRATION CONFIRMED (pontes/dimensões) / SECONDARY REPORT (túnel, raio) |
+| 17 | **Escolta ativa**: segundo jogador garante a rota, ajuda nas manobras e **remove obstáculos** (ex.: postes de luz) | **CONFIRMADO** (a narração é explícita; a v1 dizia "aparentemente") | [2:24–2:40] "at least two players…escort, securing the route, helping the driver maneuver…removing roadside obstacles such as lamps" | VIDEO NARRATION CONFIRMED |
 | 18 | Luzes de alerta, sinalização temporária, controle de cruzamento, espaçamento de comboio | **NÃO CONFIRMADO** | não mencionado | — (apenas **[AUST DESIGN PROPOSAL]**) |
-| 19 | Jobs complexos duram 30+ minutos | **NOVO / CONFIRMADO** | [0:48] | NARRATED |
-| 20 | **Modo empresa**: dono compra caminhões/trailers, contrata, expande a frota, gerencia | **CONFIRMADO** | [2:54–3:10] | NARRATED |
-| 21 | **10%** de cada job de funcionário vai automaticamente para a conta da empresa | **CONFIRMADO como afirmação do vídeo** | [3:10–3:18] | NARRATED (percentual **não** copiado) |
-| 22 | **Modo job padrão** (sem empresa; dinheiro e XP para progressão) | **NOVO / CONFIRMADO** | [3:18–3:34] | NARRATED |
+| 19 | Jobs complexos duram 30+ minutos | **NOVO / CONFIRMADO** | [0:48] | VIDEO NARRATION CONFIRMED |
+| 20 | **Modo empresa**: dono compra caminhões/trailers, contrata, expande a frota, gerencia | **CONFIRMADO** | [2:54–3:10] | VIDEO NARRATION CONFIRMED |
+| 21 | **10%** de cada job de funcionário vai automaticamente para a conta da empresa | **CONFIRMADO como afirmação do vídeo** | [3:10–3:18] | VIDEO NARRATION CONFIRMED (percentual **não** copiado) |
+| 22 | **Modo job padrão** (sem empresa; dinheiro e XP para progressão) | **NOVO / CONFIRMADO** | [3:18–3:34] | VIDEO NARRATION CONFIRMED |
 | 23 | Compatibilidade ESX / QBCore / QBOX | título do produto (não é fala) | — | SECONDARY REPORT |
-| 24 | "Dock/rear cargo area → sair do veículo → interagir" como fluxo completo | **NÃO CONFIRMADO** como sequência | só partes (itens 2, 3, 6) são ditas | BRIEF ONLY |
+| 24 | "Dock/rear cargo area → sair do veículo → interagir" como fluxo completo | **NÃO CONFIRMADO** como sequência | só partes (itens 2, 3, 6) são ditas | SECONDARY REPORT |
 
 **Correções em relação à v1 (`b66d975`):** (a) a escolta **ativa** passa de "aparentemente" para **narrada**; (b) "direção agressiva/raspagem" e "portas traseiras abertas" **não** estão na transcrição; (c) "hidráulico" e "túnel/raio de curva" **não** estão na transcrição; (d) o **10%** passa de **SECONDARY REPORT** para **afirmação narrada do vídeo**; (e) itens **novos**: descarga em local designado, 8 trailers, jobs de 30+ min, modo job padrão, planejamento de rota pelo motorista.
 
@@ -78,11 +87,11 @@ Nota 1–10; confiança **MÉDIA** (narração do desenvolvedor, sem verificaç�
 
 | Critério | Nota | Base | Tag |
 |---|---|---|---|
-| GAMEPLAY | 9 | tarefas físicas distintas por tipo de frete (itens 2, 3, 7, 8, 9, 17) | NARRATED |
-| JOB VARIETY | 9 | **12 tipos** de job; 8 trailers; courier, oversized, especial | NARRATED |
-| HEAVY RP VALUE | 9 | carga manual, rampa, estacionamento de precisão, escolta | NARRATED |
-| PHYSICAL INTERACTION | 9 | pallet jack, rampa, scanner de etiquetas, remover obstáculos | NARRATED |
-| COOP VALUE | 9 (↑ de 8) | jobs de **no mínimo 2 jogadores** com escolta ativa explícita | NARRATED |
+| GAMEPLAY | 9 | tarefas físicas distintas por tipo de frete (itens 2, 3, 7, 8, 9, 17) | VIDEO NARRATION CONFIRMED |
+| JOB VARIETY | 9 | **12 tipos** de job; 8 trailers; courier, oversized, especial | VIDEO NARRATION CONFIRMED |
+| HEAVY RP VALUE | 9 | carga manual, rampa, estacionamento de precisão, escolta | VIDEO NARRATION CONFIRMED |
+| PHYSICAL INTERACTION | 9 | pallet jack, rampa, scanner de etiquetas, remover obstáculos | VIDEO NARRATION CONFIRMED |
+| COOP VALUE | 9 (↑ de 8) | jobs de **no mínimo 2 jogadores** com escolta ativa explícita | VIDEO NARRATION CONFIRMED |
 | AUST RELEVANCE | 8 | complementa onde o AUST é mais fraco (profundidade física/courier/escolta); **não** fornece arquitetura | AUST DESIGN PROPOSAL |
 
 ## 4. Loop de gameplay observado
@@ -92,17 +101,17 @@ JOB SELECTION → VEHICLE / CARGO PREPARATION → DOCKING → PHYSICAL LOADING �
   → CARGO RISK → SPECIAL JOB MECHANICS → PRECISION DELIVERY → REWARD / XP / COMPANY ECONOMY
 ```
 
-- **[VIDEO OBSERVED — NARRATED]** presentes na narração: posicionar no ponto de carga (6), carregar com pallet jack (2), rampa (3), risco de carga com pagamento (12), mecânicas especiais — courier/oversized/escolta (9, 15, 17), entrega com posicionamento quase perfeito (8), recompensa/XP/empresa (20–22).
-- **[VIDEO OBSERVED — BRIEF ONLY]** a etapa "preparação do veículo" como **abrir portas/sair do veículo** não consta na transcrição.
+- **[VIDEO NARRATION CONFIRMED]** presentes na narração: posicionar no ponto de carga (6), carregar com pallet jack (2), rampa (3), risco de carga com pagamento (12), mecânicas especiais — courier/oversized/escolta (9, 15, 17), entrega com posicionamento quase perfeito (8), recompensa/XP/empresa (20–22).
+- **[SECONDARY REPORT]** a etapa "preparação do veículo" como **abrir portas/sair do veículo** não consta na transcrição.
 - **[AUST DESIGN PROPOSAL]** a sequência completa como **modelo de profundidade** para o AUST.
 
-**Diferença central:** o job genérico é `PICK TRAILER → DRIVE A TO B → PAYMENT`. **[NARRATED]** o TrueMaps abre dizendo que o script é "much more than simply driving from point A to point B". O AUST hoje é forte em economia/indústria e fraco em preparação física e interação de carga fora de forklift/reach stacker (docs 05 e 07) — **[AUST DESIGN PROPOSAL]**.
+**Diferença central:** o job genérico é `PICK TRAILER → DRIVE A TO B → PAYMENT`. **[VIDEO NARRATION CONFIRMED]** o TrueMaps abre dizendo que o script é "much more than simply driving from point A to point B". O AUST hoje é forte em economia/indústria e fraco em preparação física e interação de carga fora de forklift/reach stacker (docs 05 e 07) — **[AUST DESIGN PROPOSAL]**.
 
 ## 5. Carregamento físico em doca
 
-**[VIDEO OBSERVED — NARRATED]:** posicionar o caminhão no ponto de carga, **usar pallet jack**, **operar a rampa do caminhão** (abrir/subir/baixar), e na descarga **colocar a mercadoria no local designado**.
+**[VIDEO NARRATION CONFIRMED]:** posicionar o caminhão no ponto de carga, **usar pallet jack**, **operar a rampa do caminhão** (abrir/subir/baixar), e na descarga **colocar a mercadoria no local designado**.
 
-**[VIDEO OBSERVED — BRIEF ONLY]:** dar ré na doca → sair do veículo → interagir com a área traseira → abrir portas traseiras → engatar o pallet → mover → carregar dentro do caminhão (a **sequência completa** não é narrada).
+**[SECONDARY REPORT]:** dar ré na doca → sair do veículo → interagir com a área traseira → abrir portas traseiras → engatar o pallet → mover → carregar dentro do caminhão (a **sequência completa** não é narrada).
 
 Elementos distintos a estudar: **PALLET JACK · LIFTGATE/RAMPA · CARGO DOOR STATE · DOCKING**.
 
@@ -114,7 +123,7 @@ Elementos distintos a estudar: **PALLET JACK · LIFTGATE/RAMPA · CARGO DOOR STA
 |---|---|---|---|
 | **Forklift** | pallets pesados | `client/modules/forklift.lua` (Polarix) e `client/forklift.client.lua` (trade point); estudo em docs 07/10 | fato do AUST |
 | **Reach Stacker** | contêineres | `client/modules/reach_stacker.lua`; `container_handler` | fato do AUST |
-| **Pallet Jack** | armazém / van / box truck / carga curta | **não existe** | **[NARRATED]** o TrueMaps usa pallet jack para carregar; **[AUST DESIGN PROPOSAL]** terceiro modo (uso em van/box truck é proposta; a narração não especifica o veículo) |
+| **Pallet Jack** | armazém / van / box truck / carga curta | **não existe** | **[VIDEO NARRATION CONFIRMED]** o TrueMaps usa pallet jack para carregar; **[AUST DESIGN PROPOSAL]** terceiro modo (uso em van/box truck é proposta; a narração não especifica o veículo) |
 
 **[AUST DESIGN PROPOSAL]:** `FORKLIFT = heavy pallet handling` · `PALLET JACK = warehouse / van / box truck / short-distance` · `REACH STACKER = containers`. Sem implementação imediata → **GPLAY-01**.
 
@@ -122,11 +131,11 @@ Elementos distintos a estudar: **PALLET JACK · LIFTGATE/RAMPA · CARGO DOOR STA
 
 **[AUST DESIGN PROPOSAL]** — estados possíveis (rótulos de discussão): `DOORS_CLOSED` · `DOORS_OPEN` · `LIFTGATE_UP` · `LIFTGATE_DOWN` · `LOADING_ALLOWED` · `LOADING_COMPLETE`.
 
-Observação: **[NARRATED]** só a **rampa** (abrir/subir/baixar) é confirmada; **portas** são **[BRIEF ONLY]**. Como o TrueMaps modela estado é **UNKNOWN**. → **GPLAY-02**.
+Observação: **[VIDEO NARRATION CONFIRMED]** só a **rampa** (abrir/subir/baixar) é confirmada; **portas** são **[SECONDARY REPORT]**. Como o TrueMaps modela estado é **UNKNOWN**. → **GPLAY-02**.
 
 ## 8. Courier
 
-**Fluxo [VIDEO OBSERVED — NARRATED]:** entrar na área de carga → **achar o pacote correto (só um é o certo)** → **escanear etiquetas** → identificar → entregar **na porta do cliente** → **seguir para o próximo ponto**.
+**Fluxo [VIDEO NARRATION CONFIRMED]:** entrar na área de carga → **achar o pacote correto (só um é o certo)** → **escanear etiquetas** → identificar → entregar **na porta do cliente** → **seguir para o próximo ponto**.
 
 **Estado do AUST (fato):** depósito NPC → missão de parcel → coleta (`CarrySystem` do **cliente**) → paradas sequenciais → depósito; o servidor valida cooldown, nível e posição (≤ 15 m) por parada (doc 05 §6). **Sem identidade de pacote nem scanner.**
 
@@ -134,7 +143,7 @@ Observação: **[NARRATED]** só a **rampa** (abrir/subir/baixar) é confirmada;
 
 ## 9. Integridade da carga
 
-**[NARRATED]:** cuidar da condição da carga; **colisão e dano afetam diretamente o pagamento final**. **[BRIEF ONLY]:** direção agressiva, raspagem e curva brusca (**não** aparecem na transcrição).
+**[VIDEO NARRATION CONFIRMED]:** cuidar da condição da carga; **colisão e dano afetam diretamente o pagamento final**. **[SECONDARY REPORT]:** direção agressiva, raspagem e curva brusca (**não** aparecem na transcrição).
 
 **Estado do AUST (fato):** integridade **reportada pelo cliente** e **consumida pelo servidor**: `truck_simulation_service.lua:103-108` (clamp 0..100, só pode diminuir); usada em `job_service.lua:434`. Um cliente modificado pode **nunca reportar queda** (CLIENT-SOURCED / SERVER-CONSUMED; **RUNTIME PROOF REQUIRED**).
 
@@ -151,7 +160,7 @@ Observação: **[NARRATED]** só a **rampa** (abrir/subir/baixar) é confirmada;
 
 ## 10. Carga oversized e planejamento de rota
 
-**[NARRATED]:** **8 trailers customizados** de dimensões diferentes; **nem toda carga oversized passa em toda ponte**, então o motorista deve **conhecer as rotas certas e planejar a viagem**. **[BRIEF ONLY]:** túnel, raio de curva, obstrução de via como fatores.
+**[VIDEO NARRATION CONFIRMED]:** **8 trailers customizados** de dimensões diferentes; **nem toda carga oversized passa em toda ponte**, então o motorista deve **conhecer as rotas certas e planejar a viagem**. **[SECONDARY REPORT]:** túnel, raio de curva, obstrução de via como fatores.
 
 **[AUST DESIGN PROPOSAL] — SPECIAL TRANSPORT ROUTE VALIDATION (não implementar):** dimensões do veículo, restrições de rota, **pontes (narrado)**, túneis, curvas fechadas, obstáculos. Fonte dos dados de mapa e método de validação do TrueMaps: **UNKNOWN**. → **GPLAY-07**.
 
@@ -159,16 +168,16 @@ Observação: **[NARRATED]** só a **rampa** (abrir/subir/baixar) é confirmada;
 
 | Recurso | Escolta no XS-Trucking (código lido) | Escolta no TrueMaps |
 |---|---|---|
-| Natureza | presença/distância/suporte de convoy + bônus (`08b` §9) | **[NARRATED]** tarefas **ativas** (jobs de ≥ 2 jogadores) |
+| Natureza | presença/distância/suporte de convoy + bônus (`08b` §9) | **[VIDEO NARRATION CONFIRMED]** tarefas **ativas** (jobs de ≥ 2 jogadores) |
 
-**Fluxo [NARRATED]:** segundo jogador **garante a rota**, **ajuda o motorista a manobrar em trechos difíceis** e **remove obstáculos laterais (ex.: postes de luz)** para o caminhão passar.
+**Fluxo [VIDEO NARRATION CONFIRMED]:** segundo jogador **garante a rota**, **ajuda o motorista a manobrar em trechos difíceis** e **remove obstáculos laterais (ex.: postes de luz)** para o caminhão passar.
 
 **[AUST DESIGN PROPOSAL] — ACTIVE ESCORT ROLE:** tarefas futuras possíveis: controle de tráfego · fechamento de via · reconhecimento de rota · remoção de obstáculo · controle de cruzamento · sinalizador de alerta · sinalização temporária · espaçamento do comboio · verificação de folga (os itens além de "garantir a rota", "ajudar a manobrar" e "remover obstáculos" **não** são ditos no vídeo). **HIGH GAMEPLAY VALUE.** Estado do AUST: papel `escort` citado em `client/convoy.client.lua:180` (não auditado a fundo). → **GPLAY-06**.
 
 ## 12. Precisão de estacionamento → DOCKING QUALITY SYSTEM
 
 - **XS (código lido):** `dockScore` (distância 2D + heading do trailer ao ponto, no servidor) — `08b` §9.
-- **TrueMaps [NARRATED]:** "every inch matters", "near-perfect positioning", reverse em área designada.
+- **TrueMaps [VIDEO NARRATION CONFIRMED]:** "every inch matters", "near-perfect positioning", reverse em área designada.
 - **[AUST DESIGN PROPOSAL]:** métricas: erro de posição · erro de heading · alinhamento de ré · alinhamento do trailer · velocidade final → **DOCK SCORE 0–100**.
 
 | Faixa (**proposta do AUST; não do TrueMaps**) | Classe |
@@ -183,7 +192,7 @@ Observação: **[NARRATED]** só a **rampa** (abrir/subir/baixar) é confirmada;
 
 ## 13. Economia de empresa e modos
 
-**[NARRATED]:** dois sistemas principais — **empresa** (dono compra caminhões/trailers, contrata, expande a frota e gerencia; **10%** de cada job de funcionário vai automaticamente à conta da empresa) e **modo job padrão** (sem empresa; dinheiro e XP para desbloquear progressão). **O percentual não é copiado.**
+**[VIDEO NARRATION CONFIRMED]:** dois sistemas principais — **empresa** (dono compra caminhões/trailers, contrata, expande a frota e gerencia; **10%** de cada job de funcionário vai automaticamente à conta da empresa) e **modo job padrão** (sem empresa; dinheiro e XP para desbloquear progressão). **O percentual não é copiado.**
 
 Conceito: `ENTREGA DO FUNCIONÁRIO → PAGAMENTO DO MOTORISTA + RECEITA DA EMPRESA (revenue share)`.
 
@@ -200,21 +209,23 @@ Conceito: `ENTREGA DO FUNCIONÁRIO → PAGAMENTO DO MOTORISTA + RECEITA DA EMPRE
 
 > **O AUST NÃO deve copiar um único recurso de trucking.** Usar referências **por domínio**. **TARGET DESIGN (proposta):** XS → arquitetura · Polarix → manuseio de pallet · TrueMaps → profundidade de gameplay · AUST → sistema integrado canônico.
 
-## 15. Backlog de ESTUDO de gameplay (GPLAY) — nada será implementado
+## 15. Backlog de ESTUDO de gameplay (GPLAY-01…11) — nada será implementado
 
 | ID | Título | Prioridade | Evidência no vídeo (transcrição) | Estado |
 |---|---|---|---|---|
-| GPLAY-01 | Pallet Jack (**+ descarga em local designado**) | ALTA | pallet jack e descarga: **NARRATED** | STUDY ONLY |
-| GPLAY-02 | Hydraulic Liftgate / Cargo Doors | ALTA | rampa: **NARRATED**; portas: **BRIEF ONLY** | STUDY ONLY |
-| GPLAY-03 | Courier Package Scanner | ALTA | **NARRATED** | STUDY ONLY |
-| GPLAY-04 | Cargo Integrity | ALTA | colisão/dano → pagamento: **NARRATED**; direção agressiva/raspagem: **BRIEF ONLY** | STUDY ONLY |
-| GPLAY-05 | Precision Docking | ALTA | **NARRATED** | STUDY ONLY |
-| GPLAY-06 | Active Escort Gameplay | ALTA | **NARRATED** | STUDY ONLY |
-| GPLAY-07 | Oversized Route Restrictions | MÉDIA | pontes e planejamento de rota: **NARRATED**; túnel/raio: **BRIEF ONLY** | STUDY ONLY |
-| GPLAY-08 | Road Obstacle Interaction | MÉDIA | remover obstáculos (ex.: postes): **NARRATED** | STUDY ONLY |
-| GPLAY-09 | Special Transport Convoy | MÉDIA | oversized + escolta ≥ 2 jogadores: **NARRATED** | STUDY ONLY |
+| GPLAY-01 | Pallet Jack (**+ descarga em local designado**) | ALTA | pallet jack e descarga: **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| GPLAY-02 | Cargo Ramp / Liftgate (+ portas) | ALTA | rampa: **VIDEO NARRATION CONFIRMED**; portas: **SECONDARY REPORT** | STUDY ONLY |
+| GPLAY-03 | Courier Package Scanner | ALTA | **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| GPLAY-04 | Cargo Integrity | ALTA | colisão/dano → pagamento: **VIDEO NARRATION CONFIRMED**; direção agressiva/raspagem: **SECONDARY REPORT** | STUDY ONLY |
+| GPLAY-05 | Precision Docking | ALTA | **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| GPLAY-06 | Active Escort Gameplay | ALTA | **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| GPLAY-07 | Oversized Route Clearance | **ALTA** | pontes e planejamento de rota: **VIDEO NARRATION CONFIRMED**; túnel/raio: **SECONDARY REPORT** | STUDY ONLY |
+| GPLAY-08 | Road Obstacle Interaction | MÉDIA (sobe para ALTA se GPLAY-06 for aprovado) | remover obstáculos (ex.: postes): **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| GPLAY-09 | Special Transport Convoy | MÉDIA (sobe para ALTA se GPLAY-06/07 forem aprovados) | oversized + escolta ≥ 2 jogadores: **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| **GPLAY-10** | Long-form logistics jobs | **ALTA** | jobs complexos de **30+ minutos**: **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
+| **GPLAY-11** | Trailer dimensional route constraints | **ALTA** | 8 trailers de dimensões diferentes e restrição de ponte: **VIDEO NARRATION CONFIRMED** | STUDY ONLY |
 
-Todos: **J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO.** Decisão por item: **APPROVE / DEFER / REJECT**.
+**Prioridades:** HIGH PRIORITY STUDY = GPLAY-01…07, 10 e 11; GPLAY-08/09 mantidos MÉDIA (HIGH/MEDIUM conforme a arquitetura de escolta/oversized). Todos: **J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO.** Decisão por item: **APPROVE / DEFER / REJECT**.
 
 ## 16. Detalhamento dos itens de estudo
 
@@ -226,7 +237,7 @@ Todos: **J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO.** Decisão por item: **AP
 
 ### 16.2 GPLAY-02 — Cargo Access
 
-**STUDY:** rampa/liftgate (narrada) · portas traseiras (**BRIEF ONLY**) · rampas · acesso à carga do veículo · permissão de carregamento. **Perguntas:** abrir a porta afeta o estado da carga? pode-se carregar com a porta fechada? quem é dono do estado do liftgate? o estado deve replicar? o que acontece na desconexão? (docs 06 e 11).
+**STUDY:** rampa/liftgate (narrada) · portas traseiras (**SECONDARY REPORT**) · rampas · acesso à carga do veículo · permissão de carregamento. **Perguntas:** abrir a porta afeta o estado da carga? pode-se carregar com a porta fechada? quem é dono do estado do liftgate? o estado deve replicar? o que acontece na desconexão? (docs 06 e 11).
 
 ### 16.3 GPLAY-03 — Courier Scanner
 
@@ -252,18 +263,32 @@ Todos: **J2 APPROVAL REQUIRED: YES · CODE CHANGE: NO.** Decisão por item: **AP
 | GPLAY-08 | interação com obstáculo de via (remover/criar; quem pode; ciclo de vida; limpeza na desconexão; risco de grief) |
 | GPLAY-09 | comboio de transporte especial (oversized + escolta ativa + pilot car) sobre o convoy atual (`convoy_service`); depende de GPLAY-06/07 |
 
+### 16.8 GPLAY-10 — Long-form logistics jobs
+
+**EVIDENCE [VIDEO NARRATION CONFIRMED, 0:48–0:57]:** jobs complexos podem levar **30 minutos ou mais**.
+
+**STUDY [AUST DESIGN PROPOSAL]:** como sustentar engajamento em jobs longos · checkpoints intermediários · tarefas físicas · risco · multi-parada · recuperação · progresso parcial · tratamento de desconexão · escala de recompensa · risco de fadiga/repetição.
+
+**AUST GOAL:** jobs longos devem ser **mais profundos, não apenas mais longos de direção**. Relaciona-se com o registro único de job e a recuperação de restart/queda (TD-02, TD-27, W4-02) — jobs longos amplificam a perda por reinício (o AUST e o XS mantêm estado só em memória em partes do fluxo; ver `08b` §4.5 e doc 11).
+
+### 16.9 GPLAY-11 — Trailer dimensional route constraints
+
+**EVIDENCE [VIDEO NARRATION CONFIRMED, 2:08–2:24]:** 8 trailers customizados com dimensões/larguras/tamanhos diferentes; nem toda carga oversized passa em toda ponte; exige planejamento de rota.
+
+**STUDY [AUST DESIGN PROPOSAL]:** largura do trailer · altura do trailer · altura da carga · folga de rota · restrições de ponte/túnel · rotas especiais permitidas · **metadados de folga criados por admin**. Algoritmo e fonte de dados do TrueMaps: **UNKNOWN**.
+
+**IMPORTANTE:** **Route Builder = ADMIN ONLY.** Jogadores podem **PLANEJAR** rotas (consulta/planejamento como gameplay), mas **nunca** ganham acesso a ferramentas de **autoria** de rotas ou de metadados de folga. Relaciona-se com GPLAY-07 (validação) e com as dimensões por modelo que o PropEditor já calibra (docs 07/10).
+
 ## 17. Ecossistema de dispositivos (sem criar outra UI isolada)
 
-Ver `19_AUST_DEVICE_ECOSYSTEM_INTEGRATION.md` (**PHONE ≠ TABLET ≠ NEXUSOS**; fontes dos três resources **não lidas**; **ARCHITECTURE PENDING SOURCE REVIEW**). **[AUST DESIGN PROPOSAL]**:
+Ver `19_AUST_DEVICE_ECOSYSTEM_INTEGRATION.md` (**PHONE ≠ TABLET ≠ NEXUSOS**; fontes dos três resources **não lidas**; **ARCHITECTURE PENDING SOURCE REVIEW**). **[AUST DESIGN PROPOSAL]** de distribuição:
 
-| Funcionalidade | Dispositivo proposto |
-|---|---|
-| Courier scanner | **TABLET** / interface operacional portátil |
-| Manifesto de carga | **TABLET** |
-| Planejamento da empresa | **NEXUSOS** |
-| Atribuição de escolta | **NEXUSOS / TABLET** |
-| Alerta de escolta | **PHONE** |
-| **Route Builder** | **ADMIN ONLY** |
+| Dispositivo | Papel | Funcionalidades candidatas |
+|---|---|---|
+| **NEXUSOS** | gestão | planejamento de jobs · gestão da empresa · **planejamento de rota oversized** · frota · contratos · atribuição de escolta |
+| **VP_TABLET** | operação | manifesto · **checklist de carregamento** · tarefas de pallet/carga · **courier scanner** · condição da carga · rota ativa · tarefas de escolta |
+| **VP_PHONE** | comunicação | atribuição de job · convites de empresa/convoy · alertas (incl. alerta de escolta) · manutenção · notificações de frota |
+| **ROUTE BUILDER** | autoria | **ADMIN ONLY** |
 
 ## 18. Route Builder
 
@@ -271,9 +296,9 @@ Ver `19_AUST_DEVICE_ECOSYSTEM_INTEGRATION.md` (**PHONE ≠ TABLET ≠ NEXUSOS**;
 
 ## 19. Perguntas para J2
 
-1. Quais GPLAY entram no roadmap? (APPROVE / DEFER / REJECT por ID.)
+1. Quais GPLAY (01–11) entram no roadmap? (APPROVE / DEFER / REJECT por ID.)
 2. Pallet Jack: A, B, C ou D? (GPLAY-01.)
-3. Conferir **na imagem** os itens **BRIEF ONLY** (portas traseiras, direção agressiva/raspagem, túnel/raio de curva, "hidráulico") antes de aprová-los.
+3. Conferir **na imagem** (VIDEO VISUAL OBSERVED) os itens **SECONDARY REPORT** (portas traseiras, direção agressiva/raspagem, túnel/raio de curva, "hidráulico") antes de aprová-los.
 4. GPLAY-04: tratar a integridade atual (cliente → servidor, só decresce) como transitória?
 
 ## 20. Limites desta revisão

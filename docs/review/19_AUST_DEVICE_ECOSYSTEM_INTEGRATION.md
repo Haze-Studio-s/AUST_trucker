@@ -67,10 +67,15 @@ Legenda: YES · NO · SUMMARY · FULL · LIMITED · VIEW · ALERT(S) · EXECUTE 
 | Convoy | INVITE/ALERT | STATUS | PLAN/MANAGE | OVERSIGHT |
 | Industries / supply chain | NO | LIMITED | FULL | OVERSIGHT |
 | Ledger / leaderboards | NO | NO | FULL | VIEW |
+| Courier scanner / parcel (gameplay; proposta GPLAY-03) | NO | **EXECUTE** | VIEW | VIEW |
+| Checklist de carregamento / tarefas de pallet e carga (GPLAY-01/02) | NO | **EXECUTE** | VIEW | VIEW |
+| Condição da carga (GPLAY-04) | ALERT | FULL | VIEW | VIEW |
+| Planejamento de rota oversized (jogador; GPLAY-07/11) | NO | VIEW | **PLAN** | OVERSIGHT |
+| Tarefas de escolta (GPLAY-06) | ALERT | **EXECUTE** | PLAN/ASSIGN | OVERSIGHT |
 | **Route Builder** | **NO** | **NO** | **NO (jogador)** | **YES — ADMIN ONLY** |
 | **Server settings** | **NO** | **NO** | **NO (jogador)** | **YES — ADMIN ONLY** |
 
-Observações: (a) a matriz é **proposta de UX**, não requisito técnico descoberto; (b) o que cada dispositivo **consegue** fazer depende da revisão de fonte (STUDY-DEVICE-01); (c) "NEXUSOS ADMIN" refere-se à parte **administrativa** do NexusOS, se existir — **UNKNOWN**.
+Observações: (a) as linhas GPLAY vêm do adendo TrueMaps (`20_…`, **proposta**; **planejar** rota como jogador **≠** autoria de rotas, que é **ADMIN ONLY**); (b) a matriz é **proposta de UX**, não requisito técnico descoberto; (b) o que cada dispositivo **consegue** fazer depende da revisão de fonte (STUDY-DEVICE-01); (c) "NEXUSOS ADMIN" refere-se à parte **administrativa** do NexusOS, se existir — **UNKNOWN**.
 
 ## 5. Backend canônico do AUST (direção, não implementação)
 
