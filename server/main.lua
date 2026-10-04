@@ -263,6 +263,19 @@ local function CleanupLobbyEntities(lobby)
     end
 end
 
+-- Entrada na fase de carregamento. O client NUNCA envia `inspectionCompleted` (nenhum arquivo em client/
+-- dispara esse evento), então o lobby fica em STEP_GET_TRUCK até o primeiro evento da fase de carga.
+-- Em vez de exigir um evento que não chega, o primeiro evento válido de carregamento promove o estágio
+-- (comportamento original do HandlePalletLoaded). Qualquer outro estágio continua recusado.
+local function EnterLoadingStage(lobby)
+    if lobby.stage == 'STATUS_LOADING' then return true end
+    if lobby.stage == 'STEP_GET_TRUCK' then
+        lobby.stage = 'STATUS_LOADING'
+        return true
+    end
+    return false
+end
+
 -- Exposto a outros arquivos server-side (events.lua): a entidade pertence ao lobby ativo do jogador?
 -- Retorna hasLobby (jogador tem lobby Polarix ativo), matches (entidade registrada pelo servidor no lobby)
 function PolarixOwnsEntity(citizenId, ent)
@@ -1378,7 +1391,7 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
     end
 
     -- Máquina de estados: palete só é aceito durante o carregamento e até o total exigido
-    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if not EnterLoadingStage(lobby) then return end
     if (lobby.loadedCount or 0) >= required then return end
 
     -- Valida distância do jogador até a carreta (anti-spam remoto)
@@ -1486,7 +1499,7 @@ RegisterNetEvent('aurp_trucker:server:pickupHose', function(jobId, terminalId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if not EnterLoadingStage(lobby) then return end
 
     if lobby.cargoType ~= 'liquid' then return end
     if lobby.hoseConnected then return end
@@ -1542,7 +1555,7 @@ RegisterNetEvent('aurp_trucker:server:connectHose', function(jobId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
-    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if not EnterLoadingStage(lobby) then return end
 
     if lobby.cargoType ~= 'liquid' then return end
     if not lobby.hoseProp or not DoesEntityExist(lobby.hoseProp) then return end
@@ -1646,7 +1659,7 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         if lobby.stage ~= 'STEP_STRAPPING' or (lobby.loadedCount or 0) < (lobby.requiredCount or 1) then return end
     elseif lobby.cargoType == 'liquid' or lobby.cargoType == 'heavy' then
         return -- têm eventos próprios (disconnectHose / heavyContainerLoaded)
-    elseif lobby.stage ~= 'STATUS_LOADING' then
+    elseif not EnterLoadingStage(lobby) then
         return
     end
 
@@ -1709,7 +1722,7 @@ RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId)
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
     if lobby.cargoType ~= 'heavy' then return end
-    if lobby.stage ~= 'STATUS_LOADING' then return end
+    if not EnterLoadingStage(lobby) then return end
     local hPed = GetPlayerPed(src)
     if not hPed or hPed == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
     if #(GetEntityCoords(hPed) - GetEntityCoords(lobby.trailer)) > 60.0 then return end
