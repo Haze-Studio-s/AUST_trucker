@@ -345,13 +345,10 @@ function ForkliftModule.SpawnGhostProp(trailer, model, offset, heading)
     local finalPitch, finalRoll = 0.0, 0.0
     local finalYaw = heading or (type(offset) == 'table' and offset.heading) or 0.0
 
-    -- Integração 6DoF: Se houver offset personalizado para o modelo do veículo e modelo do prop
+    -- Se houver micro-ajuste angular no PropEditor para este prop, aplica apenas nas rotações secundárias
     local customPropOffset, customPropRot = GetVehiclePropOffset(trailer, modelHash)
-    if customPropOffset then
-        finalOff = customPropOffset
-        if customPropRot then
-            finalPitch, finalRoll, finalYaw = customPropRot.x, customPropRot.y, customPropRot.z
-        end
+    if customPropRot then
+        finalPitch, finalRoll = customPropRot.x, customPropRot.y
     end
 
     AttachEntityToEntity(
@@ -389,27 +386,21 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         return false
     end
 
-    -- RESGATE PRIORITÁRIO DE OFFSETS CONFIGURADOS PELO ADMIN (A Única Fonte de Verdade)
-    -- 1º Prioridade: Aba PropEditor (/truckeradmin) para a combinação [Trailer <-> PropModel]
-    -- 2º Prioridade: Aba Slots do Trailer (Config.TrailerSlots) para o slotIndex atual
-    -- 3º Prioridade: Fallback geométrico do slot
+    -- RESGATE PRIORITÁRIO DE OFFSETS DOS SLOTS DO REBOQUE (A Única Fonte de Verdade)
+    -- Os slots configurados pelo Admin na aba Offsets Trailer 3D (Config.TrailerSlots)
+    -- governam estritamente a posição (X, Y, Z) e rotação base (Heading/Yaw) de cada slot individual (1..N).
+    local slotOff, slotHead = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
+    local finalX = (type(slotOff) == 'table' and slotOff.x) or 0.0
+    local finalY = (type(slotOff) == 'table' and slotOff.y) or 0.0
+    local finalZ = (type(slotOff) == 'table' and slotOff.z) or 0.35
+    local finalPitch, finalRoll = 0.0, 0.0
+    local finalYaw = slotHead or (type(slotOff) == 'table' and slotOff.heading) or 0.0
+
+    -- Micro-ajustes angulares do prop (PropEditor nunca sobrescreve posição X/Y/Z dos slots de trailer)
     local pModel = GetEntityModel(palletEntity)
-    local adminOff, adminRot = GetVehiclePropOffset(targetTrailer, pModel)
-
-    local finalX, finalY, finalZ = 0.0, 0.0, 0.0
-    local finalPitch, finalRoll, finalYaw = 0.0, 0.0, 0.0
-
-    if adminOff then
-        finalX, finalY, finalZ = adminOff.x, adminOff.y, adminOff.z
-        if adminRot then
-            finalPitch, finalRoll, finalYaw = adminRot.x, adminRot.y, adminRot.z
-        end
-    else
-        local slotOff, slotHead = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
-        finalX = (type(slotOff) == 'table' and slotOff.x) or 0.0
-        finalY = (type(slotOff) == 'table' and slotOff.y) or 0.0
-        finalZ = (type(slotOff) == 'table' and slotOff.z) or 0.35
-        finalYaw = slotHead or (type(slotOff) == 'table' and slotOff.heading) or 0.0
+    local _, adminRot = GetVehiclePropOffset(targetTrailer, pModel)
+    if adminRot then
+        finalPitch, finalRoll = adminRot.x, adminRot.y
     end
 
     -- Controle de rede antes do acoplamento
@@ -489,9 +480,9 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
                 if dist > 3.5 then
                     break
                 end
-                SetEntityNoCollisionEntity(pEnt, fEnt, true)
-                SetEntityNoCollisionEntity(fEnt, pEnt, true)
-                Wait(0)
+                SetEntityNoCollisionEntity(pEnt, fEnt, false)
+                SetEntityNoCollisionEntity(fEnt, pEnt, false)
+                Wait(50)
             end
         end)
     end
