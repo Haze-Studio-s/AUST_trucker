@@ -2786,11 +2786,10 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             end
 
                             -- 4. Estabilização e salvaguarda permanente em repouso:
-                            -- O palete DEVE permanecer CONGELADO (FreezeEntityPosition = true) no staging!
-                            -- Isso impede completamente o afundamento / tunelamento da Havok na malha do MLO.
+                            -- O palete permanece com gravidade ativa e física sólida, segurado pelo Freeze no piso do MLO.
                             SetEntityCollision(ent, true, true)
-                            SetEntityDynamic(ent, false)
-                            SetEntityHasGravity(ent, false)
+                            SetEntityCompletelyDisableCollision(ent, false, true)
+                            SetEntityHasGravity(ent, true)
                             FreezeEntityPosition(ent, true)
                             SetEntityVelocity(ent, 0.0, 0.0, 0.0)
 

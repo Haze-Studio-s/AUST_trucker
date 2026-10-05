@@ -819,13 +819,30 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             -- INTERRUPÇÃO IMEDIATA DO LAÇO (Diretriz 3): impede engate em cascata
                                             break
                                         else
-                                            -- Mantém a blindagem: palete 100% congelado e sólido no chão até a manobra perfeita
-                                            if pState ~= 'frozen' then
-                                                FreezeEntityPosition(p, true)
-                                                SetEntityDynamic(p, false)
-                                                SetEntityHasGravity(p, false)
-                                                SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                                PalletPhysState[p] = 'frozen'
+                                            -- BLOQUEIO DE GRAVIDADE ZERO (Física Sólida Constante):
+                                            -- Paletes soltos no solo NUNCA perdem gravidade! Se sofrerem toque/colisão ou
+                                            -- manobra da empilhadeira, devem manter gravidade terrestre e física natural.
+                                            SetEntityCollision(p, true, true)
+                                            SetEntityCompletelyDisableCollision(p, false, true)
+                                            SetEntityHasGravity(p, true)
+
+                                            local distForksToPallet = #(forkCoords - pCoords)
+                                            if distForksToPallet <= 2.2 or HasEntityCollidedWithEntity(forklift, p) then
+                                                -- Toque ou proximidade iminente: descongela com física ativa e gravidade total
+                                                if pState ~= 'dynamic_solid' then
+                                                    ActivatePhysics(p)
+                                                    SetEntityDynamic(p, true)
+                                                    FreezeEntityPosition(p, false)
+                                                    SetEntityMass(p, 800.0)
+                                                    PalletPhysState[p] = 'dynamic_solid'
+                                                end
+                                            else
+                                                -- Longe da empilhadeira: repouso estável no piso do galpão
+                                                if pState ~= 'frozen' then
+                                                    SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                                    FreezeEntityPosition(p, true)
+                                                    PalletPhysState[p] = 'frozen'
+                                                end
                                             end
                                         end
                                     end
