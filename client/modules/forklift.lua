@@ -716,102 +716,126 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     -- OPERAÇÃO COM ACOPLAMENTO TEMPORÁRIO NOS GARFOS (Blindagem Anti-Overflow de Rede)
                     local forkCoords, forkBone = GetForkliftForksCoords(forklift)
 
-                    -- 1. Gerenciamento de Acoplamento Temporário por Altura (Z >= 0.35m)
-                    local activeCarried = nil
+                    -- 1. Gerenciamento de Acoplamento Temporário por Altura (TRAVA DE CARGA ÚNICA - Diretriz 1)
+                    local activeCarried = DetectedCarriedPallet
 
-                    -- Monta lista de paletes candidatos (tabela da missão + palete mais próximo no solo)
-                    local candidatePallets = {}
-                    local seenPallets = {}
-                    for _, p in pairs(ActiveMissionPallets) do
-                        if p and DoesEntityExist(p) and not seenPallets[p] then
-                            seenPallets[p] = true
-                            candidatePallets[#candidatePallets + 1] = p
-                        end
-                    end
-                    local nearestP = ForkliftModule.GetNearestGroundPallet(forklift)
-                    if nearestP and DoesEntityExist(nearestP) and not seenPallets[nearestP] then
-                        seenPallets[nearestP] = true
-                        candidatePallets[#candidatePallets + 1] = nearestP
+                    -- Valida se a empilhadeira já carrega um palete ativo nos garfos
+                    local isAlreadyCarrying = false
+                    if activeCarried and DoesEntityExist(activeCarried) and IsEntityAttachedToEntity(activeCarried, forklift) then
+                        isAlreadyCarrying = true
+                    else
+                        activeCarried = nil
+                        DetectedCarriedPallet = nil
                     end
 
-                    for _, p in ipairs(candidatePallets) do
-                        if p and DoesEntityExist(p) then
-                            local pCoords = GetEntityCoords(p)
-
-                            if not PalletBaseZ[p] then
-                                PalletBaseZ[p] = pCoords.z
+                    -- Se já estiver carregando, bloqueia completamente a busca e novos engates (Diretriz 1)
+                    if not isAlreadyCarrying then
+                        -- Monta lista de paletes candidatos soltos (tabela da missão + palete mais próximo no solo)
+                        local candidatePallets = {}
+                        local seenPallets = {}
+                        for _, p in pairs(ActiveMissionPallets) do
+                            if p and DoesEntityExist(p) and not seenPallets[p] and not IsEntityAttached(p) then
+                                seenPallets[p] = true
+                                candidatePallets[#candidatePallets + 1] = p
                             end
+                        end
+                        local nearestP = ForkliftModule.GetNearestGroundPallet(forklift)
+                        if nearestP and DoesEntityExist(nearestP) and not seenPallets[nearestP] and not IsEntityAttached(nearestP) then
+                            seenPallets[nearestP] = true
+                            candidatePallets[#candidatePallets + 1] = nearestP
+                        end
 
-                            local pState = PalletPhysState[p] or 'frozen'
+                        -- FILTRO DE ENTIDADE ÚNICA (Diretriz 2): Ordena da menor para a maior distância até os garfos
+                        if #candidatePallets > 1 then
+                            table.sort(candidatePallets, function(a, b)
+                                local distA = #(forkCoords - GetEntityCoords(a))
+                                local distB = #(forkCoords - GetEntityCoords(b))
+                                return distA < distB
+                            end)
+                        end
 
-                            if pState == 'attached_to_forks' then
-                                activeCarried = p
-                            elseif pState == 'recoil_zone' or (PalletReengageCooldown[p] and GetGameTimer() < PalletReengageCooldown[p]) then
-                                -- Palete em processo de desengate/recuo: proibido reengatar nos garfos
-                            else
-                                -- Só processa engate se a carga não estiver estivada no reboque
-                                if not IsEntityAttached(p) then
-                                    -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
-                                    local forkCoords, currentForkBone = GetForkliftForksCoords(forklift)
-                                    local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
+                        for _, p in ipairs(candidatePallets) do
+                            if p and DoesEntityExist(p) then
+                                local pCoords = GetEntityCoords(p)
 
-                                    -- Alinhamento Angular (Perfil Casual / Facilitado): perdoa até 45 graus
-                                    local forkH = GetEntityHeading(forklift)
-                                    local palH  = GetEntityHeading(p)
-                                    local diffAngle = math.abs((forkH - palH) % 180)
-                                    if diffAngle > 90 then diffAngle = 180 - diffAngle end
-                                    local isAngleAligned = (diffAngle <= 45.0)
+                                if not PalletBaseZ[p] then
+                                    PalletBaseZ[p] = pCoords.z
+                                end
 
-                                    -- Encaixe Físico dos Garfos dentro do Palete (Perfil Casual):
-                                    -- X: centralização (|X| <= 0.80m)
-                                    -- Y: penetração suave dos garfos (|Y| <= 1.10m)
-                                    -- Z: altura de entrada (-0.60m a +0.60m)
-                                    local isEngagedWithForks = isAngleAligned
-                                        and (math.abs(relToPal.x) <= 0.80)
-                                        and (math.abs(relToPal.y) <= 1.10)
-                                        and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
+                                local pState = PalletPhysState[p] or 'frozen'
 
-                                    if isEngagedWithForks then
-                                        -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
-                                        if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
-                                            NetworkRequestControlOfEntity(p)
-                                        end
+                                if pState == 'attached_to_forks' then
+                                    activeCarried = p
+                                    break
+                                elseif pState == 'recoil_zone' or (PalletReengageCooldown[p] and GetGameTimer() < PalletReengageCooldown[p]) then
+                                    -- Palete em processo de desengate/recuo: proibido reengatar nos garfos
+                                else
+                                    -- Só processa engate se a carga não estiver estivada no reboque
+                                    if not IsEntityAttached(p) then
+                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
+                                        local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                        -- Descongela e anexa instantaneamente aos garfos da empilhadeira
-                                        SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                        FreezeEntityPosition(p, false)
-                                        SetEntityDynamic(p, false)
-                                        SetEntityHasGravity(p, false)
+                                        -- Alinhamento Angular (Perfil Casual / Facilitado): perdoa até 45 graus
+                                        local forkH = GetEntityHeading(forklift)
+                                        local palH  = GetEntityHeading(p)
+                                        local diffAngle = math.abs((forkH - palH) % 180)
+                                        if diffAngle > 90 then diffAngle = 180 - diffAngle end
+                                        local isAngleAligned = (diffAngle <= 45.0)
 
-                                        local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
-                                        local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
+                                        -- Encaixe Físico dos Garfos dentro do Palete (Perfil Casual):
+                                        -- X: centralização (|X| <= 0.80m)
+                                        -- Y: penetração suave dos garfos (|Y| <= 1.10m)
+                                        -- Z: altura de entrada (-0.60m a +0.60m)
+                                        local isEngagedWithForks = isAngleAligned
+                                            and (math.abs(relToPal.x) <= 0.80)
+                                            and (math.abs(relToPal.y) <= 1.10)
+                                            and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
-                                        local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
-                                        if customForkOff then
-                                            forkOffX, forkOffY, forkOffZ = customForkOff.x, customForkOff.y, customForkOff.z
-                                            if customForkRot then
-                                                forkPitch, forkRoll, forkYaw = customForkRot.x, customForkRot.y, customForkRot.z
+                                        if isEngagedWithForks then
+                                            -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
+                                            if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
+                                                NetworkRequestControlOfEntity(p)
                                             end
-                                        end
 
-                                        AttachEntityToEntity(
-                                            p, forklift, forkBone,
-                                            forkOffX, forkOffY, forkOffZ,
-                                            forkPitch, forkRoll, forkYaw,
-                                            false, false, false, false, 2, true
-                                        )
-
-                                        PalletPhysState[p] = 'attached_to_forks'
-                                        activeCarried = p
-                                        PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
-                                    else
-                                        -- Mantém a blindagem: palete 100% congelado e sólido no chão até a manobra perfeita
-                                        if pState ~= 'frozen' then
-                                            FreezeEntityPosition(p, true)
+                                            -- Descongela e anexa instantaneamente aos garfos da empilhadeira
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                            FreezeEntityPosition(p, false)
                                             SetEntityDynamic(p, false)
                                             SetEntityHasGravity(p, false)
-                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                            PalletPhysState[p] = 'frozen'
+
+                                            local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
+                                            local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
+
+                                            local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
+                                            if customForkOff then
+                                                forkOffX, forkOffY, forkOffZ = customForkOff.x, customForkOff.y, customForkOff.z
+                                                if customForkRot then
+                                                    forkPitch, forkRoll, forkYaw = customForkRot.x, customForkRot.y, customForkRot.z
+                                                end
+                                            end
+
+                                            AttachEntityToEntity(
+                                                p, forklift, forkBone,
+                                                forkOffX, forkOffY, forkOffZ,
+                                                forkPitch, forkRoll, forkYaw,
+                                                false, false, false, false, 2, true
+                                            )
+
+                                            PalletPhysState[p] = 'attached_to_forks'
+                                            activeCarried = p
+                                            PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+
+                                            -- INTERRUPÇÃO IMEDIATA DO LAÇO (Diretriz 3): impede engate em cascata
+                                            break
+                                        else
+                                            -- Mantém a blindagem: palete 100% congelado e sólido no chão até a manobra perfeita
+                                            if pState ~= 'frozen' then
+                                                FreezeEntityPosition(p, true)
+                                                SetEntityDynamic(p, false)
+                                                SetEntityHasGravity(p, false)
+                                                SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                                PalletPhysState[p] = 'frozen'
+                                            end
                                         end
                                     end
                                 end
