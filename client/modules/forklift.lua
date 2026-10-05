@@ -773,13 +773,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         if diffAngle > 90 then diffAngle = 180 - diffAngle end
                                         local isAngleAligned = (diffAngle <= 45.0)
 
-                                        -- Encaixe Físico dos Garfos dentro do Palete (Perfil Casual):
+                                        -- Encaixe Físico dos Garfos dentro do Palete:
                                         -- X: centralização (|X| <= 0.80m)
-                                        -- Y: penetração suave dos garfos (|Y| <= 1.10m)
+                                        -- Y: penetração dos garfos (|Y| <= 0.50m)
                                         -- Z: altura de entrada (-0.60m a +0.60m)
                                         local isEngagedWithForks = isAngleAligned
                                             and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 1.10)
+                                            and (math.abs(relToPal.y) <= 0.50)
                                             and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
                                         if isEngagedWithForks then
