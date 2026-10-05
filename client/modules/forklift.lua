@@ -879,40 +879,32 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     -- Raio horizontal XY <= 0.65m, altura Z entre -0.25m e +0.25m e ângulo <= 25 graus
                                     local isAlignedWithGhost = (distXY <= 0.65) and (deltaZ >= -0.25 and deltaZ <= 0.25) and (diffAngle <= 25.0)
 
-                                    if isAlignedWithGhost or pState == 'recoil_zone' or pState == 'detached_at_ghost' then
+                                    if isAlignedWithGhost or pState == 'stowed_awaiting_recoil' then
                                         slotPalletCandidate = p
                                         isCandidateInSlot = true
 
-                                        -- GATILHO 1: DESACOPLAMENTO NO ALVO AMPLO COM FÍSICA E GRAVIDADE REAIS (ZERO SNAPS)
-                                        -- Desatrela instantaneamente dos garfos sem alterar coordenadas ou congelar
-                                        if pState == 'attached_to_forks' and isAlignedWithGhost then
-                                            DetachEntity(p, true, true)
-                                            SetEntityDynamic(p, true)
-                                            SetEntityHasGravity(p, true)
-                                            FreezeEntityPosition(p, false)
+                                        -- SNAP IMEDIATO E MANDATÓRIO NO FANTASMA (Diretriz do Usuário):
+                                        -- Desanexa instantaneamente dos garfos e acopla no trailer nas coordenadas e rotação exatas do fantasma
+                                        if pState == 'attached_to_forks' and isAlignedWithGhost and not isStowingPallet then
+                                            isStowingPallet = true
 
-                                            -- ZONA DE RECUO LIVRE: Desativa colisão mútua imediata entre palete e empilhadeira
-                                            -- Garante que o operador abaixe e deslize os garfos em marcha à ré sem impulsos parasitas
-                                            SetEntityNoCollisionEntity(p, forklift, false)
-                                            SetEntityNoCollisionEntity(forklift, p, false)
-
-                                            -- Havok ativação no próximo tick para garantir que o unfreeze foi processado
-                                            CreateThread(function()
-                                                Wait(0)
-                                                if DoesEntityExist(p) then
-                                                    ActivatePhysics(p)
-                                                end
-                                            end)
-
-                                            PalletPhysState[p] = 'recoil_zone'
-                                            PalletReengageCooldown[p] = GetGameTimer() + 4000
-                                            DetectedCarriedPallet = nil
-
-                                            -- ELIMINAÇÃO DE DUPLICAÇÃO/CLONAGEM (Diretriz 2):
-                                            -- Deleta o holograma fantasma imediatamente no exato momento da soltura da carga
+                                            -- Elimina o holograma fantasma imediatamente
                                             ForkliftModule.DeleteGhostProp()
 
-                                            PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                                            -- Força encaixe atômico direto no trailer pelo slot
+                                            local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(p, trailer, CurrentSlotIndex)
+                                            if ok then
+                                                PalletPhysState[p] = 'stowed_awaiting_recoil'
+                                                DetectedCarriedPallet = nil
+
+                                                -- Desativa colisão mútua imediata com a empilhadeira para manobra livre de ré
+                                                SetEntityNoCollisionEntity(p, forklift, false)
+                                                SetEntityNoCollisionEntity(forklift, p, false)
+
+                                                PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                                            else
+                                                isStowingPallet = false
+                                            end
                                         end
 
                                         break
@@ -935,113 +927,89 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
 
-                    -- 3. Zona de Recuo Livre & Ancoragem de Segurança Final no Reboque (distância >= 1.0m)
-                    if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) and not isStowingPallet then
+                    -- 3. Zona de Recuo Livre & Reativação de Colisão Sólida (distância >= 1.0m)
+                    if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) and PalletPhysState[slotPalletCandidate] == 'stowed_awaiting_recoil' then
                         sleep = 0
                         local pCoords = GetEntityCoords(slotPalletCandidate)
                         local distForksToPallet = #(forkCoords - pCoords)
-                        local pState = PalletPhysState[slotPalletCandidate]
 
                         if distForksToPallet < 1.0 then
-                            -- Empilhadeira ainda dentro da Zona de Recuo Livre (< 1.0 metro)
+                            -- Empilhadeira ainda dentro da Zona de Recuo (< 1.0 metro)
                             if TextUIShowing ~= 'retract_forks' then
-                                lib.showTextUI(('Palete solto no Slot %d! Abaixe os garfos e recue 1 metro'):format(CurrentSlotIndex), { position = 'left-center', icon = 'arrow-down' })
+                                lib.showTextUI(('Palete estivado no Slot %d! Recue a empilhadeira 1 metro'):format(CurrentSlotIndex), { position = 'left-center', icon = 'arrow-down' })
                                 TextUIShowing = 'retract_forks'
                             end
+                            -- Mantém colisões desativadas enquanto os garfos estão sob/perto da carga
+                            SetEntityNoCollisionEntity(slotPalletCandidate, forklift, false)
+                            SetEntityNoCollisionEntity(forklift, slotPalletCandidate, false)
                         else
-                            -- GATILHO 2: RECUO SEGURO COMPLETO (Distância >= 1.0m) -> ANCORAGEM DEFINITIVA NA POSE REAL
-                            isStowingPallet = true
+                            -- RECUO COMPLETO (Distância >= 1.0m) -> REATIVA COLISÃO E AVANÇA O SLOT
                             if TextUIShowing then
                                 lib.hideTextUI()
                                 TextUIShowing = nil
                             end
 
-                            local ghost = CurrentGhostEntity
-                            if ghost and DoesEntityExist(ghost) then
-                                SetEntityDrawOutline(ghost, false)
+                            local stowedPallet = slotPalletCandidate
+                            local stowedSlot = CurrentSlotIndex
+
+                            -- Reativa colisão física completa com a empilhadeira e com o jogador
+                            SetEntityNoCollisionEntity(stowedPallet, forklift, true)
+                            SetEntityNoCollisionEntity(forklift, stowedPallet, true)
+                            SetEntityCollision(stowedPallet, true, true)
+                            SetCanClimbOnEntity(stowedPallet, true)
+
+                            PalletPhysState[stowedPallet] = 'stowed'
+                            DetectedCarriedPallet = nil
+                            loadedCount = loadedCount + 1
+                            CurrentSlotIndex = CurrentSlotIndex + 1
+
+                            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+                            PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
+
+                            local pNetId = NetworkGetEntityIsNetworked(stowedPallet) and NetworkGetNetworkIdFromEntity(stowedPallet) or nil
+                            local curSlotOff, curSlotHead = ForkliftModule.GetSlotOffset(trailer, stowedSlot)
+                            TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, curSlotOff, curSlotHead)
+
+                            if onLoadedCb then
+                                onLoadedCb('dropped', stowedPallet, loadedCount, requiredCount, stowedSlot, curSlotOff, curSlotHead)
                             end
 
-                            -- Aguarda estabilização do palete (repouso)
-                            local stabTimer = GetGameTimer() + 2000
-                            while DoesEntityExist(slotPalletCandidate) and GetGameTimer() < stabTimer do
-                                local vel = GetEntityVelocity(slotPalletCandidate)
-                                local speed = math.sqrt(vel.x^2 + vel.y^2 + vel.z^2)
-                                if speed < 0.05 then break end
-                                Wait(100)
-                            end
+                            -- Elimina o holograma do slot recém ocupado
+                            ForkliftModule.DeleteGhostProp()
 
-                            local targetPalletToSnap = slotPalletCandidate
-                            if DoesEntityExist(targetPalletToSnap) then
-                                local ok, sOff, sHead, errReason = ForkliftModule.SnapPalletToCurrentSlot(targetPalletToSnap, trailer, CurrentSlotIndex)
-                                if ok then
-                                    local stowedSlot = CurrentSlotIndex
-                                    PalletPhysState[targetPalletToSnap] = 'stowed'
-                                    DetectedCarriedPallet = nil
-                                    loadedCount = loadedCount + 1
-                                    CurrentSlotIndex = CurrentSlotIndex + 1
-
-                                    PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
-                                    PlaySoundFrontend(-1, "GARAGE_DOOR_SCRIPTED_CLOSE", "GTAO_SCRIPTED_DOOR_SOUNDS", 0)
-
-                                    local pNetId = NetworkGetEntityIsNetworked(targetPalletToSnap) and NetworkGetNetworkIdFromEntity(targetPalletToSnap) or nil
-                                    TriggerServerEvent('aurp_trucker:server:polarixPalletLoaded', jobId, stowedSlot, pNetId, sOff, sHead)
-
-                                    if onLoadedCb then
-                                        onLoadedCb('dropped', targetPalletToSnap, loadedCount, requiredCount, stowedSlot, sOff, sHead)
-                                    end
-
-                                    -- Elimina o holograma do slot recém ocupado; o próximo só surge quando a próxima carga for erguida
-                                    ForkliftModule.DeleteGhostProp()
-
-                                    if loadedCount >= requiredCount then
-                                        local hasForklift = false
-                                        if withForklift ~= nil then
-                                            hasForklift = (withForklift == true)
-                                        elseif _G.ActiveJob and _G.ActiveJob.withForklift ~= nil then
-                                            hasForklift = (_G.ActiveJob.withForklift == true)
-                                        else
-                                            local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
-                                            hasForklift = (currentFork ~= nil and DoesEntityExist(currentFork))
-                                        end
-
-                                        if hasForklift then
-                                            awaitingForkliftDock = true
-                                            ForkliftModule.SpawnForkliftGhost(trailer)
-                                            if _G.UpdateMissionObjective and trailer and DoesEntityExist(trailer) then
-                                                local fOff = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or { x = 0.0, y = -6.0, z = 0.35 }
-                                                local dockWorldPos = GetOffsetFromEntityInWorldCoords(trailer, fOff.x or 0.0, fOff.y or -6.0, (fOff.z or 0.35) + 0.6)
-                                                _G.UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [E]')
-                                            end
-                                            if _G.SendMissionNotify then
-                                                _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [E] para embarcar.', 'info')
-                                            end
-                                        else
-                                            ForkliftModule.StopOperation()
-                                            if onAllLoadedCb then
-                                                onAllLoadedCb()
-                                            end
-                                            break
-                                        end
-                                    end
-
-                                    CreateThread(function()
-                                        Wait(1000)
-                                        isStowingPallet = false
-                                    end)
+                            if loadedCount >= requiredCount then
+                                local hasForklift = false
+                                if withForklift ~= nil then
+                                    hasForklift = (withForklift == true)
+                                elseif _G.ActiveJob and _G.ActiveJob.withForklift ~= nil then
+                                    hasForklift = (_G.ActiveJob.withForklift == true)
                                 else
-                                    -- Palete escorregou ou caiu fora do reboque
-                                    if errReason == 'off_deck' then
-                                        PalletPhysState[targetPalletToSnap] = 'fallen'
-                                        if _G.SendMissionNotify then
-                                            _G.SendMissionNotify('Central Logística', 'Atenção: O palete caiu fora da carreta! Reposicione a carga.', 'error')
-                                        end
-                                        PlaySoundFrontend(-1, "CHECKPOINT_MISSED", "HUD_MINI_GAME_SOUNDSET", 0)
-                                    end
-                                    isStowingPallet = false
+                                    local currentFork = forklift or ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+                                    hasForklift = (currentFork ~= nil and DoesEntityExist(currentFork))
                                 end
-                            else
-                                isStowingPallet = false
+
+                                if hasForklift then
+                                    awaitingForkliftDock = true
+                                    ForkliftModule.SpawnForkliftGhost(trailer)
+                                    if _G.UpdateMissionObjective and trailer and DoesEntityExist(trailer) then
+                                        local fOff = ForkliftModule.GetForkliftSlotOffset and ForkliftModule.GetForkliftSlotOffset(trailer) or { x = 0.0, y = -6.0, z = 0.35 }
+                                        local dockWorldPos = GetOffsetFromEntityInWorldCoords(trailer, fOff.x or 0.0, fOff.y or -6.0, (fOff.z or 0.35) + 0.6)
+                                        _G.UpdateMissionObjective('forklift_dock', dockWorldPos, 'Embarcar Empilhadeira no Reboque [E]')
+                                    end
+                                    if _G.SendMissionNotify then
+                                        _G.SendMissionNotify('Central Logística', 'Paletes estivados! Posicione a empilhadeira na traseira da carreta e pressione [E] para embarcar.', 'info')
+                                    end
+                                else
+                                    ForkliftModule.StopOperation()
+                                    if onAllLoadedCb then
+                                        onAllLoadedCb()
+                                    end
+                                    break
+                                end
                             end
+
+                            slotPalletCandidate = nil
+                            isStowingPallet = false
                         end
                     else
                         if TextUIShowing == 'retract_forks' then
