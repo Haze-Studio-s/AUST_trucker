@@ -713,6 +713,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     local isAlreadyCarrying = false
                     if activeCarried and DoesEntityExist(activeCarried) and IsEntityAttachedToEntity(activeCarried, forklift) then
                         isAlreadyCarrying = true
+                        -- Assegura isolamento de colisão contínuo contra carreta e caminhão
+                        if trailer and DoesEntityExist(trailer) then
+                            SetEntityNoCollisionEntity(activeCarried, trailer, false)
+                            SetEntityNoCollisionEntity(trailer, activeCarried, false)
+                        end
+                        local truck = _G.JobEntities and _G.JobEntities.truck
+                        if truck and DoesEntityExist(truck) then
+                            SetEntityNoCollisionEntity(activeCarried, truck, false)
+                            SetEntityNoCollisionEntity(truck, activeCarried, false)
+                        end
                     else
                         activeCarried = nil
                         DetectedCarriedPallet = nil
@@ -835,6 +845,19 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                                 forkPitch, forkRoll, forkYaw,
                                                 false, false, false, false, 2, true
                                             )
+
+                                            -- BLINDAGEM ANTI-CATAPULTA HAVOK:
+                                            -- Anula colisão mútua entre o palete nos garfos e a prancha da carreta/caminhão.
+                                            -- Evita explosão de depenetração de corpo rígido ao manobrar perto ou sobre o trailer.
+                                            if trailer and DoesEntityExist(trailer) then
+                                                SetEntityNoCollisionEntity(p, trailer, false)
+                                                SetEntityNoCollisionEntity(trailer, p, false)
+                                            end
+                                            local truck = _G.JobEntities and _G.JobEntities.truck
+                                            if truck and DoesEntityExist(truck) then
+                                                SetEntityNoCollisionEntity(p, truck, false)
+                                                SetEntityNoCollisionEntity(truck, p, false)
+                                            end
 
                                             PalletPhysState[p] = 'attached_to_forks'
                                             activeCarried = p
