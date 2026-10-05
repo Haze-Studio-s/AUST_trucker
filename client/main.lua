@@ -3229,12 +3229,16 @@ local function SyncTrailerPalletAttach(trailerEnt, slotIndex, sData)
         SetEntityNoCollisionEntity(pEnt, trailerEnt, false)
         SetEntityNoCollisionEntity(trailerEnt, pEnt, false)
 
+        local rPitch = (sData.rotation and sData.rotation.pitch) or 0.0
+        local rRoll  = (sData.rotation and sData.rotation.roll) or 0.0
+        local rYaw   = (sData.rotation and sData.rotation.yaw) or heading or 0.0
+
         -- Ancoragem padronizada no Bone 0 (Root da Entidade)
         if not IsEntityAttachedToEntity(pEnt, trailerEnt) then
             AttachEntityToEntity(
                 pEnt, trailerEnt, 0,
                 off.x, off.y, off.z,
-                0.0, 0.0, heading,
+                rPitch, rRoll, rYaw,
                 false, false, false, false, 2, true
             )
         end

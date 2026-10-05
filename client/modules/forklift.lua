@@ -389,26 +389,20 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         return false
     end
 
-    -- CAPTURA DA POSE REAL ONDE REPOUSOU (ZERO SNAPS)
-    -- Calcula coordenadas relativas exatas do palete em relação ao trailer
-    local pCurCoords = GetEntityCoords(palletEntity)
-    local relOffset = GetOffsetFromEntityGivenWorldCoords(targetTrailer, pCurCoords.x, pCurCoords.y, pCurCoords.z)
+    -- RECUPERAÇÃO DAS COORDENADAS 6DOF DA VAGA NO TRAILER (Decisão do Usuário - Alinhamento Perfeito)
+    local pModel = GetEntityModel(palletEntity)
+    local slotOff, slotHead = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
+    local customPropOff, customPropRot = GetVehiclePropOffset(targetTrailer, pModel)
 
-    -- Validação: O palete precisa estar dentro dos limites do deck do trailer
-    -- Tolerância de deck: largura total ~2.6m (|x| <= 1.35), comprimento (~ -6.0 a 4.5) e z (-0.4 a 1.6)
-    if math.abs(relOffset.x) > 1.35 or relOffset.y < -6.5 or relOffset.y > 5.0 or relOffset.z < -0.4 or relOffset.z > 1.8 then
-        if Config.Debug then print("[AUST_Trucker] AVISO: Palete fora do deck do reboque! Abortando ancoragem.") end
-        return false, nil, nil, "off_deck"
+    local finalX, finalY, finalZ = slotOff.x, slotOff.y, slotOff.z
+    local relPitch, relRoll, relYaw = 0.0, 0.0, slotHead or 0.0
+
+    if customPropOff then
+        finalX, finalY, finalZ = customPropOff.x, customPropOff.y, customPropOff.z
+        if customPropRot then
+            relPitch, relRoll, relYaw = customPropRot.x, customPropRot.y, customPropRot.z
+        end
     end
-
-    -- Rotação relativa real em graus
-    local pRot = GetEntityRotation(palletEntity, 2)
-    local tRot = GetEntityRotation(targetTrailer, 2)
-    local relPitch = (pRot.x - tRot.x) % 360
-    local relRoll  = (pRot.y - tRot.y) % 360
-    local relYaw   = (pRot.z - tRot.z) % 360
-
-    local finalX, finalY, finalZ = relOffset.x, relOffset.y, relOffset.z
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -420,7 +414,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Ancoragem padronizada rígida OneSync na POSE REAL DE REPOUSO (Sem teletransporte/snap)
+    -- Ancoragem padronizada rígida OneSync na vaga 6DOF configurada (Alinhamento Perfeito)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
@@ -739,11 +733,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
 
                                     if isEngagedWithForks then
-                                        -- Transição Cinemática: descongela temporariamente no chão sem gravidade para permitir subida mecânica
+                                        -- Transição Cinemática: descongela temporariamente no chão com gravidade real e atrito ativo
                                         if pState == 'frozen' then
                                             FreezeEntityPosition(p, false)
                                             SetEntityDynamic(p, true)
-                                            SetEntityHasGravity(p, false)
+                                            SetEntityHasGravity(p, true)
                                             ActivatePhysics(p)
                                             PalletPhysState[p] = 'ground_engaged'
                                         end
@@ -783,19 +777,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                             PalletPhysState[p] = 'attached_to_forks'
                                             activeCarried = p
-                                        else
-                                            -- Se ainda não atingiu a altura mínima, cancela acelerações para baixo
-                                            local vel = GetEntityVelocity(p)
-                                            if vel.z < -0.05 then
-                                                SetEntityVelocity(p, vel.x, vel.y, 0.0)
-                                            end
                                         end
                                     else
-                                        -- Garfos longe da carga: recongela no chão
+                                        -- Garfos longe da carga: recongela no chão apenas se em repouso
                                         if pState ~= 'frozen' and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
                                             FreezeEntityPosition(p, true)
                                             SetEntityDynamic(p, false)
-                                            SetEntityHasGravity(p, false)
+                                            SetEntityHasGravity(p, true)
                                             SetEntityVelocity(p, 0.0, 0.0, 0.0)
                                             PalletPhysState[p] = 'frozen'
                                         end
@@ -826,10 +814,25 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                     if trailer and DoesEntityExist(trailer) and not isStowingPallet then
                         local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(trailer, CurrentSlotIndex)
-                        local ghostWorldCoords = GetOffsetFromEntityInWorldCoords(trailer, slotOffset.x, slotOffset.y, slotOffset.z)
+                        local carriedModel = DetectedCarriedPallet and DoesEntityExist(DetectedCarriedPallet) and GetEntityModel(DetectedCarriedPallet) or joaat('hei_prop_carrier_cargo_04b')
+                        local customOffset, customRot = GetVehiclePropOffset(trailer, carriedModel)
+                        
+                        local targetOff = slotOffset
+                        local targetHead = slotHeading or 0.0
+                        if customOffset then
+                            targetOff = customOffset
+                            if customRot then targetHead = customRot.z end
+                        end
+
+                        local ghostWorldCoords
+                        if CurrentGhostEntity and DoesEntityExist(CurrentGhostEntity) then
+                            ghostWorldCoords = GetEntityCoords(CurrentGhostEntity)
+                        else
+                            ghostWorldCoords = GetOffsetFromEntityInWorldCoords(trailer, targetOff.x, targetOff.y, targetOff.z)
+                        end
                         local trailerCoords = GetEntityCoords(trailer)
                         local trailerH = GetEntityHeading(trailer)
-                        local targetHeading = (trailerH + (slotHeading or 0.0)) % 360
+                        local targetHeading = (trailerH + targetHead) % 360
 
                         for _, p in pairs(ActiveMissionPallets) do
                             if p and DoesEntityExist(p) then
