@@ -1947,21 +1947,12 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     if CurrentStage == 'STEP_8_IN_TRANSIT' and (isSevereTilt or isCentrifugalCritical) and (now - lastDropTime >= 4500) then
                         local candidatePallet = nil
 
-                        -- 1. Prioridade absoluta para paletes com amarração frouxa
+                        -- Somente paletes com amarração frouxa ou risco ativo podem ceder e cair
+                        -- Cargas amarradas perfeitamente (riskLevel == 0) possuem retenção 100% inquebrável
                         for _, pData in ipairs(targetList) do
                             if pData.isSecured and (pData.riskLevel == 'high' or pData.riskLevel == 'medium') and not pData.lost and not pData.isFallen then
                                 candidatePallet = pData
                                 break
-                            end
-                        end
-
-                        -- 2. Se amarração for perfeita, rompe se carreta estiver na iminência de tombar (|Roll| > 38°) OU curva extrema sustentada (> 80 km/h)
-                        if not candidatePallet and (absRoll > 38.0 or (isCritical and speedKmh > 80.0)) then
-                            for _, pData in ipairs(targetList) do
-                                if pData.isSecured and not pData.lost and not pData.isFallen then
-                                    candidatePallet = pData
-                                    break
-                                end
                             end
                         end
 
