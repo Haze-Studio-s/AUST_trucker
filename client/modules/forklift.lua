@@ -499,8 +499,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         SetNetworkIdCanMigrate(NetworkGetNetworkIdFromEntity(palletEntity), false)
     end
 
-    local finalOffsetVec = vector3(finalX, finalY, finalZ)
-    local finalRotVec = vector3(finalPitch, finalRoll, finalYaw)
+    local finalOffsetVec = vector3(finalX or 0.0, finalY or 0.0, finalZ or 0.0)
+    local finalRotVec = vector3(relPitch or 0.0, relRoll or 0.0, relYaw or 0.0)
 
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
@@ -509,8 +509,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         curSlots[tostring(slotIndex)] = {
             palletNet = pNet,
             offset = { x = finalX, y = finalY, z = finalZ },
-            heading = finalYaw,
-            rotation = { pitch = finalPitch, roll = finalRoll, yaw = finalYaw }
+            heading = relYaw,
+            rotation = { pitch = relPitch, roll = relRoll, yaw = relYaw }
         }
         Entity(targetTrailer).state:set('loadedSlots', curSlots, true)
     end
