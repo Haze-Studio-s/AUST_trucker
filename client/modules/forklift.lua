@@ -766,7 +766,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
                                         local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                        -- Alinhamento Angular (Perfil Casual / Facilitado): perdoa até 45 graus
+                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR):
+                                        -- Alinhamento Angular: perdoa até 45 graus (incluindo ré/trás por simetria a 180°)
                                         local forkH = GetEntityHeading(forklift)
                                         local palH  = GetEntityHeading(p)
                                         local diffAngle = math.abs((forkH - palH) % 180)
@@ -774,12 +775,12 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         local isAngleAligned = (diffAngle <= 45.0)
 
                                         -- Encaixe Físico dos Garfos dentro do Palete:
-                                        -- X: centralização (|X| <= 0.80m)
-                                        -- Y: penetração dos garfos (|Y| <= 0.95m)
-                                        -- Z: altura de entrada (-0.60m a +0.60m)
+                                        -- Eixo X (Centralização lateral): tolerância de até ±0.80m (janela total de 1.60m)
+                                        -- Eixo Y (Penetração dos garfos): limite exato de até ±0.90m do centro do palete
+                                        -- Eixo Z (Altura vertical dos garfos): entrada entre -0.60m e +0.60m (janela total de 1.20m)
                                         local isEngagedWithForks = isAngleAligned
                                             and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 0.95)
+                                            and (math.abs(relToPal.y) <= 0.90)
                                             and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
                                         if isEngagedWithForks then
