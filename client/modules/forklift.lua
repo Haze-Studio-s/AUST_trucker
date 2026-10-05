@@ -776,11 +776,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                         -- Encaixe Físico dos Garfos dentro do Palete:
                                         -- Eixo X (Centralização lateral): tolerância de até ±0.80m (janela total de 1.60m)
-                                        -- Eixo Y (Penetração dos garfos): limite exato de até ±0.90m do centro do palete
+                                        -- Eixo Y (Penetração dos garfos): limite exato de até ±0.95m do centro do palete
                                         -- Eixo Z (Altura vertical dos garfos): entrada entre -0.60m e +0.60m (janela total de 1.20m)
                                         local isEngagedWithForks = isAngleAligned
                                             and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 0.90)
+                                            and (math.abs(relToPal.y) <= 0.95)
                                             and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
                                         if isEngagedWithForks then
