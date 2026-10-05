@@ -389,11 +389,26 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         return false
     end
 
-    local slotOffset, slotHeading = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
-    slotHeading = slotHeading or (type(slotOffset) == 'table' and slotOffset.heading) or 0.0
+    -- CAPTURA DA POSE REAL ONDE REPOUSOU (ZERO SNAPS)
+    -- Calcula coordenadas relativas exatas do palete em relação ao trailer
+    local pCurCoords = GetEntityCoords(palletEntity)
+    local relOffset = GetOffsetFromEntityGivenWorldCoords(targetTrailer, pCurCoords.x, pCurCoords.y, pCurCoords.z)
 
-    local finalX, finalY, finalZ = slotOffset.x, slotOffset.y, slotOffset.z
-    local finalPitch, finalRoll, finalYaw = 0.0, 0.0, slotHeading
+    -- Validação: O palete precisa estar dentro dos limites do deck do trailer
+    -- Tolerância de deck: largura total ~2.6m (|x| <= 1.35), comprimento (~ -6.0 a 4.5) e z (-0.4 a 1.6)
+    if math.abs(relOffset.x) > 1.35 or relOffset.y < -6.5 or relOffset.y > 5.0 or relOffset.z < -0.4 or relOffset.z > 1.8 then
+        if Config.Debug then print("[AUST_Trucker] AVISO: Palete fora do deck do reboque! Abortando ancoragem.") end
+        return false, nil, nil, "off_deck"
+    end
+
+    -- Rotação relativa real em graus
+    local pRot = GetEntityRotation(palletEntity, 2)
+    local tRot = GetEntityRotation(targetTrailer, 2)
+    local relPitch = (pRot.x - tRot.x) % 360
+    local relRoll  = (pRot.y - tRot.y) % 360
+    local relYaw   = (pRot.z - tRot.z) % 360
+
+    local finalX, finalY, finalZ = relOffset.x, relOffset.y, relOffset.z
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -405,8 +420,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Ancoragem padronizada rígida OneSync no Bone 0 (Root da Entidade) sem soft-pinning
-    -- Garante correspondência 1:1 absoluta com as coordenadas do Gizmo 3D e do Holograma Fantasma
+    -- Ancoragem padronizada rígida OneSync na POSE REAL DE REPOUSO (Sem teletransporte/snap)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
@@ -414,7 +428,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     AttachEntityToEntity(
         palletEntity, targetTrailer, 0,
         finalX, finalY, finalZ,
-        finalPitch, finalRoll, finalYaw,
+        relPitch, relRoll, relYaw,
         false, false, false, false, 2, true
     )
 
@@ -827,27 +841,34 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local diffAngle = math.abs((curH - targetHeading) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                                    -- FAIXA DE ALINHAMENTO BALANCEADA (Decisão do Usuário):
-                                    -- Raio horizontal XY <= 0.45m, altura Z entre -0.10m e +0.05m e ângulo <= 15 graus
-                                    local isAlignedWithGhost = (distXY <= 0.45) and (deltaZ >= -0.10 and deltaZ <= 0.05) and (diffAngle <= 15.0)
+                                    -- FAIXA DE ALINHAMENTO RESTRITA (Decisão do Usuário - Zero Snaps):
+                                    -- Raio horizontal XY <= 0.35m, altura Z entre -0.10m e +0.10m e ângulo <= 12 graus
+                                    local isAlignedWithGhost = (distXY <= 0.35) and (deltaZ >= -0.10 and deltaZ <= 0.10) and (diffAngle <= 12.0)
 
                                     if isAlignedWithGhost or pState == 'recoil_zone' or pState == 'detached_at_ghost' then
                                         slotPalletCandidate = p
                                         isCandidateInSlot = true
 
-                                        -- GATILHO 1: DESACOPLAMENTO AUTOMÁTICO (SOLTAR A CARGA SOZINHA)
-                                        -- Desatrela instantaneamente dos garfos sem exigir nenhum botão do jogador
+                                        -- GATILHO 1: DESACOPLAMENTO NO ALVO RESTRITO COM FÍSICA E GRAVIDADE REAIS (ZERO SNAPS)
+                                        -- Desatrela instantaneamente dos garfos sem alterar coordenadas ou congelar
                                         if pState == 'attached_to_forks' and isAlignedWithGhost then
                                             DetachEntity(p, true, true)
-                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                            SetEntityDynamic(p, false)
-                                            SetEntityHasGravity(p, false)
-                                            FreezeEntityPosition(p, true) -- Fixa temporariamente sobre a chapa do deck
+                                            SetEntityDynamic(p, true)
+                                            SetEntityHasGravity(p, true)
+                                            FreezeEntityPosition(p, false)
 
                                             -- ZONA DE RECUO LIVRE: Desativa colisão mútua imediata entre palete e empilhadeira
-                                            -- Garante que a ré saia deslizando suavemente sem atrito nem arraste
+                                            -- Garante que o operador abaixe e deslize os garfos em marcha à ré sem impulsos parasitas
                                             SetEntityNoCollisionEntity(p, forklift, false)
                                             SetEntityNoCollisionEntity(forklift, p, false)
+
+                                            -- Havok ativação no próximo tick para garantir que o unfreeze foi processado
+                                            CreateThread(function()
+                                                Wait(0)
+                                                if DoesEntityExist(p) then
+                                                    ActivatePhysics(p)
+                                                end
+                                            end)
 
                                             PalletPhysState[p] = 'recoil_zone'
                                             DetectedCarriedPallet = nil
@@ -874,21 +895,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                         end
                     end
 
-                    -- 3. Zona de Recuo Livre & Ancoragem de Segurança Final no Reboque (distância >= 2.60m)
+                    -- 3. Zona de Recuo Livre & Ancoragem de Segurança Final no Reboque (distância >= 1.0m)
                     if slotPalletCandidate and DoesEntityExist(slotPalletCandidate) and not isStowingPallet then
                         sleep = 0
                         local pCoords = GetEntityCoords(slotPalletCandidate)
                         local distForksToPallet = #(forkCoords - pCoords)
                         local pState = PalletPhysState[slotPalletCandidate]
 
-                        if distForksToPallet < 2.60 then
-                            -- Empilhadeira ainda dentro da Zona de Recuo Livre
+                        if distForksToPallet < 1.0 then
+                            -- Empilhadeira ainda dentro da Zona de Recuo Livre (< 1.0 metro)
                             if TextUIShowing ~= 'retract_forks' then
-                                lib.showTextUI(('Palete no Slot %d! Recue a empilhadeira para travar na carreta'):format(CurrentSlotIndex), { position = 'left-center', icon = 'arrow-down' })
+                                lib.showTextUI(('Palete solto no Slot %d! Abaixe os garfos e recue 1 metro'):format(CurrentSlotIndex), { position = 'left-center', icon = 'arrow-down' })
                                 TextUIShowing = 'retract_forks'
                             end
                         else
-                            -- GATILHO 2: RECUO SEGURO COMPLETO (Distância >= 2.60m) -> ANCORAGEM DEFINITIVA NO TRAILER
+                            -- GATILHO 2: RECUO SEGURO COMPLETO (Distância >= 1.0m) -> ANCORAGEM DEFINITIVA NA POSE REAL
                             isStowingPallet = true
                             if TextUIShowing then
                                 lib.hideTextUI()
@@ -900,12 +921,18 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 SetEntityDrawOutline(ghost, false)
                             end
 
-                            -- Pausa de estabilização da física antes do acoplamento definitivo
-                            Wait(250)
+                            -- Aguarda estabilização do palete (repouso)
+                            local stabTimer = GetGameTimer() + 2000
+                            while DoesEntityExist(slotPalletCandidate) and GetGameTimer() < stabTimer do
+                                local vel = GetEntityVelocity(slotPalletCandidate)
+                                local speed = math.sqrt(vel.x^2 + vel.y^2 + vel.z^2)
+                                if speed < 0.05 then break end
+                                Wait(100)
+                            end
 
                             local targetPalletToSnap = slotPalletCandidate
                             if DoesEntityExist(targetPalletToSnap) then
-                                local ok, sOff, sHead = ForkliftModule.SnapPalletToCurrentSlot(targetPalletToSnap, trailer, CurrentSlotIndex)
+                                local ok, sOff, sHead, errReason = ForkliftModule.SnapPalletToCurrentSlot(targetPalletToSnap, trailer, CurrentSlotIndex)
                                 if ok then
                                     local stowedSlot = CurrentSlotIndex
                                     PalletPhysState[targetPalletToSnap] = 'stowed'
@@ -962,6 +989,14 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         isStowingPallet = false
                                     end)
                                 else
+                                    -- Palete escorregou ou caiu fora do reboque
+                                    if errReason == 'off_deck' then
+                                        PalletPhysState[targetPalletToSnap] = 'fallen'
+                                        if _G.SendMissionNotify then
+                                            _G.SendMissionNotify('Central Logística', 'Atenção: O palete caiu fora da carreta! Reposicione a carga.', 'error')
+                                        end
+                                        PlaySoundFrontend(-1, "CHECKPOINT_MISSED", "HUD_MINI_GAME_SOUNDSET", 0)
+                                    end
                                     isStowingPallet = false
                                 end
                             else
