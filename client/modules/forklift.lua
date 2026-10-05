@@ -93,6 +93,28 @@ end
 local CurrentGhostEntity = nil
 local CurrentSlotIndex = 1
 local TargetTrailerEntity = nil
+local TrailerFrozenForLoading = false
+
+local function FreezeTrailerRig(freeze)
+    local tr = TargetTrailerEntity or (_G.JobEntities and _G.JobEntities.trailer)
+    local tk = _G.JobEntities and _G.JobEntities.truck
+
+    if tr and DoesEntityExist(tr) then
+        SetEntityVelocity(tr, 0.0, 0.0, 0.0)
+        SetVehicleBrake(tr, freeze)
+        SetVehicleHandbrake(tr, freeze)
+        FreezeEntityPosition(tr, freeze)
+    end
+
+    if tk and DoesEntityExist(tk) then
+        SetEntityVelocity(tk, 0.0, 0.0, 0.0)
+        SetVehicleBrake(tk, freeze)
+        SetVehicleHandbrake(tk, freeze)
+        FreezeEntityPosition(tk, freeze)
+    end
+
+    TrailerFrozenForLoading = freeze
+end
 
 function ForkliftModule.DeleteGhostProp()
     if CurrentGhostEntity and DoesEntityExist(CurrentGhostEntity) then
@@ -587,6 +609,15 @@ function ForkliftModule.SnapForkliftToSlot(forkliftEntity, trailer)
 
     _G.ForkliftLoadedOnTrailer = true
 
+    -- DESTRAVAMENTO ESTÁTICO DO CONJUNTO TRAILER + CAMINHÃO:
+    -- Com a empilhadeira acoplada na traseira, libera a física para a etapa de amarração e viagem
+    if TrailerFrozenForLoading then
+        FreezeTrailerRig(false)
+        if _G.SendMissionNotify then
+            _G.SendMissionNotify('Central Logística', 'Carreta e caminhão destravados para manobra e trânsito.', 'success')
+        end
+    end
+
     -- Deleta o holograma da empilhadeira
     ForkliftModule.DeleteGhostProp()
     return true, forkOffset, forkHeading
@@ -861,6 +892,16 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                             PalletPhysState[p] = 'attached_to_forks'
                                             activeCarried = p
+
+                                            -- CONGELAMENTO ESTÁTICO DO CONJUNTO TRAILER + CAMINHÃO NO 1º PALETE:
+                                            -- Impede deslocamento inercial, oscilação de suspensão e empurrões da empilhadeira
+                                            if not TrailerFrozenForLoading then
+                                                FreezeTrailerRig(true)
+                                                if _G.SendMissionNotify then
+                                                    _G.SendMissionNotify('Central Logística', 'Carreta e caminhão travados na baía para segurança do carregamento.', 'info')
+                                                end
+                                            end
+
                                             PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
 
                                             -- INTERRUPÇÃO IMEDIATA DO LAÇO (Diretriz 3): impede engate em cascata
@@ -1151,6 +1192,9 @@ function ForkliftModule.StopOperation()
         local forklift = ForkliftModule.GetPlayerForklift()
         ForkliftModule.SafeDetachWithDistanceCheck(CurrentForkliftPallet, forklift, 2.5)
         CurrentForkliftPallet = nil
+    end
+    if TrailerFrozenForLoading then
+        FreezeTrailerRig(false)
     end
     ForkliftModule.DeleteGhostProp()
 end
