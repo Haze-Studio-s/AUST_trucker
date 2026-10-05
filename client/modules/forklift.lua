@@ -734,65 +734,64 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             else
                                 -- Só processa engate se a carga não estiver estivada no reboque
                                 if not IsEntityAttached(p) then
+                                    -- DETECÇÃO 3D EXTREMAMENTE RESTRITA SOB A BASE DO PALETE CONGELADO (Diretriz 3 & Decisão A1)
+                                    -- Garante que o palete permaneça 100% CONGELADO no chão até o engate exato
                                     local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
-                                    -- Garfos posicionados geometricamente sob o vão do palete
-                                    local isEngagedWithForks = math.abs(relP.x) <= 1.3 and (relP.y >= 0.1 and relP.y <= 3.5) and (math.abs(relP.z) <= 0.9)
+                                    local forkCoords, currentForkBone = GetForkliftForksCoords(forklift)
+                                    local relForkToPallet = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
+
+                                    -- Alinhamento Angular: os garfos devem entrar de frente (ângulo relativo <= 12 graus)
+                                    local forkH = GetEntityHeading(forklift)
+                                    local palH  = GetEntityHeading(p)
+                                    local diffAngle = math.abs((forkH - palH) % 180)
+                                    if diffAngle > 90 then diffAngle = 180 - diffAngle end
+                                    local isAngleAligned = (diffAngle <= 12.0)
+
+                                    -- Zona Geométrica Restrita:
+                                    -- Lateral (X): centralizado sob o vão do palete (|X| <= 0.28m)
+                                    -- Profundidade (Y): garfos inseridos entre 0.45m e 1.65m na base
+                                    -- Altura (Z): alinhamento vertical dos garfos com o vão inferior (|Z| <= 0.15m)
+                                    local isEngagedWithForks = isAngleAligned
+                                        and (math.abs(relP.x) <= 0.28)
+                                        and (relP.y >= 0.45 and relP.y <= 1.65)
+                                        and (math.abs(relP.z) <= 0.15)
 
                                     if isEngagedWithForks then
-                                        -- Transição Cinemática: descongela temporariamente no chão sem gravidade para permitir subida mecânica
-                                        if pState == 'frozen' then
-                                            FreezeEntityPosition(p, false)
-                                            SetEntityDynamic(p, true)
-                                            SetEntityHasGravity(p, false)
-                                            ActivatePhysics(p)
-                                            PalletPhysState[p] = 'ground_engaged'
+                                        -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
+                                        if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
+                                            NetworkRequestControlOfEntity(p)
                                         end
 
-                                        local zLift = pCoords.z - PalletBaseZ[p]
-                                        -- GATILHO ATÔMICO DE ACOPLAMENTO TEMPORÁRIO (Decisão A1: Z >= 0.35m)
-                                        if zLift >= 0.35 then
-                                            -- Solicita controle pontual se networked
-                                            if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
-                                                NetworkRequestControlOfEntity(p)
-                                            end
+                                        -- Descongela e anexa instantaneamente aos garfos da empilhadeira
+                                        SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                        FreezeEntityPosition(p, false)
+                                        SetEntityDynamic(p, false)
+                                        SetEntityHasGravity(p, false)
 
-                                            -- Acopla rigidamente aos garfos da empilhadeira
-                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                            FreezeEntityPosition(p, false)
-                                            SetEntityDynamic(p, false)
-                                            SetEntityHasGravity(p, false)
+                                        local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
+                                        local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
 
-                                            -- AttachEntityToEntity no bone dos garfos com Autoridade Suprema do 6DOF
-                                            local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
-                                            local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
-
-                                            local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
-                                            if customForkOff then
-                                                forkOffX, forkOffY, forkOffZ = customForkOff.x, customForkOff.y, customForkOff.z
-                                                if customForkRot then
-                                                    forkPitch, forkRoll, forkYaw = customForkRot.x, customForkRot.y, customForkRot.z
-                                                end
-                                            end
-
-                                            AttachEntityToEntity(
-                                                p, forklift, forkBone,
-                                                forkOffX, forkOffY, forkOffZ,
-                                                forkPitch, forkRoll, forkYaw,
-                                                false, false, false, false, 2, true
-                                            )
-
-                                            PalletPhysState[p] = 'attached_to_forks'
-                                            activeCarried = p
-                                        else
-                                            -- Se ainda não atingiu a altura mínima, cancela acelerações para baixo
-                                            local vel = GetEntityVelocity(p)
-                                            if vel.z < -0.05 then
-                                                SetEntityVelocity(p, vel.x, vel.y, 0.0)
+                                        local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
+                                        if customForkOff then
+                                            forkOffX, forkOffY, forkOffZ = customForkOff.x, customForkOff.y, customForkOff.z
+                                            if customForkRot then
+                                                forkPitch, forkRoll, forkYaw = customForkRot.x, customForkRot.y, customForkRot.z
                                             end
                                         end
+
+                                        AttachEntityToEntity(
+                                            p, forklift, forkBone,
+                                            forkOffX, forkOffY, forkOffZ,
+                                            forkPitch, forkRoll, forkYaw,
+                                            false, false, false, false, 2, true
+                                        )
+
+                                        PalletPhysState[p] = 'attached_to_forks'
+                                        activeCarried = p
+                                        PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
                                     else
-                                        -- Garfos longe da carga: recongela no chão
-                                        if pState ~= 'frozen' and math.abs(pCoords.z - PalletBaseZ[p]) <= 0.10 then
+                                        -- Mantém a blindagem: palete 100% congelado e sólido no chão até a manobra perfeita
+                                        if pState ~= 'frozen' then
                                             FreezeEntityPosition(p, true)
                                             SetEntityDynamic(p, false)
                                             SetEntityHasGravity(p, false)
@@ -1028,7 +1027,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             if dist <= 3.5 then
                                 sleep = 0
                                 if TextUIShowing ~= 'forks_guide' then
-                                    lib.showTextUI('Encaixe os garfos sob o palete e erga o mastro (Shift / NumPad 5)', { position = 'left-center', icon = 'pallet' })
+                                    lib.showTextUI('Alinhe e insira os garfos por baixo do vão do palete', { position = 'left-center', icon = 'pallet' })
                                     TextUIShowing = 'forks_guide'
                                 end
                             else
