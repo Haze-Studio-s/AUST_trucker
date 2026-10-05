@@ -734,27 +734,26 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             else
                                 -- Só processa engate se a carga não estiver estivada no reboque
                                 if not IsEntityAttached(p) then
-                                    -- DETECÇÃO 3D EXTREMAMENTE RESTRITA SOB A BASE DO PALETE CONGELADO (Diretriz 3 & Decisão A1)
-                                    -- Garante que o palete permaneça 100% CONGELADO no chão até o engate exato
+                                    -- DETECÇÃO 3D SUAVIZADA COM INSERÇÃO COMPLETA SOB O PALETE CONGELADO (Diretriz 1 & 2)
                                     local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
                                     local forkCoords, currentForkBone = GetForkliftForksCoords(forklift)
-                                    local relForkToPallet = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                    -- Alinhamento Angular: os garfos devem entrar de frente (ângulo relativo <= 12 graus)
+                                    -- Alinhamento Angular Suavizado: perdoa variações de até 22 graus
                                     local forkH = GetEntityHeading(forklift)
                                     local palH  = GetEntityHeading(p)
                                     local diffAngle = math.abs((forkH - palH) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
-                                    local isAngleAligned = (diffAngle <= 12.0)
+                                    local isAngleAligned = (diffAngle <= 22.0)
 
-                                    -- Zona Geométrica Restrita:
-                                    -- Lateral (X): centralizado sob o vão do palete (|X| <= 0.28m)
-                                    -- Profundidade (Y): garfos inseridos entre 0.45m e 1.65m na base
-                                    -- Altura (Z): alinhamento vertical dos garfos com o vão inferior (|Z| <= 0.15m)
+                                    -- Zona Geométrica Equilibrada:
+                                    -- Lateral (X): perdoa até 0.45m de desalinhamento (|X| <= 0.45m)
+                                    -- Altura (Z): tolerância vertical suave de entrada (|Z| <= 0.25m)
+                                    -- Profundidade (Y) - GATILHO DE INSERÇÃO COMPLETA:
+                                    -- Dispara estritamente quando os garfos avançarem totalmente sob o vão (Y entre 0.90m e 1.75m)
                                     local isEngagedWithForks = isAngleAligned
-                                        and (math.abs(relP.x) <= 0.28)
-                                        and (relP.y >= 0.45 and relP.y <= 1.65)
-                                        and (math.abs(relP.z) <= 0.15)
+                                        and (math.abs(relP.x) <= 0.45)
+                                        and (relP.y >= 0.90 and relP.y <= 1.75)
+                                        and (math.abs(relP.z) <= 0.25)
 
                                     if isEngagedWithForks then
                                         -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
