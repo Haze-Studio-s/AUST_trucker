@@ -44,6 +44,10 @@ local ForkliftLoadedOnTrailer = false
 local ForkliftSecured = false
 local ForkliftRiskLevel = 0
 
+-- Configuração experimental: ativação do prop 3D texturizado 'strap_prop' para teste
+local UseStrapProp = true
+local SpawnedStrapProps = {}
+
 -- =======================================================================
 -- CÁLCULO DINÂMICO DE BOUNDING BOX (Z-AXIS CLAMP) PARA CARRETAS E FORKLIFT
 -- Utiliza GetModelDimensions para obter o limite Z superior real da geometria
@@ -344,6 +348,16 @@ local function CleanupCurrentJob()
                 SetEntityCollision(pData.entity, true, true)
             end
         end
+    end
+
+    if SpawnedStrapProps then
+        for _, sProp in pairs(SpawnedStrapProps) do
+            if sProp and DoesEntityExist(sProp) then
+                DetachEntity(sProp, true, true)
+                DeleteEntity(sProp)
+            end
+        end
+        SpawnedStrapProps = {}
     end
 
     ActiveJob = nil
@@ -1025,6 +1039,43 @@ local function DrawPalletPolyStraps(trailer, pEnt)
     DrawSingleStrap(trailer, pEnt, relPos, -0.28, halfX, topZ, hw, r, g, b, a)
 end
 
+local function AttachStrapPropToPallet(palletEnt)
+    if not palletEnt or not DoesEntityExist(palletEnt) then return nil end
+    local modelHash = joaat('strap_prop')
+    if not IsModelInCdimage(modelHash) or not IsModelValid(modelHash) then
+        return nil
+    end
+
+    RequestModel(modelHash)
+    local timeout = 1000
+    while not HasModelLoaded(modelHash) and timeout > 0 do
+        Wait(50)
+        timeout = timeout - 50
+    end
+    if not HasModelLoaded(modelHash) then return nil end
+
+    local pCoords = GetEntityCoords(palletEnt)
+    local prop = CreateObject(modelHash, pCoords.x, pCoords.y, pCoords.z, false, false, false)
+    if not prop or not DoesEntityExist(prop) then return nil end
+
+    SetEntityCollision(prop, false, false)
+    SetCanClimbOnEntity(prop, false)
+    FreezeEntityPosition(prop, false)
+    SetEntityDynamic(prop, false)
+    SetEntityLodDist(prop, 0xFFFF)
+
+    -- Anexa o prop diretamente ao centro superior do palete
+    AttachEntityToEntity(
+        prop, palletEnt, 0,
+        0.0, 0.0, 0.0,
+        0.0, 0.0, 0.0,
+        false, false, false, false, 2, true
+    )
+
+    SetModelAsNoLongerNeeded(modelHash)
+    return prop
+end
+
 CreateThread(function()
     while true do
         local sleep = 500
@@ -1044,7 +1095,27 @@ CreateThread(function()
                     local pEnt = pData.entity
                     -- Condicionamento ESTRITO: Apenas paletes confirmados com sucesso no minigame (isSecured == true)
                     if pData.isSecured == true and pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                        DrawPalletPolyStraps(trailer, pEnt)
+                        if UseStrapProp then
+                            -- Modo Teste: Gerencia o prop 3D texturizado 'strap_prop'
+                            if not SpawnedStrapProps[pEnt] or not DoesEntityExist(SpawnedStrapProps[pEnt]) then
+                                local sProp = AttachStrapPropToPallet(pEnt)
+                                if sProp then
+                                    SpawnedStrapProps[pEnt] = sProp
+                                else
+                                    -- Fallback para polígonos caso o prop falhe o carregamento
+                                    DrawPalletPolyStraps(trailer, pEnt)
+                                end
+                            end
+                        else
+                            -- Modo Polígonos Tradicionais
+                            DrawPalletPolyStraps(trailer, pEnt)
+                        end
+                    else
+                        if SpawnedStrapProps[pEnt] and DoesEntityExist(SpawnedStrapProps[pEnt]) then
+                            DetachEntity(SpawnedStrapProps[pEnt], true, true)
+                            DeleteEntity(SpawnedStrapProps[pEnt])
+                            SpawnedStrapProps[pEnt] = nil
+                        end
                     end
                 end
             end
