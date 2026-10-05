@@ -717,7 +717,22 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     -- 1. Gerenciamento de Acoplamento Temporário por Altura (Z >= 0.35m)
                     local activeCarried = nil
 
+                    -- Monta lista de paletes candidatos (tabela da missão + palete mais próximo no solo)
+                    local candidatePallets = {}
+                    local seenPallets = {}
                     for _, p in pairs(ActiveMissionPallets) do
+                        if p and DoesEntityExist(p) and not seenPallets[p] then
+                            seenPallets[p] = true
+                            candidatePallets[#candidatePallets + 1] = p
+                        end
+                    end
+                    local nearestP = ForkliftModule.GetNearestGroundPallet(forklift)
+                    if nearestP and DoesEntityExist(nearestP) and not seenPallets[nearestP] then
+                        seenPallets[nearestP] = true
+                        candidatePallets[#candidatePallets + 1] = nearestP
+                    end
+
+                    for _, p in ipairs(candidatePallets) do
                         if p and DoesEntityExist(p) then
                             local pCoords = GetEntityCoords(p)
 
@@ -734,26 +749,25 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             else
                                 -- Só processa engate se a carga não estiver estivada no reboque
                                 if not IsEntityAttached(p) then
-                                    -- DETECÇÃO 3D SUAVIZADA COM INSERÇÃO COMPLETA SOB O PALETE CONGELADO (Diretriz 1 & 2)
-                                    local relP = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
+                                    -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
                                     local forkCoords, currentForkBone = GetForkliftForksCoords(forklift)
+                                    local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                    -- Alinhamento Angular Suavizado: perdoa variações de até 22 graus
+                                    -- Alinhamento Angular Suavizado: perdoa variações de até 25 graus
                                     local forkH = GetEntityHeading(forklift)
                                     local palH  = GetEntityHeading(p)
                                     local diffAngle = math.abs((forkH - palH) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
-                                    local isAngleAligned = (diffAngle <= 22.0)
+                                    local isAngleAligned = (diffAngle <= 25.0)
 
-                                    -- Zona Geométrica Equilibrada:
-                                    -- Lateral (X): perdoa até 0.45m de desalinhamento (|X| <= 0.45m)
-                                    -- Altura (Z): tolerância vertical suave de entrada (|Z| <= 0.25m)
-                                    -- Profundidade (Y) - GATILHO DE INSERÇÃO COMPLETA:
-                                    -- Dispara estritamente quando os garfos avançarem totalmente sob o vão (Y entre 0.90m e 1.75m)
+                                    -- Encaixe Físico dos Garfos dentro do Palete:
+                                    -- X: centralizado entre os garfos (|X| <= 0.45m)
+                                    -- Y: garfos penetraram sob o corpo do palete (|Y| <= 0.65m)
+                                    -- Z: ponta dos garfos alinhada à abertura da base (-0.35m a +0.35m)
                                     local isEngagedWithForks = isAngleAligned
-                                        and (math.abs(relP.x) <= 0.45)
-                                        and (relP.y >= 0.90 and relP.y <= 1.75)
-                                        and (math.abs(relP.z) <= 0.25)
+                                        and (math.abs(relToPal.x) <= 0.45)
+                                        and (math.abs(relToPal.y) <= 0.65)
+                                        and (relToPal.z >= -0.35 and relToPal.z <= 0.35)
 
                                     if isEngagedWithForks then
                                         -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
