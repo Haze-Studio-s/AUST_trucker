@@ -2756,17 +2756,17 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             local groundZ = baseSpawnZ
                             local rayFound = false
 
-                            local raycastStart = vector3(pCoords.x, pCoords.y, pCoords.z + 1.5)
-                            local raycastEnd = vector3(pCoords.x, pCoords.y, pCoords.z - 4.0)
-                            local rayHandle = StartShapeTestRay(raycastStart.x, raycastStart.y, raycastStart.z, raycastEnd.x, raycastEnd.y, raycastEnd.z, 1 | 16, ent, 7)
+                            local raycastStart = vector3(pCoords.x, pCoords.y, pCoords.z + 2.0)
+                            local raycastEnd = vector3(pCoords.x, pCoords.y, pCoords.z - 5.0)
+                            local rayHandle = StartShapeTestRay(raycastStart.x, raycastStart.y, raycastStart.z, raycastEnd.x, raycastEnd.y, raycastEnd.z, 1 | 16 | 32, ent, 7)
                             local _, hit, hitCoords = GetShapeTestResult(rayHandle)
 
-                            if hit and hit ~= 0 and hitCoords.z > (baseSpawnZ - 3.5) then
+                            if hit and hit ~= 0 and hitCoords.z > (baseSpawnZ - 4.0) then
                                 groundZ = hitCoords.z
                                 rayFound = true
                             else
-                                local gFound, gz = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 1.5, false)
-                                if gFound and gz > (baseSpawnZ - 3.5) then
+                                local gFound, gz = GetGroundZFor_3dCoord(pCoords.x, pCoords.y, pCoords.z + 2.0, false)
+                                if gFound and gz > (baseSpawnZ - 4.0) then
                                     groundZ = gz
                                     rayFound = true
                                 end
@@ -2775,7 +2775,7 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             -- Cálculo do offset vertical inferior da bounding box do modelo
                             local minDim, _ = GetModelDimensions(GetEntityModel(ent))
                             local bottomOffset = math.abs(minDim.z)
-                            local finalRestZ = groundZ + bottomOffset + 0.02
+                            local finalRestZ = groundZ + bottomOffset + 0.03
 
                             if rayFound then
                                 SetEntityCoordsNoOffset(ent, pCoords.x, pCoords.y, finalRestZ, false, false, false)

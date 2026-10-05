@@ -440,7 +440,6 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     -- COLISÃO FÍSICA SÓLIDA PARA JOGADORES E VEÍCULOS (Diretriz 3):
     SetEntityCollision(palletEntity, true, true)
     SetCanClimbOnEntity(palletEntity, true)
-    SetEntityCompletelyDisableCollision(palletEntity, false, true)
 
     -- Isolamento seletivo rigoroso do palete contra a chapa do trailer para evitar interferência na suspensão
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
@@ -753,6 +752,18 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     PalletBaseZ[p] = pCoords.z
                                 end
 
+                                -- SENTINELA ANTI-LIMBO (Garantia de Colisão e Solo Firme):
+                                -- Se a física ou colisão falhar e o palete afundar > 0.35m abaixo do nível de solo seguro,
+                                -- intercepta e reposiciona imediatamente no piso com colisão ativa e sem afundamento.
+                                if not IsEntityAttached(p) and PalletBaseZ[p] and (pCoords.z < (PalletBaseZ[p] - 0.35)) then
+                                    SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                    SetEntityCoordsNoOffset(p, pCoords.x, pCoords.y, PalletBaseZ[p], false, false, false)
+                                    SetEntityCollision(p, true, true)
+                                    SetCanClimbOnEntity(p, true)
+                                    FreezeEntityPosition(p, true)
+                                    pCoords = GetEntityCoords(p)
+                                end
+
                                 local pState = PalletPhysState[p] or 'frozen'
 
                                 if pState == 'attached_to_forks' then
@@ -776,11 +787,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                         -- Encaixe Físico dos Garfos dentro do Palete:
                                         -- Eixo X (Centralização lateral): tolerância de até ±0.80m (janela total de 1.60m)
-                                        -- Eixo Y (Penetração dos garfos): limite exato de até ±0.95m do centro do palete
+                                        -- Eixo Y (Penetração dos garfos): limite de até ±1.10m do centro do palete
                                         -- Eixo Z (Altura vertical dos garfos): entrada entre -0.60m e +0.60m (janela total de 1.20m)
                                         local isEngagedWithForks = isAngleAligned
                                             and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 0.95)
+                                            and (math.abs(relToPal.y) <= 1.10)
                                             and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
                                         if isEngagedWithForks then
