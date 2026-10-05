@@ -2788,7 +2788,7 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             -- 4. Estabilização e salvaguarda permanente em repouso:
                             -- O palete permanece com gravidade ativa e física sólida, segurado pelo Freeze no piso do MLO.
                             SetEntityCollision(ent, true, true)
-                            SetEntityCompletelyDisableCollision(ent, false, true)
+                            SetCanClimbOnEntity(ent, true)
                             SetEntityHasGravity(ent, true)
                             FreezeEntityPosition(ent, true)
                             SetEntityVelocity(ent, 0.0, 0.0, 0.0)
