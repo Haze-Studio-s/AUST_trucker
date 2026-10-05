@@ -753,21 +753,21 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local forkCoords, currentForkBone = GetForkliftForksCoords(forklift)
                                     local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                    -- Alinhamento Angular Suavizado: perdoa variações de até 25 graus
+                                    -- Alinhamento Angular Amplo (Modo Teste): perdoa variações de até 60 graus
                                     local forkH = GetEntityHeading(forklift)
                                     local palH  = GetEntityHeading(p)
                                     local diffAngle = math.abs((forkH - palH) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
-                                    local isAngleAligned = (diffAngle <= 25.0)
+                                    local isAngleAligned = (diffAngle <= 60.0)
 
-                                    -- Encaixe Físico dos Garfos dentro do Palete:
-                                    -- X: centralizado entre os garfos (|X| <= 0.45m)
-                                    -- Y: garfos penetraram sob o corpo do palete (|Y| <= 0.65m)
-                                    -- Z: ponta dos garfos alinhada à abertura da base (-0.35m a +0.35m)
+                                    -- Encaixe Físico dos Garfos dentro do Palete (Modo Teste: 2.0m de margem):
+                                    -- X: |X| <= 2.0m
+                                    -- Y: |Y| <= 2.0m
+                                    -- Z: -2.0m a +2.0m
                                     local isEngagedWithForks = isAngleAligned
-                                        and (math.abs(relToPal.x) <= 0.45)
-                                        and (math.abs(relToPal.y) <= 0.65)
-                                        and (relToPal.z >= -0.35 and relToPal.z <= 0.35)
+                                        and (math.abs(relToPal.x) <= 2.0)
+                                        and (math.abs(relToPal.y) <= 2.0)
+                                        and (relToPal.z >= -2.0 and relToPal.z <= 2.0)
 
                                     if isEngagedWithForks then
                                         -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
