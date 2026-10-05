@@ -1,6 +1,18 @@
 # Changelog — AUST_trucker
 
-## [20.9.1] — 2026-10-04 — Sincronização 6DoF com Bones Reais e Blindagem In-Game (CEF)
+## [20.9.2] — 2026-10-05 — Restauração do Fluxo de Amarração & Blindagem Operacional de Garfos
+
+### Corrigido & Aprimorado
+- **Restauração do Fluxo Original de Amarração de Cargas (`client/main.lua`):**
+  - **Estado de Aguardo e Carga Solta:** Paletes estivados no reboque permanecem rigorosamente desamarrados (`isSecured = false`) sem nenhuma fita ou corda visível até a vitória do minigame.
+  - **Alvo de Interação Lateral do `ox_target` (`SetupNextPalletTarget`):** O ponto de interação de cada palete é projetado na lateral externa da carreta correspondente (`X ≈ ±1.45m`), com raio acessível do chão ($1.60\text{m}$) e distância de $2.50\text{m}$.
+  - **Execução do Minigame Existente:** O jogador caminha até a lateral e aciona a amarração, executando o `lib.skillCheck` acompanhado da animação de catraca e som de catraca.
+  - **Gatilho Visual no Milissegundo de Vitória:** No instante exato do sucesso, as cordas vermelhas `DrawPoly` cruzam aquele respectivo palete. Em caso de falha, o palete permanece solto e o alvo reabre para nova tentativa.
+  - **Progressão Individual da Rota:** O fluxo avança sequencialmente palete a palete. A rota do caminhão só é liberada com 100% das cargas amarradas com sucesso e cordas visíveis.
+- **Calibragem e Tolerância Espacial dos Garfos (`client/modules/forklift.lua`):**
+  - Tolerância de penetração calibrada e restabelecida para $1.10\text{m}$ no espaço local com alinhamento angular de até $\pm 45^\circ$, janela lateral de $\pm 0.80\text{m}$ e vertical de $\pm 0.60\text{m}$.
+- **Blindagem Anti-Limbo e Sentinela de Piso (`client/main.lua`, `client/modules/forklift.lua`):**
+  - Colisão física sólida ativa com o piso dos armazéns e MLOs, impedindo que paletes soltos ou manobrados afundem ou atravessem a malha do mapa.
 
 ### Corrigido & Aprimorado
 - **Sincronização Dinâmica de Bones no PropEditor (`offset_editor.lua`):** O PropEditor agora detecta automaticamente o bone de trabalho do veículo de carregamento (`forks` / `forks_attach` para empilhadeiras e `frame_2` para reach stacker/handler), calculando matrizes relativas (`GetOffsetFromBoneGivenWorldCoords`) em vez de forçar o Bone 0 (Root/Chassi).

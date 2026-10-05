@@ -1387,28 +1387,32 @@ function SetupNextPalletTarget()
         return
     end
 
-    -- 2. Captura coordenadas mundiais tridimensionais em tempo real onde o palete está na caçamba
+    -- 2. Captura coordenadas mundiais e relativas do palete em relação ao reboque
+    local trailer = JobEntities.trailer
     local pCoords = GetEntityCoords(currentPallet.entity)
-    if not pCoords or pCoords == vector3(0, 0, 0) then
-        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-            pCoords = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 0.0, 0.5)
-        end
+    local targetCoords = pCoords
+
+    if trailer and DoesEntityExist(trailer) then
+        local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
+        -- Lateral correspondente: se relPos.x >= 0, lateral direita (X ≈ +1.45m); caso contrário, lateral esquerda (X ≈ -1.45m)
+        local sideX = (relPos.x >= 0.0) and 1.45 or -1.45
+        targetCoords = GetOffsetFromEntityInWorldCoords(trailer, sideX, relPos.y, relPos.z)
     end
 
     -- 3. Move a seta verde flutuante diretamente para o topo deste palete
     UpdateMissionObjective('pallet', pCoords, ('Amarrar Palete (%d/%d)'):format(currentTieIndex, #LoadedPallets))
 
-    -- 4. Cria a zona esférica de interação do ox_target EXCLUSIVAMENTE sobre a posição mundial do palete
+    -- 4. Cria a zona esférica de interação do ox_target EXCLUSIVAMENTE na lateral da carreta correspondente
     ActiveStrappingZoneId = exports.ox_target:addSphereZone({
-        coords = pCoords,
-        radius = 2.0,
+        coords = targetCoords,
+        radius = 1.6,
         debug = false,
         options = {
             {
                 name = 'aust_tie_current_pallet',
                 icon = 'fas fa-tape',
                 label = ('Amarrar Palete (%s/%s)'):format(currentTieIndex, #LoadedPallets),
-                distance = 3.5,
+                distance = 2.5,
                 canInteract = function()
                     return (hasRopes or HasRopes) and not currentPallet.isSecured and not IsPedInAnyVehicle(cache.ped, false)
                 end,
@@ -1419,7 +1423,7 @@ function SetupNextPalletTarget()
         }
     })
 
-    SendMissionNotify('Central Logística', ('Amarre o palete %s de %s.'):format(currentTieIndex, #LoadedPallets), 'info')
+    SendMissionNotify('Central Logística', ('Amarre o palete %s de %s na lateral da carreta.'):format(currentTieIndex, #LoadedPallets), 'info')
 end
 
 local function StartStrappingPalletsStage()
