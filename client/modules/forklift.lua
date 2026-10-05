@@ -429,7 +429,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         palletEntity, targetTrailer, 0,
         finalX, finalY, finalZ,
         relPitch, relRoll, relYaw,
-        false, false, false, false, 2, true
+        false, false, true, false, 2, true
     )
 
     -- BLINDAGEM HAVOK & ESTIVA SEGURA (Decisão do Usuário - v20.8.0):
@@ -444,10 +444,12 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
-    SetEntityCollision(palletEntity, false, false)
-    SetCanClimbOnEntity(palletEntity, false)
+    -- COLISÃO FÍSICA SÓLIDA PARA JOGADORES E VEÍCULOS (Diretriz 3):
+    SetEntityCollision(palletEntity, true, true)
+    SetCanClimbOnEntity(palletEntity, true)
+    SetEntityCompletelyDisableCollision(palletEntity, false, true)
 
-    -- Isolamento seletivo rigoroso do palete contra o trailer e o caminhão
+    -- Isolamento seletivo rigoroso do palete contra a chapa do trailer para evitar interferência na suspensão
     SetEntityNoCollisionEntity(palletEntity, targetTrailer, false)
     SetEntityNoCollisionEntity(targetTrailer, palletEntity, false)
     local truck = _G.JobEntities and _G.JobEntities.truck
@@ -655,6 +657,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
         local PalletBaseZ = {} -- Mapeia o Z de descanso inicial de cada palete
         local PalletPhysState = {} -- Controla transições atômicas para blindar contra Reliable network event overflow
+        local PalletReengageCooldown = {} -- Cooldown para evitar que paletes soltos no reboque sejam reengatados imediatamente
 
         while OperationActive do
             local sleep = 150
@@ -726,6 +729,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                             if pState == 'attached_to_forks' then
                                 activeCarried = p
+                            elseif pState == 'recoil_zone' or (PalletReengageCooldown[p] and GetGameTimer() < PalletReengageCooldown[p]) then
+                                -- Palete em processo de desengate/recuo: proibido reengatar nos garfos
                             else
                                 -- Só processa engate se a carga não estiver estivada no reboque
                                 if not IsEntityAttached(p) then
@@ -841,15 +846,15 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local diffAngle = math.abs((curH - targetHeading) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                                    -- FAIXA DE ALINHAMENTO RESTRITA (Decisão do Usuário - Zero Snaps):
-                                    -- Raio horizontal XY <= 0.35m, altura Z entre -0.10m e +0.10m e ângulo <= 12 graus
-                                    local isAlignedWithGhost = (distXY <= 0.35) and (deltaZ >= -0.10 and deltaZ <= 0.10) and (diffAngle <= 12.0)
+                                    -- FAIXA DE ALINHAMENTO AMPLA (Diretriz 1 - Decisão do Usuário):
+                                    -- Raio horizontal XY <= 0.65m, altura Z entre -0.25m e +0.25m e ângulo <= 25 graus
+                                    local isAlignedWithGhost = (distXY <= 0.65) and (deltaZ >= -0.25 and deltaZ <= 0.25) and (diffAngle <= 25.0)
 
                                     if isAlignedWithGhost or pState == 'recoil_zone' or pState == 'detached_at_ghost' then
                                         slotPalletCandidate = p
                                         isCandidateInSlot = true
 
-                                        -- GATILHO 1: DESACOPLAMENTO NO ALVO RESTRITO COM FÍSICA E GRAVIDADE REAIS (ZERO SNAPS)
+                                        -- GATILHO 1: DESACOPLAMENTO NO ALVO AMPLO COM FÍSICA E GRAVIDADE REAIS (ZERO SNAPS)
                                         -- Desatrela instantaneamente dos garfos sem alterar coordenadas ou congelar
                                         if pState == 'attached_to_forks' and isAlignedWithGhost then
                                             DetachEntity(p, true, true)
@@ -871,7 +876,13 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             end)
 
                                             PalletPhysState[p] = 'recoil_zone'
+                                            PalletReengageCooldown[p] = GetGameTimer() + 4000
                                             DetectedCarriedPallet = nil
+
+                                            -- ELIMINAÇÃO DE DUPLICAÇÃO/CLONAGEM (Diretriz 2):
+                                            -- Deleta o holograma fantasma imediatamente no exato momento da soltura da carga
+                                            ForkliftModule.DeleteGhostProp()
+
                                             PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
                                         end
 
