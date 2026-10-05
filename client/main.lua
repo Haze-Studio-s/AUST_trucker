@@ -44,10 +44,6 @@ local ForkliftLoadedOnTrailer = false
 local ForkliftSecured = false
 local ForkliftRiskLevel = 0
 
--- Configuração experimental: ativação do prop 3D texturizado 'strap_prop' para teste
-local UseStrapProp = true
-local SpawnedStrapProps = {}
-
 -- =======================================================================
 -- CÁLCULO DINÂMICO DE BOUNDING BOX (Z-AXIS CLAMP) PARA CARRETAS E FORKLIFT
 -- Utiliza GetModelDimensions para obter o limite Z superior real da geometria
@@ -348,16 +344,6 @@ local function CleanupCurrentJob()
                 SetEntityCollision(pData.entity, true, true)
             end
         end
-    end
-
-    if SpawnedStrapProps then
-        for _, sProp in pairs(SpawnedStrapProps) do
-            if sProp and DoesEntityExist(sProp) then
-                DetachEntity(sProp, true, true)
-                DeleteEntity(sProp)
-            end
-        end
-        SpawnedStrapProps = {}
     end
 
     ActiveJob = nil
@@ -979,9 +965,9 @@ local function ExecuteForkliftTie(forkEntity)
 end
 
 -- =======================================================================
--- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS REALISTAS 3D (DRAWPOLY BILATERAL)
+-- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS AMARELAS REALISTAS 3D (DRAWPOLY)
 -- Renderização ativada EXCLUSIVAMENTE após vitória no minigame (isSecured == true)
--- Largura: 6cm (half-width 0.03m). Sem DrawText3D ou texto flutuante.
+-- Fitas amarelas industriais com sub-divisão de costura escura, relevo e sombra.
 -- =======================================================================
 
 local function DrawPolyQuad(v1, v2, v3, v4, r, g, b, a)
@@ -993,31 +979,76 @@ local function DrawPolyQuad(v1, v2, v3, v4, r, g, b, a)
     DrawPoly(v4.x, v4.y, v4.z, v3.x, v3.y, v3.z, v1.x, v1.y, v1.z, r, g, b, a)
 end
 
-local function DrawSingleStrap(trailer, pEnt, relPos, yOffset, halfX, topZ, hw, r, g, b, a)
-    -- Trilho esquerdo do trailer
-    local lRail_A = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset - hw, relPos.z - 0.15)
-    local lRail_B = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset + hw, relPos.z - 0.15)
+-- Renderiza uma seção de fita (ex: lateral esquerda, topo ou lateral direita)
+-- decompondo em borda escura esquerda (costura), corpo central amarelo e borda direita.
+local function DrawStrapSectionWithSeam(pA_Base, pB_Base, dirX, dirY, hw, edgeW, isTopFace)
+    -- Ajuste dinâmico de luminosidade: Topo recebe luz direta; laterais recebem sombra
+    local cr, cg, cb = 235, 195, 25        -- Corpo central: Amarelo Industrial
+    local er, eg, eb = 145, 105, 10        -- Bordas/Costuras: Ocre/Âmbar Escuro (Relevo)
+    local hr, hg, hb = 255, 222, 50        -- Nervura central: Highlight de tensão
 
-    -- Topo esquerdo do palete
-    local topL_A = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset - hw, topZ)
-    local topL_B = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset + hw, topZ)
+    if not isTopFace then
+        -- Queda de luminosidade nas descidas laterais até o trilho da prancha
+        cr, cg, cb = 190, 155, 18
+        er, eg, eb = 115, 80, 8
+        hr, hg, hb = 205, 175, 30
+    end
 
-    -- Topo direito do palete
-    local topR_A = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset - hw, topZ)
-    local topR_B = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset + hw, topZ)
+    local innerW = hw - edgeW
 
-    -- Trilho direito do trailer
-    local rRail_A = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset - hw, relPos.z - 0.15)
-    local rRail_B = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset + hw, relPos.z - 0.15)
+    -- Pontos A (início da seção)
+    local a_leftEdge  = vector3(pA_Base.x - dirX * hw,        pA_Base.y - dirY * hw,        pA_Base.z)
+    local a_leftInner = vector3(pA_Base.x - dirX * innerW,    pA_Base.y - dirY * innerW,    pA_Base.z)
+    local a_rightInner= vector3(pA_Base.x + dirX * innerW,    pA_Base.y + dirY * innerW,    pA_Base.z)
+    local a_rightEdge = vector3(pA_Base.x + dirX * hw,        pA_Base.y + dirY * hw,        pA_Base.z)
 
-    -- 1. Tira lateral esquerda: Trilho esquerdo -> Topo esquerdo
-    DrawPolyQuad(lRail_A, lRail_B, topL_B, topL_A, r, g, b, a)
+    -- Pontos B (fim da seção)
+    local b_leftEdge  = vector3(pB_Base.x - dirX * hw,        pB_Base.y - dirY * hw,        pB_Base.z)
+    local b_leftInner = vector3(pB_Base.x - dirX * innerW,    pB_Base.y - dirY * innerW,    pB_Base.z)
+    local b_rightInner= vector3(pB_Base.x + dirX * innerW,    pB_Base.y + dirY * innerW,    pB_Base.z)
+    local b_rightEdge = vector3(pB_Base.x + dirX * hw,        pB_Base.y + dirY * hw,        pB_Base.z)
 
-    -- 2. Tira superior: Topo esquerdo -> Topo direito
-    DrawPolyQuad(topL_A, topL_B, topR_B, topR_A, r, g, b, a)
+    -- 1. Costura / Borda Esquerda Escurecida (simula bainha reforçada e relevo)
+    DrawPolyQuad(a_leftEdge, b_leftEdge, b_leftInner, a_leftInner, er, eg, eb, 255)
 
-    -- 3. Tira lateral direita: Topo direito -> Trilho direito
-    DrawPolyQuad(topR_A, topR_B, rRail_B, rRail_A, r, g, b, a)
+    -- 2. Corpo Central Amarelo Industrial
+    DrawPolyQuad(a_leftInner, b_leftInner, b_rightInner, a_rightInner, cr, cg, cb, 255)
+
+    -- 3. Costura / Borda Direita Escurecida
+    DrawPolyQuad(a_rightInner, b_rightInner, b_rightEdge, a_rightEdge, er, eg, eb, 255)
+
+    -- 4. Nervura de Tensão Central (Fita esticada com highlight tridimensional no centro)
+    local midW = innerW * 0.45
+    local a_midL = vector3(pA_Base.x - dirX * midW, pA_Base.y - dirY * midW, pA_Base.z)
+    local a_midR = vector3(pA_Base.x + dirX * midW, pA_Base.y + dirY * midW, pA_Base.z)
+    local b_midL = vector3(pB_Base.x - dirX * midW, pB_Base.y - dirY * midW, pB_Base.z)
+    local b_midR = vector3(pB_Base.x + dirX * midW, pB_Base.y + dirY * midW, pB_Base.z)
+    DrawPolyQuad(a_midL, b_midL, b_midR, a_midR, hr, hg, hb, 255)
+end
+
+local function DrawRealisticSingleStrap(trailer, pEnt, relPos, yOffset, halfX, topZ, hw, edgeW)
+    -- Eixo Y local para a largura da cinta (direção perpendicular ao comprimento que atravessa o palete em X)
+    local dirX = 0.0
+    local dirY = 1.0
+
+    -- Pontos centrais de ancoragem e curvatura
+    -- 1. Ponto no trilho esquerdo da prancha
+    local lRail = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset, relPos.z - 0.15)
+    -- 2. Ponto no topo esquerdo do palete
+    local topL  = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset, topZ)
+    -- 3. Ponto no topo direito do palete
+    local topR  = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset, topZ)
+    -- 4. Ponto no trilho direito da prancha
+    local rRail = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset, relPos.z - 0.15)
+
+    -- Lateral Esquerda: Trilho esquerdo -> Topo esquerdo (Sombra suave)
+    DrawStrapSectionWithSeam(lRail, topL, dirX, dirY, hw, edgeW, false)
+
+    -- Topo: Topo esquerdo -> Topo direito (Luz direta plena)
+    DrawStrapSectionWithSeam(topL, topR, dirX, dirY, hw, edgeW, true)
+
+    -- Lateral Direita: Topo direito -> Trilho direito (Sombra suave)
+    DrawStrapSectionWithSeam(topR, rRail, dirX, dirY, hw, edgeW, false)
 end
 
 local function DrawPalletPolyStraps(trailer, pEnt)
@@ -1028,52 +1059,15 @@ local function DrawPalletPolyStraps(trailer, pEnt)
     local pCoords = GetEntityCoords(pEnt)
     local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-    -- Vermelho industrial vibrante (220, 20, 20, 255) com 6cm de largura total (hw = 0.03m)
-    local r, g, b, a = 220, 20, 20, 255
+    -- Fita Industrial de 6cm de largura (hw = 0.03m) com bordas de costura reforçada de 6mm (edgeW = 0.006m)
     local hw = 0.03
+    local edgeW = 0.006
 
     -- Cinta 1: Paralela Frontal (+0.28m)
-    DrawSingleStrap(trailer, pEnt, relPos, 0.28, halfX, topZ, hw, r, g, b, a)
+    DrawRealisticSingleStrap(trailer, pEnt, relPos, 0.28, halfX, topZ, hw, edgeW)
 
     -- Cinta 2: Paralela Traseira (-0.28m)
-    DrawSingleStrap(trailer, pEnt, relPos, -0.28, halfX, topZ, hw, r, g, b, a)
-end
-
-local function AttachStrapPropToPallet(palletEnt)
-    if not palletEnt or not DoesEntityExist(palletEnt) then return nil end
-    local modelHash = joaat('strap_prop')
-    if not IsModelInCdimage(modelHash) or not IsModelValid(modelHash) then
-        return nil
-    end
-
-    RequestModel(modelHash)
-    local timeout = 1000
-    while not HasModelLoaded(modelHash) and timeout > 0 do
-        Wait(50)
-        timeout = timeout - 50
-    end
-    if not HasModelLoaded(modelHash) then return nil end
-
-    local pCoords = GetEntityCoords(palletEnt)
-    local prop = CreateObject(modelHash, pCoords.x, pCoords.y, pCoords.z, false, false, false)
-    if not prop or not DoesEntityExist(prop) then return nil end
-
-    SetEntityCollision(prop, false, false)
-    SetCanClimbOnEntity(prop, false)
-    FreezeEntityPosition(prop, false)
-    SetEntityDynamic(prop, false)
-    SetEntityLodDist(prop, 0xFFFF)
-
-    -- Anexa o prop diretamente ao centro superior do palete
-    AttachEntityToEntity(
-        prop, palletEnt, 0,
-        0.0, 0.0, 0.0,
-        0.0, 0.0, 0.0,
-        false, false, false, false, 2, true
-    )
-
-    SetModelAsNoLongerNeeded(modelHash)
-    return prop
+    DrawRealisticSingleStrap(trailer, pEnt, relPos, -0.28, halfX, topZ, hw, edgeW)
 end
 
 CreateThread(function()
@@ -1095,27 +1089,7 @@ CreateThread(function()
                     local pEnt = pData.entity
                     -- Condicionamento ESTRITO: Apenas paletes confirmados com sucesso no minigame (isSecured == true)
                     if pData.isSecured == true and pEnt and DoesEntityExist(pEnt) and not pData.lost and not pData.isFallen then
-                        if UseStrapProp then
-                            -- Modo Teste: Gerencia o prop 3D texturizado 'strap_prop'
-                            if not SpawnedStrapProps[pEnt] or not DoesEntityExist(SpawnedStrapProps[pEnt]) then
-                                local sProp = AttachStrapPropToPallet(pEnt)
-                                if sProp then
-                                    SpawnedStrapProps[pEnt] = sProp
-                                else
-                                    -- Fallback para polígonos caso o prop falhe o carregamento
-                                    DrawPalletPolyStraps(trailer, pEnt)
-                                end
-                            end
-                        else
-                            -- Modo Polígonos Tradicionais
-                            DrawPalletPolyStraps(trailer, pEnt)
-                        end
-                    else
-                        if SpawnedStrapProps[pEnt] and DoesEntityExist(SpawnedStrapProps[pEnt]) then
-                            DetachEntity(SpawnedStrapProps[pEnt], true, true)
-                            DeleteEntity(SpawnedStrapProps[pEnt])
-                            SpawnedStrapProps[pEnt] = nil
-                        end
+                        DrawPalletPolyStraps(trailer, pEnt)
                     end
                 end
             end
