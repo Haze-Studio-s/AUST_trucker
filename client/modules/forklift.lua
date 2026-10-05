@@ -389,26 +389,28 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         return false
     end
 
-    -- CAPTURA DA POSE REAL ONDE REPOUSOU (ZERO SNAPS)
-    -- Calcula coordenadas relativas exatas do palete em relação ao trailer
-    local pCurCoords = GetEntityCoords(palletEntity)
-    local relOffset = GetOffsetFromEntityGivenWorldCoords(targetTrailer, pCurCoords.x, pCurCoords.y, pCurCoords.z)
+    -- RESGATE PRIORITÁRIO DE OFFSETS CONFIGURADOS PELO ADMIN (A Única Fonte de Verdade)
+    -- 1º Prioridade: Aba PropEditor (/truckeradmin) para a combinação [Trailer <-> PropModel]
+    -- 2º Prioridade: Aba Slots do Trailer (Config.TrailerSlots) para o slotIndex atual
+    -- 3º Prioridade: Fallback geométrico do slot
+    local pModel = GetEntityModel(palletEntity)
+    local adminOff, adminRot = GetVehiclePropOffset(targetTrailer, pModel)
 
-    -- Validação: O palete precisa estar dentro dos limites do deck do trailer
-    -- Tolerância de deck: largura total ~2.6m (|x| <= 1.35), comprimento (~ -6.0 a 4.5) e z (-0.4 a 1.6)
-    if math.abs(relOffset.x) > 1.35 or relOffset.y < -6.5 or relOffset.y > 5.0 or relOffset.z < -0.4 or relOffset.z > 1.8 then
-        if Config.Debug then print("[AUST_Trucker] AVISO: Palete fora do deck do reboque! Abortando ancoragem.") end
-        return false, nil, nil, "off_deck"
+    local finalX, finalY, finalZ = 0.0, 0.0, 0.0
+    local finalPitch, finalRoll, finalYaw = 0.0, 0.0, 0.0
+
+    if adminOff then
+        finalX, finalY, finalZ = adminOff.x, adminOff.y, adminOff.z
+        if adminRot then
+            finalPitch, finalRoll, finalYaw = adminRot.x, adminRot.y, adminRot.z
+        end
+    else
+        local slotOff, slotHead = ForkliftModule.GetSlotOffset(targetTrailer, slotIndex)
+        finalX = (type(slotOff) == 'table' and slotOff.x) or 0.0
+        finalY = (type(slotOff) == 'table' and slotOff.y) or 0.0
+        finalZ = (type(slotOff) == 'table' and slotOff.z) or 0.35
+        finalYaw = slotHead or (type(slotOff) == 'table' and slotOff.heading) or 0.0
     end
-
-    -- Rotação relativa real em graus
-    local pRot = GetEntityRotation(palletEntity, 2)
-    local tRot = GetEntityRotation(targetTrailer, 2)
-    local relPitch = (pRot.x - tRot.x) % 360
-    local relRoll  = (pRot.y - tRot.y) % 360
-    local relYaw   = (pRot.z - tRot.z) % 360
-
-    local finalX, finalY, finalZ = relOffset.x, relOffset.y, relOffset.z
 
     -- Controle de rede antes do acoplamento
     local timeout = 1500
@@ -420,7 +422,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
 
     DetachEntity(palletEntity, true, true)
 
-    -- Ancoragem padronizada rígida OneSync na POSE REAL DE REPOUSO (Sem teletransporte/snap)
+    -- ANCORAGEM RIGOROSA 6DoF NO OFFSET DO ADMIN (Sobrescrita total de física e pose dinâmica)
     FreezeEntityPosition(palletEntity, false)
     SetEntityDynamic(palletEntity, false)
     SetEntityHasGravity(palletEntity, false)
@@ -428,7 +430,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     AttachEntityToEntity(
         palletEntity, targetTrailer, 0,
         finalX, finalY, finalZ,
-        relPitch, relRoll, relYaw,
+        finalPitch, finalRoll, finalYaw,
         false, false, true, false, 2, true
     )
 
@@ -500,7 +502,7 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
     end
 
     local finalOffsetVec = vector3(finalX or 0.0, finalY or 0.0, finalZ or 0.0)
-    local finalRotVec = vector3(relPitch or 0.0, relRoll or 0.0, relYaw or 0.0)
+    local finalRotVec = vector3(finalPitch or 0.0, finalRoll or 0.0, finalYaw or 0.0)
 
     -- Sincronização OneSync via Entity StateBags (Pilar 1)
     if NetworkGetEntityIsNetworked(targetTrailer) and NetworkGetEntityIsNetworked(palletEntity) then
@@ -509,8 +511,8 @@ function ForkliftModule.SnapPalletToCurrentSlot(palletEntity, trailer, slotIndex
         curSlots[tostring(slotIndex)] = {
             palletNet = pNet,
             offset = { x = finalX, y = finalY, z = finalZ },
-            heading = relYaw,
-            rotation = { pitch = relPitch, roll = relRoll, yaw = relYaw }
+            heading = finalYaw,
+            rotation = { pitch = finalPitch, roll = finalRoll, yaw = finalYaw }
         }
         Entity(targetTrailer).state:set('loadedSlots', curSlots, true)
     end
