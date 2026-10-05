@@ -752,9 +752,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     PalletBaseZ[p] = pCoords.z
                                 end
 
-                                -- SENTINELA ANTI-LIMBO (Garantia de Colisão e Solo Firme):
-                                -- Se a física ou colisão falhar e o palete afundar > 0.35m abaixo do nível de solo seguro,
-                                -- intercepta e reposiciona imediatamente no piso com colisão ativa e sem afundamento.
+                                -- SENTINELA ANTI-LIMBO E ANTI-FLUTUAÇÃO (Garantia de Colisão Sólida e Solo Firme):
+                                -- 1. Se a física falhar e o palete afundar > 0.35m abaixo do piso seguro, restaura a cota Z.
                                 if not IsEntityAttached(p) and PalletBaseZ[p] and (pCoords.z < (PalletBaseZ[p] - 0.35)) then
                                     SetEntityVelocity(p, 0.0, 0.0, 0.0)
                                     SetEntityCoordsNoOffset(p, pCoords.x, pCoords.y, PalletBaseZ[p], false, false, false)
@@ -762,6 +761,19 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     SetCanClimbOnEntity(p, true)
                                     FreezeEntityPosition(p, true)
                                     pCoords = GetEntityCoords(p)
+                                end
+
+                                -- 2. TRAVA HORIZONTAL PLANA E ANCORAGEM ESTÁTICA RIGOROSA (Decisão do Usuário A1 & A2):
+                                -- O palete no solo permanece 100% sólido e imóvel. Caso o impacto da empilhadeira tente
+                                -- inclinar, tombar ou torcer o prop (Pitch ou Roll diferente de 0°), restaura nivelado com o solo.
+                                if not IsEntityAttached(p) then
+                                    local pRot = GetEntityRotation(p, 2)
+                                    if math.abs(pRot.x) > 0.8 or math.abs(pRot.y) > 0.8 then
+                                        SetEntityRotation(p, 0.0, 0.0, pRot.z, 2, false)
+                                        SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                    end
+                                    FreezeEntityPosition(p, true)
+                                    SetEntityDynamic(p, false)
                                 end
 
                                 local pState = PalletPhysState[p] or 'frozen'
@@ -833,7 +845,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         else
                                             -- ESTABILIDADE E COLISÃO SÓLIDA NO SOLO:
                                             -- Mantém o palete perfeitamente firme e assentado no chão para manobra precisa da empilhadeira.
-                                            -- NUNCA chamar SetEntityCompletelyDisableCollision em loop (destrói cache de manifolds Havok)!
                                             if pState ~= 'frozen' then
                                                 SetEntityCollision(p, true, true)
                                                 SetCanClimbOnEntity(p, true)
