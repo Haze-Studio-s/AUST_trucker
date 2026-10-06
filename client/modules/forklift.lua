@@ -104,6 +104,9 @@ local function FreezeTrailerRig(freeze)
         SetVehicleBrake(tr, freeze)
         SetVehicleHandbrake(tr, freeze)
         FreezeEntityPosition(tr, freeze)
+        if NetworkGetEntityIsNetworked(tr) then
+            Entity(tr).state:set('isRigLoadingFrozen', freeze, true)
+        end
     end
 
     if tk and DoesEntityExist(tk) then
@@ -893,6 +896,12 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             PalletPhysState[p] = 'attached_to_forks'
                                             activeCarried = p
 
+                                            -- Sincroniza StateBag OneSync na empilhadeira para observadores
+                                            if NetworkGetEntityIsNetworked(forklift) and NetworkGetEntityIsNetworked(p) then
+                                                local pNetId = NetworkGetNetworkIdFromEntity(p)
+                                                Entity(forklift).state:set('forkliftCarriedNet', pNetId, true)
+                                            end
+
                                             -- CONGELAMENTO ESTÁTICO DO CONJUNTO TRAILER + CAMINHÃO NO 1º PALETE:
                                             -- Impede deslocamento inercial, oscilação de suspensão e empurrões da empilhadeira
                                             if not TrailerFrozenForLoading then
@@ -987,6 +996,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             if ok then
                                                 PalletPhysState[p] = 'stowed_awaiting_recoil'
                                                 DetectedCarriedPallet = nil
+
+                                                if NetworkGetEntityIsNetworked(forklift) then
+                                                    Entity(forklift).state:set('forkliftCarriedNet', nil, true)
+                                                end
 
                                                 -- Desativa colisão mútua imediata com a empilhadeira para manobra livre de ré
                                                 SetEntityNoCollisionEntity(p, forklift, false)
@@ -1192,6 +1205,10 @@ function ForkliftModule.StopOperation()
         local forklift = ForkliftModule.GetPlayerForklift()
         ForkliftModule.SafeDetachWithDistanceCheck(CurrentForkliftPallet, forklift, 2.5)
         CurrentForkliftPallet = nil
+    end
+    local curFork = ForkliftModule.GetPlayerForklift() or (_G.JobEntities and _G.JobEntities.forklift)
+    if curFork and DoesEntityExist(curFork) and NetworkGetEntityIsNetworked(curFork) then
+        Entity(curFork).state:set('forkliftCarriedNet', nil, true)
     end
     if TrailerFrozenForLoading then
         FreezeTrailerRig(false)

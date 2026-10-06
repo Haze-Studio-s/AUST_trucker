@@ -1369,34 +1369,71 @@ CreateThread(function()
             end
         end
 
-        -- 2. Havok Shield para Clientes Espectadores (Observers próximos a qualquer reboque com carga)
+        -- 2. Havok Shield para Clientes Espectadores (Observers próximos a reboques com carga ou empilhadeiras ativas)
         local ped = cache.ped or PlayerPedId()
         local pCoords = GetEntityCoords(ped)
         local nearbyVehicles = GetGamePool('CVehicle')
+        local nearbyTrailers = {}
+
         for _, veh in ipairs(nearbyVehicles) do
-            if veh ~= trailer and DoesEntityExist(veh) and GetVehicleClass(veh) == 11 then
-                if #(pCoords - GetEntityCoords(veh)) <= 35.0 then
-                    local sBag = Entity(veh).state
-                    local lSlots = sBag and sBag.loadedSlots
-                    if lSlots and type(lSlots) == 'table' then
-                        for _, sData in pairs(lSlots) do
-                            if sData.palletNet then
-                                local pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
-                                if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
-                                    hasCargo = true
-                                    SetEntityNoCollisionEntity(pEnt, veh, true)
-                                    SetEntityNoCollisionEntity(veh, pEnt, true)
+            if DoesEntityExist(veh) and GetVehicleClass(veh) == 11 then
+                if #(pCoords - GetEntityCoords(veh)) <= 40.0 then
+                    nearbyTrailers[#nearbyTrailers + 1] = veh
+                    if veh ~= trailer then
+                        local sBag = Entity(veh).state
+                        local lSlots = sBag and sBag.loadedSlots
+                        if lSlots and type(lSlots) == 'table' then
+                            for _, sData in pairs(lSlots) do
+                                if sData.palletNet then
+                                    local pEnt = NetworkGetEntityFromNetworkId(sData.palletNet)
+                                    if pEnt and pEnt ~= 0 and DoesEntityExist(pEnt) then
+                                        hasCargo = true
+                                        SetEntityNoCollisionEntity(pEnt, veh, true)
+                                        SetEntityNoCollisionEntity(veh, pEnt, true)
+                                    end
                                 end
                             end
                         end
+                        local lFork = sBag and sBag.loadedForklift
+                        if lFork and lFork.forkNet then
+                            local fEnt = NetworkGetEntityFromNetworkId(lFork.forkNet)
+                            if fEnt and fEnt ~= 0 and DoesEntityExist(fEnt) and IsEntityAttachedToEntity(fEnt, veh) then
+                                hasCargo = true
+                                SetEntityNoCollisionEntity(fEnt, veh, true)
+                                SetEntityNoCollisionEntity(veh, fEnt, true)
+                            end
+                        end
                     end
-                    local lFork = sBag and sBag.loadedForklift
-                    if lFork and lFork.forkNet then
-                        local fEnt = NetworkGetEntityFromNetworkId(lFork.forkNet)
-                        if fEnt and fEnt ~= 0 and DoesEntityExist(fEnt) and IsEntityAttachedToEntity(fEnt, veh) then
+                end
+            end
+        end
+
+        -- 3. Blindagem de Empilhadeira Ativa de Terceiros e Paletes Carregados (Anti-Capotamento OneSync)
+        for _, veh in ipairs(nearbyVehicles) do
+            if DoesEntityExist(veh) and GetEntityModel(veh) == joaat('forklift') then
+                if #(pCoords - GetEntityCoords(veh)) <= 40.0 then
+                    local fBag = Entity(veh).state
+                    local carriedNet = fBag and fBag.forkliftCarriedNet
+                    local carriedEnt = carriedNet and NetworkGetEntityFromNetworkId(carriedNet)
+
+                    if carriedEnt and carriedEnt ~= 0 and DoesEntityExist(carriedEnt) then
+                        hasCargo = true
+                        SetEntityNoCollisionEntity(carriedEnt, veh, true)
+                        SetEntityNoCollisionEntity(veh, carriedEnt, true)
+
+                        for _, trVeh in ipairs(nearbyTrailers) do
+                            SetEntityNoCollisionEntity(carriedEnt, trVeh, true)
+                            SetEntityNoCollisionEntity(trVeh, carriedEnt, true)
+                        end
+                    end
+
+                    -- Se a empilhadeira estiver manobrando colada a algum trailer na baía
+                    for _, trVeh in ipairs(nearbyTrailers) do
+                        if #(GetEntityCoords(veh) - GetEntityCoords(trVeh)) <= 8.5 then
                             hasCargo = true
-                            SetEntityNoCollisionEntity(fEnt, veh, true)
-                            SetEntityNoCollisionEntity(veh, fEnt, true)
+                            -- Permite passagem suave sem impulsos explosivos do Havok no cliente espectador
+                            SetEntityNoCollisionEntity(veh, trVeh, true)
+                            SetEntityNoCollisionEntity(trVeh, veh, true)
                         end
                     end
                 end
@@ -3336,6 +3373,17 @@ AddStateBagChangeHandler('loadedForklift', nil, function(bagName, key, value, _u
             end
         end
     end
+end)
+
+AddStateBagChangeHandler('isRigLoadingFrozen', nil, function(bagName, key, value, _unused, replicated)
+    local trailerEnt = GetEntityFromStateBagName(bagName)
+    if not trailerEnt or trailerEnt == 0 or not DoesEntityExist(trailerEnt) then return end
+
+    local shouldFreeze = (value == true)
+    SetEntityVelocity(trailerEnt, 0.0, 0.0, 0.0)
+    SetVehicleBrake(trailerEnt, shouldFreeze)
+    SetVehicleHandbrake(trailerEnt, shouldFreeze)
+    FreezeEntityPosition(trailerEnt, shouldFreeze)
 end)
 
 -- Sincronização inicial de offsets de reboques do banco no carregamento do client
