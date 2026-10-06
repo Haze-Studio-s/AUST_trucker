@@ -1,5 +1,20 @@
 # Changelog — AUST_trucker
 
+## [20.9.3] — 2026-10-05 — Blindagem Anti-Catapulta Havok, Congelamento de Carga, Fitas Realistas & Separação de Assets
+
+### Adicionado & Aprimorado
+- **Separação Arquitetural de Assets (`resources/[assets]/AUST_trucker_assets`):**
+  - Isolamento completo de todos os modelos de veículos (`.yft`, `.ytd`), props 3D (`.ydr`, `.ytyp`) e metadados de handling (`data/*.meta`) para o resource dedicado `AUST_trucker_assets`.
+  - Eliminação total do crash nativo do FiveM `hamper-zulu-chicken` (`GTA5_b3258.exe+487E78`) ao reiniciar o script em tempo de execução (`ensure`/`restart`). O `AUST_trucker` agora é 100% puro em scripts Lua e interface NUI.
+- **Congelamento Estático da Carreta no 1º Palete (`client/modules/forklift.lua`):**
+  - Rotina `FreezeTrailerRig(true)` acionada no momento exato em que a empilhadeira ergue e acopla o primeiro palete nos garfos, travando o conjunto carreta + caminhão (`FreezeEntityPosition`, freios e velocidade zero).
+  - Destravamento automático (`FreezeTrailerRig(false)`) assim que a empilhadeira conclui seu acoplamento na traseira do reboque (`SnapForkliftToSlot`) ou ao encerrar a operação.
+- **Blindagem Anti-Catapulta Havok (Palete nos Garfos vs Trailer):**
+  - Desativação mútua contínua de colisão (`SetEntityNoCollisionEntity`) entre o palete nos garfos da empilhadeira e a prancha da carreta/caminhão, eliminando explosões de depenetração e arremesso de veículos ao aproximar a carga da prancha metálica.
+- **Renderização Planar das Cintas de Amarração (`client/main.lua`):**
+  - Correção da rotação planar das fitas de amarração 3D, expandindo a largura ao longo do vetor longitudinal (`GetEntityForwardVector(trailer)`). A fita agora se apresenta larga de frente e rente à parede da carga.
+  - Paleta de cor em **Vermelho Industrial Realista** com sub-faixas de costura reforçada nas bordas, nervura de highlight central tridimensional e sombreamento diferenciado nas descidas laterais.
+
 ## [20.9.2] — 2026-10-05 — Restauração do Fluxo de Amarração & Blindagem Operacional de Garfos
 
 ### Corrigido & Aprimorado
