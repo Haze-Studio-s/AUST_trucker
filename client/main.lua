@@ -1059,9 +1059,9 @@ local function DrawPalletPolyStraps(trailer, pEnt)
     local pCoords = GetEntityCoords(pEnt)
     local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-    -- Fita Industrial de 6cm de largura (hw = 0.03m) com bordas de costura reforçada de 6mm (edgeW = 0.006m)
-    local hw = 0.03
-    local edgeW = 0.006
+    -- Fita Industrial de 10cm de largura total (hw = 0.05m) com bordas de costura reforçada de 1.2cm (edgeW = 0.012m)
+    local hw = 0.05
+    local edgeW = 0.012
 
     -- Cinta 1: Paralela Frontal (+0.28m)
     DrawRealisticSingleStrap(trailer, pEnt, relPos, 0.28, halfX, topZ, hw, edgeW)
