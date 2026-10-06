@@ -608,8 +608,8 @@ local function StartCouplingWatcher()
                                 local trDiff = math.abs((trH - dockHeading + 180) % 360 - 180)
                                 local headingError = math.min(trDiff, math.abs(trDiff - 180.0))
 
-                                local isAligned = (veh ~= 0) and (headingError <= 20.0)
-                                local isDocked = (distDock <= 4.0) and isAligned
+                                local isAligned = (veh ~= 0) and (headingError <= 25.0)
+                                local isDocked = (distDock <= 4.8) and isAligned
 
                                 if isDocked then
                                     -- Vaga Verde Alinhada Rigorosa (Padrão LC Truck Logistics)
@@ -620,7 +620,7 @@ local function StartCouplingWatcher()
                                     end
 
                                     local speed = (veh ~= 0) and GetEntitySpeed(veh) or 0.0
-                                    if IsControlJustPressed(0, 38) or (speed < 0.3 and distDock <= 2.5) then
+                                    if IsControlJustPressed(0, 38) or (speed < 0.35 and distDock <= 3.2) then
                                         if currentDockTextUi then
                                             lib.hideTextUI()
                                             currentDockTextUi = nil
@@ -669,8 +669,8 @@ local function StartCouplingWatcher()
                                 else
                                     -- Vaga Vermelha Não-Alinhada / Em Aproximação (Permanece Vermelho se torto ou afastado)
                                     DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
-                                    if distRear <= 18.0 and veh ~= 0 then
-                                        local hintText = isAligned and ('Aproxime o reboque do batente (%.1fm)'):format(distRear) or 'Alinhe a traseira do reboque perpendicular à porta'
+                                    if distDock <= 25.0 and veh ~= 0 then
+                                        local hintText = isAligned and ('Aproxime a carreta da baía (%.1fm)'):format(distDock) or 'Alinhe a traseira do reboque perpendicular à porta'
                                         if currentDockTextUi ~= hintText then
                                             lib.showTextUI(hintText)
                                             currentDockTextUi = hintText
