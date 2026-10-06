@@ -1214,13 +1214,14 @@ function StartJob(job)
     -- Criar ponto ox_lib otimizado para a doca de carregamento (Resmon 0.00ms fora do raio)
     ClearJobPoints()
     if job.pickup and job.pickup.coords then
+        local pHeading = (type(job.pickup.coords) == 'vector4' and job.pickup.coords.w) or (job.pickup.heading) or 90.0
         pickupPoint = lib.points.new({
             coords = job.pickup.coords,
             distance = 45.0,
             nearby = function(self)
                 if not currentJob or jobProgress.stage ~= 'pickup' then return end
-                DrawMarker(1, self.coords.x, self.coords.y, self.coords.z - 1.0,
-                    0, 0, 0, 0, 0, 0, 3.5, 3.5, 1.2, 0, 255, 0, 140, false, true, 2, false, nil, nil, false)
+                DrawMarker(30, self.coords.x, self.coords.y, self.coords.z - 0.6,
+                    0.0, 0.0, 0.0, 90.0, pHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
 
                 local playerPed = PlayerPedId()
                 local inVeh = IsPedInAnyVehicle(playerPed, false)

@@ -30,6 +30,7 @@ _G.ActiveJob = ActiveJob
 
 local ActiveDeliveryPoint = nil
 local DockWatcherPoint = nil
+local TrailerBayWatcherPoint = nil
 local hasRopes = false
 local HasRopes = false
 local currentTieIndex = 1
@@ -317,6 +318,10 @@ local function CleanupCurrentJob()
         pcall(function() DockWatcherPoint:remove() end)
         DockWatcherPoint = nil
     end
+    if TrailerBayWatcherPoint then
+        pcall(function() TrailerBayWatcherPoint:remove() end)
+        TrailerBayWatcherPoint = nil
+    end
     if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
         pcall(function() exports.ox_target:removeLocalEntity(JobEntities.truck) end)
     end
@@ -535,6 +540,10 @@ local function StartCouplingWatcher()
                 if hasTrailer then
                     -- ETAPA 3 CONCLUÍDA -> ROTA PARA A BAÍA DE CARGA
                     CurrentStage = 'STEP_4_PARK_DOCK'
+                    if TrailerBayWatcherPoint then
+                        pcall(function() TrailerBayWatcherPoint:remove() end)
+                        TrailerBayWatcherPoint = nil
+                    end
                     ClearObjectiveMarkers(false)
 
                     local dockCfg = Config.LoadingBayCoords or (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.LoadingBayCoords) or vector4(1244.53, -3135.57, 4.53, 90.0)
@@ -2320,6 +2329,52 @@ local function OnPlayerEnteredTruck(truck)
     UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga')
 
     SendMissionNotify('Central Logística', 'Dê marcha-ré e engate a carreta no caminhão.', 'info')
+
+    -- Renderização da vaga zebrada DrawMarker 30 no pátio inicial (idêntico ao final da entrega)
+    if TrailerBayWatcherPoint then pcall(function() TrailerBayWatcherPoint:remove() end) end
+    local trCoord = (JobEntities.trailer and DoesEntityExist(JobEntities.trailer) and GetEntityCoords(JobEntities.trailer))
+        or (ActiveJob and ActiveJob.trailerCoords and vector3(ActiveJob.trailerCoords.x, ActiveJob.trailerCoords.y, ActiveJob.trailerCoords.z))
+        or vector3(1272.21, -3159.80, 4.90)
+
+    local trHeading = (JobEntities.trailer and DoesEntityExist(JobEntities.trailer) and GetEntityHeading(JobEntities.trailer))
+        or (ActiveJob and ActiveJob.trailerCoords and type(ActiveJob.trailerCoords) == 'vector4' and ActiveJob.trailerCoords.w)
+        or 90.0
+
+    TrailerBayWatcherPoint = lib.points.new({
+        coords = trCoord,
+        distance = 60.0,
+        nearby = function(self)
+            if CurrentStage ~= 'STEP_3_COUPLE_TRAILER' then return end
+            local ped = cache.ped or PlayerPedId()
+            local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
+            local targetPos = self.coords
+            local targetH = trHeading
+
+            local trEnt = JobEntities.trailer
+            if trEnt and DoesEntityExist(trEnt) then
+                targetPos = GetEntityCoords(trEnt)
+                targetH = GetEntityHeading(trEnt)
+                self.coords = targetPos
+            end
+
+            local isAligned = false
+            if veh ~= 0 then
+                local vehH = GetEntityHeading(veh)
+                -- Alinhamento de ré: a frente do caminhão aponta na direção oposta ao trailer (~180°)
+                local diff = math.abs((vehH - targetH + 180) % 360 - 180)
+                local reverseDiff = math.abs(diff - 180.0)
+                isAligned = (reverseDiff <= 25.0) or (diff <= 25.0)
+            end
+
+            if isAligned then
+                -- Vaga Verde Alinhada de Ré (Padrão LC Truck Logistics)
+                DrawMarker(30, targetPos.x, targetPos.y, targetPos.z - 0.6, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+            else
+                -- Vaga Vermelha Não-Alinhada / Em Aproximação (Padrão LC Truck Logistics)
+                DrawMarker(30, targetPos.x, targetPos.y, targetPos.z - 0.6, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+            end
+        end
+    })
 
     StartCouplingWatcher()
 end
