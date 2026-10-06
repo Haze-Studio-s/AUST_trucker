@@ -570,9 +570,9 @@ local function StartCouplingWatcher()
                         if DockWatcherPoint then pcall(function() DockWatcherPoint:remove() end) end
                         local currentDockTextUi = nil
 
-                        -- Parâmetros de Tolerância Estrita (Diretriz 1)
-                        local MAX_DOCK_DIST = (Config.Docking and Config.Docking.MaxDistance) or 1.2
-                        local MAX_HEADING_ERR = (Config.Docking and Config.Docking.MaxHeadingError) or 8.0
+                        -- Parâmetros Equilibrados de Tolerância (Suave e Agradável)
+                        local MAX_DOCK_DIST = (Config.Docking and Config.Docking.MaxDistance) or 2.2
+                        local MAX_HEADING_ERR = (Config.Docking and Config.Docking.MaxHeadingError) or 14.0
 
                         DockWatcherPoint = lib.points.new({
                             coords = dockCoords,

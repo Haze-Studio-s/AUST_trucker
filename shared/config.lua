@@ -87,10 +87,10 @@ Config.Polarix = {
         PalletStagingHeading = 180.0,
     },
 
-    -- Parâmetros Rigorosos de Alinhamento de Doca e Anti-Colisão
+    -- Parâmetros Equilibrados de Alinhamento de Doca e Anti-Colisão (Desafiador e Suave)
     Docking = {
-        MaxDistance = 1.2,      -- Reboque praticamente colado à doca (1.2m máx)
-        MaxHeadingError = 8.0,  -- Tolerância angular máxima estrita (8.0 graus)
+        MaxDistance = 2.2,      -- Reboque na vaga com folga confortável (2.2m)
+        MaxHeadingError = 14.0, -- Tolerância angular suave (14.0 graus)
         ScanRadius = 10.0,      -- Raio de verificação de desobstrução de baia
     },
 
