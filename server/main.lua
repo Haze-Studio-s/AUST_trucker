@@ -1010,6 +1010,7 @@ local function StartTruckDelivery(src, contractData)
             while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
             if DoesEntityExist(pObj) then
                 FreezeEntityPosition(pObj, true)
+                SetEntityInvincible(pObj, true)
                 LockEntityNetworkOwner(pObj, src)
                 SetEntityDistanceCullingRadius(pObj, 450.0)
                 ignoreEntities[pObj] = true
@@ -1022,6 +1023,7 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                 if DoesEntityExist(fallbackObj) then
                     FreezeEntityPosition(fallbackObj, true)
+                    SetEntityInvincible(fallbackObj, true)
                     LockEntityNetworkOwner(fallbackObj, src)
                     SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                     ignoreEntities[fallbackObj] = true
@@ -1049,6 +1051,7 @@ local function StartTruckDelivery(src, contractData)
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
                     FreezeEntityPosition(pObj, true)
+                    SetEntityInvincible(pObj, true)
                     LockEntityNetworkOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 450.0)
                     ignoreEntities[pObj] = true
@@ -1060,6 +1063,7 @@ local function StartTruckDelivery(src, contractData)
                     while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                     if DoesEntityExist(fallbackObj) then
                         FreezeEntityPosition(fallbackObj, true)
+                        SetEntityInvincible(fallbackObj, true)
                         LockEntityNetworkOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                         ignoreEntities[fallbackObj] = true

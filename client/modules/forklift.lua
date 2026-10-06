@@ -38,12 +38,12 @@ local function GetForkliftForksCoords(forklift)
     if boneIndex == -1 then
         boneIndex = GetEntityBoneIndexByName(forklift, 'forks_attach')
     end
-    if boneIndex == -1 then
+    if boneIndex == -1 and Config and Config.Polarix and Config.Polarix.Forklift then
         boneIndex = Config.Polarix.Forklift.ForkBoneIndex or 3
     end
-    local coords = GetWorldPositionOfEntityBone(forklift, boneIndex)
+    local coords = (boneIndex ~= -1) and GetWorldPositionOfEntityBone(forklift, boneIndex) or vector3(0, 0, 0)
     if coords == vector3(0, 0, 0) then
-        return GetOffsetFromEntityInWorldCoords(forklift, 0.0, 1.8, 0.0), boneIndex
+        return GetOffsetFromEntityInWorldCoords(forklift, 0.0, 1.8, 0.0), 0
     end
     return coords, boneIndex
 end
@@ -818,6 +818,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     end
                                     FreezeEntityPosition(p, true)
                                     SetEntityDynamic(p, false)
+                                    SetEntityInvincible(p, true)
+                                    SetEntityProofs(p, true, true, true, true, true, true, true, true)
+                                    SetEntityCanBeDamaged(p, false)
+                                    SetDisableFragCache(p, true)
                                 end
 
                                 local pState = PalletPhysState[p] or 'frozen'
@@ -842,27 +846,46 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         local isAngleAligned = (diffAngle <= 45.0)
 
                                         -- Encaixe Físico dos Garfos dentro do Palete:
-                                        -- Eixo X (Centralização lateral): tolerância de até ±0.80m (janela total de 1.60m)
-                                        -- Eixo Y (Penetração dos garfos): limite de até ±1.10m do centro do palete
-                                        -- Eixo Z (Altura vertical dos garfos): entrada entre -0.60m e +0.60m (janela total de 1.20m)
+                                        -- Eixo X (Centralização lateral): tolerância de até ±0.65m
+                                        -- Eixo Y (Penetração dos garfos): pontas dos garfos inseridas sob o palete (±0.65m)
+                                        -- Eixo Z (Altura vertical dos garfos): entrada entre -0.50m e +0.50m
                                         local isEngagedWithForks = isAngleAligned
-                                            and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 1.10)
-                                            and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
+                                            and (math.abs(relToPal.x) <= 0.65)
+                                            and (math.abs(relToPal.y) <= 0.65)
+                                            and (relToPal.z >= -0.50 and relToPal.z <= 0.50)
 
                                         if isEngagedWithForks then
-                                            -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
+                                            -- Garante controle de rede do palete com espera ativa
                                             if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
-                                                NetworkRequestControlOfEntity(p)
+                                                local ctrlTimeout = GetGameTimer() + 1000
+                                                while not NetworkHasControlOfEntity(p) and GetGameTimer() < ctrlTimeout do
+                                                    NetworkRequestControlOfEntity(p)
+                                                    Wait(20)
+                                                end
                                             end
 
-                                            -- Descongela e anexa instantaneamente aos garfos da empilhadeira
+                                            -- Blindagem absoluta contra destruição, fragmentação e colisão com a empilhadeira
+                                            SetEntityInvincible(p, true)
+                                            SetEntityProofs(p, true, true, true, true, true, true, true, true)
+                                            SetEntityCanBeDamaged(p, false)
+                                            SetDisableFragCache(p, true)
+                                            SetEntityNoCollisionEntity(p, forklift, false)
+                                            SetEntityNoCollisionEntity(forklift, p, false)
+
+                                            -- Descongela e anexa com segurança aos garfos da empilhadeira
                                             SetEntityVelocity(p, 0.0, 0.0, 0.0)
                                             FreezeEntityPosition(p, false)
                                             SetEntityDynamic(p, false)
                                             SetEntityHasGravity(p, false)
 
-                                            local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
+                                            -- Cálculo dinâmico de elevação Z pelo Bounding Box real do prop
+                                            local minDim, maxDim = GetModelDimensions(GetEntityModel(p))
+                                            local bottomOffset = math.abs(minDim.z)
+                                            local actualForkBone = (forkBone and forkBone > 0) and forkBone or 0
+
+                                            local forkOffX = 0.0
+                                            local forkOffY = (actualForkBone == 0) and 1.8 or 0.95
+                                            local forkOffZ = (actualForkBone == 0) and (bottomOffset - 0.1) or (bottomOffset + 0.03)
                                             local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
 
                                             local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
@@ -874,7 +897,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             end
 
                                             AttachEntityToEntity(
-                                                p, forklift, forkBone,
+                                                p, forklift, actualForkBone,
                                                 forkOffX, forkOffY, forkOffZ,
                                                 forkPitch, forkRoll, forkYaw,
                                                 false, false, false, false, 2, true
@@ -882,7 +905,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
 
                                             -- BLINDAGEM ANTI-CATAPULTA HAVOK:
                                             -- Anula colisão mútua entre o palete nos garfos e a prancha da carreta/caminhão.
-                                            -- Evita explosão de depenetração de corpo rígido ao manobrar perto ou sobre o trailer.
                                             if trailer and DoesEntityExist(trailer) then
                                                 SetEntityNoCollisionEntity(p, trailer, false)
                                                 SetEntityNoCollisionEntity(trailer, p, false)
@@ -902,8 +924,12 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                                 Entity(forklift).state:set('forkliftCarriedNet', pNetId, true)
                                             end
 
+                                            -- Dispara callback 'picked' para transicionar a seta de objetivo até a carreta
+                                            if onLoadedCb then
+                                                onLoadedCb('picked', p)
+                                            end
+
                                             -- CONGELAMENTO ESTÁTICO DO CONJUNTO TRAILER + CAMINHÃO NO 1º PALETE:
-                                            -- Impede deslocamento inercial, oscilação de suspensão e empurrões da empilhadeira
                                             if not TrailerFrozenForLoading then
                                                 FreezeTrailerRig(true)
                                                 if _G.SendMissionNotify then
@@ -925,6 +951,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                                 SetEntityDynamic(p, false)
                                                 SetEntityHasGravity(p, true)
                                                 SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                                SetEntityInvincible(p, true)
+                                                SetEntityProofs(p, true, true, true, true, true, true, true, true)
+                                                SetEntityCanBeDamaged(p, false)
+                                                SetDisableFragCache(p, true)
                                                 PalletPhysState[p] = 'frozen'
                                             end
                                         end
