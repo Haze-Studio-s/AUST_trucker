@@ -1741,3 +1741,84 @@ lib.callback.register('aurp_trucker:server:getVehiclePropOffsets', function(sour
     return { dualMap = dualMap, rawMap = rawMap }
 end)
 
+-- =======================================================================
+-- ALOCAÇÃO DINÂMICA DE BAIAS DE CARREGAMENTO (ANTI-COLISÃO AUTORITATIVA)
+-- =======================================================================
+local ReservedBays = {} -- [bayIndex] = jobId
+
+lib.callback.register('aurp_trucker:server:requestLoadingBay', function(source, jobId)
+    local bays = Config.LoadingBays or (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.LoadingBays) or {
+        vector4(1244.02, -3135.68, 4.53, 90.0),
+        vector4(1244.15, -3142.38, 4.53, 90.0),
+        vector4(1243.28, -3149.17, 4.53, 90.0),
+        vector4(1243.18, -3155.82, 4.53, 90.0),
+    }
+
+    local scanRadius = (Config.Docking and Config.Docking.ScanRadius) or 10.0
+
+    -- 1. Se o jobId já possui baia alocada e válida, retorna ela mesma
+    for idx, bJobId in pairs(ReservedBays) do
+        if bJobId == jobId then
+            return { success = true, bayIndex = idx, coords = bays[idx] }
+        end
+    end
+
+    -- 2. Limpeza preventiva de reservas órfãs
+    for idx, bJobId in pairs(ReservedBays) do
+        local lobby = PolarixLobbies and PolarixLobbies[bJobId]
+        if not lobby then
+            ReservedBays[idx] = nil
+        end
+    end
+
+    -- 3. Varredura sequencial de baias livres de 1 a 4
+    for idx, bayCoord in ipairs(bays) do
+        if not ReservedBays[idx] then
+            -- Verifica se há algum veículo no raio de 10 metros
+            local isClear = true
+            local targetPos = vector3(bayCoord.x, bayCoord.y, bayCoord.z)
+
+            if GetAllVehicles then
+                local allVehs = GetAllVehicles()
+                for _, veh in ipairs(allVehs) do
+                    if DoesEntityExist(veh) then
+                        local vCoords = GetEntityCoords(veh)
+                        -- Ignora o caminhão e carreta do próprio jogador solicitante
+                        local lobby = jobId and PolarixLobbies and PolarixLobbies[jobId]
+                        local isMyVeh = lobby and (veh == lobby.truck or veh == lobby.trailer)
+
+                        if not isMyVeh and #(targetPos - vCoords) <= scanRadius then
+                            isClear = false
+                            break
+                        end
+                    end
+                end
+            end
+
+            if isClear then
+                ReservedBays[idx] = jobId
+                if Config.Debug then
+                    print(("[AUST_Trucker] Baia %d alocada com sucesso para o JobID: %s"):format(idx, tostring(jobId)))
+                end
+                return { success = true, bayIndex = idx, coords = bayCoord }
+            end
+        end
+    end
+
+    return { success = false, message = 'Todas as baias estão ocupadas no momento' }
+end)
+
+RegisterNetEvent('aurp_trucker:server:releaseLoadingBay', function(jobId)
+    local src = source
+    for idx, bJobId in pairs(ReservedBays) do
+        if bJobId == jobId then
+            ReservedBays[idx] = nil
+            if Config.Debug then
+                print(("[AUST_Trucker] Baia %d liberada para o JobID: %s"):format(idx, tostring(jobId)))
+            end
+            break
+        end
+    end
+end)
+
+

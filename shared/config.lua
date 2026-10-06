@@ -75,12 +75,32 @@ Config.Polarix = {
         TrailerSpawnCoords = vector4(1272.21, -3159.80, 4.90, 90.0),
         ForkliftBayCoords = vector4(1246.26, -3168.81, 4.63, 90.0),
         HandlerBayCoords = vector4(1240.20, -3195.10, 5.88, 270.00),
-        LoadingBayCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
+        LoadingBayCoords = vector4(1244.02, -3135.68, 4.53, 90.0),
+        -- Matriz de Baias de Carregamento Dinâmicas (Armazém Buccaneer - Docas 1 a 4)
+        LoadingBays = {
+            vector4(1244.02, -3135.68, 4.53, 90.0), -- Baia / Doca 1
+            vector4(1244.15, -3142.38, 4.53, 90.0), -- Baia / Doca 2
+            vector4(1243.28, -3149.17, 4.53, 90.0), -- Baia / Doca 3
+            vector4(1243.18, -3155.82, 4.53, 90.0), -- Baia / Doca 4
+        },
         PalletStagingAnchor = vector3(1272.00, -3182.00, 5.90),
         PalletStagingHeading = 180.0,
     },
 
-    LoadingBayCoords = vector4(1244.53, -3135.57, 4.53, 90.0),
+    -- Parâmetros Rigorosos de Alinhamento de Doca e Anti-Colisão
+    Docking = {
+        MaxDistance = 1.2,      -- Reboque praticamente colado à doca (1.2m máx)
+        MaxHeadingError = 8.0,  -- Tolerância angular máxima estrita (8.0 graus)
+        ScanRadius = 10.0,      -- Raio de verificação de desobstrução de baia
+    },
+
+    LoadingBayCoords = vector4(1244.02, -3135.68, 4.53, 90.0),
+    LoadingBays = {
+        vector4(1244.02, -3135.68, 4.53, 90.0),
+        vector4(1244.15, -3142.38, 4.53, 90.0),
+        vector4(1243.28, -3149.17, 4.53, 90.0),
+        vector4(1243.18, -3155.82, 4.53, 90.0),
+    },
     PalletProps = {
         'hei_prop_carrier_cargo_04b',
     },

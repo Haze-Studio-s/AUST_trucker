@@ -538,7 +538,7 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
-                    -- ETAPA 3 CONCLUÍDA -> ROTA PARA A BAÍA DE CARGA
+                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR
                     CurrentStage = 'STEP_4_PARK_DOCK'
                     if TrailerBayWatcherPoint then
                         pcall(function() TrailerBayWatcherPoint:remove() end)
@@ -546,119 +546,154 @@ local function StartCouplingWatcher()
                     end
                     ClearObjectiveMarkers(false)
 
-                    local dockCfg = Config.LoadingBayCoords or (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.LoadingBayCoords) or vector4(1244.53, -3135.57, 4.53, 90.0)
-                    local dockCoords = vector3(dockCfg.x, dockCfg.y, dockCfg.z)
-                    local dockHeading = (type(dockCfg) == 'vector4' and dockCfg.w) or 90.0
+                    local allocatedBay = nil
+                    local reqJobId = ActiveJob and ActiveJob.jobId
 
-                    -- Atualiza objetivo e rota GPS para a baía demarcada
-                    UpdateMissionObjective('dock', dockCoords, 'Baía de Carregamento')
+                    -- Tenta obter baia livre via servidor
+                    local function AcquireBayAndStartDock()
+                        local res = lib.callback.await('aurp_trucker:server:requestLoadingBay', false, reqJobId)
+                        if res and res.success and res.coords then
+                            allocatedBay = res.coords
+                        else
+                            -- Fallback inteligente na Baia 1 caso falhe
+                            allocatedBay = (Config.LoadingBays and Config.LoadingBays[1]) or vector4(1244.02, -3135.68, 4.53, 90.0)
+                            SendMissionNotify('Central Logística', 'Aguardando liberação de doca. Siga para a baía indicada provisoriamente.', 'info')
+                        end
 
-                    SendMissionNotify('Central Logística', 'Carreta engatada! Leve o conjunto até a vaga demarcada na baía.', 'info')
+                        local dockCoords = vector3(allocatedBay.x, allocatedBay.y, allocatedBay.z)
+                        local dockHeading = (type(allocatedBay) == 'vector4' and allocatedBay.w) or 90.0
 
-                    -- Monitoramento de estacionamento na baía com DrawMarker 30 (Padrão LC Truck Logistics / Lixeiro Charmoso)
-                    if DockWatcherPoint then pcall(function() DockWatcherPoint:remove() end) end
-                    local currentDockTextUi = nil
+                        -- Atualiza objetivo e rota GPS para a baía demarcada
+                        UpdateMissionObjective('dock', dockCoords, 'Baía de Carregamento')
+                        SendMissionNotify('Central Logística', 'Carreta engatada! Posicione e dê ré perfeitamente alinhada na doca.', 'info')
 
-                    DockWatcherPoint = lib.points.new({
-                        coords = dockCoords,
-                        distance = 200.0,
-                        onExit = function()
-                            if currentDockTextUi then
-                                lib.hideTextUI()
-                                currentDockTextUi = nil
-                            end
-                        end,
-                        nearby = function(self)
-                            if CurrentStage ~= 'STEP_4_PARK_DOCK' then return end
-                            local ped = cache.ped or PlayerPedId()
-                            local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
-                            local tk = JobEntities.truck
-                            local tr = JobEntities.trailer
+                        if DockWatcherPoint then pcall(function() DockWatcherPoint:remove() end) end
+                        local currentDockTextUi = nil
 
-                            local refEntity = (veh ~= 0) and veh or (tk and DoesEntityExist(tk) and tk) or ped
-                            local trOrVeh = (tr and DoesEntityExist(tr)) and tr or refEntity
-                            local trCoords = GetEntityCoords(trOrVeh)
-                            local dist = #(trCoords - dockCoords)
+                        -- Parâmetros de Tolerância Estrita (Diretriz 1)
+                        local MAX_DOCK_DIST = (Config.Docking and Config.Docking.MaxDistance) or 1.2
+                        local MAX_HEADING_ERR = (Config.Docking and Config.Docking.MaxHeadingError) or 8.0
 
-                            local markerZ = dockCoords.z - 0.45
-                            local foundGround, groundZ = GetGroundZFor_3dCoord(dockCoords.x, dockCoords.y, dockCoords.z + 2.0, false)
-                            if foundGround and groundZ > 0.0 then
-                                markerZ = groundZ + 0.05
-                            end
+                        DockWatcherPoint = lib.points.new({
+                            coords = dockCoords,
+                            distance = 200.0,
+                            onExit = function()
+                                if currentDockTextUi then
+                                    lib.hideTextUI()
+                                    currentDockTextUi = nil
+                                end
+                            end,
+                            nearby = function(self)
+                                if CurrentStage ~= 'STEP_4_PARK_DOCK' then return end
+                                local ped = cache.ped or PlayerPedId()
+                                local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
+                                local tk = JobEntities.truck
+                                local tr = JobEntities.trailer
 
-                            local vehH = (veh ~= 0) and GetEntityHeading(veh) or (tk and DoesEntityExist(tk) and GetEntityHeading(tk)) or GetEntityHeading(ped)
-                            local trH = (tr and DoesEntityExist(tr)) and GetEntityHeading(tr) or vehH
-                            local vehDiff = math.abs((vehH - dockHeading + 180) % 360 - 180)
-                            local trDiff = math.abs((trH - dockHeading + 180) % 360 - 180)
-                            local isAligned = (veh ~= 0) and ((vehDiff <= 25.0 or math.abs(vehDiff - 180) <= 25.0) and (trDiff <= 25.0 or math.abs(trDiff - 180) <= 25.0))
+                                local refEntity = (veh ~= 0) and veh or (tk and DoesEntityExist(tk) and tk) or ped
+                                local trOrVeh = (tr and DoesEntityExist(tr)) and tr or refEntity
 
-                            if dist <= 4.5 and isAligned then
-                                -- Vaga Verde Alinhada (Padrão LC Truck Logistics)
-                                DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
-                                if currentDockTextUi ~= 'park' then
-                                    lib.showTextUI('[E] Estacionar Carreta na Baía')
-                                    currentDockTextUi = 'park'
+                                -- Cálculo Milimétrico: Ponto Exato do Para-Choque Traseiro da Carreta
+                                local rearPoint = GetEntityCoords(trOrVeh)
+                                if tr and DoesEntityExist(tr) then
+                                    local minDim, maxDim = GetModelDimensions(GetEntityModel(tr))
+                                    local rearY = (minDim and minDim.y < -1.0) and minDim.y or -7.0
+                                    rearPoint = GetOffsetFromEntityInWorldCoords(tr, 0.0, rearY, 0.0)
                                 end
 
-                                local speed = (veh ~= 0) and GetEntitySpeed(veh) or 0.0
-                                if IsControlJustPressed(0, 38) or (speed < 0.3 and dist <= 3.0) then
-                                    if currentDockTextUi then
-                                        lib.hideTextUI()
-                                        currentDockTextUi = nil
-                                    end
-                                    self:remove()
-                                    DockWatcherPoint = nil
-                                    ClearObjectiveMarkers(false)
+                                -- Distância da traseira até o batente da doca (2D/3D)
+                                local distRear = #(vector3(rearPoint.x, rearPoint.y, rearPoint.z) - dockCoords)
 
-                                    -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA COM BASE NO TIPO DE CARGA
-                                    if ActiveJob and ActiveJob.cargoType == 'heavy' then
-                                        CurrentStage = 'STEP_5_ENTER_HANDLER'
-                                        if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
-                                            UpdateMissionObjective('forklift', JobEntities.handler, 'Reach Stacker (Handler)')
+                                local markerZ = dockCoords.z - 0.45
+                                local foundGround, groundZ = GetGroundZFor_3dCoord(dockCoords.x, dockCoords.y, dockCoords.z + 2.0, false)
+                                if foundGround and groundZ > 0.0 then
+                                    markerZ = groundZ + 0.05
+                                end
+
+                                -- Validação Estrita de Heading (Ângulo Máximo de 8.0 Graus)
+                                local trH = (tr and DoesEntityExist(tr)) and GetEntityHeading(tr) or ((veh ~= 0) and GetEntityHeading(veh) or GetEntityHeading(ped))
+                                local trDiff = math.abs((trH - dockHeading + 180) % 360 - 180)
+                                local headingError = math.min(trDiff, math.abs(trDiff - 180.0))
+
+                                local isAligned = (veh ~= 0) and (headingError <= MAX_HEADING_ERR)
+                                local isDocked = (distRear <= MAX_DOCK_DIST) and isAligned
+
+                                if isDocked then
+                                    -- Vaga Verde Alinhada Rigorosa (Padrão LC Truck Logistics)
+                                    DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                                    if currentDockTextUi ~= 'park' then
+                                        lib.showTextUI('[E] Estacionar Carreta na Baía')
+                                        currentDockTextUi = 'park'
+                                    end
+
+                                    local speed = (veh ~= 0) and GetEntitySpeed(veh) or 0.0
+                                    if IsControlJustPressed(0, 38) or (speed < 0.2 and distRear <= (MAX_DOCK_DIST * 0.8)) then
+                                        if currentDockTextUi then
+                                            lib.hideTextUI()
+                                            currentDockTextUi = nil
                                         end
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado! Assuma o Reach Stacker para içar o contêiner.', 'info')
-                                    elseif ActiveJob and (ActiveJob.cargoType == 'liquid' or ActiveJob.cargoType == 'adr') then
-                                        CurrentStage = 'STEP_5_FUEL_LOADING'
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira para o carregamento.', 'info')
-                                    elseif ActiveJob and ActiveJob.cargoType == 'vehicle_carrier' then
-                                        CurrentStage = 'STEP_5_LOAD_CARS'
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado! Aproxime-se da cegonha com uma chave de boca para abrir a rampa e embarcar os carros.', 'info')
-                                        if CarCarrierModule and CarCarrierModule.StartLoadingOperation then
-                                            CarCarrierModule.StartLoadingOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.vehicleNetIds or {}, function(action, loaded, total)
-                                                if action == 'completed' then
-                                                    SendMissionNotify('Central Logística', 'Cegonha 100% carregada e travada! Entre no caminhão e inicie a rota rodoviária.', 'success')
-                                                    UpdateMissionObjective('truck', JobEntities.truck, 'Seu Caminhão')
-                                                    if ActiveJob.deliveryCoords then
-                                                        StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                                        self:remove()
+                                        DockWatcherPoint = nil
+                                        ClearObjectiveMarkers(false)
+
+                                        -- Libera a baia ocupada no servidor
+                                        if reqJobId then
+                                            TriggerServerEvent('aurp_trucker:server:releaseLoadingBay', reqJobId)
+                                        end
+
+                                        -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA COM BASE NO TIPO DE CARGA
+                                        if ActiveJob and ActiveJob.cargoType == 'heavy' then
+                                            CurrentStage = 'STEP_5_ENTER_HANDLER'
+                                            if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
+                                                UpdateMissionObjective('forklift', JobEntities.handler, 'Reach Stacker (Handler)')
+                                            end
+                                            SendMissionNotify('Central Logística', 'Caminhão posicionado! Assuma o Reach Stacker para içar o contêiner.', 'info')
+                                        elseif ActiveJob and (ActiveJob.cargoType == 'liquid' or ActiveJob.cargoType == 'adr') then
+                                            CurrentStage = 'STEP_5_FUEL_LOADING'
+                                            SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Conecte a mangueira para o carregamento.', 'info')
+                                        elseif ActiveJob and ActiveJob.cargoType == 'vehicle_carrier' then
+                                            CurrentStage = 'STEP_5_LOAD_CARS'
+                                            SendMissionNotify('Central Logística', 'Caminhão posicionado! Aproxime-se da cegonha com uma chave de boca para abrir a rampa e embarcar os carros.', 'info')
+                                            if CarCarrierModule and CarCarrierModule.StartLoadingOperation then
+                                                CarCarrierModule.StartLoadingOperation(ActiveJob.jobId, JobEntities.trailer, ActiveJob.vehicleNetIds or {}, function(action, loaded, total)
+                                                    if action == 'completed' then
+                                                        SendMissionNotify('Central Logística', 'Cegonha 100% carregada e travada! Entre no caminhão e inicie a rota rodoviária.', 'success')
+                                                        UpdateMissionObjective('truck', JobEntities.truck, 'Seu Caminhão')
+                                                        if ActiveJob.deliveryCoords then
+                                                            StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                                                        end
                                                     end
-                                                end
-                                            end)
+                                                end)
+                                            end
+                                        else
+                                            CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                            if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                                UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                            end
+                                            SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
                                         end
-                                    else
-                                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                                        if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                            UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                                        end
-                                        SendMissionNotify('Central Logística', 'Caminhão posicionado na baía! Assuma a empilhadeira para iniciar o carregamento.', 'info')
-                                    end
-                                end
-                            else
-                                -- Vaga Vermelha Não-Alinhada / Em Aproximação (Padrão LC Truck Logistics)
-                                DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
-                                if dist <= 22.0 and veh ~= 0 then
-                                    if currentDockTextUi ~= 'align' then
-                                        lib.showTextUI('Alinhe o caminhão e o reboque na baía demarcada')
-                                        currentDockTextUi = 'align'
                                     end
                                 else
-                                    if currentDockTextUi then
-                                        lib.hideTextUI()
-                                        currentDockTextUi = nil
+                                    -- Vaga Vermelha Não-Alinhada / Em Aproximação (Permanece Vermelho se torto ou afastado)
+                                    DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+                                    if distRear <= 18.0 and veh ~= 0 then
+                                        local hintText = isAligned and ('Aproxime o reboque do batente (%.1fm)'):format(distRear) or 'Alinhe a traseira do reboque perpendicular à porta'
+                                        if currentDockTextUi ~= hintText then
+                                            lib.showTextUI(hintText)
+                                            currentDockTextUi = hintText
+                                        end
+                                    else
+                                        if currentDockTextUi then
+                                            lib.hideTextUI()
+                                            currentDockTextUi = nil
+                                        end
                                     end
                                 end
                             end
-                        end
-                    })
+                        })
+                    end
+
+                    AcquireBayAndStartDock()
                     break
                 end
             end
