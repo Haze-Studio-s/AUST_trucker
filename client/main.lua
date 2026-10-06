@@ -965,9 +965,9 @@ local function ExecuteForkliftTie(forkEntity)
 end
 
 -- =======================================================================
--- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS AMARELAS REALISTAS 3D (DRAWPOLY)
+-- SISTEMA VISUAL DE AMARRAÇÃO DE CARGA: CINTAS VERMELHAS REALISTAS 3D (DRAWPOLY)
 -- Renderização ativada EXCLUSIVAMENTE após vitória no minigame (isSecured == true)
--- Fitas amarelas industriais com sub-divisão de costura escura, relevo e sombra.
+-- Fitas vermelhas industriais com orientação planar correta, bordas de costura e relevo.
 -- =======================================================================
 
 local function DrawPolyQuad(v1, v2, v3, v4, r, g, b, a)
@@ -979,76 +979,76 @@ local function DrawPolyQuad(v1, v2, v3, v4, r, g, b, a)
     DrawPoly(v4.x, v4.y, v4.z, v3.x, v3.y, v3.z, v1.x, v1.y, v1.z, r, g, b, a)
 end
 
--- Renderiza uma seção de fita (ex: lateral esquerda, topo ou lateral direita)
--- decompondo em borda escura esquerda (costura), corpo central amarelo e borda direita.
-local function DrawStrapSectionWithSeam(pA_Base, pB_Base, dirX, dirY, hw, edgeW, isTopFace)
-    -- Ajuste dinâmico de luminosidade: Topo recebe luz direta; laterais recebem sombra
-    local cr, cg, cb = 235, 195, 25        -- Corpo central: Amarelo Industrial
-    local er, eg, eb = 145, 105, 10        -- Bordas/Costuras: Ocre/Âmbar Escuro (Relevo)
-    local hr, hg, hb = 255, 222, 50        -- Nervura central: Highlight de tensão
+-- Renderiza uma seção de fita gerando o plano de largura alinhado corretamente à superfície da carga
+local function DrawStrapSectionWithSeam(pA, pB, widthVec, hw, edgeW, isTopFace)
+    -- Vermelho Industrial Realista:
+    -- Topo: Luz direta plena
+    local cr, cg, cb = 225, 25, 25         -- Corpo central: Vermelho vivo
+    local er, eg, eb = 135, 10, 10         -- Bordas/Costuras: Carmim / Vinho escuro (relevo)
+    local hr, hg, hb = 250, 60, 60         -- Nervura central: Destaque de tensão tridimensional
 
     if not isTopFace then
-        -- Queda de luminosidade nas descidas laterais até o trilho da prancha
-        cr, cg, cb = 190, 155, 18
-        er, eg, eb = 115, 80, 8
-        hr, hg, hb = 205, 175, 30
+        -- Laterais: Queda de luz suave nas descidas até a prancha
+        cr, cg, cb = 180, 18, 18
+        er, eg, eb = 100, 8, 8
+        hr, hg, hb = 210, 45, 45
     end
 
     local innerW = hw - edgeW
+    local midW = innerW * 0.40
 
-    -- Pontos A (início da seção)
-    local a_leftEdge  = vector3(pA_Base.x - dirX * hw,        pA_Base.y - dirY * hw,        pA_Base.z)
-    local a_leftInner = vector3(pA_Base.x - dirX * innerW,    pA_Base.y - dirY * innerW,    pA_Base.z)
-    local a_rightInner= vector3(pA_Base.x + dirX * innerW,    pA_Base.y + dirY * innerW,    pA_Base.z)
-    local a_rightEdge = vector3(pA_Base.x + dirX * hw,        pA_Base.y + dirY * hw,        pA_Base.z)
+    local a_leftEdge   = pA - widthVec * hw
+    local a_leftInner  = pA - widthVec * innerW
+    local a_midL       = pA - widthVec * midW
+    local a_midR       = pA + widthVec * midW
+    local a_rightInner = pA + widthVec * innerW
+    local a_rightEdge  = pA + widthVec * hw
 
-    -- Pontos B (fim da seção)
-    local b_leftEdge  = vector3(pB_Base.x - dirX * hw,        pB_Base.y - dirY * hw,        pB_Base.z)
-    local b_leftInner = vector3(pB_Base.x - dirX * innerW,    pB_Base.y - dirY * innerW,    pB_Base.z)
-    local b_rightInner= vector3(pB_Base.x + dirX * innerW,    pB_Base.y + dirY * innerW,    pB_Base.z)
-    local b_rightEdge = vector3(pB_Base.x + dirX * hw,        pB_Base.y + dirY * hw,        pB_Base.z)
+    local b_leftEdge   = pB - widthVec * hw
+    local b_leftInner  = pB - widthVec * innerW
+    local b_midL       = pB - widthVec * midW
+    local b_midR       = pB + widthVec * midW
+    local b_rightInner = pB + widthVec * innerW
+    local b_rightEdge  = pB + widthVec * hw
 
-    -- 1. Costura / Borda Esquerda Escurecida (simula bainha reforçada e relevo)
+    -- 1. Borda/Costura Esquerda (simula reforço e relevo)
     DrawPolyQuad(a_leftEdge, b_leftEdge, b_leftInner, a_leftInner, er, eg, eb, 255)
 
-    -- 2. Corpo Central Amarelo Industrial
+    -- 2. Corpo Central Vermelho
     DrawPolyQuad(a_leftInner, b_leftInner, b_rightInner, a_rightInner, cr, cg, cb, 255)
 
-    -- 3. Costura / Borda Direita Escurecida
+    -- 3. Borda/Costura Direita
     DrawPolyQuad(a_rightInner, b_rightInner, b_rightEdge, a_rightEdge, er, eg, eb, 255)
 
-    -- 4. Nervura de Tensão Central (Fita esticada com highlight tridimensional no centro)
-    local midW = innerW * 0.45
-    local a_midL = vector3(pA_Base.x - dirX * midW, pA_Base.y - dirY * midW, pA_Base.z)
-    local a_midR = vector3(pA_Base.x + dirX * midW, pA_Base.y + dirY * midW, pA_Base.z)
-    local b_midL = vector3(pB_Base.x - dirX * midW, pB_Base.y - dirY * midW, pB_Base.z)
-    local b_midR = vector3(pB_Base.x + dirX * midW, pB_Base.y + dirY * midW, pB_Base.z)
+    -- 4. Nervura de Tensão Central (highlight sutil)
     DrawPolyQuad(a_midL, b_midL, b_midR, a_midR, hr, hg, hb, 255)
 end
 
 local function DrawRealisticSingleStrap(trailer, pEnt, relPos, yOffset, halfX, topZ, hw, edgeW)
-    -- Eixo Y local para a largura da cinta (direção perpendicular ao comprimento que atravessa o palete em X)
-    local dirX = 0.0
-    local dirY = 1.0
+    -- Vetor longitudinal da carreta (aponta para frente da carreta)
+    -- Ao olhar de frente para o palete, a fita deve ter largura ao longo do eixo Y da carreta!
+    local fwdVec = GetEntityForwardVector(trailer)
 
-    -- Pontos centrais de ancoragem e curvatura
     -- 1. Ponto no trilho esquerdo da prancha
     local lRail = GetOffsetFromEntityInWorldCoords(trailer, -1.25, relPos.y + yOffset, relPos.z - 0.15)
-    -- 2. Ponto no topo esquerdo do palete
+    -- 2. Topo esquerdo do palete
     local topL  = GetOffsetFromEntityInWorldCoords(pEnt, -halfX, yOffset, topZ)
-    -- 3. Ponto no topo direito do palete
+    -- 3. Topo direito do palete
     local topR  = GetOffsetFromEntityInWorldCoords(pEnt, halfX, yOffset, topZ)
     -- 4. Ponto no trilho direito da prancha
     local rRail = GetOffsetFromEntityInWorldCoords(trailer, 1.25, relPos.y + yOffset, relPos.z - 0.15)
 
-    -- Lateral Esquerda: Trilho esquerdo -> Topo esquerdo (Sombra suave)
-    DrawStrapSectionWithSeam(lRail, topL, dirX, dirY, hw, edgeW, false)
+    -- Seção 1 (Lateral Esquerda: lRail -> topL)
+    -- A largura da fita deve se expandir para frente/trás (fwdVec) para ser vista de frente larga e rente à parede do palete
+    DrawStrapSectionWithSeam(lRail, topL, fwdVec, hw, edgeW, false)
 
-    -- Topo: Topo esquerdo -> Topo direito (Luz direta plena)
-    DrawStrapSectionWithSeam(topL, topR, dirX, dirY, hw, edgeW, true)
+    -- Seção 2 (Topo da Carga: topL -> topR)
+    -- No topo, a fita também se expande para frente/trás (fwdVec) deitada sobre a caixa
+    DrawStrapSectionWithSeam(topL, topR, fwdVec, hw, edgeW, true)
 
-    -- Lateral Direita: Topo direito -> Trilho direito (Sombra suave)
-    DrawStrapSectionWithSeam(topR, rRail, dirX, dirY, hw, edgeW, false)
+    -- Seção 3 (Lateral Direita: topR -> rRail)
+    -- Na lateral direita, desce até a prancha com largura ao longo de fwdVec
+    DrawStrapSectionWithSeam(topR, rRail, fwdVec, hw, edgeW, false)
 end
 
 local function DrawPalletPolyStraps(trailer, pEnt)
@@ -1059,9 +1059,9 @@ local function DrawPalletPolyStraps(trailer, pEnt)
     local pCoords = GetEntityCoords(pEnt)
     local relPos = GetOffsetFromEntityGivenWorldCoords(trailer, pCoords.x, pCoords.y, pCoords.z)
 
-    -- Fita Industrial de 10cm de largura total (hw = 0.05m) com bordas de costura reforçada de 1.2cm (edgeW = 0.012m)
-    local hw = 0.05
-    local edgeW = 0.012
+    -- Fita Industrial de 9cm de largura visível de frente (hw = 0.045m) com costura de 1cm (edgeW = 0.010m)
+    local hw = 0.045
+    local edgeW = 0.010
 
     -- Cinta 1: Paralela Frontal (+0.28m)
     DrawRealisticSingleStrap(trailer, pEnt, relPos, 0.28, halfX, topZ, hw, edgeW)
