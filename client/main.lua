@@ -593,16 +593,9 @@ local function StartCouplingWatcher()
                                 local refEntity = (veh ~= 0) and veh or (tk and DoesEntityExist(tk) and tk) or ped
                                 local trOrVeh = (tr and DoesEntityExist(tr)) and tr or refEntity
 
-                                -- Cálculo Milimétrico: Ponto Exato do Para-Choque Traseiro da Carreta
-                                local rearPoint = GetEntityCoords(trOrVeh)
-                                if tr and DoesEntityExist(tr) then
-                                    local minDim, maxDim = GetModelDimensions(GetEntityModel(tr))
-                                    local rearY = (minDim and minDim.y < -1.0) and minDim.y or -7.0
-                                    rearPoint = GetOffsetFromEntityInWorldCoords(tr, 0.0, rearY, 0.0)
-                                end
-
-                                -- Distância da traseira até o batente da doca (2D/3D)
-                                local distRear = #(vector3(rearPoint.x, rearPoint.y, rearPoint.z) - dockCoords)
+                                -- Validação Baseada na Carreta / Conjunto sobre a Vaga Demarcada
+                                local trCoords = (tr and DoesEntityExist(tr)) and GetEntityCoords(tr) or GetEntityCoords(refEntity)
+                                local distDock = #(vector3(trCoords.x, trCoords.y, trCoords.z) - dockCoords)
 
                                 local markerZ = dockCoords.z - 0.45
                                 local foundGround, groundZ = GetGroundZFor_3dCoord(dockCoords.x, dockCoords.y, dockCoords.z + 2.0, false)
@@ -610,13 +603,13 @@ local function StartCouplingWatcher()
                                     markerZ = groundZ + 0.05
                                 end
 
-                                -- Validação Estrita de Heading (Ângulo Máximo de 8.0 Graus)
+                                -- Validação de Heading do Conjunto (Alinhamento com a baía)
                                 local trH = (tr and DoesEntityExist(tr)) and GetEntityHeading(tr) or ((veh ~= 0) and GetEntityHeading(veh) or GetEntityHeading(ped))
                                 local trDiff = math.abs((trH - dockHeading + 180) % 360 - 180)
                                 local headingError = math.min(trDiff, math.abs(trDiff - 180.0))
 
-                                local isAligned = (veh ~= 0) and (headingError <= MAX_HEADING_ERR)
-                                local isDocked = (distRear <= MAX_DOCK_DIST) and isAligned
+                                local isAligned = (veh ~= 0) and (headingError <= 20.0)
+                                local isDocked = (distDock <= 4.0) and isAligned
 
                                 if isDocked then
                                     -- Vaga Verde Alinhada Rigorosa (Padrão LC Truck Logistics)
@@ -627,7 +620,7 @@ local function StartCouplingWatcher()
                                     end
 
                                     local speed = (veh ~= 0) and GetEntitySpeed(veh) or 0.0
-                                    if IsControlJustPressed(0, 38) or (speed < 0.2 and distRear <= (MAX_DOCK_DIST * 0.8)) then
+                                    if IsControlJustPressed(0, 38) or (speed < 0.3 and distDock <= 2.5) then
                                         if currentDockTextUi then
                                             lib.hideTextUI()
                                             currentDockTextUi = nil
