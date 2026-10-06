@@ -1217,10 +1217,16 @@ function StartJob(job)
         local pHeading = (type(job.pickup.coords) == 'vector4' and job.pickup.coords.w) or (job.pickup.heading) or 90.0
         pickupPoint = lib.points.new({
             coords = job.pickup.coords,
-            distance = 45.0,
+            distance = 150.0,
             nearby = function(self)
                 if not currentJob or jobProgress.stage ~= 'pickup' then return end
-                DrawMarker(30, self.coords.x, self.coords.y, self.coords.z - 0.6,
+                local markerZ = self.coords.z - 0.45
+                local foundGround, groundZ = GetGroundZFor_3dCoord(self.coords.x, self.coords.y, self.coords.z + 2.0, false)
+                if foundGround and groundZ > 0.0 then
+                    markerZ = groundZ + 0.05
+                end
+
+                DrawMarker(30, self.coords.x, self.coords.y, markerZ,
                     0.0, 0.0, 0.0, 90.0, pHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
 
                 local playerPed = PlayerPedId()
@@ -3245,8 +3251,14 @@ local function StartDeliveryRoute()
                 local trDiff = math.abs((trH - destH + 180) % 360 - 180)
                 local isAligned = (vehDiff <= 10.0) and (trDiff <= 10.0) and isAttached
 
+                local markerZ = destZ - 0.45
+                local foundGround, groundZ = GetGroundZFor_3dCoord(destX, destY, destZ + 2.0, false)
+                if foundGround and groundZ > 0.0 then
+                    markerZ = groundZ + 0.05
+                end
+
                 if distance <= 4.0 and isAligned then
-                    DrawMarker(30, destX, destY, destZ - 0.6, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                    DrawMarker(30, destX, destY, markerZ, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
                     if currentTextUi ~= 'park' then
                         lib.showTextUI('[E] Estacionar e Descarregar Carga')
                         currentTextUi = 'park'
@@ -3414,7 +3426,7 @@ local function StartDeliveryRoute()
                             currentTextUi = nil
                         end
                     end
-                    DrawMarker(30, destX, destY, destZ - 0.6, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+                    DrawMarker(30, destX, destY, markerZ, 0, 0, 0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
                 end
             else
                 if currentTextUi ~= nil then

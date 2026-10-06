@@ -561,7 +561,7 @@ local function StartCouplingWatcher()
 
                     DockWatcherPoint = lib.points.new({
                         coords = dockCoords,
-                        distance = 80.0,
+                        distance = 200.0,
                         onExit = function()
                             if currentDockTextUi then
                                 lib.hideTextUI()
@@ -580,6 +580,12 @@ local function StartCouplingWatcher()
                             local trCoords = GetEntityCoords(trOrVeh)
                             local dist = #(trCoords - dockCoords)
 
+                            local markerZ = dockCoords.z - 0.45
+                            local foundGround, groundZ = GetGroundZFor_3dCoord(dockCoords.x, dockCoords.y, dockCoords.z + 2.0, false)
+                            if foundGround and groundZ > 0.0 then
+                                markerZ = groundZ + 0.05
+                            end
+
                             local vehH = (veh ~= 0) and GetEntityHeading(veh) or (tk and DoesEntityExist(tk) and GetEntityHeading(tk)) or GetEntityHeading(ped)
                             local trH = (tr and DoesEntityExist(tr)) and GetEntityHeading(tr) or vehH
                             local vehDiff = math.abs((vehH - dockHeading + 180) % 360 - 180)
@@ -588,7 +594,7 @@ local function StartCouplingWatcher()
 
                             if dist <= 4.5 and isAligned then
                                 -- Vaga Verde Alinhada (Padrão LC Truck Logistics)
-                                DrawMarker(30, dockCoords.x, dockCoords.y, dockCoords.z - 0.6, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                                DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
                                 if currentDockTextUi ~= 'park' then
                                     lib.showTextUI('[E] Estacionar Carreta na Baía')
                                     currentDockTextUi = 'park'
@@ -638,7 +644,7 @@ local function StartCouplingWatcher()
                                 end
                             else
                                 -- Vaga Vermelha Não-Alinhada / Em Aproximação (Padrão LC Truck Logistics)
-                                DrawMarker(30, dockCoords.x, dockCoords.y, dockCoords.z - 0.6, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+                                DrawMarker(30, dockCoords.x, dockCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, dockHeading, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
                                 if dist <= 22.0 and veh ~= 0 then
                                     if currentDockTextUi ~= 'align' then
                                         lib.showTextUI('Alinhe o caminhão e o reboque na baía demarcada')
@@ -2248,9 +2254,15 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local trDiff = math.abs((trH - destH + 180) % 360 - 180)
             local isAligned = (vehDiff <= 20.0 or math.abs(vehDiff - 180) <= 20.0) and (trDiff <= 20.0 or math.abs(trDiff - 180) <= 20.0) and isAttached
 
+            local markerZ = destCoords.z - 0.45
+            local foundGround, groundZ = GetGroundZFor_3dCoord(destCoords.x, destCoords.y, destCoords.z + 2.0, false)
+            if foundGround and groundZ > 0.0 then
+                markerZ = groundZ + 0.05
+            end
+
             if dist <= 4.5 and isAligned then
                 -- Vaga Verde Alinhada (Padrão LC Truck Logistics / Lixeiro Charmoso)
-                DrawMarker(30, destCoords.x, destCoords.y, destCoords.z - 0.6, 0.0, 0.0, 0.0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                DrawMarker(30, destCoords.x, destCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
                 if currentDeliveryTextUi ~= 'park' then
                     lib.showTextUI('[E] Estacionar e Descarregar Carga')
                     currentDeliveryTextUi = 'park'
@@ -2286,7 +2298,7 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                 end
             else
                 -- Vaga Vermelha Não-Alinhada / Em Aproximação (Padrão LC Truck Logistics / Lixeiro Charmoso)
-                DrawMarker(30, destCoords.x, destCoords.y, destCoords.z - 0.6, 0.0, 0.0, 0.0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+                DrawMarker(30, destCoords.x, destCoords.y, markerZ, 0.0, 0.0, 0.0, 90.0, destH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
                 if dist <= 22.0 then
                     if currentDeliveryTextUi ~= 'align' then
                         lib.showTextUI('Alinhe o caminhão e o reboque na vaga demarcada')
@@ -2365,12 +2377,18 @@ local function OnPlayerEnteredTruck(truck)
                 isAligned = (reverseDiff <= 25.0) or (diff <= 25.0)
             end
 
+            local markerZ = targetPos.z - 0.45
+            local foundGround, groundZ = GetGroundZFor_3dCoord(targetPos.x, targetPos.y, targetPos.z + 2.0, false)
+            if foundGround and groundZ > 0.0 then
+                markerZ = groundZ + 0.05
+            end
+
             if isAligned then
                 -- Vaga Verde Alinhada de Ré (Padrão LC Truck Logistics)
-                DrawMarker(30, targetPos.x, targetPos.y, targetPos.z - 0.6, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
+                DrawMarker(30, targetPos.x, targetPos.y, markerZ, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 0, 255, 0, 50, 0, 0, 0, 0)
             else
                 -- Vaga Vermelha Não-Alinhada / Em Aproximação (Padrão LC Truck Logistics)
-                DrawMarker(30, targetPos.x, targetPos.y, targetPos.z - 0.6, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
+                DrawMarker(30, targetPos.x, targetPos.y, markerZ, 0.0, 0.0, 0.0, 90.0, targetH, 0.0, 3.0, 1.0, 10.0, 255, 0, 0, 50, 0, 0, 0, 0)
             end
         end
     })
