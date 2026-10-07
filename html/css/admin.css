@@ -5,10 +5,10 @@
    ========================================================================== */
 
 :root {
-  --admin-bg: rgba(13, 20, 28, 0.50);
-  --admin-sidebar-bg: rgba(9, 14, 20, 0.50);
-  --admin-card-bg: rgba(22, 32, 44, 0.45);
-  --admin-card-bg-hover: rgba(28, 40, 56, 0.55);
+  --admin-bg: rgba(13, 20, 28, 0.20);
+  --admin-sidebar-bg: rgba(9, 14, 20, 0.20);
+  --admin-card-bg: rgba(22, 32, 44, 0.20);
+  --admin-card-bg-hover: rgba(28, 40, 56, 0.30);
   --admin-card-border: rgba(255, 255, 255, 0.08);
   --admin-card-border-hover: rgba(16, 185, 129, 0.35);
   --admin-primary: #10b981;
@@ -98,7 +98,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(8, 12, 18, 0.40);
+  background: rgba(8, 12, 18, 0.20);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
 }
