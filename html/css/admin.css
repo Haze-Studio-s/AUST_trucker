@@ -5,11 +5,11 @@
    ========================================================================== */
 
 :root {
-  --admin-bg: rgba(10, 16, 24, 0.58);
-  --admin-sidebar-bg: rgba(8, 12, 18, 0.42);
-  --admin-card-bg: rgba(255, 255, 255, 0.035);
-  --admin-card-bg-hover: rgba(255, 255, 255, 0.06);
-  --admin-card-border: rgba(255, 255, 255, 0.09);
+  --admin-bg: rgba(13, 20, 28, 0.72);
+  --admin-sidebar-bg: rgba(9, 14, 20, 0.55);
+  --admin-card-bg: rgba(22, 32, 44, 0.45);
+  --admin-card-bg-hover: rgba(28, 40, 56, 0.55);
+  --admin-card-border: rgba(255, 255, 255, 0.08);
   --admin-card-border-hover: rgba(16, 185, 129, 0.35);
   --admin-primary: #10b981;
   --admin-primary-dark: #059669;
@@ -60,18 +60,16 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1140px;
-  max-width: 95vw;
-  height: 740px;
-  max-height: 94vh;
+  width: 1120px;
+  max-width: 94vw;
+  height: 680px;
+  max-height: 90vh;
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
-  border-radius: 16px;
-  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65),
-              0 0 25px rgba(16, 185, 129, 0.08),
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45),
+              0 0 20px rgba(16, 185, 129, 0.08),
               inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   z-index: 9999;
   flex-direction: column;
   overflow: hidden;
@@ -285,9 +283,7 @@
   border-radius: 12px;
   padding: 18px 22px;
   margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: all var(--admin-transition);
 }
 
@@ -460,8 +456,6 @@
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 12px;
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ==========================================================================
@@ -692,8 +686,6 @@
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -707,15 +699,13 @@
 }
 
 .admin-modal-box {
-  background: rgba(13, 20, 28, 0.92);
+  background: rgba(13, 20, 28, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   width: 450px;
   max-width: 90%;
   padding: 24px;
   box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 25px var(--admin-primary-glow);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -784,8 +774,6 @@
   font-size: 12px;
   font-weight: 500;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   gap: 10px;
