@@ -501,7 +501,10 @@ function IsEntityAssignedToAnyJob(ent)
 
     -- 3. Verifica em VP_Trucker.PlayerJobEntities (server/events.lua)
     if VP_Trucker and VP_Trucker.PlayerJobEntities then
-        local netId = NetworkGetEntityIsNetworked(ent) and NetworkGetNetworkIdFromEntity(ent)
+        local netId = nil
+        pcall(function()
+            netId = NetworkGetNetworkIdFromEntity(ent)
+        end)
         if netId and netId ~= 0 then
             for _, data in pairs(VP_Trucker.PlayerJobEntities) do
                 if data.truckNetId == netId or data.trailerNetId == netId or data.forkliftNetId == netId then
