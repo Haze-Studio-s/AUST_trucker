@@ -60,10 +60,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1260px;
+  width: 1320px;
   max-width: 96vw;
-  height: 780px;
-  max-height: 92vh;
+  height: 820px;
+  max-height: 94vh;
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
   border-radius: 14px;
@@ -183,11 +183,11 @@
 
 /* Sidebar de Navegação */
 .admin-sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: 220px;
+  min-width: 220px;
   background: var(--admin-sidebar-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 16px 12px;
+  padding: 16px 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -296,8 +296,8 @@
    ========================================================================== */
 .admin-master-detail {
   display: grid;
-  grid-template-columns: 1.35fr 1fr;
-  gap: 18px;
+  grid-template-columns: 1.55fr 1fr;
+  gap: 16px;
   align-items: start;
 }
 
@@ -321,8 +321,9 @@
 }
 
 .admin-table-scroll {
-  max-height: 440px;
+  max-height: 500px;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 /* ==========================================================================
@@ -482,14 +483,14 @@
 }
 
 .admin-inline-input {
-  width: 90px;
-  height: 32px;
-  padding: 4px 8px;
+  width: 70px;
+  height: 30px;
+  padding: 2px 6px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 6px;
   color: #ffffff;
-  font-size: 12px;
+  font-size: 11.5px;
   text-align: right;
   outline: none;
   font-family: inherit;
@@ -516,12 +517,13 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  min-width: 540px;
 }
 
 .admin-table th {
   text-align: left;
-  padding: 10px 14px;
-  background: rgba(13, 20, 28, 0.55);
+  padding: 10px 10px;
+  background: rgba(13, 20, 28, 0.65);
   color: var(--admin-text-muted);
   font-size: 10.5px;
   text-transform: uppercase;
@@ -531,14 +533,16 @@
   position: sticky;
   top: 0;
   z-index: 1;
+  white-space: nowrap;
 }
 
 .admin-table td {
-  padding: 12px 14px;
+  padding: 10px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--admin-text-main);
   vertical-align: middle;
   transition: background var(--admin-transition-fast);
+  white-space: nowrap;
 }
 
 .admin-table tr:hover td {
@@ -593,14 +597,14 @@
    ========================================================================== */
 .admin-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .admin-grid-3 {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
 }
 
 /* ==========================================================================
