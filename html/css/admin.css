@@ -5,8 +5,8 @@
    ========================================================================== */
 
 :root {
-  --admin-bg: rgba(13, 20, 28, 0.72);
-  --admin-sidebar-bg: rgba(9, 14, 20, 0.55);
+  --admin-bg: rgba(13, 20, 28, 0.50);
+  --admin-sidebar-bg: rgba(9, 14, 20, 0.50);
   --admin-card-bg: rgba(22, 32, 44, 0.45);
   --admin-card-bg-hover: rgba(28, 40, 56, 0.55);
   --admin-card-border: rgba(255, 255, 255, 0.08);
