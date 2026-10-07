@@ -1,5 +1,35 @@
 # Changelog — AUST_trucker
 
+## [20.9.5] — 2026-10-07 — Blindagem OneSync Multiplayer, Anti-Wipe de Frotas, Correção do Fluxo de Inicialização & Ajustes 3D de Docas
+
+### Corrigido & Aprimorado
+- **Correção da Trava de Migração de Rede OneSync (`server/main.lua`, `client/main.lua`):**
+  - Ajustado `SetNetworkIdCanMigrate(netId, true)` em `LockEntityNetworkOwner` e no watcher de paletes `polarixSyncPallets`. O bloqueio anterior (`false`) impedia que o motorista assumisse a autoridade de rede do caminhão e da empilhadeira, bloqueando o acoplamento físico da 5ª roda e o manuseio de cargas.
+- **Saneamento de Natives Exclusivas do Client no Servidor (`server/main.lua`):**
+  - Removido `NetworkGetEntityIsNetworked` (linha 504) dentro da função de verificação `IsEntityAssignedToAnyJob`, resolvendo o erro fatal `attempt to call a nil value`.
+  - Removidas chamadas de `SetNetworkIdExistsOnAllMachines` nas rotinas de spawn e fallback de paletes (linhas 1062, 1078, 1109, 1124), que interrompiam a coroutine do servidor antes do envio de `aurp_trucker:client:polarixJobStarted`.
+- **Detecção Reativa da Entrada na Cabine do Caminhão (`client/main.lua`):**
+  - Refatorados `StartTruckEnterWatcher` e `lib.onCache('vehicle')` para validação resiliente via `GetVehiclePedIsIn(ped, false) == veh` com auto-assentamento no assento `-1`.
+  - Adicionado hook dedicado reativo `lib.onCache('seat')` para transição instantânea para `STEP_3_COUPLE_TRAILER`.
+  - `UpdateMissionObjective` ajustado com `ClearObjectiveMarkers(true)` para preservar o blip secundário da carreta ao resolver o caminhão.
+- **Isolamento de Multiplayer & Proteção Anti-Wipe de Pátio (`server/main.lua`, `client/client.lua`):**
+  - Validação estrita em `IsSpawnPointClear` via `IsEntityAssignedToAnyJob(veh)`: vagas ocupadas por veículos de missão de outros jogadores são preservadas sem deleção.
+  - Notificação amigável de capacidade esgotada em vez de substituição destrutiva de entidades.
+  - Sincronização de visibilidade global de paletes para observadores via `GlobalState.activeTruckerPallets`, StateBag da carreta e raio de culling de 450m (`SetEntityDistanceCullingRadius`).
+  - Trava anti-wipe no cancelamento de rotas em `client/client.lua`, restringindo remoção de entidades apenas ao seu dono de rede.
+- **Ajuste de Visibilidade do DrawMarker de Doca (`client/main.lua`):**
+  - Raio de renderização do marcador 3D zebrado na baía de carregamento (`DockWatcherPoint`) aumentado de 200m para **250.0 metros**.
+- **Auditoria de Responsividade Front-End do Painel Admin (`/truckeradmin`):**
+  - Correção de overflow de layout, corte de textos e quebra de contêineres nas abas do painel sem tocar em identificadores ou lógica JS.
+
+## [20.9.4] — 2026-10-06 — Rampa Traseira Funcional, Empilhadeira PLT & Fluxo de Descarregamento
+
+### Adicionado & Aprimorado
+- **Integração de Assets Dedicados (`AUST_trucker_assets`):** Carreta flatbed com rampa articulada (`plttrflat`), empilhadeira compacta (`pltforklift`) e prop de colisão sólida da rampa (`polat_lumberjack_ramp001`).
+- **Trava de Trânsito da Rampa:** Bloqueio procedural durante o percurso rodoviário e destravamento condicionado ao estacionamento na vaga final de entrega.
+- **Fluxo Sequencial de Descarregamento:** Descida da rampa, coleta com empilhadeira, depósito orientado nos slots de descarregamento (`unloadingPoint`) e reembarque da empilhadeira.
+- **Validação Autoritativa Server-Side:** Contagem em tempo real e bloqueio fail-closed de pagamento caso o total descarregado seja inferior ao exigido.
+
 ## [20.9.3] — 2026-10-05 — Blindagem Anti-Catapulta Havok, Congelamento de Carga, Fitas Realistas & Separação de Assets
 
 ### Adicionado & Aprimorado
