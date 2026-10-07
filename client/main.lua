@@ -576,7 +576,7 @@ local function StartCouplingWatcher()
 
                         DockWatcherPoint = lib.points.new({
                             coords = dockCoords,
-                            distance = 200.0,
+                            distance = 250.0,
                             onExit = function()
                                 if currentDockTextUi then
                                     lib.hideTextUI()
