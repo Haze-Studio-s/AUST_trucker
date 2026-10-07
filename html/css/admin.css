@@ -5,11 +5,11 @@
    ========================================================================== */
 
 :root {
-  --admin-bg: rgba(13, 20, 28, 0.78);
-  --admin-sidebar-bg: rgba(10, 15, 22, 0.65);
-  --admin-card-bg: rgba(20, 30, 42, 0.55);
-  --admin-card-bg-hover: rgba(26, 38, 52, 0.68);
-  --admin-card-border: rgba(255, 255, 255, 0.10);
+  --admin-bg: rgba(10, 16, 24, 0.58);
+  --admin-sidebar-bg: rgba(8, 12, 18, 0.42);
+  --admin-card-bg: rgba(255, 255, 255, 0.035);
+  --admin-card-bg-hover: rgba(255, 255, 255, 0.06);
+  --admin-card-border: rgba(255, 255, 255, 0.09);
   --admin-card-border-hover: rgba(16, 185, 129, 0.35);
   --admin-primary: #10b981;
   --admin-primary-dark: #059669;
@@ -100,7 +100,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(13, 20, 28, 0.55);
+  background: rgba(8, 12, 18, 0.40);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
 }
@@ -252,7 +252,7 @@
   flex: 1;
   padding: 22px 26px;
   overflow-y: auto;
-  background: rgba(10, 15, 22, 0.25);
+  background: transparent;
 }
 
 /* Abas com Transição Fluida */
