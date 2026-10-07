@@ -3531,4 +3531,55 @@ CreateThread(function()
     end)
 end)
 
+-- ============================================================
+-- ONESYNC OBSERVER: SINCRONIZAÇÃO PASSIVA DE PALETES DE MISSÃO
+-- ============================================================
+local ObserverProcessedPallets = {}
+
+CreateThread(function()
+    while true do
+        local sleep = 2500
+        local globalPallets = GlobalState.activeTruckerPallets
+        if globalPallets and #globalPallets > 0 then
+            local ped = cache.ped or PlayerPedId()
+            local pCoords = GetEntityCoords(ped)
+
+            for _, netId in ipairs(globalPallets) do
+                if netId and netId ~= 0 then
+                    if NetworkDoesNetworkIdExist(netId) then
+                        local ent = NetworkGetEntityFromNetworkId(netId)
+                        if ent and ent ~= 0 and DoesEntityExist(ent) then
+                            local entCoords = GetEntityCoords(ent)
+                            local dist = #(pCoords - entCoords)
+                            if dist < 120.0 then
+                                sleep = 1000
+                                if not ObserverProcessedPallets[netId] then
+                                    ObserverProcessedPallets[netId] = true
+                                    SetEntityAsMissionEntity(ent, true, true)
+                                    SetEntityLodDist(ent, 0xFFFF)
+                                    SetEntityVisible(ent, true)
+                                    ResetEntityAlpha(ent)
+                                    SetEntityInvincible(ent, true)
+                                    SetEntityProofs(ent, true, true, true, true, true, true, true, true)
+                                    SetEntityCollision(ent, true, true)
+                                    SetCanClimbOnEntity(ent, true)
+                                    SetEntityHasGravity(ent, true)
+                                    -- Apenas observador passivo: mantém freeze se não estiver atrelado
+                                    if not IsEntityAttached(ent) then
+                                        FreezeEntityPosition(ent, true)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            ObserverProcessedPallets = {}
+        end
+        Wait(sleep)
+    end
+end)
+
+
 

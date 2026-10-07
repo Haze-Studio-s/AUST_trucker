@@ -85,12 +85,31 @@ local function CleanupLCContract()
     end
 
     if lcActiveJob then
+        local myPlayerId = PlayerId()
         if lcActiveJob.trailer and DoesEntityExist(lcActiveJob.trailer) then
-            DeleteEntity(lcActiveJob.trailer)
+            local canDeleteTrailer = true
+            if NetworkGetEntityIsNetworked(lcActiveJob.trailer) then
+                local owner = NetworkGetEntityOwner(lcActiveJob.trailer)
+                if owner ~= -1 and owner ~= myPlayerId then
+                    canDeleteTrailer = false
+                end
+            end
+            if canDeleteTrailer then
+                DeleteEntity(lcActiveJob.trailer)
+            end
         end
         -- Apenas deletar o caminhão se for veículo alugado de Quick Job! Nunca deletar caminhão próprio do jogador!
         if lcActiveJob.isQuickJob and lcActiveJob.truck and DoesEntityExist(lcActiveJob.truck) then
-            DeleteEntity(lcActiveJob.truck)
+            local canDeleteTruck = true
+            if NetworkGetEntityIsNetworked(lcActiveJob.truck) then
+                local owner = NetworkGetEntityOwner(lcActiveJob.truck)
+                if owner ~= -1 and owner ~= myPlayerId then
+                    canDeleteTruck = false
+                end
+            end
+            if canDeleteTruck then
+                DeleteEntity(lcActiveJob.truck)
+            end
         end
         lcActiveJob = nil
     end

@@ -263,6 +263,17 @@ local function CleanupLobbyEntities(lobby)
             end
         end
     end
+
+    if lobby.palletNetIds and #lobby.palletNetIds > 0 then
+        local currentGlobal = GlobalState.activeTruckerPallets or {}
+        local updatedGlobal = {}
+        local removeLookup = {}
+        for _, net in ipairs(lobby.palletNetIds) do removeLookup[net] = true end
+        for _, net in ipairs(currentGlobal) do
+            if not removeLookup[net] then table.insert(updatedGlobal, net) end
+        end
+        GlobalState.activeTruckerPallets = updatedGlobal
+    end
 end
 
 -- Entrada na fase de carregamento. O client NUNCA envia `inspectionCompleted` (nenhum arquivo em client/
@@ -463,6 +474,46 @@ local function IsVehicleOccupiedByPlayer(veh)
     return false
 end
 
+function IsEntityAssignedToAnyJob(ent)
+    if not ent or ent == 0 or not DoesEntityExist(ent) then return false end
+
+    -- 1. Verifica se pertence a algum lobby Polarix ativo no servidor
+    if PolarixLobbies then
+        for _, lobby in pairs(PolarixLobbies) do
+            if lobby.truck == ent or lobby.trailer == ent or lobby.forklift == ent
+                or lobby.handler == ent or lobby.container == ent or lobby.hoseProp == ent then
+                return true
+            end
+            for _, p in ipairs(lobby.pallets or {}) do
+                if p == ent then return true end
+            end
+            for _, c in ipairs(lobby.carrierCars or {}) do
+                if c == ent then return true end
+            end
+        end
+    end
+
+    -- 2. Verifica se possui StateBag de frete ativo (OneSync Infinity)
+    local sBag = Entity(ent).state
+    if sBag and (sBag.activeJobData or sBag.loadedSlots or sBag.loadedForklift or sBag.isRigLoadingFrozen) then
+        return true
+    end
+
+    -- 3. Verifica em VP_Trucker.PlayerJobEntities (server/events.lua)
+    if VP_Trucker and VP_Trucker.PlayerJobEntities then
+        local netId = NetworkGetEntityIsNetworked(ent) and NetworkGetNetworkIdFromEntity(ent)
+        if netId and netId ~= 0 then
+            for _, data in pairs(VP_Trucker.PlayerJobEntities) do
+                if data.truckNetId == netId or data.trailerNetId == netId or data.forkliftNetId == netId then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
 function IsSpawnPointClear(coords, radius, ignoreEntities)
     if not coords then return false end
     local targetCoords = vector3(coords.x, coords.y, coords.z)
@@ -475,17 +526,29 @@ function IsSpawnPointClear(coords, radius, ignoreEntities)
             if DoesEntityExist(veh) and not ignore[veh] then
                 local entCoords = GetEntityCoords(veh)
                 if #(targetCoords - entCoords) < checkRadius then
+                    -- Se o veículo estiver ocupado por um jogador, a vaga está ocupada!
                     if IsVehicleOccupiedByPlayer(veh) then
                         if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vaga em (%.1f, %.1f) ocupada por jogador no veículo %s."):format(targetCoords.x, targetCoords.y, tostring(veh))) end
                         return false
-                    else
+                    end
+
+                    -- Se o veículo pertencer a qualquer trabalho ativo de outro jogador, NÃO DELETAR!
+                    if IsEntityAssignedToAnyJob(veh) then
                         if Config.Debug then
-                            print(("[AUST_Trucker DEBUG - ETAPA 3] Deletando veículo abandonado/vazio (ID: %s, Modelo: %s) para desobstruir vaga (%.1f, %.1f)."):format(
-                                tostring(veh), tostring(GetEntityModel(veh)), targetCoords.x, targetCoords.y
+                            print(("[AUST_Trucker DEBUG - ETAPA 3] Vaga em (%.1f, %.1f) ocupada por veículo de trabalho ativo (ID: %s, Modelo: %s). Preservando veículo!"):format(
+                                targetCoords.x, targetCoords.y, tostring(veh), tostring(GetEntityModel(veh))
                             ))
                         end
-                        DeleteEntity(veh)
+                        return false
                     end
+
+                    -- Se não pertence a ninguém e está vazio, pode ser limpo como veículo abandonado do mapa
+                    if Config.Debug then
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Deletando veículo abandonado/vazio (ID: %s, Modelo: %s) para desobstruir vaga (%.1f, %.1f)."):format(
+                            tostring(veh), tostring(GetEntityModel(veh)), targetCoords.x, targetCoords.y
+                        ))
+                    end
+                    DeleteEntity(veh)
                 end
             end
         end
@@ -782,21 +845,11 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
-    -- Fallback se todas as vagas estiverem com jogadores
+    -- Fallback: Se nenhuma vaga esteve livre no loop inicial
     if not truck or not DoesEntityExist(truck) then
-        local fallbackCoord = truckSpawns[1]
-        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas ocupadas, aplicando fallback na vaga principal %s..."):format(tostring(fallbackCoord))) end
-        truck = CreateVehicle(truckModel, fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
-        local waitTimer = GetGameTimer()
-        while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-        if DoesEntityExist(truck) then
-            chosenTruckCoord = fallbackCoord
-        end
-    end
-
-    if not truck or not DoesEntityExist(truck) then
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Todas as vagas primárias ocupadas para caminhão!")):format() end
         ActiveSpawningPlayers[citizenId] = nil
-        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Falha ao instanciar caminhão no servidor.', 'error')
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de caminhão estão ocupadas no momento. Aguarde a liberação do pátio.', 'error')
         return
     end
 
@@ -852,22 +905,11 @@ local function StartTruckDelivery(src, contractData)
     end
 
     if not trailer or not DoesEntityExist(trailer) then
-        local fallbackCoord = nil
-        for _, coord in ipairs(trailerSpawns) do
-            local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
-            if distToTruck >= 14.0 then
-                fallbackCoord = coord
-                break
-            end
-        end
-        if not fallbackCoord then fallbackCoord = trailerSpawns[1] end
-        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Vagas de carreta ocupadas, aplicando fallback na vaga isolada %s..."):format(tostring(fallbackCoord))) end
-        trailer = CreateVehicle(trailerModel, fallbackCoord.x, fallbackCoord.y, fallbackCoord.z + 0.5, fallbackCoord.w or 90.0, true, true)
-        local waitTimer = GetGameTimer()
-        while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
-        if DoesEntityExist(trailer) then
-            chosenTrailerCoord = fallbackCoord
-        end
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Todas as vagas primárias de carreta ocupadas!")):format() end
+        ActiveSpawningPlayers[citizenId] = nil
+        if DoesEntityExist(truck) then DeleteEntity(truck) end
+        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de carreta/reboque estão ocupadas no momento. Aguarde a liberação do pátio.', 'error')
+        return
     end
 
     if not trailer or not DoesEntityExist(trailer) then
@@ -1012,9 +1054,13 @@ local function StartTruckDelivery(src, contractData)
                 FreezeEntityPosition(pObj, true)
                 LockEntityNetworkOwner(pObj, src)
                 SetEntityDistanceCullingRadius(pObj, 450.0)
+                local pNet = NetworkGetNetworkIdFromEntity(pObj)
+                if pNet and pNet ~= 0 then
+                    SetNetworkIdExistsOnAllMachines(pNet, true)
+                    table.insert(palletNetIds, pNet)
+                end
                 ignoreEntities[pObj] = true
                 table.insert(pallets, pObj)
-                table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
             else
                 -- Fallback imediato com prop nativo padrão caso o prop customizado falhe no streaming do servidor
                 local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.15, true, true, false)
@@ -1024,9 +1070,13 @@ local function StartTruckDelivery(src, contractData)
                     FreezeEntityPosition(fallbackObj, true)
                     LockEntityNetworkOwner(fallbackObj, src)
                     SetEntityDistanceCullingRadius(fallbackObj, 450.0)
+                    local fbNet = NetworkGetNetworkIdFromEntity(fallbackObj)
+                    if fbNet and fbNet ~= 0 then
+                        SetNetworkIdExistsOnAllMachines(fbNet, true)
+                        table.insert(palletNetIds, fbNet)
+                    end
                     ignoreEntities[fallbackObj] = true
                     table.insert(pallets, fallbackObj)
-                    table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
                 end
             end
         end
@@ -1051,9 +1101,13 @@ local function StartTruckDelivery(src, contractData)
                     FreezeEntityPosition(pObj, true)
                     LockEntityNetworkOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 450.0)
+                    local pNet = NetworkGetNetworkIdFromEntity(pObj)
+                    if pNet and pNet ~= 0 then
+                        SetNetworkIdExistsOnAllMachines(pNet, true)
+                        table.insert(palletNetIds, pNet)
+                    end
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
-                    table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(pObj))
                 else
                     local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.15, true, true, false)
                     local fbTimer = GetGameTimer()
@@ -1062,9 +1116,13 @@ local function StartTruckDelivery(src, contractData)
                         FreezeEntityPosition(fallbackObj, true)
                         LockEntityNetworkOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 450.0)
+                        local fbNet = NetworkGetNetworkIdFromEntity(fallbackObj)
+                        if fbNet and fbNet ~= 0 then
+                            SetNetworkIdExistsOnAllMachines(fbNet, true)
+                            table.insert(palletNetIds, fbNet)
+                        end
                         ignoreEntities[fallbackObj] = true
                         table.insert(pallets, fallbackObj)
-                        table.insert(palletNetIds, NetworkGetNetworkIdFromEntity(fallbackObj))
                     end
                 end
             end
@@ -1304,6 +1362,18 @@ local function StartTruckDelivery(src, contractData)
     end
 
     ActiveSpawningPlayers[citizenId] = nil
+
+    -- Replicar paletes ativos no StateBag da Carreta e no GlobalState (OneSync Infinity para Observadores)
+    if palletNetIds and #palletNetIds > 0 then
+        if trailer and DoesEntityExist(trailer) then
+            Entity(trailer).state:set('missionPalletNetIds', palletNetIds, true)
+        end
+        local currentGlobal = GlobalState.activeTruckerPallets or {}
+        local updatedGlobal = {}
+        for _, n in ipairs(currentGlobal) do table.insert(updatedGlobal, n) end
+        for _, n in ipairs(palletNetIds) do table.insert(updatedGlobal, n) end
+        GlobalState.activeTruckerPallets = updatedGlobal
+    end
 
     TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
     TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds, jobId)
