@@ -1059,7 +1059,6 @@ local function StartTruckDelivery(src, contractData)
                 SetEntityDistanceCullingRadius(pObj, 450.0)
                 local pNet = NetworkGetNetworkIdFromEntity(pObj)
                 if pNet and pNet ~= 0 then
-                    SetNetworkIdExistsOnAllMachines(pNet, true)
                     table.insert(palletNetIds, pNet)
                 end
                 ignoreEntities[pObj] = true
@@ -1075,7 +1074,6 @@ local function StartTruckDelivery(src, contractData)
                     SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                     local fbNet = NetworkGetNetworkIdFromEntity(fallbackObj)
                     if fbNet and fbNet ~= 0 then
-                        SetNetworkIdExistsOnAllMachines(fbNet, true)
                         table.insert(palletNetIds, fbNet)
                     end
                     ignoreEntities[fallbackObj] = true
@@ -1106,7 +1104,6 @@ local function StartTruckDelivery(src, contractData)
                     SetEntityDistanceCullingRadius(pObj, 450.0)
                     local pNet = NetworkGetNetworkIdFromEntity(pObj)
                     if pNet and pNet ~= 0 then
-                        SetNetworkIdExistsOnAllMachines(pNet, true)
                         table.insert(palletNetIds, pNet)
                     end
                     ignoreEntities[pObj] = true
@@ -1121,7 +1118,6 @@ local function StartTruckDelivery(src, contractData)
                         SetEntityDistanceCullingRadius(fallbackObj, 450.0)
                         local fbNet = NetworkGetNetworkIdFromEntity(fallbackObj)
                         if fbNet and fbNet ~= 0 then
-                            SetNetworkIdExistsOnAllMachines(fbNet, true)
                             table.insert(palletNetIds, fbNet)
                         end
                         ignoreEntities[fallbackObj] = true
