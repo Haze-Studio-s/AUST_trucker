@@ -1,5 +1,18 @@
 # Changelog — AUST_trucker
 
+## [20.9.8] — 2026-10-07 — Mecânica de Acoplamento de Containers (Reach Stacker), Blindagem Seletiva Anti-Catapulta & Multi-Slots
+
+### Adicionado & Aprimorado
+- **Mecânica de Içamento e Acoplamento de Containers (`client/modules/reach_stacker.lua`):**
+  - Integração procedural do veículo `handler` (Reach Stacker) utilizando o spreader (`frame_2`) para captação no solo e assentamento nivelado em carretas (`freighttrailer` / `trflat`) via tecla `[G]`.
+  - Suporte completo a cargas individuais (container de 40 pés centralizado) e duplas (2x containers de 20 pés em slots dianteiro e traseiro).
+- **Blindagem Seletiva Havok Anti-Catapulta (`client/modules/reach_stacker.lua`):**
+  - Eliminação da técnica arcaica de remoção total de colisão (`SetEntityCollision false`). O container mantém colisão sólida com pedestres, balas e outros veículos no trânsito, enquanto isola o contato destrutivo com a carreta e o maquinário através de `SetEntityNoCollisionEntity` mútuo + `FreezeEntityPosition`.
+- **Resolução Dinâmica de Slots & Sincronização OneSync (`shared/config.lua`, `server/main.lua`, `client/main.lua`):**
+  - Registro de slots nativos de containers para `freighttrailer` em `Config.TrailerSlots` e suporte à calibração livre via Gizmo 3D no `/truckeradmin`.
+  - Spawning autoritativo de múltiplos containers no despacho de frete, com autoridade OneSync ancorada no motorista (`LockEntityNetworkOwner`).
+  - Replicação multiplayer transparente via StateBag `loadedContainers` no reboque e controle em etapas no servidor (`aurp_trucker:server:heavyContainerLoaded`).
+
 ## [20.9.7] — 2026-10-07 — Chave Composta de Offsets de Trailer por Carga (Multi-Prop) & Isolamento no Painel Admin
 
 ### Adicionado & Aprimorado

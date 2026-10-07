@@ -502,10 +502,17 @@ Config.TrailerSlots = {
     ['freighttrailer'] = {
         deckZ = 0.35,
         pallets = {
-            vector3(-0.55,  3.6, 0.35), vector3( 0.55,  3.6, 0.35),
-            vector3(-0.55,  1.2, 0.35), vector3( 0.55,  1.2, 0.35),
-            vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35),
-            vector3(-0.55, -3.6, 0.35), vector3( 0.55, -3.6, 0.35),
+            vector3( 0.0,  3.8, 0.35),
+            vector3( 0.0, -3.8, 0.35),
+        },
+        containers = {
+            double = {
+                { x = 0.0, y =  3.8, z = 0.35, heading = 0.0 },
+                { x = 0.0, y = -3.8, z = 0.35, heading = 0.0 },
+            },
+            single = {
+                { x = 0.0, y =  0.0, z = 0.35, heading = 0.0 },
+            }
         },
         forklift = vector3(0.0, -5.4, 0.35)
     },

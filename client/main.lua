@@ -2673,26 +2673,33 @@ lib.onCache('vehicle', function(veh)
         if JobEntities.handler and veh == JobEntities.handler then
             CurrentStage = 'STEP_6_LOAD_CONTAINER'
 
-            if JobEntities.container and DoesEntityExist(JobEntities.container) then
-                UpdateMissionObjective('pallet', JobEntities.container, 'Contêiner Marítimo')
+            local containerList = (JobEntities.containers and #JobEntities.containers > 0 and JobEntities.containers) or (JobEntities.container and { JobEntities.container }) or {}
+            local reqCount = (ActiveJob and ActiveJob.requiredCount) or #containerList or 1
+
+            if containerList[1] and DoesEntityExist(containerList[1]) then
+                UpdateMissionObjective('pallet', containerList[1], 'Contêiner Marítimo')
             end
 
             SendMissionNotify('Central Logística', 'Opere o Reach Stacker! Aproxime o spreader do contêiner e aperte [G] para travar.', 'info')
 
-            ReachStackerModule.SetMissionContainer(JobEntities.container)
-            ReachStackerModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, function(action, cEnt)
+            ReachStackerModule.StartOperation(ActiveJob.jobId, JobEntities.trailer, function(action, cEnt, curLoaded, totalExp)
                 if action == 'picked' then
                     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
                         local trailerPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 0.0, 1.0)
                         UpdateMissionObjective('trailer_rear', trailerPos, 'Posicione sobre a prancha e aperte [G]')
                     end
+                elseif action == 'dropped_partial' then
+                    SendMissionNotify('Central Logística', ('Contêiner %d/%d acoplado! Busque o próximo contêiner no pátio.'):format(curLoaded or 1, totalExp or 2), 'info')
+                    local nextCont = ReachStackerModule.GetNearestGroundContainer(JobEntities.handler)
+                    if nextCont and DoesEntityExist(nextCont) then
+                        UpdateMissionObjective('pallet', nextCont, 'Próximo Contêiner')
+                    end
                 elseif action == 'dropped' then
-                    SendMissionNotify('Central Logística', 'Contêiner fixado com sucesso na prancha! Entre no caminhão para iniciar a rota.', 'success')
+                    SendMissionNotify('Central Logística', 'Todos os contêineres fixados com sucesso na prancha! Entre no caminhão para iniciar a rota.', 'success')
                 end
             end, function()
                 ClearObjectiveMarkers(false)
-                TriggerServerEvent('aurp_trucker:server:heavyContainerLoaded', ActiveJob.jobId)
-            end)
+            end, containerList, reqCount)
         end
     end
 end)
@@ -2940,10 +2947,27 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
             end
 
-            if payload.containerNetId and payload.containerNetId ~= 0 then
+            JobEntities.containers = {}
+            if payload.containerNetIds and #payload.containerNetIds > 0 then
+                for _, cNet in ipairs(payload.containerNetIds) do
+                    local cEnt = WaitForNetworkEntity(cNet, 5000)
+                    if cEnt and DoesEntityExist(cEnt) then
+                        table.insert(JobEntities.containers, cEnt)
+                        SetEntityVisible(cEnt, true)
+                        ResetEntityAlpha(cEnt)
+                        PlaceObjectOnGroundProperly(cEnt)
+                        SetEntityCollision(cEnt, true, true)
+                        FreezeEntityPosition(cEnt, true)
+                    end
+                end
+                if #JobEntities.containers > 0 then
+                    JobEntities.container = JobEntities.containers[1]
+                end
+            elseif payload.containerNetId and payload.containerNetId ~= 0 then
                 local container = WaitForNetworkEntity(payload.containerNetId, 5000)
                 if container and DoesEntityExist(container) then
                     JobEntities.container = container
+                    JobEntities.containers = { container }
                     SetEntityVisible(container, true)
                     ResetEntityAlpha(container)
                     PlaceObjectOnGroundProperly(container)
@@ -3101,6 +3125,11 @@ end)
 RegisterNetEvent('aurp_trucker:client:polarixReadyForTransit', function(deliveryCoords)
     if not ActiveJob then return end
     StartDeliveryRoute(deliveryCoords, ActiveJob.jobId)
+end)
+
+RegisterNetEvent('aurp_trucker:client:heavyContainerNextRequired', function(currentLoaded, reqCount)
+    if not ActiveJob then return end
+    SendMissionNotify('Central Logística', ('Contêiner %d/%d carregado. Busque o próximo no pátio!'):format(currentLoaded, reqCount), 'info')
 end)
 
 RegisterNetEvent('aurp_trucker:client:polarixJobFinished', function(summary)

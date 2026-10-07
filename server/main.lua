@@ -933,6 +933,8 @@ local function StartTruckDelivery(src, contractData)
     local chosenHandlerCoord = nil
     local containerObj = nil
     local containerNetId = nil
+    local containers = {}
+    local containerNetIds = {}
     local carrierCars = {}
     local carrierVehicleNetIds = {}
     local pallets = {}
@@ -1170,18 +1172,33 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('vehiclekeys:client:SetOwner', src, handlerPlate)
         end
 
-        -- Spawn do Contêiner
-        local cSpawns = yardCfg.containerSpawns or { vector4(1178.15, -3115.13, 5.02, 266.0) }
-        local chosenCCoord = cSpawns[math.random(#cSpawns)]
-        local cModel = joaat(Config.Polarix.ContainerModel or 'prop_contr_03b_ld')
-        containerObj = CreateObject(cModel, chosenCCoord.x, chosenCCoord.y, chosenCCoord.z + 0.1, true, true, false)
-        local waitTimer = GetGameTimer()
-        while not DoesEntityExist(containerObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
-        if DoesEntityExist(containerObj) then
-            FreezeEntityPosition(containerObj, true)
-            containerNetId = NetworkGetNetworkIdFromEntity(containerObj)
-            if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Contêiner gerado com sucesso. NetID: %s"):format(tostring(containerNetId))) end
+        -- Spawn do Contêiner (Suporte a 40ft único ou 20ft duplo)
+        local cSpawns = yardCfg.containerSpawns or {
+            vector4(1178.15, -3115.13, 5.02, 266.0),
+            vector4(1185.25, -3115.13, 5.02, 266.0)
+        }
+        local cModel = joaat(contractData.cargoModel or Config.Polarix.ContainerModel or 'prop_contr_03b_ld')
+        local numContainers = tonumber(contractData.containerCount) or (contractData.name and contractData.name:lower():find('duplo') and 2) or 1
+        reqPallets = numContainers
+        containers = {}
+        containerNetIds = {}
+
+        for cIdx = 1, numContainers do
+            local chosenCCoord = cSpawns[cIdx] or cSpawns[1]
+            local cObj = CreateObject(cModel, chosenCCoord.x, chosenCCoord.y, chosenCCoord.z + 0.1, true, true, false)
+            local waitTimer = GetGameTimer()
+            while not DoesEntityExist(cObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+            if DoesEntityExist(cObj) then
+                FreezeEntityPosition(cObj, true)
+                local cNet = NetworkGetNetworkIdFromEntity(cObj)
+                table.insert(containers, cObj)
+                table.insert(containerNetIds, cNet)
+                LockEntityNetworkOwner(cObj, src)
+                if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Contêiner %d gerado com sucesso. NetID: %s"):format(cIdx, tostring(cNet))) end
+            end
         end
+        containerObj = containers[1]
+        containerNetId = containerNetIds[1]
     elseif cargoType == 'vehicle_carrier' then
         reqPallets = 3
         local carrierCfg = (Config.CargoTypes and Config.CargoTypes.vehicle_carrier) or {}
@@ -1247,6 +1264,8 @@ local function StartTruckDelivery(src, contractData)
         handlerPlate = handlerPlate,
         container = containerObj,
         containerNetId = containerNetId,
+        containers = containers,
+        containerNetIds = containerNetIds,
         carrierCars = carrierCars,
         vehicleNetIds = carrierVehicleNetIds,
         pallets = pallets,
@@ -1338,6 +1357,7 @@ local function StartTruckDelivery(src, contractData)
         handlerCoords = chosenHandlerCoord and vector3(chosenHandlerCoord.x, chosenHandlerCoord.y, chosenHandlerCoord.z),
         handlerPlate = handlerPlate,
         containerNetId = containerNetId,
+        containerNetIds = containerNetIds,
         vehicleNetIds = carrierVehicleNetIds,
         palletNetIds = palletNetIds,
         withForklift = withForklift,
@@ -1851,7 +1871,7 @@ RegisterNetEvent('aurp_trucker:server:palletLost', function(jobId, palletNetId)
 end)
 
 -- ETAPA: Notificação de Contêiner Carregado via Reach Stacker (Carga Pesada)
-RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId)
+RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId, slotIdx, containerNetId)
     local src = source
     local lobby = PolarixLobbies[jobId]
     if not lobby or lobby.src ~= src then return end
@@ -1861,11 +1881,22 @@ RegisterNetEvent('aurp_trucker:server:heavyContainerLoaded', function(jobId)
     if not hPed or hPed == 0 or not lobby.trailer or not DoesEntityExist(lobby.trailer) then return end
     if #(GetEntityCoords(hPed) - GetEntityCoords(lobby.trailer)) > 60.0 then return end
 
-    lobby.stage = 'STATUS_IN_TRANSIT'
-    lobby.startedTransitAt = os.time()
-    lobby.loadedCount = 1
+    lobby.loadedCount = (lobby.loadedCount or 0) + 1
+    local reqCount = lobby.requiredCount or 1
 
-    TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
+    if containerNetId and lobby.trailer and DoesEntityExist(lobby.trailer) then
+        lobby.loadedContainerNetIds = lobby.loadedContainerNetIds or {}
+        table.insert(lobby.loadedContainerNetIds, containerNetId)
+        Entity(lobby.trailer).state:set('loadedContainers', lobby.loadedContainerNetIds, true)
+    end
+
+    if lobby.loadedCount >= reqCount then
+        lobby.stage = 'STATUS_IN_TRANSIT'
+        lobby.startedTransitAt = os.time()
+        TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
+    else
+        TriggerClientEvent('aurp_trucker:client:heavyContainerNextRequired', src, lobby.loadedCount, reqCount)
+    end
 end)
 
 -- ETAPA: Contenção de Emergência de Vazamento ADR

@@ -7,8 +7,11 @@
 local ReachStackerModule = {}
 local CurrentCarriedContainer = nil
 local ActiveMissionContainer = nil
+local ActiveMissionContainers = {}
 local OperationActive = false
 local TextUIShowing = nil
+local LoadedContainersCount = 0
+local TotalContainersCount = 1
 
 function ReachStackerModule.IsPlayerInHandler()
     local ped = cache.ped or PlayerPedId()
@@ -29,6 +32,24 @@ end
 
 function ReachStackerModule.SetMissionContainer(containerEnt)
     ActiveMissionContainer = containerEnt
+    if containerEnt then
+        ActiveMissionContainers = { containerEnt }
+    else
+        ActiveMissionContainers = {}
+    end
+end
+
+function ReachStackerModule.SetMissionContainers(containersList)
+    if type(containersList) == 'table' then
+        ActiveMissionContainers = containersList
+        ActiveMissionContainer = containersList[1]
+    elseif containersList then
+        ActiveMissionContainers = { containersList }
+        ActiveMissionContainer = containersList
+    else
+        ActiveMissionContainers = {}
+        ActiveMissionContainer = nil
+    end
 end
 
 local function GetHandlerSpreaderCoords(handlerVeh)
@@ -47,6 +68,17 @@ end
 function ReachStackerModule.GetNearestGroundContainer(handlerVeh)
     if not handlerVeh or not DoesEntityExist(handlerVeh) then return nil end
     local spreaderCoords = GetHandlerSpreaderCoords(handlerVeh)
+
+    if ActiveMissionContainers and #ActiveMissionContainers > 0 then
+        for _, cEnt in ipairs(ActiveMissionContainers) do
+            if DoesEntityExist(cEnt) and not IsEntityAttached(cEnt) then
+                local cCoords = GetEntityCoords(cEnt)
+                if #(spreaderCoords - cCoords) < 6.5 then
+                    return cEnt
+                end
+            end
+        end
+    end
 
     if ActiveMissionContainer and DoesEntityExist(ActiveMissionContainer) and not IsEntityAttached(ActiveMissionContainer) then
         local cCoords = GetEntityCoords(ActiveMissionContainer)
@@ -99,8 +131,52 @@ local function AttachContainerToHandler(handlerVeh, container)
     return true
 end
 
-function ReachStackerModule.StartOperation(jobId, trailer, onLoadedCb, onAllLoadedCb)
+local function ResolveTrailerContainerSlot(trailer, containerEnt, slotIndex, totalContainers)
+    local tModel = GetEntityModel(trailer)
+    local cfg = Config.TrailerSlots and (Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel):lower()])
+
+    -- 1. Se houver configuração de slots de container dedicada
+    if cfg and cfg.containers then
+        if totalContainers and totalContainers > 1 and cfg.containers.double then
+            local s = cfg.containers.double[slotIndex] or cfg.containers.double[1]
+            if s then
+                return vector3(s.x or 0.0, s.y or 0.0, s.z or 0.35), vector3(s.rx or 0.0, s.ry or 0.0, s.heading or 0.0)
+            end
+        elseif cfg.containers.single then
+            local s = cfg.containers.single[1]
+            if s then
+                return vector3(s.x or 0.0, s.y or 0.0, s.z or 0.35), vector3(s.rx or 0.0, s.ry or 0.0, s.heading or 0.0)
+            end
+        end
+    end
+
+    -- 2. Se houver slots calibrados no /truckeradmin (pallets table)
+    if cfg and cfg.pallets and #cfg.pallets > 0 then
+        local s = cfg.pallets[slotIndex] or cfg.pallets[1]
+        if s then
+            return vector3(tonumber(s.x) or 0.0, tonumber(s.y) or 0.0, tonumber(s.z) or 0.35), vector3(0.0, 0.0, tonumber(s.heading) or 0.0)
+        end
+    end
+
+    -- 3. Fallbacks inteligentes baseados no número de contêineres
+    if totalContainers and totalContainers > 1 then
+        if slotIndex == 1 then
+            return vector3(0.0, 3.8, 0.35), vector3(0.0, 0.0, 0.0)
+        else
+            return vector3(0.0, -3.8, 0.35), vector3(0.0, 0.0, 0.0)
+        end
+    end
+
+    return vector3(0.0, 0.0, 0.35), vector3(0.0, 0.0, 0.0)
+end
+
+function ReachStackerModule.StartOperation(jobId, trailer, onLoadedCb, onAllLoadedCb, missionContainers, totalExpected)
     OperationActive = true
+    LoadedContainersCount = 0
+    TotalContainersCount = totalExpected or (type(missionContainers) == 'table' and #missionContainers) or 1
+    if missionContainers then
+        ReachStackerModule.SetMissionContainers(missionContainers)
+    end
 
     CreateThread(function()
         while OperationActive do
@@ -147,7 +223,7 @@ function ReachStackerModule.StartOperation(jobId, trailer, onLoadedCb, onAllLoad
                         local spreaderPos = GetHandlerSpreaderCoords(handlerVeh)
                         local dist = #(spreaderPos - trailerCenter)
 
-                        if dist < 6.8 then
+                        if dist < 7.5 then
                             sleep = 0
                             if TextUIShowing ~= 'drop' then
                                 lib.showTextUI('[G] Travar Contêiner na Prancha', { position = 'left-center', icon = 'truck-ramp-box' })
@@ -166,20 +242,28 @@ function ReachStackerModule.StartOperation(jobId, trailer, onLoadedCb, onAllLoad
 
                                 DetachEntity(containerEnt, true, true)
 
+                                local slotIndex = LoadedContainersCount + 1
+                                local slotOffset, slotRot = ResolveTrailerContainerSlot(trailer, containerEnt, slotIndex, TotalContainersCount)
+
                                 -- Fixação nivelada na prancha da carreta
                                 AttachEntityToEntity(
                                     containerEnt,
                                     trailer,
                                     0,
-                                    0.0, 0.0, 0.35,
-                                    0.0, 0.0, 0.0,
+                                    slotOffset.x, slotOffset.y, slotOffset.z,
+                                    slotRot.x, slotRot.y, slotRot.z,
                                     false, false, true, false, 0, true
                                 )
+
+                                -- Blindagem Havok Anti-Catapulta: Colisão com mundo preservada, isolamento mútuo estrito
                                 SetEntityCollision(containerEnt, true, true)
                                 SetEntityNoCollisionEntity(containerEnt, trailer, true)
                                 SetEntityNoCollisionEntity(trailer, containerEnt, true)
+                                SetEntityNoCollisionEntity(containerEnt, handlerVeh, true)
+                                SetEntityNoCollisionEntity(handlerVeh, containerEnt, true)
                                 FreezeEntityPosition(containerEnt, true)
 
+                                LoadedContainersCount = LoadedContainersCount + 1
                                 CurrentCarriedContainer = nil
                                 PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
@@ -188,17 +272,23 @@ function ReachStackerModule.StartOperation(jobId, trailer, onLoadedCb, onAllLoad
                                     TextUIShowing = nil
                                 end
 
-                                TriggerServerEvent('aurp_trucker:server:heavyContainerLoaded', jobId)
+                                local cNet = NetworkGetNetworkIdFromEntity(containerEnt)
+                                TriggerServerEvent('aurp_trucker:server:heavyContainerLoaded', jobId, slotIndex, cNet)
 
-                                if onLoadedCb then
-                                    onLoadedCb('dropped', containerEnt)
+                                if LoadedContainersCount < TotalContainersCount then
+                                    if onLoadedCb then
+                                        onLoadedCb('dropped_partial', containerEnt, LoadedContainersCount, TotalContainersCount)
+                                    end
+                                else
+                                    if onLoadedCb then
+                                        onLoadedCb('dropped', containerEnt, LoadedContainersCount, TotalContainersCount)
+                                    end
+                                    ReachStackerModule.StopOperation()
+                                    if onAllLoadedCb then
+                                        onAllLoadedCb()
+                                    end
+                                    break
                                 end
-
-                                ReachStackerModule.StopOperation()
-                                if onAllLoadedCb then
-                                    onAllLoadedCb()
-                                end
-                                break
                             end
                         else
                             if TextUIShowing == 'drop' then
