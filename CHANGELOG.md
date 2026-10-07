@@ -1,5 +1,19 @@
 # Changelog — AUST_trucker
 
+## [20.9.6] — 2026-10-07 — Identificação Diegética Heavy RP, Leitura Dinâmica de Placas, Alarme/Chaveiro & Remoção de Marcadores 3D
+
+### Adicionado & Aprimorado
+- **Remoção Absoluta de Marcadores 3D de Veículos (`client/main.lua`):**
+  - Supressão de qualquer marcador flutuante `DrawMarker 20` (chevron/seta verde) sobre o caminhão, a carreta, a empilhadeira e seus componentes de interação (`trailer_rear`, `trailer_doors`, `trailer_strap`, `forklift_dock`). O espaço aéreo do pátio agora é 100% limpo, atendendo ao padrão rigoroso de simulação Heavy RP.
+  - Preservados os blips e rotas no GPS/minimap e os marcadores de piso de doca/estacionamento (`DrawMarker 30` zebrado e `DrawMarker 1` de devolução).
+- **Busca pela Placa (Leitura Dinâmica Diegética) (`client/main.lua`):**
+  - Ao materializar a entidade física do caminhão no cliente, o script lê diretamente a matrícula gerada pela engine via `GetVehicleNumberPlateText(truck)`.
+  - Disparo de notificação na tela: `Veículo liberado no pátio. Placa designada: [PLACA]`.
+  - Sincronização automática da placa na interface NUI do contrato/HUD ativa.
+- **Feedback Diegético de Alarme e Chaveiro (`client/main.lua`):**
+  - Implementada a rotina `TriggerKeyfobChirp(veh)` que simula o destrancar à distância para caminhões de frota/alugados (`not payload.isOwned`).
+  - Emite dois pulsos rápidos e sincronizados de faróis/setas indicadoras acompanhados de buzina curta (~140ms), auxiliando na localização visual e sonora no pátio noturno sem recorrer a elementos arcade.
+
 ## [20.9.5] — 2026-10-07 — Blindagem OneSync Multiplayer, Anti-Wipe de Frotas, Correção do Fluxo de Inicialização & Ajustes 3D de Docas
 
 ### Corrigido & Aprimorado

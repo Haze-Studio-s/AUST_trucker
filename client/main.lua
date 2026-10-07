@@ -264,7 +264,18 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
                 self.coords = pos
             end
 
-            if objType ~= 'dock' and objType ~= 'delivery' then
+            local isVehicleObjective = (
+                objType == 'truck'
+                or objType == 'trailer'
+                or objType == 'forklift'
+                or objType == 'handler'
+                or objType == 'trailer_rear'
+                or objType == 'trailer_doors'
+                or objType == 'trailer_strap'
+                or objType == 'forklift_dock'
+            )
+
+            if objType ~= 'dock' and objType ~= 'delivery' and not isVehicleObjective then
                 DrawMarker(
                     20,
                     pos.x, pos.y, pos.z + dynamicOffsetZ,
@@ -2478,6 +2489,30 @@ local function StartTruckEnterWatcher(truck)
     end)
 end
 
+local function TriggerKeyfobChirp(veh)
+    if not veh or not DoesEntityExist(veh) then return end
+    CreateThread(function()
+        for i = 1, 2 do
+            pcall(function()
+                SetVehicleIndicatorLights(veh, 0, true)
+                SetVehicleIndicatorLights(veh, 1, true)
+                SetVehicleLights(veh, 2)
+                StartVehicleHorn(veh, 140, "HELDDOWN", false)
+            end)
+            Wait(140)
+            pcall(function()
+                SetVehicleIndicatorLights(veh, 0, false)
+                SetVehicleIndicatorLights(veh, 1, false)
+                SetVehicleLights(veh, 0)
+            end)
+            if i == 1 then
+                Wait(140)
+            end
+        end
+    end)
+end
+_G.TriggerKeyfobChirp = TriggerKeyfobChirp
+
 local function StartMissionStep1(truck, trailer, forklift)
     CurrentStage = 'STEP_2_ENTER_TRUCK'
 
@@ -2496,8 +2531,7 @@ local function StartMissionStep1(truck, trailer, forklift)
         SendNUIMessage({ action = 'updateActiveJob', activeJob = lcActiveJob })
     end
 
-    -- 1. Criação do blip e rota no GPS direcionando para o caminhão
-    -- 2. Ativação da seta verde flutuante (marcador chevron tipo 20) sobre o teto do caminhão
+    -- 1. Criação do blip e rota no GPS direcionando para o caminhão (Heavy RP: sem marcador 3D flutuante)
     local truckTarget = (truck and DoesEntityExist(truck) and truck) or (ActiveJob and ActiveJob.truckCoords)
     UpdateMissionObjective('truck', truckTarget, 'Seu Caminhão')
 
@@ -2507,8 +2541,18 @@ local function StartMissionStep1(truck, trailer, forklift)
         UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga', true)
     end
 
-    -- 3. Disparo da notificação sonora de 10 segundos
-    SendMissionNotify('Central Logística', 'Veículos liberados no pátio. Entre no caminhão para iniciar.', 'info')
+    -- 3. Notificação diegética: se o caminhão já estiver materializado com placa, notifica a placa.
+    -- Caso contrário, a notificação com a placa designada será disparada assim que a entidade for resolvida na rede.
+    if truck and DoesEntityExist(truck) then
+        local livePlate = GetVehicleNumberPlateText(truck)
+        if (not livePlate or livePlate == '') and ActiveJob and ActiveJob.truckPlate then
+            livePlate = ActiveJob.truckPlate
+        end
+        livePlate = string.gsub(livePlate or '', "^%s*(.-)%s*$", "%1")
+        if livePlate ~= '' then
+            SendMissionNotify('Central Logística', ('Veículo liberado no pátio. Placa designada: %s'):format(livePlate), 'info')
+        end
+    end
 
     -- 4. Inicia watcher contínuo à prova de falhas de assento
     StartTruckEnterWatcher(truck)
@@ -2778,6 +2822,37 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 local truckPlate = payload.truckPlate or GetVehicleNumberPlateText(truck)
                 if truckPlate and truckPlate ~= '' then
                     SetVehicleNumberPlateText(truck, truckPlate)
+                end
+
+                -- Leitura Dinâmica da Placa e Identificação Diegética (Heavy RP)
+                local livePlate = GetVehicleNumberPlateText(truck)
+                if (not livePlate or livePlate == '') and truckPlate then
+                    livePlate = truckPlate
+                end
+                livePlate = string.gsub(livePlate or '', "^%s*(.-)%s*$", "%1")
+
+                if ActiveJob then
+                    ActiveJob.truckPlate = livePlate
+                end
+                if lcActiveJob then
+                    lcActiveJob.truckPlate = livePlate
+                end
+
+                -- Disparo da notificação diegética na tela com a placa gerada/atribuída
+                SendMissionNotify('Central Logística', ('Veículo liberado no pátio. Placa designada: %s'):format(livePlate), 'info')
+
+                -- Sincronização diegética com a NUI da HUD
+                SendNUIMessage({
+                    action = 'updateActiveJob',
+                    activeJob = {
+                        plate = livePlate,
+                        truckPlate = livePlate
+                    }
+                })
+
+                -- Feedback Diegético de Alarme e Chaveiro (apenas para veículos alugados/frota)
+                if not payload.isOwned then
+                    TriggerKeyfobChirp(truck)
                 end
 
                 if payload.truckMods then
