@@ -2352,10 +2352,10 @@ local function OnPlayerEnteredTruck(truck)
 
     JobEntities.truck = truck
 
-    -- Restaura colisão mútua para permitir o acoplamento físico da 5ª roda
+    -- Garante colisão ativa para permitir o acoplamento físico da 5ª roda
     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-        SetEntityNoCollisionEntity(truck, JobEntities.trailer, false)
-        SetEntityNoCollisionEntity(JobEntities.trailer, truck, false)
+        SetEntityCollision(JobEntities.trailer, true, true)
+        SetEntityCollision(truck, true, true)
     end
 
     PlaySoundFrontend(-1, "Menu_Accept", "Phone_SoundSet_Default", true)
@@ -2423,27 +2423,50 @@ local function OnPlayerEnteredTruck(truck)
     StartCouplingWatcher()
 end
 
+local function IsMissionTruck(veh)
+    if not veh or veh == 0 or not DoesEntityExist(veh) or not ActiveJob then return false end
+    if JobEntities.truck and DoesEntityExist(JobEntities.truck) and veh == JobEntities.truck then
+        return true
+    end
+    if ActiveJob.truckNetId and ActiveJob.truckNetId ~= 0 then
+        if NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
+            local netVeh = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
+            if netVeh ~= 0 and DoesEntityExist(netVeh) and veh == netVeh then
+                return true
+            end
+        end
+        if NetworkGetEntityIsNetworked(veh) then
+            local myNet = VehToNet(veh)
+            if myNet and myNet ~= 0 and myNet == ActiveJob.truckNetId then
+                return true
+            end
+        end
+    end
+    if ActiveJob.truckPlate and ActiveJob.truckPlate ~= '' then
+        local vehPlate = GetVehicleNumberPlateText(veh)
+        if vehPlate then
+            local cleanVeh = string.gsub(vehPlate, "%s+", ""):upper()
+            local cleanTarget = string.gsub(ActiveJob.truckPlate, "%s+", ""):upper()
+            if cleanVeh == cleanTarget then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function StartTruckEnterWatcher(truck)
     CreateThread(function()
         while CurrentStage == 'STEP_2_ENTER_TRUCK' and ActiveJob do
             Wait(250)
             local ped = cache.ped or PlayerPedId()
             local veh = cache.vehicle or GetVehiclePedIsIn(ped, false)
-            local targetTruck = (truck and DoesEntityExist(truck)) and truck or JobEntities.truck
 
-            if (not targetTruck or not DoesEntityExist(targetTruck)) and ActiveJob and ActiveJob.truckNetId then
-                if NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
-                    local resolved = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
-                    if resolved ~= 0 and DoesEntityExist(resolved) then
-                        targetTruck = resolved
-                        JobEntities.truck = resolved
-                    end
-                end
-            end
-
-            if veh ~= 0 and targetTruck and DoesEntityExist(targetTruck) and veh == targetTruck then
+            if veh ~= 0 and DoesEntityExist(veh) and IsMissionTruck(veh) then
                 local seat = GetPedInVehicleSeat(veh, -1)
                 if seat == ped or seat == cache.ped then
+                    JobEntities.truck = veh
+                    if lcActiveJob then lcActiveJob.truck = veh end
                     OnPlayerEnteredTruck(veh)
                     break
                 end
@@ -2490,8 +2513,10 @@ local function StartMissionStep1(truck, trailer, forklift)
     -- 5. Verificação imediata caso o jogador já esteja dentro do veículo
     local ped = cache.ped or PlayerPedId()
     local currentVeh = GetVehiclePedIsIn(ped, false)
-    if currentVeh ~= 0 and truck and currentVeh == truck then
+    if currentVeh ~= 0 and IsMissionTruck(currentVeh) then
         if GetPedInVehicleSeat(currentVeh, -1) == ped then
+            JobEntities.truck = currentVeh
+            if lcActiveJob then lcActiveJob.truck = currentVeh end
             OnPlayerEnteredTruck(currentVeh)
         end
     end
@@ -2502,23 +2527,15 @@ end
 -- =======================================================================
 
 lib.onCache('vehicle', function(veh)
-    if not ActiveJob or not veh then return end
+    if not ActiveJob or not veh or veh == 0 then return end
 
     -- ETAPA 2: ENTRAR NO CAMINHÃO
     if CurrentStage == 'STEP_2_ENTER_TRUCK' then
-        local isTargetTruck = false
-        if JobEntities.truck and veh == JobEntities.truck then
-            isTargetTruck = true
-        elseif ActiveJob and ActiveJob.truckNetId and NetworkDoesNetworkIdExist(ActiveJob.truckNetId) then
-            local netVeh = NetworkGetEntityFromNetworkId(ActiveJob.truckNetId)
-            if netVeh ~= 0 and veh == netVeh then
-                isTargetTruck = true
-            end
-        end
-
-        if isTargetTruck then
+        if IsMissionTruck(veh) then
             local pedSeat = GetPedInVehicleSeat(veh, -1)
-            if pedSeat == cache.ped then
+            if pedSeat == (cache.ped or PlayerPedId()) then
+                JobEntities.truck = veh
+                if lcActiveJob then lcActiveJob.truck = veh end
                 OnPlayerEnteredTruck(veh)
             end
         end
@@ -2794,11 +2811,6 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 SetVehicleCanBeVisiblyDamaged(trailer, false)
                 SetVehicleStrong(trailer, true)
 
-                if truck and DoesEntityExist(truck) then
-                    SetEntityNoCollisionEntity(truck, trailer, true)
-                    SetEntityNoCollisionEntity(trailer, truck, true)
-                end
-
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
                     UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
                 end
@@ -2884,9 +2896,10 @@ local PalletSyncGuard = {
 -- Sincronização dos Paletes e Garantia de Física Dinâmica Nativa (Sem Limbo / Ancoragem Segura de Solo)
 RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds, jobId)
     PalletSyncGuard.Begin(PalletSyncState, jobId)
+    local safeNetIds = palletNetIds or {}
     CreateThread(function()
         local pallets = {}
-        for _, netId in ipairs(palletNetIds) do
+        for _, netId in ipairs(safeNetIds) do
             if netId and netId ~= 0 then
                 if not PalletSyncGuard.Claim(PalletSyncState, netId) then
                     local existingEnt = PalletSyncState.ents[netId]
@@ -2984,9 +2997,9 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
         -- Coleta entidades registradas com tolerância para abastecer o módulo da empilhadeira
         CreateThread(function()
             local waitTime = GetGameTimer() + 4000
-            while GetGameTimer() < waitTime and #pallets < #palletNetIds do
+            while GetGameTimer() < waitTime and #pallets < #safeNetIds do
                 pallets = {}
-                for _, netId in ipairs(palletNetIds) do
+                for _, netId in ipairs(safeNetIds) do
                     local ent = PalletSyncState.ents[netId]
                     if ent and DoesEntityExist(ent) then table.insert(pallets, ent) end
                 end

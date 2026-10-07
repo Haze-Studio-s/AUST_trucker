@@ -63,8 +63,8 @@ end
 
 local pickupPoint = nil
 local deliveryPoint = nil
-local contractStopPoint = nil
-local lcActiveJob = nil
+-- Unificação do estado de missão com client/main.lua
+lcActiveJob = _G.lcActiveJob
 local lcDeliveryPoint = nil
 local lcDeliveryBlip = nil
 local isStartingJob = false

@@ -1351,7 +1351,7 @@ local function StartTruckDelivery(src, contractData)
         requiredCount = reqPallets,
         loadedCount = 0,
         deliveryCoords = destCoords,
-        trailerModel = selectedTrailerModel,
+        trailerModel = requestedTrailer or contractData.trailerModel,
         trailerOffsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
     }
 
