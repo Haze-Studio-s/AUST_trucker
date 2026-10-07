@@ -60,10 +60,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1320px;
-  max-width: 96vw;
-  height: 820px;
-  max-height: 94vh;
+  width: min(94vw, 1420px);
+  min-width: 1000px;
+  height: min(90vh, 860px);
+  min-height: 620px;
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
   border-radius: 14px;
@@ -296,9 +296,10 @@
    ========================================================================== */
 .admin-master-detail {
   display: grid;
-  grid-template-columns: 1.55fr 1fr;
+  grid-template-columns: minmax(560px, 1.55fr) minmax(360px, 1fr);
   gap: 16px;
   align-items: start;
+  width: 100%;
 }
 
 .admin-master-col {
@@ -320,10 +321,12 @@
   margin-bottom: 0;
 }
 
-.admin-table-scroll {
-  max-height: 500px;
+.admin-table-scroll,
+.admin-table-container {
+  max-height: 520px;
   overflow-y: auto;
   overflow-x: auto;
+  width: 100%;
 }
 
 /* ==========================================================================
@@ -545,6 +548,14 @@
   white-space: nowrap;
 }
 
+.admin-table td.col-ellipsis,
+.admin-table td:nth-child(2) {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .admin-table tr:hover td {
   background: rgba(16, 185, 129, 0.05);
 }
@@ -715,6 +726,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
   padding: 9px 14px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.05);

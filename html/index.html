@@ -38,7 +38,7 @@
 		<link rel="stylesheet" href="css/style.css">
 		<link id="css-light" rel="stylesheet" href="css/light-style.css" disabled>
 		<link id="css-dark" rel="stylesheet" href="css/dark-style.css">
-		<link rel="stylesheet" href="css/admin.css?v=3.1.0">
+		<link rel="stylesheet" href="css/admin.css?v=3.2.0">
 
 		<!-- Font Awesome 6 -->
 		<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
@@ -1132,22 +1132,22 @@
 
 									<div class="admin-box-subtle" style="margin-bottom: 14px;">
 										<div style="margin-bottom: 10px;">
-											<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+											<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
 												<label style="margin:0; font-size:11px;">Ponto de Coleta (X, Y, Z)</label>
-												<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 2px 6px; font-size:10px;"><i class="fas fa-crosshairs"></i> Capturar</button>
+												<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 3px 8px; font-size:10.5px;"><i class="fas fa-crosshairs"></i> Capturar</button>
 											</div>
-											<div style="display:flex; gap: 6px;">
+											<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
 												<input type="number" step="0.01" id="route-form-pickup-x" class="admin-input" placeholder="X" style="height:32px; font-size:11px;">
 												<input type="number" step="0.01" id="route-form-pickup-y" class="admin-input" placeholder="Y" style="height:32px; font-size:11px;">
 												<input type="number" step="0.01" id="route-form-pickup-z" class="admin-input" placeholder="Z" style="height:32px; font-size:11px;">
 											</div>
 										</div>
 										<div>
-											<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 4px;">
+											<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
 												<label style="margin:0; font-size:11px;">Ponto de Entrega (X, Y, Z)</label>
-												<button id="btn-cap-deliv" class="admin-btn admin-btn-outline" style="padding: 2px 6px; font-size:10px;"><i class="fas fa-crosshairs"></i> Capturar</button>
+												<button id="btn-cap-deliv" class="admin-btn admin-btn-outline" style="padding: 3px 8px; font-size:10.5px;"><i class="fas fa-crosshairs"></i> Capturar</button>
 											</div>
-											<div style="display:flex; gap: 6px;">
+											<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
 												<input type="number" step="0.01" id="route-form-deliv-x" class="admin-input" placeholder="X" style="height:32px; font-size:11px;">
 												<input type="number" step="0.01" id="route-form-deliv-y" class="admin-input" placeholder="Y" style="height:32px; font-size:11px;">
 												<input type="number" step="0.01" id="route-form-deliv-z" class="admin-input" placeholder="Z" style="height:32px; font-size:11px;">
@@ -1245,7 +1245,7 @@
 												<button id="btn-cap-spawn" class="admin-btn admin-btn-outline" style="padding: 3px 8px; font-size:10.5px;"><i class="fas fa-crosshairs"></i> Capturar</button>
 											</div>
 										</div>
-										<div style="display:flex; gap: 6px;">
+										<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
 											<input type="number" step="0.01" id="spawn-form-x" class="admin-input" placeholder="X" style="height:32px; font-size:11px;">
 											<input type="number" step="0.01" id="spawn-form-y" class="admin-input" placeholder="Y" style="height:32px; font-size:11px;">
 											<input type="number" step="0.01" id="spawn-form-z" class="admin-input" placeholder="Z" style="height:32px; font-size:11px;">
@@ -1514,8 +1514,8 @@
 									</div>
 
 									<div class="admin-box-subtle" style="margin-bottom: 14px;">
-										<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
-											<label style="margin:0;">Coordenadas e Direção (X, Y, Z, Heading)</label>
+										<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
+											<label style="margin:0; font-size:11px;">Coordenadas e Direção (X, Y, Z, Heading)</label>
 											<button id="btn-cap-npc" class="admin-btn admin-btn-outline" style="padding: 4px 8px; font-size:11px;"><i class="fas fa-crosshairs"></i> Capturar Minha Posição</button>
 										</div>
 										<div style="display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
