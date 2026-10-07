@@ -430,12 +430,12 @@
       const dist = r.distance || r.distance_km || 0;
 
       tr.innerHTML = `
-        <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
-        <td>${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
-        <td><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
-        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary)">(${escapeHtml(xp)} XP)</span></td>
-        <td>${Number(dist).toFixed(1)} km (Lvl ${r.req_skill || r.required_level || 1})</td>
-        <td>
+        <td style="font-weight:600;">#${escapeHtml(r.id || r.route_id || k)}</td>
+        <td title="${escapeHtml(r.name || r.title || 'Carga Sem Nome')}">${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
+        <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
+        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary); font-size:10.5px;">(${escapeHtml(xp)} XP)</span></td>
+        <td>${Number(dist).toFixed(1)} km <small style="color:var(--admin-text-muted);">(Lv ${r.req_skill || r.required_level || 1})</small></td>
+        <td style="text-align:center;">
           <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
           <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
         </td>
@@ -1039,9 +1039,9 @@
           const dist = r.distance || r.distance_km || 5.0;
 
           tr.innerHTML = `
-            <td><strong>#${escapeHtml(r.id || r.route_id || k)}</strong></td>
-            <td>${escapeHtml(r.name || r.title || 'Carga')}</td>
-            <td><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
+            <td style="font-weight:600;">#${escapeHtml(r.id || r.route_id || k)}</td>
+            <td title="${escapeHtml(r.name || r.title || 'Carga')}">${escapeHtml(r.name || r.title || 'Carga')}</td>
+            <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
             <td>${Number(dist).toFixed(1)} km</td>
             <td>
               <input type="number" class="admin-inline-input eco-route-pay" data-id="${escapeHtml(k)}" value="${escapeHtml(payment)}">
@@ -1049,8 +1049,8 @@
             <td>
               <input type="number" class="admin-inline-input eco-route-xp" data-id="${escapeHtml(k)}" value="${escapeHtml(xp)}">
             </td>
-            <td>
-              <button class="admin-btn admin-btn-primary btn-save-route-eco" data-id="${escapeHtml(k)}" style="padding: 4px 10px; font-size:11px;"><i class="fas fa-save"></i> Salvar</button>
+            <td style="text-align:center;">
+              <button class="admin-btn admin-btn-primary btn-save-route-eco" data-id="${escapeHtml(k)}" style="padding: 4px 8px; font-size:11px;" title="Salvar"><i class="fas fa-save"></i></button>
             </td>
           `;
           tbody.appendChild(tr);
@@ -1124,14 +1124,14 @@
       const coords = n.coords ? (typeof n.coords === 'string' ? JSON.parse(n.coords) : n.coords) : {};
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>#${escapeHtml(n.npc_id || k)}</strong></td>
-        <td>${escapeHtml(n.npc_name || 'Despachante')}</td>
-        <td><span class="admin-badge admin-badge-heavy">${escapeHtml(n.npc_model || 's_m_m_trucker_01')}</span></td>
-        <td style="font-family: monospace; font-size: 11px;">
-          X: ${coords.x ? Number(coords.x).toFixed(1) : 0}, Y: ${coords.y ? Number(coords.y).toFixed(1) : 0}, Z: ${coords.z ? Number(coords.z).toFixed(1) : 0}
+        <td style="font-weight:600;">#${escapeHtml(n.npc_id || k)}</td>
+        <td title="${escapeHtml(n.npc_name || 'Despachante')}">${escapeHtml(n.npc_name || 'Despachante')}</td>
+        <td style="text-align:center;"><span class="admin-badge admin-badge-heavy">${escapeHtml(n.npc_model || 's_m_m_trucker_01')}</span></td>
+        <td style="font-family: monospace; font-size: 10.5px;">
+          X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0}
         </td>
-        <td>
-          <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
+        <td style="text-align:center;">
+          <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
           <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
         </td>
       `;

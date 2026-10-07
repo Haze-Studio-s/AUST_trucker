@@ -265,8 +265,10 @@
 /* Área de Conteúdo */
 .admin-content {
   flex: 1;
-  padding: 22px 26px;
+  padding: 16px 18px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
   background: transparent;
 }
 
@@ -296,8 +298,8 @@
    ========================================================================== */
 .admin-master-detail {
   display: grid;
-  grid-template-columns: minmax(560px, 1.55fr) minmax(360px, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(540px, 1.65fr) minmax(320px, 1fr);
+  gap: 14px;
   align-items: start;
   width: 100%;
 }
@@ -306,14 +308,14 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 16px;
+  gap: 14px;
 }
 
 .admin-detail-col {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 16px;
+  gap: 14px;
 }
 
 .admin-detail-col .admin-card,
@@ -336,8 +338,8 @@
   background: var(--admin-card-bg);
   border: 1px solid var(--admin-card-border);
   border-radius: 12px;
-  padding: 18px 22px;
-  margin-bottom: 20px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   transition: all var(--admin-transition);
 }
@@ -519,19 +521,19 @@
 .admin-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
-  min-width: 540px;
+  font-size: 11.5px;
+  table-layout: fixed;
 }
 
 .admin-table th {
   text-align: left;
-  padding: 10px 10px;
+  padding: 8px 8px;
   background: rgba(13, 20, 28, 0.65);
   color: var(--admin-text-muted);
-  font-size: 10.5px;
+  font-size: 10px;
   text-transform: uppercase;
   font-weight: 700;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: sticky;
   top: 0;
@@ -540,7 +542,7 @@
 }
 
 .admin-table td {
-  padding: 10px 10px;
+  padding: 7px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--admin-text-main);
   vertical-align: middle;
@@ -548,17 +550,49 @@
   white-space: nowrap;
 }
 
-.admin-table td.col-ellipsis,
-.admin-table td:nth-child(2) {
-  max-width: 190px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .admin-table tr:hover td {
   background: rgba(16, 185, 129, 0.05);
 }
+
+.admin-table .admin-btn {
+  padding: 4px 7px;
+  font-size: 11px;
+  height: 26px;
+  line-height: 1;
+  gap: 4px;
+}
+
+/* Colunas Específicas de Rotas (table-layout: fixed) */
+.admin-table-routes th:nth-child(1), .admin-table-routes td:nth-child(1) { width: 75px; text-overflow: ellipsis; overflow: hidden; }
+.admin-table-routes th:nth-child(2), .admin-table-routes td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-routes th:nth-child(3), .admin-table-routes td:nth-child(3) { width: 68px; text-align: center; }
+.admin-table-routes th:nth-child(4), .admin-table-routes td:nth-child(4) { width: 125px; }
+.admin-table-routes th:nth-child(5), .admin-table-routes td:nth-child(5) { width: 95px; }
+.admin-table-routes th:nth-child(6), .admin-table-routes td:nth-child(6) { width: 68px; text-align: center; }
+
+/* Colunas Específicas de Economia (table-layout: fixed) */
+.admin-table-economy th:nth-child(1), .admin-table-economy td:nth-child(1) { width: 65px; text-overflow: ellipsis; overflow: hidden; }
+.admin-table-economy th:nth-child(2), .admin-table-economy td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-economy th:nth-child(3), .admin-table-economy td:nth-child(3) { width: 65px; text-align: center; }
+.admin-table-economy th:nth-child(4), .admin-table-economy td:nth-child(4) { width: 55px; }
+.admin-table-economy th:nth-child(5), .admin-table-economy td:nth-child(5) { width: 78px; }
+.admin-table-economy th:nth-child(6), .admin-table-economy td:nth-child(6) { width: 72px; }
+.admin-table-economy th:nth-child(7), .admin-table-economy td:nth-child(7) { width: 65px; text-align: center; }
+
+/* Colunas Específicas de NPCs (table-layout: fixed) */
+.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 85px; text-overflow: ellipsis; overflow: hidden; }
+.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 105px; text-align: center; }
+.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 155px; font-family: monospace; font-size: 10.5px; }
+.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 75px; text-align: center; }
+
+/* Colunas Específicas do Prop Editor (table-layout: fixed) */
+.admin-table-props-6dof th:nth-child(1), .admin-table-props-6dof td:nth-child(1) { width: 60px; text-overflow: ellipsis; overflow: hidden; }
+.admin-table-props-6dof th:nth-child(2), .admin-table-props-6dof td:nth-child(2) { width: 90px; }
+.admin-table-props-6dof th:nth-child(3), .admin-table-props-6dof td:nth-child(3) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-props-6dof th:nth-child(4), .admin-table-props-6dof td:nth-child(4) { width: 135px; font-family: monospace; font-size: 10.5px; }
+.admin-table-props-6dof th:nth-child(5), .admin-table-props-6dof td:nth-child(5) { width: 125px; font-family: monospace; font-size: 10.5px; }
+.admin-table-props-6dof th:nth-child(6), .admin-table-props-6dof td:nth-child(6) { width: 65px; text-align: center; }
 
 /* Badges de Categoria */
 .admin-badge {
