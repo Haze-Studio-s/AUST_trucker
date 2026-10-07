@@ -1,5 +1,20 @@
 # Changelog — AUST_trucker
 
+## [20.9.7] — 2026-10-07 — Chave Composta de Offsets de Trailer por Carga (Multi-Prop) & Isolamento no Painel Admin
+
+### Adicionado & Aprimorado
+- **Chave Composta e Isolamento de Offsets por Carga (`server/database.lua`):**
+  - Tabela `aust_trucker_trailer_offsets` atualizada com a coluna `prop_model VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b'`.
+  - Migração de índice segura de `uq_trailer_slot` para `uq_trailer_prop_slot (trailer_model, prop_model, slot_index, is_forklift)`. Permite que o mesmo modelo de reboque (ex: `trflat`) armazene simultaneamente calibrações independentes de posições para diferentes tipos de cargas (ex: Madeira vs Borracha vs Carga Geral) sem sobrescrita.
+- **Cache O(1) e Resolução em Cascata (`server/services/admin_service.lua`, `server/main.lua`):**
+  - O cache em RAM agora indexa por chave composta `model::prop` além do índice genérico de compatibilidade retroativa `model`.
+  - Implementado `AdminService.GetOffsetsForTrailerAndCargo(trailerModel, cargoPropModel)` com resolução sequencial em cascata: exata (`model::prop`) → modelo geral no banco → fallback estático em `Config.TrailerSlots`.
+  - Resolução dinâmica de props em missões ativas através da carga contratada no despacho.
+- **Agrupamento e Controles no Painel Administrativo (`html/js/admin.js`):**
+  - Exibição de cards individuais por par `Trailer — Carga: [PROP]` na aba "Offsets Trailer 3D".
+  - Ação rápida "Configurar Esta Carga" preenchendo modelo de carreta e prop no formulário.
+  - Exclusão atômica por slot e exclusão em lote de toda a configuração daquela carga específica (`btn-del-group`) sem afetar as demais cargas do mesmo reboque.
+
 ## [20.9.6] — 2026-10-07 — Identificação Diegética Heavy RP, Leitura Dinâmica de Placas, Alarme/Chaveiro & Remoção de Marcadores 3D
 
 ### Adicionado & Aprimorado

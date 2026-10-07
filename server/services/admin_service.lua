@@ -316,15 +316,36 @@ end
 function AdminService.ReloadTrailerOffsets()
     local offsets = MySQL.query.await('SELECT * FROM aust_trucker_trailer_offsets') or {}
     local offsetMap = {}
+    local rawModelMap = {}
+
     for _, o in ipairs(offsets) do
         local model = o.trailer_model:lower()
-        if not offsetMap[model] then
-            offsetMap[model] = { pallets = {}, forklift = nil }
+        local prop = (o.prop_model and o.prop_model ~= '' and o.prop_model:lower()) or 'hei_prop_carrier_cargo_04b'
+        local compKey = model .. '::' .. prop
+
+        if not offsetMap[compKey] then
+            offsetMap[compKey] = {
+                trailer_model = model,
+                prop_model = prop,
+                label = o.label or nil,
+                pallets = {},
+                forklift = nil
+            }
         end
+        if not rawModelMap[model] then
+            rawModelMap[model] = {
+                trailer_model = model,
+                prop_model = prop,
+                label = o.label or nil,
+                pallets = {},
+                forklift = nil
+            }
+        end
+
         local vecData = {
             id = o.id,
             label = o.label or nil,
-            prop_model = o.prop_model or nil,
+            prop_model = prop,
             x = tonumber(o.offset_x) or 0.0,
             y = tonumber(o.offset_y) or 0.0,
             z = tonumber(o.offset_z) or 0.0,
@@ -332,16 +353,35 @@ function AdminService.ReloadTrailerOffsets()
         }
         local isFork = (o.is_forklift == 1 or o.is_forklift == true or tonumber(o.is_forklift) == 1 or tostring(o.is_forklift) == '1')
         if isFork then
-            offsetMap[model].forklift = vecData
+            offsetMap[compKey].forklift = vecData
+            rawModelMap[model].forklift = vecData
         else
-            offsetMap[model].pallets[tostring(o.slot_index)] = vecData
-            offsetMap[model].pallets[tonumber(o.slot_index)] = vecData
+            offsetMap[compKey].pallets[tostring(o.slot_index)] = vecData
+            offsetMap[compKey].pallets[tonumber(o.slot_index)] = vecData
+            rawModelMap[model].pallets[tostring(o.slot_index)] = vecData
+            rawModelMap[model].pallets[tonumber(o.slot_index)] = vecData
         end
     end
 
     -- Dual-indexação com normalização estrita de hash 32-bit (Signed e Unsigned)
     local dualMap = {}
-    for model, data in pairs(offsetMap) do
+    for compKey, data in pairs(offsetMap) do
+        dualMap[compKey] = data
+        local model = data.trailer_model
+        local prop = data.prop_model
+        local h = joaat(model)
+        local u = h & 0xFFFFFFFF
+        local s = (u >= 0x80000000) and (u - 0x100000000) or u
+        dualMap[h .. '::' .. prop] = data
+        dualMap[u .. '::' .. prop] = data
+        dualMap[s .. '::' .. prop] = data
+        dualMap[tostring(h) .. '::' .. prop] = data
+        dualMap[tostring(u) .. '::' .. prop] = data
+        dualMap[tostring(s) .. '::' .. prop] = data
+    end
+
+    -- Fallbacks genéricos pelo modelo simples (compatibilidade reversa)
+    for model, data in pairs(rawModelMap) do
         dualMap[model] = data
         local h = joaat(model)
         local u = h & 0xFFFFFFFF
@@ -352,7 +392,11 @@ function AdminService.ReloadTrailerOffsets()
         dualMap[tostring(h)] = data
         dualMap[tostring(u)] = data
         dualMap[tostring(s)] = data
+        if not offsetMap[model] then
+            offsetMap[model] = data
+        end
     end
+
     AdminService.TrailerOffsets = dualMap
     AdminService.CleanTrailerOffsets = offsetMap
 
@@ -370,7 +414,7 @@ function AdminService.ReloadTrailerOffsets()
             end
         end
 
-        for model, data in pairs(offsetMap) do
+        for model, data in pairs(rawModelMap) do
             local h = joaat(model)
             local u = h & 0xFFFFFFFF
             local s = (u >= 0x80000000) and (u - 0x100000000) or u
@@ -404,6 +448,55 @@ function AdminService.ReloadTrailerOffsets()
     end
 
     return dualMap, offsetMap
+end
+
+---Resolução de offsets de reboque em cascata (Par exato Trailer+Prop -> Modelo genérico -> Padrão Config)
+function AdminService.GetOffsetsForTrailerAndCargo(trailerModel, cargoPropModel)
+    if not trailerModel then return nil end
+    local offsets = AdminService.TrailerOffsets
+    if not offsets or next(offsets) == nil then
+        offsets = AdminService.ReloadTrailerOffsets()
+    end
+
+    local modelKey = tostring(trailerModel):lower()
+    local hash = tonumber(trailerModel) or joaat(modelKey)
+    local u = tostring(hash & 0xFFFFFFFF)
+    local s = tostring((hash & 0xFFFFFFFF >= 0x80000000) and (hash & 0xFFFFFFFF - 0x100000000) or (hash & 0xFFFFFFFF))
+    local hStr = tostring(hash)
+
+    local propKey = cargoPropModel and tostring(cargoPropModel):lower() or nil
+
+    -- 1. Resolução prioritária pela combinação exata (Trailer + Prop)
+    if propKey and propKey ~= '' then
+        local candidates = {
+            modelKey .. '::' .. propKey,
+            hStr .. '::' .. propKey,
+            u .. '::' .. propKey,
+            s .. '::' .. propKey
+        }
+        for _, k in ipairs(candidates) do
+            if offsets[k] and offsets[k].pallets and next(offsets[k].pallets) ~= nil then
+                return offsets[k]
+            end
+        end
+    end
+
+    -- 2. Resolução em Cascata: Fallback para o modelo genérico do trailer
+    local fallbackKeys = { modelKey, hStr, u, s, hash }
+    for _, k in ipairs(fallbackKeys) do
+        if offsets[k] and offsets[k].pallets and next(offsets[k].pallets) ~= nil then
+            return offsets[k]
+        end
+    end
+
+    -- 3. Resolução em Cascata: Fallback para Config.TrailerSlots estático
+    for _, k in ipairs(fallbackKeys) do
+        if Config.TrailerSlots and Config.TrailerSlots[k] and Config.TrailerSlots[k].pallets and next(Config.TrailerSlots[k].pallets) ~= nil then
+            return Config.TrailerSlots[k]
+        end
+    end
+
+    return nil
 end
 
 function AdminService.ReloadVehiclePropOffsets()
@@ -517,25 +610,11 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
 end)
 
 -- Callback em tempo de execução para sincronização de offsets de reboque (100% da RAM, zero SQL overhead)
-lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
-    local offsets = AdminService.TrailerOffsets
-    if not offsets or next(offsets) == nil then
-        offsets = AdminService.ReloadTrailerOffsets()
-    end
-
-    local modelKey = tostring(trailerModel or ''):lower()
-    local hash = tonumber(trailerModel) or joaat(modelKey)
-    local u = hash & 0xFFFFFFFF
-    local s = (u >= 0x80000000) and (u - 0x100000000) or u
-
-    local targetData = offsets[modelKey] or offsets[hash] or offsets[u] or offsets[s] or offsets[tostring(hash)] or offsets[tostring(u)] or offsets[tostring(s)]
-    if not targetData and Config.TrailerSlots then
-        targetData = Config.TrailerSlots[hash] or Config.TrailerSlots[u] or Config.TrailerSlots[s] or Config.TrailerSlots[modelKey]
-    end
-
+lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel, cargoPropModel)
+    local specificData = AdminService.GetOffsetsForTrailerAndCargo(trailerModel, cargoPropModel)
     return {
-        specific = targetData,
-        all = offsets
+        specific = specificData,
+        all = AdminService.TrailerOffsets
     }
 end)
 
@@ -678,7 +757,7 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteSpawn', function(spawnId)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Spawn excluído.', type = 'info' })
 end)
 
--- 3. MAPEAMENTO DE OFFSETS DE TRAILER (GIZMO / NUDGE TOOL)
+-- 3. MAPEAMENTO DE OFFSETS DE TRAILER (GIZMO / NUDGE TOOL) COM CHAVE COMPOSTA (TRAILER + PROP)
 RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or type(data) ~= 'table' then return end
@@ -690,7 +769,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local isForklift = data.isForklift and 1 or 0
     local label = CleanStr(data.label, 100, nil)
     local propModel = CleanStr(data.propModel, 100, nil)
-    propModel = propModel and propModel:lower() or (isForklift == 1 and 'forklift' or nil)
+    propModel = (propModel and propModel:lower()) or (isForklift == 1 and 'forklift' or 'hei_prop_carrier_cargo_04b')
     local ox, oy, oz = ClampNum(data.x, -50.0, 50.0, 0.0), ClampNum(data.y, -50.0, 50.0, 0.0), ClampNum(data.z, -50.0, 50.0, 0.0)
     local heading = ClampNum(data.heading, -360.0, 360.0, 0.0)
 
@@ -699,13 +778,13 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
         (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-        label = VALUES(label), prop_model = VALUES(prop_model), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
+        label = VALUES(label), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
         heading = VALUES(heading)
     ]], {
         trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift
     })
 
-    AdminLog(src, 'adminSaveTrailerOffset', ('%s slot=%d fork=%d'):format(trailerModel, slotIndex, isForklift))
+    AdminLog(src, 'adminSaveTrailerOffset', ('%s prop=%s slot=%d fork=%d'):format(trailerModel, propModel, slotIndex, isForklift))
 
     -- Recarrega e normaliza dados frescos do banco
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
@@ -722,29 +801,32 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, offsetPayload, heading, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {
         title = 'Offset Calibrado',
-        description = ('Offset do %s (%s) gravado no banco e ativo em tempo real!'):format(trailerModel, isForklift == 1 and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))),
+        description = ('Offset do %s [%s] (%s) gravado no banco e ativo em tempo real!'):format(trailerModel, propModel, isForklift == 1 and 'Empilhadeira' or ('Slot ' .. tostring(slotIndex))),
         type = 'success'
     })
 end)
 
-RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOrModel, maybeSlot, maybeFork)
+RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOrModel, maybeSlot, maybeFork, maybeProp)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or not dataOrModel then return end
 
-    local id, trailerModel, slotIndex, isForklift
+    local id, trailerModel, slotIndex, isForklift, propModel
     if type(dataOrModel) == 'table' then
         id = tonumber(dataOrModel.id)
-        trailerModel = CleanStr(dataOrModel.trailerModel, 50, nil)
-        slotIndex = tonumber(dataOrModel.slotIndex)
-        isForklift = dataOrModel.isForklift
+        trailerModel = CleanStr(dataOrModel.trailerModel or dataOrModel.trailer, 50, nil)
+        slotIndex = tonumber(dataOrModel.slotIndex or dataOrModel.slot)
+        isForklift = dataOrModel.isForklift or dataOrModel.is_forklift or dataOrModel.fork
+        propModel = CleanStr(dataOrModel.propModel or dataOrModel.prop_model or dataOrModel.prop, 100, nil)
     else
         trailerModel = CleanStr(dataOrModel, 50, nil)
         slotIndex = tonumber(maybeSlot)
         isForklift = maybeFork
+        propModel = CleanStr(maybeProp, 100, nil)
     end
+    if propModel then propModel = propModel:lower() end
     if id and not IsFiniteNumber(id) then id = nil end
     if not id and not trailerModel then return end
-    AdminLog(src, 'adminDeleteTrailerOffset', tostring(id or trailerModel))
+    AdminLog(src, 'adminDeleteTrailerOffset', ('id=%s trailer=%s prop=%s slot=%s fork=%s'):format(tostring(id), tostring(trailerModel), tostring(propModel), tostring(slotIndex), tostring(isForklift)))
 
     local rowsAffected = 0
     if id and id > 0 then
@@ -755,19 +837,33 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteTrailerOffset', function(dataOr
     if not rowsAffected or rowsAffected == 0 then
         if trailerModel then
             local modelStr = tostring(trailerModel):lower()
-            local h = joaat(modelStr)
-            local u = tostring(h & 0xFFFFFFFF)
             local isFork = (isForklift == true or isForklift == 1 or isForklift == '1') and 1 or 0
-            MySQL.query.await([[
-                DELETE FROM aust_trucker_trailer_offsets 
-                WHERE (LOWER(trailer_model) = ? OR LOWER(trailer_model) = ? OR LOWER(trailer_model) = ?) 
-                  AND slot_index = ? AND is_forklift = ?
-            ]], { modelStr, tostring(h), u, slotIndex or 1, isFork })
+            if slotIndex and propModel then
+                MySQL.query.await([[
+                    DELETE FROM aust_trucker_trailer_offsets 
+                    WHERE LOWER(trailer_model) = ? AND LOWER(prop_model) = ? AND slot_index = ? AND is_forklift = ?
+                ]], { modelStr, propModel, slotIndex, isFork })
+            elseif slotIndex then
+                MySQL.query.await([[
+                    DELETE FROM aust_trucker_trailer_offsets 
+                    WHERE LOWER(trailer_model) = ? AND slot_index = ? AND is_forklift = ?
+                ]], { modelStr, slotIndex, isFork })
+            elseif propModel then
+                MySQL.query.await([[
+                    DELETE FROM aust_trucker_trailer_offsets 
+                    WHERE LOWER(trailer_model) = ? AND LOWER(prop_model) = ?
+                ]], { modelStr, propModel })
+            else
+                MySQL.query.await([[
+                    DELETE FROM aust_trucker_trailer_offsets 
+                    WHERE LOWER(trailer_model) = ?
+                ]], { modelStr })
+            end
         end
     end
 
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
-    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel or '', slotIndex or 1, isForklift == true, vector3(0, 0, 0), 0.0, cleanOffsets or updatedOffsets)
+    TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel or '', slotIndex or 1, (isForklift == 1 or isForklift == true), vector3(0, 0, 0), 0.0, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Offset do trailer %s excluído com sucesso.'):format(tostring(trailerModel or id or '')), type = 'info' })
 end)
 

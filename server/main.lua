@@ -1007,22 +1007,17 @@ local function StartTruckDelivery(src, contractData)
         local function ResolveCargoPropHash(slotIdx)
             local tOffsets = nil
             local reqKey = tostring(requestedTrailer or ''):lower()
-            if AdminService then
-                if AdminService.TrailerOffsets then
-                    tOffsets = AdminService.TrailerOffsets[reqKey]
-                        or AdminService.TrailerOffsets[requestedTrailer]
-                        or AdminService.TrailerOffsets[trailerModel]
-                end
-                if (not tOffsets or not tOffsets.pallets or next(tOffsets.pallets) == nil) and AdminService.ReloadTrailerOffsets then
-                    local freshOffsets = AdminService.ReloadTrailerOffsets()
-                    if freshOffsets then
-                        tOffsets = freshOffsets[reqKey] or freshOffsets[requestedTrailer]
-                    end
-                end
+            local cModel = contractData.cargoModel or contractData.cargo_model
+            if AdminService and AdminService.GetOffsetsForTrailerAndCargo then
+                tOffsets = AdminService.GetOffsetsForTrailerAndCargo(reqKey, cModel)
+            elseif AdminService and AdminService.TrailerOffsets then
+                tOffsets = AdminService.TrailerOffsets[reqKey]
+                    or AdminService.TrailerOffsets[requestedTrailer]
+                    or AdminService.TrailerOffsets[trailerModel]
             end
             local slotData = tOffsets and tOffsets.pallets and (tOffsets.pallets[slotIdx] or tOffsets.pallets[tostring(slotIdx)])
             local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)
-                or contractData.cargoModel
+                or cModel
                 or contractData.cargo_model
                 or (Config.Polarix and Config.Polarix.PalletModels and Config.Polarix.PalletModels[((slotIdx - 1) % #Config.Polarix.PalletModels) + 1])
                 or (Config.Polarix and Config.Polarix.DefaultPalletModel)
@@ -1262,7 +1257,8 @@ local function StartTruckDelivery(src, contractData)
         cargoModel = (function()
             local cm = contractData.cargoModel or contractData.cargo_model
             if cm and cm ~= '' then return cm end
-            local tOffsets = AdminService and AdminService.TrailerOffsets and (AdminService.TrailerOffsets[requestedTrailer] or AdminService.TrailerOffsets[trailerModel] or AdminService.TrailerOffsets[tostring(requestedTrailer):lower()])
+            local tOffsets = (AdminService and AdminService.GetOffsetsForTrailerAndCargo and AdminService.GetOffsetsForTrailerAndCargo(requestedTrailer or trailerModel, cm))
+                or (AdminService and AdminService.TrailerOffsets and (AdminService.TrailerOffsets[requestedTrailer] or AdminService.TrailerOffsets[trailerModel]))
             local s1 = tOffsets and tOffsets.pallets and (tOffsets.pallets[1] or tOffsets.pallets['1'])
             if s1 and s1.prop_model and s1.prop_model ~= '' then return s1.prop_model end
             return 'hei_prop_carrier_cargo_04b'
@@ -1351,7 +1347,10 @@ local function StartTruckDelivery(src, contractData)
         loadedCount = 0,
         deliveryCoords = destCoords,
         trailerModel = requestedTrailer or contractData.trailerModel,
-        trailerOffsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
+        trailerOffsets = (AdminService and AdminService.GetOffsetsForTrailerAndCargo and AdminService.GetOffsetsForTrailerAndCargo(requestedTrailer or contractData.trailerModel, contractData.cargoModel or contractData.cargo_model))
+            or (AdminService and AdminService.TrailerOffsets and (AdminService.TrailerOffsets[requestedTrailer or contractData.trailerModel]))
+            or (Config.TrailerSlots and Config.TrailerSlots[requestedTrailer or contractData.trailerModel])
+            or {}
     }
 
     if Config.Debug then

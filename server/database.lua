@@ -453,12 +453,12 @@ local TABLES = {
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
-    -- Módulo Administrativo: Offsets de Slots de Trailer Mapeados Visualmente
+    -- Módulo Administrativo: Offsets de Slots de Trailer Mapeados Visualmente (Chave Composta por Trailer + Prop)
     [[CREATE TABLE IF NOT EXISTS `aust_trucker_trailer_offsets` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `trailer_model` VARCHAR(50) NOT NULL,
         `label` VARCHAR(100) DEFAULT NULL,
-        `prop_model` VARCHAR(100) DEFAULT NULL,
+        `prop_model` VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b',
         `slot_index` INT NOT NULL,
         `offset_x` FLOAT NOT NULL DEFAULT 0.0,
         `offset_y` FLOAT NOT NULL DEFAULT 0.0,
@@ -466,7 +466,7 @@ local TABLES = {
         `heading` FLOAT NOT NULL DEFAULT 0.0,
         `is_forklift` TINYINT(1) NOT NULL DEFAULT 0,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY `uq_trailer_slot` (`trailer_model`, `slot_index`, `is_forklift`)
+        UNIQUE KEY `uq_trailer_prop_slot` (`trailer_model`, `prop_model`, `slot_index`, `is_forklift`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
     -- Módulo Administrativo: Offsets Livres Veículo <-> Prop (PropEditor 6DoF)
@@ -573,16 +573,24 @@ local MIGRATIONS = {
     "ALTER TABLE `trucker_jobs` ADD INDEX `idx_jobs_company` (`company_id`)",
     -- impede pagamento duplicado de convoy (falha e é logado se já houver duplicatas)
     "ALTER TABLE `trucker_convoy_payments` ADD UNIQUE INDEX `uq_cp_convoy_citizen` (`convoy_id`, `citizenid`)",
+    -- Offsets Trailer 3D: Chave Composta por Trailer + Prop
+    "UPDATE `aust_trucker_trailer_offsets` SET `prop_model` = 'hei_prop_carrier_cargo_04b' WHERE `prop_model` IS NULL OR `prop_model` = ''",
+    "ALTER TABLE `aust_trucker_trailer_offsets` MODIFY COLUMN `prop_model` VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b'",
+    "ALTER TABLE `aust_trucker_trailer_offsets` DROP INDEX `uq_trailer_slot`",
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD UNIQUE INDEX `uq_trailer_prop_slot` (`trailer_model`, `prop_model`, `slot_index`, `is_forklift`)",
 }
 
--- Erros esperados em migrations idempotentes (coluna/chave já existe)
+-- Erros esperados em migrations idempotentes (coluna/chave já existe ou não existe para drop)
 local function IsExpectedMigrationError(err)
     local e = tostring(err or ''):lower()
     return e:find('duplicate column', 1, true)
         or e:find('duplicate key name', 1, true)
         or e:find('already exists', 1, true)
+        or e:find("can't drop", 1, true)
+        or e:find('check that column/key exists', 1, true)
         or e:find('1060', 1, true)
         or e:find('1061', 1, true)
+        or e:find('1091', 1, true)
 end
 
 ---Garante que todas as tabelas e migrations existam. Chamado dentro de MySQL.ready (main.lua).

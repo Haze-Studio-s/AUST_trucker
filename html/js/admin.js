@@ -858,7 +858,7 @@
   }
 
   // ============================================================
-  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS (COM DELETE E LABEL)
+  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS (COM CHAVE COMPOSTA TRAILER + PROP)
   // ============================================================
   function renderOffsetsTab() {
     const listContainer = document.getElementById('admin-offsets-list');
@@ -866,10 +866,20 @@
     listContainer.innerHTML = '';
 
     const offsets = adminData.trailerOffsets || {};
-    let keys = Object.keys(offsets);
-    const textKeys = keys.filter(k => isNaN(Number(k)));
-    if (textKeys.length > 0) {
-      keys = textKeys;
+    let allKeys = Object.keys(offsets);
+    // Filtra chaves numéricas de hash 32-bit (mantém apenas chaves legíveis por string)
+    const textKeys = allKeys.filter(k => isNaN(Number(k)));
+
+    // Se existirem chaves com '::' (chave composta), priorizamos elas
+    // Se um modelo existir apenas como chave simples sem '::', também é mantido
+    const hasComposite = textKeys.some(k => k.includes('::'));
+    let keys = textKeys;
+    if (hasComposite) {
+      keys = textKeys.filter(k => {
+        if (k.includes('::')) return true;
+        // Mantém a chave simples apenas se não existir nenhuma chave composta para esse modelo
+        return !textKeys.some(other => other.startsWith(k + '::'));
+      });
     }
 
     if (keys.length === 0) {
@@ -877,8 +887,17 @@
       return;
     }
 
-    keys.forEach(model => {
-      const item = offsets[model];
+    // Ordena alfabeticamente por modelo e prop
+    keys.sort();
+
+    keys.forEach(compKey => {
+      const item = offsets[compKey];
+      if (!item) return;
+
+      const trailerModel = (item.trailer_model || compKey.split('::')[0] || compKey).toLowerCase();
+      const propModel = (item.prop_model || (compKey.includes('::') ? compKey.split('::')[1] : null) || 'hei_prop_carrier_cargo_04b');
+      const groupLabel = item.label || null;
+
       let palletSlots = [];
       if (item.pallets) {
         const seen = new Set();
@@ -894,10 +913,20 @@
 
       const card = document.createElement('div');
       card.className = 'admin-card';
+      card.style.borderLeft = '4px solid var(--admin-primary)';
       card.innerHTML = `
-        <div class="admin-card-header">
-          <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(model.toUpperCase())}</strong></span>
-          <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(model)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Usar Modelo</button>
+        <div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+          <div>
+            <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(trailerModel.toUpperCase())}</strong></span>
+            <span class="admin-badge admin-badge-primary" style="margin-left: 8px; font-size: 11px;">
+              <i class="fas fa-box"></i> Carga / Prop: <strong>${escapeHtml(propModel)}</strong>
+            </span>
+            ${groupLabel ? `<span style="color:#94a3b8; font-size:11px; margin-left:6px;">(${escapeHtml(groupLabel)})</span>` : ''}
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Configurar Esta Carga</button>
+            <button class="admin-btn admin-btn-danger btn-del-group" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 8px; font-size: 11px;" title="Excluir Todos os Slots Desta Carga"><i class="fas fa-trash"></i></button>
+          </div>
         </div>
         <div style="font-size:12px; line-height: 1.6;">
           <div style="margin-bottom: 8px;"><strong>Slots de Paletes Calibrados:</strong></div>
@@ -908,11 +937,11 @@
                   <strong style="color:var(--admin-primary)">Slot ${s.slot}</strong> 
                   ${s.data.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(s.data.label)}"</span>` : ''}
                   <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;" title="Prop Homologado / Carga">
-                    <i class="fas fa-box"></i> ${escapeHtml(s.data.prop_model || 'Padrão')}
+                    <i class="fas fa-box"></i> ${escapeHtml(s.data.prop_model || propModel)}
                   </span>
                   <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
                 </div>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(model)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
               </div>
             `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
           </div>
@@ -923,7 +952,7 @@
                 ${item.forklift.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(item.forklift.label)}"</span>` : ''}
                 <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;"><i class="fas fa-truck-ramp-box"></i> ${escapeHtml(item.forklift.prop_model || 'forklift')}</span>
                 <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(item.forklift && item.forklift.id ? item.forklift.id : '')}" data-trailer="${escapeHtml(model)}" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(item.forklift && item.forklift.id ? item.forklift.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="forklift" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
               </div>
             ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
           </div>
@@ -935,17 +964,41 @@
     listContainer.querySelectorAll('.btn-select-trailer').forEach(btn => {
       btn.addEventListener('click', function () {
         const m = this.getAttribute('data-model');
-        const input = document.getElementById('offset-form-trailer');
-        if (input) {
-          input.value = m;
-          input.focus();
-        }
+        const p = this.getAttribute('data-prop');
+        const trailerInput = document.getElementById('offset-form-trailer');
+        const propInput = document.getElementById('offset-form-prop');
+        if (trailerInput) trailerInput.value = m;
+        if (propInput && p) propInput.value = p;
+        if (trailerInput) trailerInput.focus();
+      });
+    });
+
+    listContainer.querySelectorAll('.btn-del-group').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const trailer = this.getAttribute('data-trailer');
+        const prop = this.getAttribute('data-prop');
+        showConfirmModal(
+          'Excluir Configuração Completa',
+          `Deseja realmente remover TODOS os slots do trailer "${trailer.toUpperCase()}" com a carga "${prop}"?`,
+          () => {
+            postNUI('adminDeleteTrailerOffset', {
+              trailerModel: trailer,
+              propModel: prop
+            });
+            const compKey = trailer.toLowerCase() + '::' + prop.toLowerCase();
+            delete adminData.trailerOffsets[compKey];
+            delete adminData.trailerOffsets[trailer.toLowerCase()];
+            renderOffsetsTab();
+            showAdminToast(`Configuração de ${trailer} (${prop}) excluída com sucesso.`);
+          }
+        );
       });
     });
 
     listContainer.querySelectorAll('.btn-del-offset').forEach(btn => {
       btn.addEventListener('click', function () {
         const trailer = this.getAttribute('data-trailer');
+        const prop = this.getAttribute('data-prop');
         const slot = parseInt(this.getAttribute('data-slot'));
         const isFork = this.getAttribute('data-fork') === '1';
         const offsetId = parseInt(this.getAttribute('data-id')) || null;
@@ -953,17 +1006,19 @@
 
         showConfirmModal(
           'Excluir Offset',
-          `Deseja realmente remover o offset do trailer "${trailer}" (${targetDesc})?`,
+          `Deseja realmente remover o offset do trailer "${trailer}" [${prop}] (${targetDesc})?`,
           () => {
             postNUI('adminDeleteTrailerOffset', {
               id: offsetId,
               trailerModel: trailer,
+              propModel: prop,
               slotIndex: slot,
               isForklift: isFork
             });
-            Object.keys(adminData.trailerOffsets).forEach(k => {
+            const compKey = trailer.toLowerCase() + '::' + prop.toLowerCase();
+            [compKey, trailer.toLowerCase()].forEach(k => {
               const trData = adminData.trailerOffsets[k];
-              if (trData && (k === trailer || String(k).toLowerCase() === String(trailer).toLowerCase())) {
+              if (trData) {
                 if (isFork) {
                   trData.forklift = null;
                 } else if (trData.pallets) {
@@ -980,7 +1035,7 @@
               }
             });
             renderOffsetsTab();
-            showAdminToast(`Offset do trailer ${trailer} removido com sucesso.`);
+            showAdminToast(`Offset do trailer ${trailer} [${prop}] removido com sucesso.`);
           }
         );
       });
