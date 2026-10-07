@@ -833,10 +833,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 else
                                     -- Só processa engate se a carga não estiver estivada no reboque
                                     if not IsEntityAttached(p) then
-                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
-                                        local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
+                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DA EMPILHADEIRA (GARFOS PENETRANDO SOB A CARGA)
+                                        local rel = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
 
-                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR):
                                         -- Alinhamento Angular: perdoa até 45 graus (incluindo ré/trás por simetria a 180°)
                                         local forkH = GetEntityHeading(forklift)
                                         local palH  = GetEntityHeading(p)
@@ -844,14 +843,14 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                         if diffAngle > 90 then diffAngle = 180 - diffAngle end
                                         local isAngleAligned = (diffAngle <= 45.0)
 
-                                        -- Encaixe Físico dos Garfos dentro do Palete:
-                                        -- Eixo X (Centralização lateral): tolerância de até ±0.65m
-                                        -- Eixo Y (Penetração dos garfos): pontas dos garfos inseridas sob o palete (±0.65m)
-                                        -- Eixo Z (Altura vertical dos garfos): entrada entre -0.50m e +0.50m
+                                        -- Encaixe Físico: os dentes dos garfos avançam para a frente da empilhadeira (+Y)
+                                        -- Eixo X (Centralização lateral): tolerância de até ±0.70m
+                                        -- Eixo Y (Penetração longitudinal dos dentes sob o palete): entre +0.70m e +2.60m
+                                        -- Eixo Z (Diferença de cota entre o osso dos garfos e o palete): tolerância de até ±0.55m
                                         local isEngagedWithForks = isAngleAligned
-                                            and (math.abs(relToPal.x) <= 0.65)
-                                            and (math.abs(relToPal.y) <= 0.65)
-                                            and (relToPal.z >= -0.50 and relToPal.z <= 0.50)
+                                            and (math.abs(rel.x) <= 0.70)
+                                            and (rel.y >= 0.70 and rel.y <= 2.60)
+                                            and (math.abs(pCoords.z - forkCoords.z) <= 0.55)
 
                                         if isEngagedWithForks then
                                             -- Garante controle de rede do palete com espera ativa
@@ -936,6 +935,9 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             end
 
                                             PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                                            if _G.SendMissionNotify then
+                                                _G.SendMissionNotify('Central Logística', 'Carga acoplada aos garfos. Transporte até a carreta.', 'success')
+                                            end
 
                                             -- INTERRUPÇÃO IMEDIATA DO LAÇO (Diretriz 3): impede engate em cascata
                                             break
