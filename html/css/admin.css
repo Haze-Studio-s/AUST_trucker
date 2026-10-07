@@ -5,21 +5,21 @@
    ========================================================================== */
 
 :root {
-  --admin-bg: rgba(13, 20, 24, 0.96);
-  --admin-sidebar-bg: rgba(10, 15, 19, 0.75);
-  --admin-card-bg: rgba(22, 31, 38, 0.85);
-  --admin-card-bg-hover: rgba(26, 37, 46, 0.92);
-  --admin-card-border: rgba(16, 185, 129, 0.18);
-  --admin-card-border-hover: rgba(16, 185, 129, 0.45);
+  --admin-bg: rgba(13, 20, 28, 0.78);
+  --admin-sidebar-bg: rgba(10, 15, 22, 0.65);
+  --admin-card-bg: rgba(20, 30, 42, 0.55);
+  --admin-card-bg-hover: rgba(26, 38, 52, 0.68);
+  --admin-card-border: rgba(255, 255, 255, 0.10);
+  --admin-card-border-hover: rgba(16, 185, 129, 0.35);
   --admin-primary: #10b981;
   --admin-primary-dark: #059669;
-  --admin-primary-glow: rgba(16, 185, 129, 0.35);
+  --admin-primary-glow: rgba(16, 185, 129, 0.28);
   --admin-primary-light: rgba(16, 185, 129, 0.12);
   --admin-text-main: #f1f5f9;
   --admin-text-muted: #94a3b8;
   --admin-text-dim: #64748b;
   --admin-danger: #ef4444;
-  --admin-danger-glow: rgba(239, 68, 68, 0.3);
+  --admin-danger-glow: rgba(239, 68, 68, 0.25);
   --admin-warning: #f59e0b;
   --admin-info: #06b6d4;
   --admin-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -36,12 +36,12 @@
 }
 
 #admin-panel *::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.15);
+  background: rgba(0, 0, 0, 0.10);
   border-radius: 8px;
 }
 
 #admin-panel *::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.10);
   border-radius: 8px;
   transition: background var(--admin-transition-fast);
 }
@@ -52,7 +52,7 @@
 }
 
 /* ==========================================================================
-   Painel Container (Janela Principal Centralizada)
+   Painel Container (Janela Principal Centralizada - Glassmorphism)
    ========================================================================== */
 #admin-panel {
   display: none;
@@ -67,11 +67,11 @@
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
   border-radius: 16px;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.85),
-              0 0 35px rgba(16, 185, 129, 0.12),
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.65),
+              0 0 25px rgba(16, 185, 129, 0.08),
               inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   z-index: 9999;
   flex-direction: column;
   overflow: hidden;
@@ -100,7 +100,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background: rgba(15, 23, 42, 0.65);
+  background: rgba(13, 20, 28, 0.55);
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: relative;
 }
@@ -252,7 +252,7 @@
   flex: 1;
   padding: 22px 26px;
   overflow-y: auto;
-  background: rgba(15, 23, 42, 0.25);
+  background: rgba(10, 15, 22, 0.25);
 }
 
 /* Abas com Transição Fluida */
@@ -281,17 +281,19 @@
    ========================================================================== */
 .admin-card {
   background: var(--admin-card-bg);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--admin-card-border);
   border-radius: 12px;
   padding: 18px 22px;
   margin-bottom: 20px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   transition: all var(--admin-transition);
 }
 
 .admin-card:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .admin-card-header {
@@ -402,8 +404,8 @@
   width: 100%;
   height: 40px;
   padding: 0 14px;
-  background: rgba(10, 15, 20, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 8px;
   color: #ffffff;
   font-size: 12.5px;
@@ -419,7 +421,7 @@
 
 .admin-input:focus, .admin-select:focus {
   border-color: var(--admin-primary);
-  background: rgba(10, 15, 20, 0.85);
+  background: rgba(255, 255, 255, 0.07);
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 
@@ -436,8 +438,8 @@
   width: 90px;
   height: 32px;
   padding: 4px 8px;
-  background: rgba(10, 15, 20, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 6px;
   color: #ffffff;
   font-size: 12px;
@@ -449,7 +451,17 @@
 
 .admin-inline-input:focus {
   border-color: var(--admin-primary);
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+}
+
+/* Caixa Sub-container Translúcida (Substitui fundos pretos inline) */
+.admin-box-subtle {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 12px;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 /* ==========================================================================
@@ -464,13 +476,13 @@
 .admin-table th {
   text-align: left;
   padding: 10px 14px;
-  background: rgba(10, 15, 20, 0.6);
+  background: rgba(13, 20, 28, 0.55);
   color: var(--admin-text-muted);
   font-size: 10.5px;
   text-transform: uppercase;
   font-weight: 700;
   letter-spacing: 0.6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -485,7 +497,7 @@
 }
 
 .admin-table tr:hover td {
-  background: rgba(16, 185, 129, 0.04);
+  background: rgba(16, 185, 129, 0.05);
 }
 
 /* Badges de Categoria */
@@ -596,7 +608,7 @@
 }
 
 .admin-folder-card {
-  background: rgba(18, 26, 32, 0.9);
+  background: rgba(20, 30, 42, 0.45);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   overflow: hidden;
@@ -679,7 +691,7 @@
 .admin-modal-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.78);
+  background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
@@ -695,13 +707,15 @@
 }
 
 .admin-modal-box {
-  background: #111a20;
-  border: 1px solid var(--admin-card-border);
+  background: rgba(13, 20, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
   width: 450px;
   max-width: 90%;
   padding: 24px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.95), 0 0 25px var(--admin-primary-glow);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.8), 0 0 25px var(--admin-primary-glow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -761,7 +775,7 @@
 }
 
 .admin-toast {
-  background: rgba(18, 26, 32, 0.96);
+  background: rgba(13, 20, 28, 0.88);
   border: 1px solid var(--admin-primary);
   border-left: 4px solid var(--admin-primary);
   color: #ffffff;
@@ -769,7 +783,9 @@
   border-radius: 8px;
   font-size: 12px;
   font-weight: 500;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   gap: 10px;
