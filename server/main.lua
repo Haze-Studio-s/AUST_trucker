@@ -60,7 +60,7 @@ function LockEntityNetworkOwner(entity, src)
     pcall(function()
         local netId = NetworkGetNetworkIdFromEntity(entity)
         if netId and netId ~= 0 then
-            SetNetworkIdCanMigrate(netId, false)
+            SetNetworkIdCanMigrate(netId, true)
         end
     end)
 end

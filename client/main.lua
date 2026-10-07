@@ -159,7 +159,7 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
     end
 
     if not isSecondary then
-        ClearObjectiveMarkers(false)
+        ClearObjectiveMarkers(true)
     end
 
     local isEntity = false
@@ -2464,7 +2464,10 @@ local function StartTruckEnterWatcher(truck)
 
             if veh ~= 0 and DoesEntityExist(veh) and IsMissionTruck(veh) then
                 local seat = GetPedInVehicleSeat(veh, -1)
-                if seat == ped or seat == cache.ped then
+                if seat == ped or seat == cache.ped or seat == 0 or GetVehiclePedIsIn(ped, false) == veh then
+                    if seat ~= ped and seat ~= cache.ped and GetVehiclePedIsIn(ped, false) == veh then
+                        SetPedIntoVehicle(ped, veh, -1)
+                    end
                     JobEntities.truck = veh
                     if lcActiveJob then lcActiveJob.truck = veh end
                     OnPlayerEnteredTruck(veh)
@@ -2514,11 +2517,9 @@ local function StartMissionStep1(truck, trailer, forklift)
     local ped = cache.ped or PlayerPedId()
     local currentVeh = GetVehiclePedIsIn(ped, false)
     if currentVeh ~= 0 and IsMissionTruck(currentVeh) then
-        if GetPedInVehicleSeat(currentVeh, -1) == ped then
-            JobEntities.truck = currentVeh
-            if lcActiveJob then lcActiveJob.truck = currentVeh end
-            OnPlayerEnteredTruck(currentVeh)
-        end
+        JobEntities.truck = currentVeh
+        if lcActiveJob then lcActiveJob.truck = currentVeh end
+        OnPlayerEnteredTruck(currentVeh)
     end
 end
 
@@ -2532,8 +2533,9 @@ lib.onCache('vehicle', function(veh)
     -- ETAPA 2: ENTRAR NO CAMINHÃO
     if CurrentStage == 'STEP_2_ENTER_TRUCK' then
         if IsMissionTruck(veh) then
+            local ped = cache.ped or PlayerPedId()
             local pedSeat = GetPedInVehicleSeat(veh, -1)
-            if pedSeat == (cache.ped or PlayerPedId()) then
+            if pedSeat == ped or GetVehiclePedIsIn(ped, false) == veh then
                 JobEntities.truck = veh
                 if lcActiveJob then lcActiveJob.truck = veh end
                 OnPlayerEnteredTruck(veh)
@@ -2651,6 +2653,16 @@ lib.onCache('vehicle', function(veh)
     end
 end)
 
+lib.onCache('seat', function(seat)
+    if not ActiveJob or seat ~= -1 then return end
+    local veh = cache.vehicle
+    if CurrentStage == 'STEP_2_ENTER_TRUCK' and veh and veh ~= 0 and IsMissionTruck(veh) then
+        JobEntities.truck = veh
+        if lcActiveJob then lcActiveJob.truck = veh end
+        OnPlayerEnteredTruck(veh)
+    end
+end)
+
 -- =======================================================================
 -- EVENTOS DE REDE: INICIALIZAÇÃO E TRANSIÇÕES AUTORITATIVAS
 -- =======================================================================
@@ -2726,8 +2738,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
         -- 2. Resolução progressiva e não-bloqueante dos veículos primários (Caminhão e Carreta)
         CreateThread(function()
-            local truck = WaitForNetworkEntity(payload.truckNetId, 4000)
-            local trailer = WaitForNetworkEntity(payload.trailerNetId, 4000)
+            local truck = WaitForNetworkEntity(payload.truckNetId, 8000)
+            local trailer = WaitForNetworkEntity(payload.trailerNetId, 8000)
 
             if not truck or not DoesEntityExist(truck) then
                 if payload.truckNetId and NetworkDoesNetworkIdExist(payload.truckNetId) then
@@ -2920,13 +2932,13 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             SetEntityProofs(ent, true, true, true, true, true, true, true, true)
                             SetEntityCanBeDamaged(ent, false)
 
-                            -- Garante controle autoritativo local no OneSync e bloqueia migração
+                            -- Garante controle autoritativo local no OneSync e permite migração para acoplamento
                             local ctrlTimeout = GetGameTimer() + 2000
                             while not NetworkHasControlOfEntity(ent) and GetGameTimer() < ctrlTimeout do
                                 NetworkRequestControlOfEntity(ent)
                                 Wait(50)
                             end
-                            SetNetworkIdCanMigrate(netId, false)
+                            SetNetworkIdCanMigrate(netId, true)
 
                             -- 1. Ancoragem de segurança inicial
                             FreezeEntityPosition(ent, true)
