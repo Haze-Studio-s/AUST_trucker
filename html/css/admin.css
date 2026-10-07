@@ -60,10 +60,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 1120px;
-  max-width: 94vw;
-  height: 680px;
-  max-height: 90vh;
+  width: 1260px;
+  max-width: 96vw;
+  height: 780px;
+  max-height: 92vh;
   background: var(--admin-bg);
   border: 1px solid var(--admin-card-border);
   border-radius: 14px;
@@ -190,8 +190,25 @@
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   overflow-y: auto;
+}
+
+.admin-sidebar-category {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--admin-text-dim);
+  letter-spacing: 0.8px;
+  margin: 12px 6px 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.admin-sidebar-category:first-of-type {
+  margin-top: 2px;
 }
 
 .admin-tab-btn {
@@ -272,6 +289,40 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* ==========================================================================
+   Layout Master-Detail Lado a Lado (UX Otimizada)
+   ========================================================================== */
+.admin-master-detail {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 18px;
+  align-items: start;
+}
+
+.admin-master-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 16px;
+}
+
+.admin-detail-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 16px;
+}
+
+.admin-detail-col .admin-card,
+.admin-master-col .admin-card {
+  margin-bottom: 0;
+}
+
+.admin-table-scroll {
+  max-height: 440px;
+  overflow-y: auto;
 }
 
 /* ==========================================================================
