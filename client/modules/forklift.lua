@@ -807,23 +807,43 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     pCoords = GetEntityCoords(p)
                                 end
 
-                                -- 2. TRAVA HORIZONTAL PLANA E ANCORAGEM ESTÁTICA RIGOROSA (Decisão do Usuário A1 & A2):
-                                -- O palete no solo permanece 100% sólido e imóvel. Caso o impacto da empilhadeira tente
-                                -- inclinar, tombar ou torcer o prop (Pitch ou Roll diferente de 0°), restaura nivelado com o solo.
-                                if not IsEntityAttached(p) then
-                                    local pRot = GetEntityRotation(p, 2)
-                                    if math.abs(pRot.x) > 0.8 or math.abs(pRot.y) > 0.8 then
-                                        SetEntityRotation(p, 0.0, 0.0, pRot.z, 2, false)
-                                        SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                    end
-                                    FreezeEntityPosition(p, true)
-                                    SetEntityDynamic(p, false)
-                                    SetEntityInvincible(p, true)
-                                    SetEntityProofs(p, true, true, true, true, true, true, true, true)
-                                    SetEntityCanBeDamaged(p, false)
-                                end
-
+                                -- 2. GERENCIAMENTO DINAMICO DE FISICA E ANCORAGEM POR PROXIMIDADE:
+                                -- Paletes distantes (> 3.5m) ficam congelados para nao afundarem no piso do MLO.
+                                -- Quando a empilhadeira se aproxima (<= 3.5m), ganham fisica dinamica interativa para que
+                                -- os garfos deslizem suavemente por baixo sem bater em parede solida (concreto).
+                                local distToForks = #(forkCoords - pCoords)
                                 local pState = PalletPhysState[p] or 'frozen'
+
+                                if not IsEntityAttached(p) then
+                                    if distToForks <= 3.5 then
+                                        if pState ~= 'dynamic_interactive' then
+                                            SetEntityCollision(p, true, true)
+                                            SetCanClimbOnEntity(p, true)
+                                            SetEntityDynamic(p, true)
+                                            SetEntityHasGravity(p, true)
+                                            FreezeEntityPosition(p, false)
+                                            PalletPhysState[p] = 'dynamic_interactive'
+                                            pState = 'dynamic_interactive'
+                                        end
+
+                                        -- Estabilizador suave: previne tombamento acidental se a ponta do garfo esbarrar
+                                        local pRot = GetEntityRotation(p, 2)
+                                        if math.abs(pRot.x) > 15.0 or math.abs(pRot.y) > 15.0 then
+                                            SetEntityRotation(p, 0.0, 0.0, pRot.z, 2, false)
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                        end
+                                    else
+                                        if pState ~= 'frozen' then
+                                            SetEntityVelocity(p, 0.0, 0.0, 0.0)
+                                            SetEntityCollision(p, true, true)
+                                            SetCanClimbOnEntity(p, true)
+                                            SetEntityDynamic(p, false)
+                                            FreezeEntityPosition(p, true)
+                                            PalletPhysState[p] = 'frozen'
+                                            pState = 'frozen'
+                                        end
+                                    end
+                                end
 
                                 if pState == 'attached_to_forks' then
                                     activeCarried = p
@@ -831,33 +851,43 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 elseif pState == 'recoil_zone' or (PalletReengageCooldown[p] and GetGameTimer() < PalletReengageCooldown[p]) then
                                     -- Palete em processo de desengate/recuo: proibido reengatar nos garfos
                                 else
-                                    -- Só processa engate se a carga não estiver estivada no reboque
+                                    -- So processa engate se a carga nao estiver estivada no reboque
                                     if not IsEntityAttached(p) then
-                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR)
+                                        -- DETECCAO DUAL DE ENGAJAMENTO (ESPACO LOCAL DA EMPILHADEIRA E DO PALETE)
+                                        local relFork = GetOffsetFromEntityGivenWorldCoords(forklift, pCoords.x, pCoords.y, pCoords.z)
                                         local relToPal = GetOffsetFromEntityGivenWorldCoords(p, forkCoords.x, forkCoords.y, forkCoords.z)
 
-                                        -- DETECÇÃO 3D NO ESPAÇO LOCAL DO PALETE (PONTAS DOS GARFOS NO VÃO INFERIOR):
-                                        -- Alinhamento Angular: perdoa até 45 graus (incluindo ré/trás por simetria a 180°)
+                                        -- Alinhamento Angular: perdoa ate 45 graus (incluindo re/tras por simetria a 180 graus)
                                         local forkH = GetEntityHeading(forklift)
                                         local palH  = GetEntityHeading(p)
                                         local diffAngle = math.abs((forkH - palH) % 180)
                                         if diffAngle > 90 then diffAngle = 180 - diffAngle end
                                         local isAngleAligned = (diffAngle <= 45.0)
 
-                                        -- Encaixe Físico dos Garfos dentro do Palete:
-                                        -- Eixo X (Centralização lateral): tolerância de até ±0.80m (janela total de 1.60m)
-                                        -- Eixo Y (Penetração dos garfos): limite de até ±1.10m do centro do palete
-                                        -- Eixo Z (Altura vertical dos garfos): entrada entre -0.60m e +0.60m (janela total de 1.20m)
-                                        local isEngagedWithForks = isAngleAligned
-                                            and (math.abs(relToPal.x) <= 0.80)
-                                            and (math.abs(relToPal.y) <= 1.10)
+                                        -- Encaixe Fisico dos Garfos dentro do Palete:
+                                        -- Condicao A (Espaco Empilhadeira): palete a frente do mastro e centralizado entre os dentes
+                                        local isEngagedForkliftSpace = isAngleAligned
+                                            and (math.abs(relFork.x) <= 0.75)
+                                            and (relFork.y >= 0.70 and relFork.y <= 2.60)
+                                            and (math.abs(pCoords.z - forkCoords.z) <= 0.55)
+
+                                        -- Condicao B (Espaco Palete - Fallback): dentes dos garfos dentro do centro do vao
+                                        local isEngagedPalletSpace = isAngleAligned
+                                            and (math.abs(relToPal.x) <= 0.85)
+                                            and (math.abs(relToPal.y) <= 1.30)
                                             and (relToPal.z >= -0.60 and relToPal.z <= 0.60)
 
+                                        local isEngagedWithForks = isEngagedForkliftSpace or isEngagedPalletSpace
+
                                         if isEngagedWithForks then
-                                            -- GATILHO ATÔMICO DE ACOPLAMENTO AUTOMÁTICO DIRETO (Diretriz 2 & Decisão A2)
+                                            -- GATILHO ATOMICO DE ACOPLAMENTO AUTOMATICO DIRETO
                                             if NetworkGetEntityIsNetworked(p) and not NetworkHasControlOfEntity(p) then
                                                 NetworkRequestControlOfEntity(p)
                                             end
+
+                                            -- Desativa colisao mutua imediata com a empilhadeira para fixacao perfeita
+                                            SetEntityNoCollisionEntity(p, forklift, false)
+                                            SetEntityNoCollisionEntity(forklift, p, false)
 
                                             -- Descongela e anexa instantaneamente aos garfos da empilhadeira
                                             SetEntityVelocity(p, 0.0, 0.0, 0.0)
@@ -865,7 +895,10 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             SetEntityDynamic(p, false)
                                             SetEntityHasGravity(p, false)
 
-                                            local forkOffX, forkOffY, forkOffZ = 0.0, 0.95, -0.05
+                                            local actualForkBone = (forkBone and forkBone > 0) and forkBone or 0
+                                            local forkOffX = 0.0
+                                            local forkOffY = (actualForkBone == 0) and 1.8 or 0.95
+                                            local forkOffZ = -0.05
                                             local forkPitch, forkRoll, forkYaw = 0.0, 0.0, 0.0
 
                                             local customForkOff, customForkRot = GetVehiclePropOffset(forklift, GetEntityModel(p))
@@ -877,15 +910,14 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             end
 
                                             AttachEntityToEntity(
-                                                p, forklift, forkBone,
+                                                p, forklift, actualForkBone,
                                                 forkOffX, forkOffY, forkOffZ,
                                                 forkPitch, forkRoll, forkYaw,
                                                 false, false, false, false, 2, true
                                             )
 
                                             -- BLINDAGEM ANTI-CATAPULTA HAVOK:
-                                            -- Anula colisão mútua entre o palete nos garfos e a prancha da carreta/caminhão.
-                                            -- Evita explosão de depenetração de corpo rígido ao manobrar perto ou sobre o trailer.
+                                            -- Anula colisao mutua entre o palete nos garfos e a prancha da carreta/caminhao.
                                             if trailer and DoesEntityExist(trailer) then
                                                 SetEntityNoCollisionEntity(p, trailer, false)
                                                 SetEntityNoCollisionEntity(trailer, p, false)
@@ -905,31 +937,23 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                                 Entity(forklift).state:set('forkliftCarriedNet', pNetId, true)
                                             end
 
-                                            -- CONGELAMENTO ESTÁTICO DO CONJUNTO TRAILER + CAMINHÃO NO 1º PALETE:
-                                            -- Impede deslocamento inercial, oscilação de suspensão e empurrões da empilhadeira
+                                            -- Dispara callback picked para transicionar a seta de objetivo ate a carreta
+                                            if onLoadedCb then
+                                                onLoadedCb('picked', p)
+                                            end
+
+                                            -- CONGELAMENTO ESTATICO DO CONJUNTO TRAILER + CAMINHAO NO 1o PALETE:
                                             if not TrailerFrozenForLoading then
                                                 FreezeTrailerRig(true)
                                                 if _G.SendMissionNotify then
-                                                    _G.SendMissionNotify('Central Logística', 'Carreta e caminhão travados na baía para segurança do carregamento.', 'info')
+                                                    _G.SendMissionNotify('Central Logistica', 'Carreta e caminhao travados na baia para seguranca do carregamento.', 'info')
                                                 end
                                             end
 
-                                            PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                                            PlaySoundFrontend(-1, 'SELECT', 'HUD_FRONTEND_DEFAULT_SOUNDSET', 0)
 
-                                            -- INTERRUPÇÃO IMEDIATA DO LAÇO (Diretriz 3): impede engate em cascata
+                                            -- INTERRUPCAO IMEDIATA DO LACO (Diretriz 3): impede engate em cascata
                                             break
-                                        else
-                                            -- ESTABILIDADE E COLISÃO SÓLIDA NO SOLO:
-                                            -- Mantém o palete perfeitamente firme e assentado no chão para manobra precisa da empilhadeira.
-                                            if pState ~= 'frozen' then
-                                                SetEntityCollision(p, true, true)
-                                                SetCanClimbOnEntity(p, true)
-                                                FreezeEntityPosition(p, true)
-                                                SetEntityDynamic(p, false)
-                                                SetEntityHasGravity(p, true)
-                                                SetEntityVelocity(p, 0.0, 0.0, 0.0)
-                                                PalletPhysState[p] = 'frozen'
-                                            end
                                         end
                                     end
                                 end
