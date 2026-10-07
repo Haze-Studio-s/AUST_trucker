@@ -821,7 +821,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     SetEntityInvincible(p, true)
                                     SetEntityProofs(p, true, true, true, true, true, true, true, true)
                                     SetEntityCanBeDamaged(p, false)
-                                    SetDisableFragCache(p, true)
                                 end
 
                                 local pState = PalletPhysState[p] or 'frozen'
@@ -868,7 +867,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                             SetEntityInvincible(p, true)
                                             SetEntityProofs(p, true, true, true, true, true, true, true, true)
                                             SetEntityCanBeDamaged(p, false)
-                                            SetDisableFragCache(p, true)
                                             SetEntityNoCollisionEntity(p, forklift, false)
                                             SetEntityNoCollisionEntity(forklift, p, false)
 
@@ -954,7 +952,6 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                                 SetEntityInvincible(p, true)
                                                 SetEntityProofs(p, true, true, true, true, true, true, true, true)
                                                 SetEntityCanBeDamaged(p, false)
-                                                SetDisableFragCache(p, true)
                                                 PalletPhysState[p] = 'frozen'
                                             end
                                         end

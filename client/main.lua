@@ -2907,7 +2907,6 @@ RegisterNetEvent('aurp_trucker:client:polarixSyncPallets', function(palletNetIds
                             SetEntityInvincible(ent, true)
                             SetEntityProofs(ent, true, true, true, true, true, true, true, true)
                             SetEntityCanBeDamaged(ent, false)
-                            SetDisableFragCache(ent, true)
 
                             -- Garante controle autoritativo local no OneSync e bloqueia migração
                             local ctrlTimeout = GetGameTimer() + 2000
