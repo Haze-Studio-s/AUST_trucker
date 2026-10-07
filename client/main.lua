@@ -1469,11 +1469,10 @@ CreateThread(function()
                         end
                     end
 
-                    -- Se a empilhadeira estiver manobrando colada a algum trailer na baía
+                    -- Blindagem Havok: Somente desativa colisão mútua entre empilhadeira e trailer SE ela estiver efetivamente embarcada/anexada
                     for _, trVeh in ipairs(nearbyTrailers) do
-                        if #(GetEntityCoords(veh) - GetEntityCoords(trVeh)) <= 8.5 then
+                        if IsEntityAttachedToEntity(veh, trVeh) then
                             hasCargo = true
-                            -- Permite passagem suave sem impulsos explosivos do Havok no cliente espectador
                             SetEntityNoCollisionEntity(veh, trVeh, true)
                             SetEntityNoCollisionEntity(trVeh, veh, true)
                         end
