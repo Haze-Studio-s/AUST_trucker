@@ -706,6 +706,86 @@ RegisterCommand('truckerxp', function(source, args)
     ))
 end, false)
 
+-- ============================================================
+-- COMANDO ADMINISTRATIVO: /truckerlicense [id] [heavy|adr] [1|0]
+-- Gerencia certificações técnicas de motoristas diretamente.
+-- ============================================================
+RegisterCommand('truckerlicense', function(source, args)
+    local src = source
+
+    if not AdminService.IsPlayerAdmin(src) then
+        if src ~= 0 then
+            TriggerClientEvent('ox_lib:notify', src, {
+                title = 'Acesso Negado',
+                description = 'Você não possui permissão administrativa para alterar licenças.',
+                type = 'error'
+            })
+        else
+            print("[AUST_Trucker Admin] Permissão negada.")
+        end
+        return
+    end
+
+    local function NotifyCaller(title, desc, nType)
+        if src ~= 0 then
+            TriggerClientEvent('ox_lib:notify', src, {
+                title = title,
+                description = desc,
+                type = nType or 'inform',
+                duration = 7000
+            })
+        else
+            print(('[AUST_Trucker Admin] %s: %s'):format(title, desc))
+        end
+    end
+
+    local targetId = tonumber(args[1])
+    local licType = args[2] and string.lower(args[2])
+    local state = tonumber(args[3]) or 1
+
+    if not targetId or not licType or (licType ~= 'heavy' and licType ~= 'adr') then
+        NotifyCaller('Sintaxe Inválida', 'Uso: /truckerlicense [id] [heavy|adr] [1|0]\nExemplo: /truckerlicense 1 heavy 1', 'error')
+        return
+    end
+
+    local targetPlayer = Framework.GetPlayer(targetId)
+    if not targetPlayer then
+        NotifyCaller('Jogador Não Encontrado', ('O jogador com ID %s não está online.'):format(tostring(targetId)), 'error')
+        return
+    end
+
+    local citizenId = Framework.GetCitizenId(targetPlayer)
+    if not citizenId or citizenId == '' then
+        NotifyCaller('Identificador Ausente', 'Não foi possível obter o CitizenID do jogador alvo.', 'error')
+        return
+    end
+    citizenId = tostring(citizenId):gsub('^%s*(.-)%s*$', '%1')
+
+    local colName = (licType == 'heavy') and 'heavy_certified' or 'adr_certified'
+    local val = (state == 1) and 1 or 0
+
+    MySQL.query.await(([[
+        INSERT INTO trucker_licenses (citizenid, %s)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE %s = ?
+    ]]):format(colName, colName), { citizenId, val, val })
+
+    local licName = (licType == 'heavy') and 'Certificação Heavy Lift Operator' or 'Certificação ADR Specialist'
+    local actionText = (val == 1) and 'CONCEDIDA' or 'REVOGADA'
+
+    if targetId ~= src then
+        TriggerClientEvent('ox_lib:notify', targetId, {
+            title = 'Certificação Atualizada',
+            description = ('Um administrador atualizou sua licença: %s (%s).'):format(licName, actionText),
+            type = (val == 1) and 'success' or 'warning',
+            duration = 7000
+        })
+    end
+
+    NotifyCaller('Licença Atualizada', ('%s para CitizenID %s (ID: %d): %s'):format(actionText, citizenId, targetId, licName), 'success')
+    AdminLog(src, 'SET_LICENSE', ('Target=%s (ID=%s) License=%s State=%d'):format(citizenId, tostring(targetId), licType, val))
+end, false)
+
 lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     if not AdminService.IsPlayerAdmin(source) then return nil end
     local currentOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()

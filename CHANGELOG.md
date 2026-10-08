@@ -1,5 +1,17 @@
 # Changelog — AUST_trucker
 
+## [20.9.10] — 2026-10-07 — Correção de Persistência & Compatibilidade de Licenças Técnicas (Heavy Lift & ADR)
+
+### Corrigido & Aprimorado
+- **Compatibilidade de Driver oxmysql/TINYINT(1) (`server/callbacks.lua`, `server/main.lua`):**
+  - Resolvido bug crítico onde a emissão da licença técnica ("Certificação Heavy Lift Operator" / "ADR Specialist") era gravada com sucesso no MySQL, mas o jogador ficava impossibilitado de iniciar o frete e caía em loop solicitando o teste novamente.
+  - Causa raiz: Drivers MySQL/node-mysql2 deserializam colunas `TINYINT(1)` como boolean (`true`), fazendo com que comparações estritas em Lua (`licRow.heavy_certified == 1`) falhassem silenciosamente por divergência de tipo primitivo (`true ~= 1`).
+  - Implementada função de avaliação resiliente `isTruthy(val)` aceitando `true`, `1`, `'1'` e `'true'` tanto na consulta de habilitação (`aurp_trucker:getLicenses`), na blindagem de início de rotas (`StartTruckDelivery`), quanto na verificação de posse prévia de exames (`aurp_trucker:takeLicenseExam`).
+  - Sanitização e trim automático de `citizenId` em todas as rotinas de licença para prevenir inconsistências de espaçamento ou formato.
+- **Comando Administrativo `/truckerlicense` (`server/services/admin_service.lua`, `client/client.lua`):**
+  - Adicionado comando administrativo `/truckerlicense [id] [heavy|adr] [1|0]` com validação de permissões para concessão ou revogação direta de certificações técnicas sem necessidade de refazer o teste em ambiente de desenvolvimento/testes.
+  - Adicionado autocompletar e auxílio de parâmetros via `chat:addSuggestion`.
+
 ## [20.9.9] — 2026-10-07 — Comando Administrativo `/truckerxp`, Concessão de Níveis & Testes de Skill Tree
 
 ### Adicionado & Aprimorado

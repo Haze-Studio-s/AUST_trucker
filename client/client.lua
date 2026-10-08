@@ -2360,6 +2360,11 @@ CreateThread(function()
         { name = 'id', help = 'ID do jogador no servidor (ex: 1)' },
         { name = 'quantidade', help = 'Quantidade de XP a conceder (ex: 5000)' }
     })
+    TriggerEvent('chat:addSuggestion', '/truckerlicense', 'Comando ADM: Gerencia certificações técnicas de motoristas.', {
+        { name = 'id', help = 'ID do jogador no servidor (ex: 1)' },
+        { name = 'tipo', help = 'Tipo de licença: heavy (Heavy Lift Operator) ou adr (ADR Specialist)' },
+        { name = 'estado', help = '1 para conceder, 0 para revogar (padrão: 1)' }
+    })
 end)
 
 -- NUI Callbacks para gestão de empresas

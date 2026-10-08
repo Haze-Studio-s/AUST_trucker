@@ -1657,11 +1657,16 @@ lib.callback.register('aurp_trucker:getLicenses', function(source)
     local Player = Framework.GetPlayer(source)
     if not Player then return { adr = false, heavy = false } end
     local citizenId = Framework.GetCitizenId(Player)
+    if not citizenId then return { adr = false, heavy = false } end
+    citizenId = tostring(citizenId):gsub('^%s*(.-)%s*$', '%1')
 
     local row = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
+    local function isTruthy(val)
+        return val == 1 or val == true or val == '1' or tostring(val) == '1' or tostring(val):lower() == 'true'
+    end
     return {
-        adr = row and row.adr_certified == 1 or false,
-        heavy = row and row.heavy_certified == 1 or false
+        adr = (row and isTruthy(row.adr_certified)) or false,
+        heavy = (row and isTruthy(row.heavy_certified)) or false
     }
 end)
 
@@ -1672,6 +1677,8 @@ lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseTy
     local Player = Framework.GetPlayer(source)
     if not Player then return { success = false, reason = 'Jogador não encontrado' } end
     local citizenId = Framework.GetCitizenId(Player)
+    if not citizenId then return { success = false, reason = 'Cidadão não identificado' } end
+    citizenId = tostring(citizenId):gsub('^%s*(.-)%s*$', '%1')
 
     -- Whitelist do tipo de licença (também define a coluna usada no INSERT)
     if type(licenseType) ~= 'string' or not LICENSE_TYPES[licenseType] then
@@ -1695,9 +1702,13 @@ lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseTy
             return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel or 1) }
         end
 
+        local function isTruthy(val)
+            return val == 1 or val == true or val == '1' or tostring(val) == '1' or tostring(val):lower() == 'true'
+        end
+
         -- Quem já possui a licença não paga novamente
         local owned = MySQL.single.await(('SELECT %s AS has FROM trucker_licenses WHERE citizenid = ?'):format(colName), { citizenId })
-        if owned and owned.has == 1 then
+        if owned and isTruthy(owned.has) then
             return { success = false, reason = 'Você já possui esta certificação' }
         end
 

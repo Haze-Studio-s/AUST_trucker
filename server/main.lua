@@ -567,6 +567,8 @@ local function StartTruckDelivery(src, contractData)
     local Player = Framework.GetPlayer(src)
     if not Player then return end
     local citizenId = Framework.GetCitizenId(Player)
+    if not citizenId then return end
+    citizenId = tostring(citizenId):gsub('^%s*(.-)%s*$', '%1')
     if type(contractData) ~= 'table' then contractData = {} end
 
     -- SEGURANÇA: o cliente só pode indicar QUAL contrato quer (id), a placa de um veículo próprio
@@ -779,11 +781,17 @@ local function StartTruckDelivery(src, contractData)
     -- BLINDAGEM DE LICENÇAS TÉCNICAS (ADR & HEAVY LIFT)
     if cargoType == 'heavy' or cargoType == 'adr' then
         local licRow = MySQL.single.await('SELECT adr_certified, heavy_certified FROM trucker_licenses WHERE citizenid = ?', { citizenId })
-        if cargoType == 'heavy' and (not licRow or licRow.heavy_certified ~= 1) then
+        local function isTruthy(val)
+            return val == 1 or val == true or val == '1' or tostring(val) == '1' or tostring(val):lower() == 'true'
+        end
+        local hasHeavy = licRow and isTruthy(licRow.heavy_certified)
+        local hasAdr   = licRow and isTruthy(licRow.adr_certified)
+
+        if cargoType == 'heavy' and not hasHeavy then
             ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação Heavy Lift Operator para aceitar fretes de contêiner!', 'error')
             return
-        elseif cargoType == 'adr' and (not licRow or licRow.adr_certified ~= 1) then
+        elseif cargoType == 'adr' and not hasAdr then
             ActiveSpawningPlayers[citizenId] = nil
             TriggerClientEvent('aurp_trucker:notify', src, 'Licença Obrigatória', 'Você precisa da Certificação ADR Specialist para transportar materiais perigosos/químicos!', 'error')
             return
