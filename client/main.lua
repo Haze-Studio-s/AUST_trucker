@@ -568,13 +568,13 @@ local function StartCouplingWatcher()
 
                         local hitchDist = #(fifthWheelPos - kingpinPos)
 
-                        -- Se a 5ª roda estiver a menos de 4.5m do engate ou colisão próxima
-                        if hitchDist <= 4.5 or dist <= 6.0 then
+                        -- Acoplamento sutil e natural apenas ao encostar fisicamente (tolerância reduzida para 1.2m)
+                        if hitchDist <= 1.2 then
                             FreezeEntityPosition(JobEntities.trailer, false)
                             SetEntityCollision(JobEntities.trailer, true, true)
                             SetEntityCollision(JobEntities.truck, true, true)
 
-                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 6.0)
+                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.2)
                             Wait(150)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
