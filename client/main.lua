@@ -583,16 +583,11 @@ local function StartCouplingWatcher()
                             FreezeEntityPosition(JobEntities.trailer, false)
                             SetVehicleHandbrake(JobEntities.trailer, false)
                             SetVehicleBrake(JobEntities.trailer, false)
-
-                            -- Previne choque e repulsão Havok no milissegundo exato do encaixe da 5ª roda
-                            SetEntityNoCollisionEntity(JobEntities.truck, JobEntities.trailer, true)
+                            SetEntityCollision(JobEntities.trailer, true, true)
+                            SetEntityCollision(JobEntities.truck, true, true)
 
                             AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
                             Wait(50)
-
-                            SetEntityNoCollisionEntity(JobEntities.truck, JobEntities.trailer, false)
-                            SetEntityCollision(JobEntities.trailer, true, true)
-                            SetEntityCollision(JobEntities.truck, true, true)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
                             if not hasTrailer or trailerEnt == 0 then

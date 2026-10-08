@@ -1,5 +1,14 @@
 # Changelog — AUST_trucker
 
+## [20.9.15] — 2026-10-08 — Restauração Integral de Colisão Física entre Caminhão e Reboque
+
+### Corrigido & Aprimorado
+- **Restauração da Colisão Sólida (`client/main.lua`):**
+  - Resolvido bug onde a carreta perdeu colisão física e permitia que o caminhão a atravessasse como fantasma.
+  - Causa raiz: A nativa `SetEntityNoCollisionEntity(truck, trailer, false)` no engine do GTA V interpreta o terceiro parâmetro booleano `false` como "desativação permanente de colisão entre as duas entidades" (e não como reativação).
+  - Removida completamente qualquer chamada a `SetEntityNoCollisionEntity` entre caminhão e carreta no `StartCouplingWatcher`.
+  - Colisão física sólida mútua (`SetEntityCollision(trailer, true, true)` e `SetEntityCollision(truck, true, true)`) reforçada e garantida em tempo de execução.
+
 ## [20.9.14] — 2026-10-08 — Sistema de Engate Assistido Inteligente (Smart Hitch Assist) e Suporte Físico a Reboques Longos (Freighttrailer)
 
 ### Corrigido & Aprimorado
