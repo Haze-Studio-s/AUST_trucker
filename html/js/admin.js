@@ -856,7 +856,20 @@
     }
     renderSpawnsTab();
     populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
-    showAdminToast(`Ponto de spawn #${spawnId} gravado na pasta "${folderVal}"!`);
+
+    // Mantém a pasta ativa selecionada no formulário
+    const folderSelect = document.getElementById('spawn-form-folder');
+    if (folderSelect) folderSelect.value = folderVal;
+
+    // Limpa campos para o próximo cadastro
+    document.getElementById('spawn-form-id').value = '';
+    document.getElementById('spawn-form-name').value = '';
+    document.getElementById('spawn-form-x').value = '';
+    document.getElementById('spawn-form-y').value = '';
+    document.getElementById('spawn-form-z').value = '';
+    document.getElementById('spawn-form-h').value = '';
+
+    showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso na pasta "${folderVal}"!`);
   }
 
   // ============================================================

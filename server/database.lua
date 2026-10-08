@@ -631,6 +631,12 @@ function SchemaService.EnsureTables()
     end
 end
 
+-- Auto-execução garantida para suportar reinicializações a quente (ensure/restart)
+CreateThread(function()
+    Wait(250)
+    SchemaService.EnsureTables()
+end)
+
 -- ============================================================
 -- COMPANIES
 -- ============================================================

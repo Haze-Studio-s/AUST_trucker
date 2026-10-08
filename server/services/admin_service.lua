@@ -584,7 +584,38 @@ function AdminService.ReloadVehiclePropOffsets()
     return dualMap, rawMap
 end
 
+local function EnsureAdminDBSchema()
+    pcall(function()
+        MySQL.query.await([[
+            CREATE TABLE IF NOT EXISTS `aust_trucker_spawn_folders` (
+                `name` VARCHAR(100) PRIMARY KEY,
+                `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+        ]])
+        MySQL.query.await("INSERT IGNORE INTO `aust_trucker_spawn_folders` (`name`) VALUES ('Geral');")
+    end)
+
+    pcall(function()
+        MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
+    end)
+    pcall(function()
+        MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
+    end)
+
+    pcall(function()
+        MySQL.query.await("ALTER TABLE `aust_trucker_spawns` MODIFY COLUMN `spawn_type` VARCHAR(50) NOT NULL;")
+    end)
+end
+
 MySQL.ready(function()
+    EnsureAdminDBSchema()
+    AdminService.LoadAll()
+end)
+
+-- Auto-execução garantida para suportar reinicializações a quente com 'ensure AUST_trucker'
+CreateThread(function()
+    Wait(350)
+    EnsureAdminDBSchema()
     AdminService.LoadAll()
 end)
 
@@ -955,10 +986,10 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or type(spawnData) ~= 'table' then return end
 
-    local spawnId = CleanId(spawnData.id or spawnData.spawn_id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
-    local spawnType = CleanStr(spawnData.spawn_type, 20, 'truck')
-    if not SPAWN_TYPES[spawnType] then spawnType = 'truck' end
+    EnsureAdminDBSchema()
 
+    local spawnId = CleanId(spawnData.id or spawnData.spawn_id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local spawnType = CleanStr(spawnData.spawn_type, 50, 'truck')
     local existing = AdminService.Spawns[spawnId]
     local rawHeading = (spawnData.coords and (spawnData.coords.heading or spawnData.coords.w)) or spawnData.heading or 0.0
     local folderName = CleanStr(spawnData.folder_name, 100, (existing and existing.folder_name) or 'Geral')
@@ -972,32 +1003,53 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         folder_name = folderName,
     }
 
-    -- Garante que a pasta está registrada e persistida no banco
-    if folderName and folderName ~= '' then
+    -- 1. Garante que a pasta existe no banco e na memória
+    pcall(function()
         MySQL.query.await("INSERT IGNORE INTO aust_trucker_spawn_folders (name) VALUES (?)", { folderName })
-        local folderExists = false
-        for _, f in ipairs(AdminService.SpawnFolders) do
-            if f == folderName then folderExists = true; break end
-        end
-        if not folderExists then
-            table.insert(AdminService.SpawnFolders, folderName)
-            TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
-        end
+    end)
+    local folderExists = false
+    for _, f in ipairs(AdminService.SpawnFolders) do
+        if f == folderName then folderExists = true; break end
+    end
+    if not folderExists then
+        table.insert(AdminService.SpawnFolders, folderName)
+        TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
     end
 
-    MySQL.query.await([[
-        INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-        name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
-    ]], {
-        clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
-    })
+    -- 2. Tenta inserir na tabela aust_trucker_spawns com folder_name
+    local ok, err = pcall(function()
+        MySQL.query.await([[
+            INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+            name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
+        ]], {
+            clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
+        })
+    end)
 
+    if not ok then
+        print(("^1[AUST_Trucker Admin] Falha ao gravar spawn no banco (%s). Aplicando reparo de emergência...^7"):format(tostring(err)))
+        pcall(function()
+            MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
+            MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
+            MySQL.query.await("ALTER TABLE `aust_trucker_spawns` MODIFY COLUMN `spawn_type` VARCHAR(50) NOT NULL;")
+            MySQL.query.await([[
+                INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
+            ]], {
+                clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
+            })
+        end)
+    end
+
+    -- 3. Atualiza memória e sincroniza imediatamente com todos os clientes
     AdminService.Spawns[spawnId] = clean
-    AdminLog(src, 'adminSaveSpawn', spawnId .. ' [' .. clean.folder_name .. ']')
+    print(("^2[AUST_Trucker Admin] Ponto de Spawn '%s' gravado com sucesso na pasta '%s'!^7"):format(clean.id, clean.folder_name))
     TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Ponto de spawn gravado com sucesso na pasta "%s"!'):format(clean.folder_name), type = 'success' })
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Ponto de spawn "%s" gravado na pasta "%s"!'):format(clean.id, clean.folder_name), type = 'success', duration = 5000 })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteSpawn', function(spawnId)
