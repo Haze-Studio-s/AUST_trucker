@@ -21,6 +21,7 @@
   let routeSearchQuery = '';
   let ecoFilter = 'all';
   let draggedSpawnId = null;
+  let selectedSpawnFolder = 'Geral';
 
   // ============================================================
   // COMPONENTES UI IN-GAME (MODAL E TOASTS 100% IN-GAME)
@@ -177,13 +178,13 @@
         break;
       case 'adminSyncSpawns':
         if (item.spawns) {
-          adminData.spawns = item.spawns;
+          adminData.spawns = normalizeSpawns(item.spawns);
           renderSpawnsTab();
         }
         break;
       case 'adminSyncSpawnFolders':
         if (item.folders) {
-          adminData.spawnFolders = item.folders;
+          adminData.spawnFolders = normalizeFolders(item.folders);
           renderSpawnsTab();
           populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
         }
@@ -253,6 +254,41 @@
     }).then(res => res.json()).catch(() => ({}));
   }
 
+  function normalizeSpawns(raw) {
+    if (!raw) return {};
+    const map = {};
+    const processItem = (s, k) => {
+      if (!s) return;
+      const id = String(s.id || s.spawn_id || s.key || k || '').trim();
+      if (!id) return;
+      s.id = id;
+      s.key = id;
+      s.folder_name = String(s.folder_name || s.folderName || s.folder || s.spawn_folder || 'Geral').trim() || 'Geral';
+      map[id] = s;
+    };
+    if (Array.isArray(raw)) {
+      raw.forEach(processItem);
+    } else if (typeof raw === 'object') {
+      Object.keys(raw).forEach(k => processItem(raw[k], k));
+    }
+    return map;
+  }
+
+  function normalizeFolders(raw) {
+    const list = new Set(['Geral']);
+    const addItem = (f) => {
+      if (!f) return;
+      if (typeof f === 'string' && f.trim() !== '') list.add(f.trim());
+      else if (typeof f === 'object' && f.name && typeof f.name === 'string' && f.name.trim() !== '') list.add(f.name.trim());
+    };
+    if (Array.isArray(raw)) {
+      raw.forEach(addItem);
+    } else if (raw && typeof raw === 'object') {
+      Object.values(raw).forEach(addItem);
+    }
+    return Array.from(list);
+  }
+
   function normalizeProps(raw) {
     if (!raw) return [];
     const list = Array.isArray(raw) ? raw : Object.values(raw);
@@ -283,8 +319,8 @@
     if (data) {
       adminData = {
         customRoutes: data.customRoutes || data.routes || {},
-        spawns: data.spawns || {},
-        spawnFolders: data.spawnFolders || data.spawn_folders || ['Geral'],
+        spawns: normalizeSpawns(data.spawns),
+        spawnFolders: normalizeFolders(data.spawnFolders || data.spawn_folders),
         trailerOffsets: data.trailerOffsets || data.offsets || {},
         vehiclePropOffsets: data.vehiclePropOffsets || {},
         npcs: data.npcs || {},
@@ -644,54 +680,99 @@
   // ============================================================
   // ABA 2: SPAWNS DINÂMICOS (PASTAS & DRAG-AND-DROP)
   // ============================================================
+  function fillSpawnForm(s) {
+    if (!s) return;
+    const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
+    const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
+    const sId = document.getElementById('spawn-form-id');
+    const sFolder = document.getElementById('spawn-form-folder');
+    const sName = document.getElementById('spawn-form-name');
+    const sType = document.getElementById('spawn-form-type');
+    const sModel = document.getElementById('spawn-form-model');
+    const sx = document.getElementById('spawn-form-x');
+    const sy = document.getElementById('spawn-form-y');
+    const sz = document.getElementById('spawn-form-z');
+    const sh = document.getElementById('spawn-form-h');
+
+    if (sId) sId.value = s.id || s.key || s.spawn_id || '';
+    if (sFolder) {
+      const f = s.folder_name || s.folderName || s.folder || 'Geral';
+      sFolder.value = f;
+      selectedSpawnFolder = f;
+      document.querySelectorAll('.admin-folder-card').forEach(c => {
+        c.style.borderColor = (c.getAttribute('data-folder') === f) ? 'var(--admin-primary)' : '';
+      });
+    }
+    if (sName) sName.value = s.name || s.spawn_name || '';
+    if (sType) {
+      sType.value = s.spawn_type || 'truck';
+      sType.dispatchEvent(new Event('change'));
+    }
+    if (sModel && s.model) sModel.value = s.model;
+    if (sx && coords.x != null) sx.value = parseFloat(coords.x).toFixed(2);
+    if (sy && coords.y != null) sy.value = parseFloat(coords.y).toFixed(2);
+    if (sz && coords.z != null) sz.value = parseFloat(coords.z).toFixed(2);
+    if (sh) sh.value = parseFloat(hVal).toFixed(1);
+  }
+
   function renderSpawnsTab() {
     const container = document.getElementById('admin-spawns-folders-container');
     const folderSelect = document.getElementById('spawn-form-folder');
     if (!container) return;
     container.innerHTML = '';
 
-    const spawns = adminData.spawns || {};
-    const spawnsList = Object.keys(spawns).map(k => {
-      const s = spawns[k];
-      s.key = k;
-      s.folder_name = s.folder_name || 'Geral';
-      return s;
+    adminData.spawns = normalizeSpawns(adminData.spawns);
+    const spawnsList = Object.values(adminData.spawns);
+
+    const folderList = normalizeFolders(adminData.spawnFolders);
+    const folders = {};
+    folderList.forEach(f => {
+      folders[f] = [];
     });
 
-    const folders = {};
-    folders['Geral'] = [];
-
-    if (adminData.spawnFolders && Array.isArray(adminData.spawnFolders)) {
-      adminData.spawnFolders.forEach(f => {
-        if (f && !folders[f]) folders[f] = [];
-      });
-    }
-
     spawnsList.forEach(s => {
-      const fName = s.folder_name || 'Geral';
-      if (!folders[fName]) folders[fName] = [];
+      const fName = (s.folder_name && String(s.folder_name).trim()) || 'Geral';
+      s.folder_name = fName;
+      if (!folders[fName]) {
+        folders[fName] = [];
+        if (!folderList.includes(fName)) folderList.push(fName);
+      }
       folders[fName].push(s);
     });
 
     if (folderSelect) {
-      const currentSelected = folderSelect.value;
+      const currentSelected = selectedSpawnFolder || folderSelect.value;
       folderSelect.innerHTML = '';
-      Object.keys(folders).forEach(fName => {
+      folderList.forEach(fName => {
         const opt = document.createElement('option');
         opt.value = fName;
         opt.textContent = fName;
         folderSelect.appendChild(opt);
       });
-      if (currentSelected && folders[currentSelected]) {
+      if (currentSelected && folderList.includes(currentSelected)) {
         folderSelect.value = currentSelected;
+        selectedSpawnFolder = currentSelected;
+      } else {
+        folderSelect.value = 'Geral';
+        selectedSpawnFolder = 'Geral';
       }
+      folderSelect.onchange = function () {
+        selectedSpawnFolder = this.value;
+        document.querySelectorAll('.admin-folder-card').forEach(c => {
+          c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
+        });
+      };
     }
 
-    Object.keys(folders).forEach(folderName => {
-      const fList = folders[folderName];
+    folderList.forEach(folderName => {
+      const fList = folders[folderName] || [];
       const folderCard = document.createElement('div');
       folderCard.className = 'admin-folder-card';
       folderCard.setAttribute('data-folder', folderName);
+      folderCard.style.cursor = 'pointer';
+      if (folderName === selectedSpawnFolder) {
+        folderCard.style.borderColor = 'var(--admin-primary)';
+      }
 
       const isDefault = folderName === 'Geral';
       folderCard.innerHTML = `
@@ -710,28 +791,40 @@
         </div>
       `;
 
+      // Seleção rápida da pasta clicando no card
+      folderCard.addEventListener('click', function (e) {
+        if (e.target.closest('.btn-del-folder') || e.target.closest('.admin-spawn-row') || e.target.closest('.btn-tp-spawn') || e.target.closest('.btn-del-spawn') || e.target.closest('.btn-edit-spawn')) return;
+        selectedSpawnFolder = folderName;
+        if (folderSelect) folderSelect.value = folderName;
+        document.querySelectorAll('.admin-folder-card').forEach(c => c.style.borderColor = '');
+        folderCard.style.borderColor = 'var(--admin-primary)';
+        showAdminToast(`Pasta "${folderName}" selecionada no formulário.`);
+      });
+
       const itemsContainer = folderCard.querySelector('.admin-folder-items');
 
       fList.forEach(s => {
         const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
+        const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
         const row = document.createElement('div');
         row.className = 'admin-spawn-row';
         row.setAttribute('draggable', 'true');
-        row.setAttribute('data-id', s.key || s.id || s.spawn_id);
+        row.setAttribute('data-id', s.id || s.key || s.spawn_id);
 
         row.innerHTML = `
           <div style="display:flex; align-items:center; gap:10px;">
             <i class="fas fa-grip-vertical" style="color:var(--admin-text-muted); cursor:grab;"></i>
-            <strong>#${escapeHtml(s.key || s.id || s.spawn_id)}</strong>
+            <strong>#${escapeHtml(s.id || s.key || s.spawn_id)}</strong>
             <span style="color:#fff;">${escapeHtml(s.name || s.spawn_name || 'Ponto')}</span>
             <span class="admin-badge admin-badge-quick">${escapeHtml((s.spawn_type || 'truck').toUpperCase())}</span>
           </div>
           <div style="font-family:monospace; font-size:11px; color:var(--admin-text-muted);">
-            X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0} H:${coords.heading ? Number(coords.heading).toFixed(0) : 0}°
+            X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0} H:${Number(hVal).toFixed(0)}°
           </div>
           <div style="display:flex; gap:6px;">
-            <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
-            <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${escapeHtml(s.key || s.id || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
+            <button class="admin-btn admin-btn-outline btn-edit-spawn" data-id="${escapeHtml(s.id || s.key || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Editar no Formulário"><i class="fas fa-edit"></i></button>
+            <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(hVal)}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
+            <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${escapeHtml(s.id || s.key || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
           </div>
         `;
 
@@ -779,6 +872,17 @@
       container.appendChild(folderCard);
     });
 
+    container.querySelectorAll('.btn-edit-spawn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const id = this.getAttribute('data-id');
+        const s = adminData.spawns[id];
+        if (s) {
+          fillSpawnForm(s);
+          showAdminToast(`Spawn #${id} carregado no formulário.`);
+        }
+      });
+    });
+
     container.querySelectorAll('.btn-tp-spawn').forEach(btn => {
       btn.addEventListener('click', function () {
         postNUI('adminTeleport', {
@@ -824,52 +928,84 @@
   }
 
   function saveSpawnForm() {
-    const spawnId = document.getElementById('spawn-form-id').value.trim();
-    if (!spawnId) {
-      showAdminToast('Informe o ID do ponto de spawn!', 'error');
-      return;
+    try {
+      const spawnIdInput = document.getElementById('spawn-form-id');
+      const spawnId = (spawnIdInput?.value || '').trim();
+      if (!spawnId) {
+        showAdminToast('Informe o ID do ponto de spawn!', 'error');
+        if (spawnIdInput) spawnIdInput.focus();
+        return;
+      }
+
+      const folderSelect = document.getElementById('spawn-form-folder');
+      const folderVal = (selectedSpawnFolder || (folderSelect?.options && folderSelect.selectedIndex >= 0 ? folderSelect.options[folderSelect.selectedIndex]?.value : null) || folderSelect?.value || 'Geral').trim() || 'Geral';
+      const sName = (document.getElementById('spawn-form-name')?.value || '').trim() || spawnId;
+      const sType = document.getElementById('spawn-form-type')?.value || 'truck';
+      const sModel = (document.getElementById('spawn-form-model')?.value || '').trim();
+
+      const coords = {
+        x: parseFloat(document.getElementById('spawn-form-x')?.value) || 0.0,
+        y: parseFloat(document.getElementById('spawn-form-y')?.value) || 0.0,
+        z: parseFloat(document.getElementById('spawn-form-z')?.value) || 0.0,
+        heading: parseFloat(document.getElementById('spawn-form-h')?.value) || 0.0
+      };
+
+      const payload = {
+        id: spawnId,
+        spawn_id: spawnId,
+        name: sName,
+        spawn_name: sName,
+        spawn_type: sType,
+        model: sModel,
+        folder_name: folderVal,
+        folder: folderVal,
+        folderName: folderVal,
+        coords: coords,
+        heading: coords.heading
+      };
+
+      // 1. Post para o servidor
+      postNUI('adminSaveSpawn', payload);
+
+      // 2. Atualiza cache local garantindo dicionário normalizado
+      if (!adminData.spawns || Array.isArray(adminData.spawns)) {
+        adminData.spawns = normalizeSpawns(adminData.spawns);
+      }
+      adminData.spawns[spawnId] = payload;
+
+      if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
+      if (!adminData.spawnFolders.includes(folderVal)) {
+        adminData.spawnFolders.push(folderVal);
+      }
+
+      // 3. Renderiza a aba atualizada
+      selectedSpawnFolder = folderVal;
+      renderSpawnsTab();
+      populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
+
+      // 4. Mantém a pasta ativa selecionada no formulário
+      if (folderSelect) folderSelect.value = folderVal;
+
+      // 5. Limpa campos para o próximo cadastro
+      if (spawnIdInput) spawnIdInput.value = '';
+      const nameInput = document.getElementById('spawn-form-name');
+      if (nameInput) nameInput.value = '';
+      const xInput = document.getElementById('spawn-form-x');
+      if (xInput) xInput.value = '';
+      const yInput = document.getElementById('spawn-form-y');
+      if (yInput) yInput.value = '';
+      const zInput = document.getElementById('spawn-form-z');
+      if (zInput) zInput.value = '';
+      const hInput = document.getElementById('spawn-form-h');
+      if (hInput) hInput.value = '';
+      const modelInput = document.getElementById('spawn-form-model');
+      if (modelInput) modelInput.value = '';
+
+      showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso na pasta "${folderVal}"!`, 'success');
+    } catch (err) {
+      console.error('[Admin NUI] Erro ao salvar spawn:', err);
+      showAdminToast('Erro ao salvar ponto de spawn: ' + (err.message || err), 'error');
     }
-
-    const folderVal = document.getElementById('spawn-form-folder')?.value || 'Geral';
-    const coords = {
-      x: parseFloat(document.getElementById('spawn-form-x').value) || 0.0,
-      y: parseFloat(document.getElementById('spawn-form-y').value) || 0.0,
-      z: parseFloat(document.getElementById('spawn-form-z').value) || 0.0,
-      heading: parseFloat(document.getElementById('spawn-form-h').value) || 0.0
-    };
-
-    const payload = {
-      id: spawnId,
-      spawn_id: spawnId,
-      name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
-      spawn_name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
-      spawn_type: document.getElementById('spawn-form-type').value,
-      folder_name: folderVal,
-      coords: coords
-    };
-
-    postNUI('adminSaveSpawn', payload);
-    adminData.spawns[spawnId] = payload;
-    if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
-    if (!adminData.spawnFolders.includes(folderVal)) {
-      adminData.spawnFolders.push(folderVal);
-    }
-    renderSpawnsTab();
-    populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
-
-    // Mantém a pasta ativa selecionada no formulário
-    const folderSelect = document.getElementById('spawn-form-folder');
-    if (folderSelect) folderSelect.value = folderVal;
-
-    // Limpa campos para o próximo cadastro
-    document.getElementById('spawn-form-id').value = '';
-    document.getElementById('spawn-form-name').value = '';
-    document.getElementById('spawn-form-x').value = '';
-    document.getElementById('spawn-form-y').value = '';
-    document.getElementById('spawn-form-z').value = '';
-    document.getElementById('spawn-form-h').value = '';
-
-    showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso na pasta "${folderVal}"!`);
   }
 
   // ============================================================

@@ -50,10 +50,12 @@ local function CleanStr(v, maxLen, default)
     return str
 end
 
--- Identificador seguro (letras, números, _ e -)
+-- Identificador seguro (letras, números, _ e -; converte espaços para _)
 local function CleanId(v, maxLen)
     local str = CleanStr(v, maxLen, nil)
-    if not str or str:find('[^%w_%-]') then return nil end
+    if not str then return nil end
+    str = str:gsub('%s+', '_'):gsub('[^%w_%-]', '')
+    if str == '' then return nil end
     return str
 end
 
@@ -867,6 +869,8 @@ lib.callback.register('aurp_trucker:server:getAdminData', function(source)
         customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
+        spawnFolders = AdminService.SpawnFolders,
+        spawn_folders = AdminService.SpawnFolders,
         trailerOffsets = cleanOffsets or currentOffsets,
         offsets = cleanOffsets or currentOffsets,
         homologatedProps = currentProps,
@@ -988,18 +992,28 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
 
     EnsureAdminDBSchema()
 
-    local spawnId = CleanId(spawnData.id or spawnData.spawn_id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local rawId = tostring(spawnData.id or spawnData.spawn_id or ''):gsub('^%s*(.-)%s*$', '%1')
+    local cleanId = CleanId(rawId, 50)
+    local spawnId = cleanId or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
     local spawnType = CleanStr(spawnData.spawn_type, 50, 'truck')
     local existing = AdminService.Spawns[spawnId]
     local rawHeading = (spawnData.coords and (spawnData.coords.heading or spawnData.coords.w)) or spawnData.heading or 0.0
-    local folderName = CleanStr(spawnData.folder_name, 100, (existing and existing.folder_name) or 'Geral')
+    local requestedFolder = CleanStr(spawnData.folder_name or spawnData.folderName or spawnData.folder or spawnData.spawn_folder, 100, nil)
+    local folderName = requestedFolder or (existing and existing.folder_name) or 'Geral'
+
+    local coords = CleanCoords(spawnData.coords)
+    local heading = ClampNum(rawHeading, -360.0, 360.0, 0.0)
+    if coords and coords.x then
+        coords.heading = heading
+        coords.w = heading
+    end
 
     local clean = {
         id          = spawnId,
         name        = CleanStr(spawnData.name or spawnData.spawn_name, 100, 'Ponto de Spawn'),
         spawn_type  = spawnType,
-        coords      = CleanCoords(spawnData.coords),
-        heading     = ClampNum(rawHeading, -360.0, 360.0, 0.0),
+        coords      = coords,
+        heading     = heading,
         folder_name = folderName,
     }
 
@@ -1016,31 +1030,40 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
     end
 
-    -- 2. Tenta inserir na tabela aust_trucker_spawns com folder_name
-    local ok, err = pcall(function()
-        MySQL.query.await([[
-            INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-            name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
-        ]], {
-            clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
-        })
+    -- 2. Gravação limpa e universal no banco (compatível com MySQL 5.7, 8.0+ e MariaDB)
+    local coordsJson = json.encode(clean.coords)
+    local dbOk, dbErr = pcall(function()
+        local existingRow = MySQL.single.await('SELECT id FROM aust_trucker_spawns WHERE id = ? LIMIT 1', { clean.id })
+        if existingRow and existingRow.id then
+            MySQL.query.await([[
+                UPDATE aust_trucker_spawns
+                SET name = ?, spawn_type = ?, folder_name = ?, coords = ?, heading = ?
+                WHERE id = ?
+            ]], {
+                clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading, clean.id
+            })
+        else
+            MySQL.query.await([[
+                INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ]], {
+                clean.id, clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading
+            })
+        end
     end)
 
-    if not ok then
-        print(("^1[AUST_Trucker Admin] Falha ao gravar spawn no banco (%s). Aplicando reparo de emergência...^7"):format(tostring(err)))
+    if not dbOk then
+        print(("^1[AUST_Trucker Admin] Falha ao persistir spawn no banco (%s). Aplicando reparo de emergência...^7"):format(tostring(dbErr)))
         pcall(function()
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` MODIFY COLUMN `spawn_type` VARCHAR(50) NOT NULL;")
             MySQL.query.await([[
-                INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
+                UPDATE aust_trucker_spawns
+                SET name = ?, spawn_type = ?, folder_name = ?, coords = ?, heading = ?
+                WHERE id = ?
             ]], {
-                clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
+                clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading, clean.id
             })
         end)
     end
