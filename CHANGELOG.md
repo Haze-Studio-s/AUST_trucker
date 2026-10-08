@@ -1,5 +1,20 @@
 # Changelog — AUST_trucker
 
+## [20.9.12] — 2026-10-07 — Correção do Fluxo de Cargas Pesadas (Contêineres), Desacoplamento de Chassi e Operação do Reach Stacker
+
+### Corrigido & Aprimorado
+- **Correção de Chassi e Remoção de Contêiner Pré-Moldado (`shared/config.lua`, `server/main.lua`, `config/logistics_config.lua`, `client/main.lua`):**
+  - Resolvido bug onde a carreta spawnava com um contêiner já soldado/moldado sobre ela antes mesmo do jogador içar a carga.
+  - Causa raiz: O modelo nativo `docktrailer` do GTA V possui uma malha 3D fixa de contêiner fundida ao reboque, e diversas cargas gerais de paletes estavam incorretamente configuradas com `trailer = "docktrailer"`.
+  - Reboque padrão para cargas pesadas (`heavy`) atualizado para `freighttrailer` (chassi portuário genuíno e vazio) e suporte total ao `trflat`.
+  - Implementada desativação automática de extras 1..14 (`SetVehicleExtra(trailer, i, 1)`) no servidor e no cliente, garantindo que o chassi da carreta permaneça 100% plano e vazio para o acoplamento do contêiner.
+  - Cargas de paletes em `config/logistics_config.lua` corrigidas para `trflat`, e adicionados contratos dedicados de contêiner com `freighttrailer`.
+- **Desbloqueio e Início Imediato do Fluxo de Cargas Pesadas (`client/main.lua`, `html/panel.js`):**
+  - Resolvido travamento onde clicar em "Iniciar Entrega" em contratos de contêiner não iniciava o fluxo do Reach Stacker.
+  - Na interface NUI (`html/panel.js`), fretes de carga pesada e de tanque agora iniciam diretamente sem exibir o modal inadequado de estiva de paletes e empilhadeira.
+  - No cliente (`client/main.lua`), o listener reativo `lib.onCache('vehicle')` agora permite assumir o Reach Stacker (`handler`) imediatamente desde a Etapa 1, ativando os controles da tecla `[G]`, spreader e fixação na prancha.
+  - Ao concluir a fixação do contêiner na prancha, o fluxo transita de forma inteligente: se a carreta já estiver engatada, parte diretamente para a rota rodoviária (`STEP_8_IN_TRANSIT`); se não estiver engatada, instrui o jogador a entrar no caminhão e acoplar a carreta, dispensando a doca de carregamento redundante.
+
 ## [20.9.11] — 2026-10-07 — Resolução Unificada de Nível de Motorista (`trucker_player_progression` vs `0r_trucker`)
 
 ### Corrigido & Aprimorado

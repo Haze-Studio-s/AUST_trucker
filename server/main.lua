@@ -778,7 +778,7 @@ local function StartTruckDelivery(src, contractData)
             cargoType = 'vehicle_carrier'
         elseif string.find(cName, 'adr') or string.find(cName, 'quimic') or string.find(cName, 'químic') or string.find(cName, 'explos') or string.find(cName, 'nuclear') or string.find(cName, 'corros') then
             cargoType = 'adr'
-        elseif tModel == 'docktrailer' or string.find(tModel, 'contr') or string.find(cName, 'conteiner') or string.find(cName, 'contêiner') or string.find(cName, 'container') or string.find(cName, 'heavy') or string.find(cName, 'pesad') then
+        elseif tModel == 'freighttrailer' or tModel == 'docktrailer' or string.find(tModel, 'contr') or string.find(cName, 'conteiner') or string.find(cName, 'contêiner') or string.find(cName, 'container') or string.find(cName, 'heavy') or string.find(cName, 'pesad') then
             cargoType = 'heavy'
         elseif tModel == 'tanker' or tModel == 'tanker2' or tModel == 'armytanker' or string.find(tModel, 'tanker') or string.find(cName, 'tanque') or string.find(cName, 'combust') or string.find(cName, 'oleo') or string.find(cName, 'óleo') or string.find(cName, 'querosene') or string.find(cName, 'solvente') then
             cargoType = 'liquid'
@@ -829,7 +829,7 @@ local function StartTruckDelivery(src, contractData)
         if cargoType == 'liquid' or cargoType == 'adr' then
             fallbackModel = 'tanker'
         elseif cargoType == 'heavy' then
-            fallbackModel = 'docktrailer'
+            fallbackModel = 'freighttrailer'
         end
         trailerModel = joaat(typeConfig.defaultTrailer or fallbackModel)
     end
@@ -940,6 +940,13 @@ local function StartTruckDelivery(src, contractData)
     end
 
     SetVehicleDoorsLocked(trailer, 1)
+
+    -- Para cargas pesadas/contêiner: desativa extras para garantir chassi limpo sem contêiner pré-moldado
+    if cargoType == 'heavy' then
+        for extraId = 1, 14 do
+            pcall(function() SetVehicleExtra(trailer, extraId, 1) end)
+        end
+    end
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira vs Reach Stacker)
     local forklift = nil

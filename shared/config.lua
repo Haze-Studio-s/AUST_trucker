@@ -376,9 +376,10 @@ Config.CargoTypes = {
     heavy = {
         label = 'Carga Pesada (Contêiner / Reach Stacker)',
         allowedTrailers = {
-            joaat('docktrailer'),
-            joaat('trailers2'),
+            joaat('freighttrailer'),
             joaat('trflat'),
+            joaat('trailers2'),
+            joaat('docktrailer'),
         },
         allowedTrucks = {
             joaat('hauler'),
@@ -387,7 +388,7 @@ Config.CargoTypes = {
             joaat('phantom'),
             joaat('phantom3'),
         },
-        defaultTrailer = 'docktrailer',
+        defaultTrailer = 'freighttrailer',
         handlerModel = 'handler',
         containerModel = 'prop_contr_03b_ld',
         yard = {
@@ -496,6 +497,15 @@ Config.TrailerSlots = {
             vector3(-0.55,  1.2, 0.35), vector3( 0.55,  1.2, 0.35), -- Meio-Frente (slots 3 e 4)
             vector3(-0.55, -1.2, 0.35), vector3( 0.55, -1.2, 0.35), -- Meio-Trás (slots 5 e 6)
             vector3(-0.55, -3.6, 0.35), vector3( 0.55, -3.6, 0.35), -- Traseira (slots 7 e 8)
+        },
+        containers = {
+            double = {
+                { x = 0.0, y =  3.8, z = 0.35, heading = 0.0 },
+                { x = 0.0, y = -3.8, z = 0.35, heading = 0.0 },
+            },
+            single = {
+                { x = 0.0, y =  0.0, z = 0.35, heading = 0.0 },
+            }
         },
         forklift = vector3(0.0, -5.2, 0.35)
     },

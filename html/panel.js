@@ -559,9 +559,9 @@ window.addEventListener("message", async function (event) {
                 button = `<button disabled type="button" class="btn btn-secondary waves-effect waves-light locked-job-btn" data-reason="${lockReason}" style="cursor: not-allowed; opacity: 0.85; background: #374151; border-color: #4b5563;" title="${lockReason}"><i class="fas fa-lock mr-1 text-danger"></i>${Utils.translate("contract_page_button_locked") || "Bloqueado"}</button>`;
             } else {
                 if (typeof trucker_party !== "undefined" && trucker_party != null && !contract.external_data) {
-                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
+                    partystart_btn = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-trailer="${Utils.escapeHtml(contract.trailer || '')}" data-name="${Utils.escapeHtml(contract.name || '')}" data-reward="${contract.reward || 0}" data-party="true" type="button" class="btn btn-dark waves-effect waves-light party-start-job-btn">${Utils.translate("contract_page_button_start_job_party")}</button>`;
                 }
-                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-reward="${contract.reward || 0}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
+                button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" data-trailer="${Utils.escapeHtml(contract.trailer || '')}" data-name="${Utils.escapeHtml(contract.name || '')}" data-reward="${contract.reward || 0}" data-party="false" type="button" class="btn btn-primary waves-effect waves-light start-job-btn">${Utils.translate("contract_page_button_start_job")}</button>`;
                 if (contract.progress) {
                     button = `<button data-id="${contract.contract_id}" data-contract-id="${contract.contract_id}" onclick="cancelContract(${contract.contract_id})" type="button" class="btn btn-outline-danger waves-effect waves-light cancel-job-btn">${Utils.translate("contract_page_button_cancel_job")}</button>`;
                     partystart_btn = "";
@@ -1687,8 +1687,19 @@ $(document).ready(function () {
         if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         let reward = Number($(this).attr("data-reward")) || 0;
+        let trailer = ($(this).attr("data-trailer") || "").toLowerCase();
+        let name = ($(this).attr("data-name") || "").toLowerCase();
+        let isHeavy = trailer === 'freighttrailer' || trailer === 'docktrailer' || name.includes('conteiner') || name.includes('contêiner') || name.includes('container') || name.includes('heavy') || name.includes('pesad');
+        let isLiquid = trailer.includes('tanker') || name.includes('tanque') || name.includes('combust') || name.includes('adr');
+
         if (typeof id !== "undefined" && id !== null) {
-            openContractConfigModal(id, false, reward);
+            if (isHeavy) {
+                startContract(id, false, 1, false);
+            } else if (isLiquid) {
+                startContract(id, false, 100, false);
+            } else {
+                openContractConfigModal(id, false, reward);
+            }
         }
     });
 
@@ -1698,8 +1709,19 @@ $(document).ready(function () {
         if (isActionProcessing || $(this).prop("disabled") || $(this).hasClass("locked-job-btn")) return;
         let id = $(this).attr("data-id") || $(this).attr("data-contract-id");
         let reward = Number($(this).attr("data-reward")) || 0;
+        let trailer = ($(this).attr("data-trailer") || "").toLowerCase();
+        let name = ($(this).attr("data-name") || "").toLowerCase();
+        let isHeavy = trailer === 'freighttrailer' || trailer === 'docktrailer' || name.includes('conteiner') || name.includes('contêiner') || name.includes('container') || name.includes('heavy') || name.includes('pesad');
+        let isLiquid = trailer.includes('tanker') || name.includes('tanque') || name.includes('combust') || name.includes('adr');
+
         if (typeof id !== "undefined" && id !== null) {
-            openContractConfigModal(id, true, reward);
+            if (isHeavy) {
+                startContract(id, true, 1, false);
+            } else if (isLiquid) {
+                startContract(id, true, 100, false);
+            } else {
+                openContractConfigModal(id, true, reward);
+            }
         }
     });
 

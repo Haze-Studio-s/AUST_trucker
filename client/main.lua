@@ -549,14 +549,30 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
-                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR
-                    CurrentStage = 'STEP_4_PARK_DOCK'
                     if TrailerBayWatcherPoint then
                         pcall(function() TrailerBayWatcherPoint:remove() end)
                         TrailerBayWatcherPoint = nil
                     end
                     ClearObjectiveMarkers(false)
 
+                    local isContainerLoaded = false
+                    if ActiveJob and ActiveJob.cargoType == 'heavy' then
+                        if JobEntities.container and DoesEntityExist(JobEntities.container) and JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                            isContainerLoaded = IsEntityAttachedToEntity(JobEntities.container, JobEntities.trailer)
+                        end
+                    end
+
+                    if isContainerLoaded then
+                        CurrentStage = 'STEP_8_IN_TRANSIT'
+                        SendMissionNotify('Central Logística', 'Carreta engatada com o contêiner carregado! Inicie o trajeto até o destino.', 'success')
+                        if ActiveJob.deliveryCoords then
+                            StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                        end
+                        break
+                    end
+
+                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR
+                    CurrentStage = 'STEP_4_PARK_DOCK'
                     local allocatedBay = nil
                     local reqJobId = ActiveJob and ActiveJob.jobId
 
@@ -2541,6 +2557,14 @@ local function StartMissionStep1(truck, trailer, forklift)
         UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga', true)
     end
 
+    if ActiveJob and ActiveJob.cargoType == 'heavy' then
+        local handlerTarget = (JobEntities.handler and DoesEntityExist(JobEntities.handler) and JobEntities.handler) or (ActiveJob.handlerCoords)
+        if handlerTarget then
+            UpdateMissionObjective('forklift', handlerTarget, 'Reach Stacker', true)
+        end
+        SendMissionNotify('Central Logística', 'Carga Pesada: Você pode carregar o contêiner com o Reach Stacker no pátio ou engatar a carreta primeiro.', 'info')
+    end
+
     -- 3. Notificação diegética: se o caminhão já estiver materializado com placa, notifica a placa.
     -- Caso contrário, a notificação com a placa designada será disparada assim que a entidade for resolvida na rede.
     if truck and DoesEntityExist(truck) then
@@ -2669,8 +2693,10 @@ lib.onCache('vehicle', function(veh)
     end
 
     -- ETAPA 5 & 6: OPERAÇÃO COM REACH STACKER (CARGA PESADA / CONTÊINER)
-    if CurrentStage == 'STEP_5_ENTER_HANDLER' then
-        if JobEntities.handler and veh == JobEntities.handler then
+    local isHandlerModel = (GetEntityModel(veh) == joaat(Config.Polarix.Handler.VehicleModel or 'handler'))
+    local isHandler = (JobEntities.handler and veh == JobEntities.handler) or isHandlerModel
+    if ActiveJob and ActiveJob.cargoType == 'heavy' and isHandler and CurrentStage ~= 'STEP_8_IN_TRANSIT' and CurrentStage ~= 'STEP_9_DELIVERY' then
+        if CurrentStage ~= 'STEP_6_LOAD_CONTAINER' then
             CurrentStage = 'STEP_6_LOAD_CONTAINER'
 
             local containerList = (JobEntities.containers and #JobEntities.containers > 0 and JobEntities.containers) or (JobEntities.container and { JobEntities.container }) or {}
@@ -2695,11 +2721,38 @@ lib.onCache('vehicle', function(veh)
                         UpdateMissionObjective('pallet', nextCont, 'Próximo Contêiner')
                     end
                 elseif action == 'dropped' then
-                    SendMissionNotify('Central Logística', 'Todos os contêineres fixados com sucesso na prancha! Entre no caminhão para iniciar a rota.', 'success')
+                    ClearObjectiveMarkers(false)
+                    local isCoupled = false
+                    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                        local hasTr, trEnt = GetVehicleTrailerVehicle(JobEntities.truck)
+                        isCoupled = (hasTr and trEnt ~= 0) or IsVehicleAttachedToTrailer(JobEntities.truck)
+                    end
+
+                    if isCoupled then
+                        CurrentStage = 'STEP_8_IN_TRANSIT'
+                        UpdateMissionObjective('truck', JobEntities.truck, 'Seu Caminhão')
+                        SendMissionNotify('Central Logística', 'Todos os contêineres fixados com sucesso! Entre no caminhão para iniciar a rota.', 'success')
+                        if ActiveJob.deliveryCoords then
+                            StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                        end
+                    else
+                        CurrentStage = 'STEP_2_ENTER_TRUCK'
+                        UpdateMissionObjective('truck', JobEntities.truck, 'Seu Caminhão')
+                        SendMissionNotify('Central Logística', 'Contêiner travado no chassis! Entre no caminhão e engate a carreta.', 'success')
+                        StartTruckEnterWatcher(JobEntities.truck)
+                    end
                 end
             end, function()
                 ClearObjectiveMarkers(false)
             end, containerList, reqCount)
+        end
+    end
+
+    if CurrentStage == 'STEP_8_IN_TRANSIT' and IsMissionTruck(veh) then
+        JobEntities.truck = veh
+        if lcActiveJob then lcActiveJob.truck = veh end
+        if ActiveJob and ActiveJob.deliveryCoords and not ActiveDeliveryPoint then
+            StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
         end
     end
 end)
@@ -2904,6 +2957,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 SetVehicleExplodesOnHighExplosionDamage(trailer, false)
                 SetVehicleCanBeVisiblyDamaged(trailer, false)
                 SetVehicleStrong(trailer, true)
+
+                if payload and payload.cargoType == 'heavy' then
+                    for extraId = 1, 14 do
+                        if DoesExtraExist(trailer, extraId) then
+                            SetVehicleExtra(trailer, extraId, 1)
+                        end
+                    end
+                end
 
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
                     UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
