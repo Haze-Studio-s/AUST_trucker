@@ -541,7 +541,7 @@ end)
 local function StartCouplingWatcher()
     CreateThread(function()
         while CurrentStage == 'STEP_3_COUPLE_TRAILER' do
-            Wait(250)
+            local sleep = 250
             if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
                 local hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
                 if not hasTrailer or trailerEnt == 0 then
@@ -555,27 +555,44 @@ local function StartCouplingWatcher()
                     local trailerCoords = GetEntityCoords(JobEntities.trailer)
                     local dist = #(truckCoords - trailerCoords)
 
-                    if dist <= 14.0 then
+                    if dist <= 15.0 then
+                        sleep = 20 -- Frequência ágil em aproximação para evitar atraso de frame e puxões
+
                         -- Ponto da 5ª roda do caminhão (traseira)
                         local truckBone = GetEntityBoneIndexByName(JobEntities.truck, "attach_female")
                         local fifthWheelPos = (truckBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.truck, truckBone)
-                            or GetOffsetFromEntityInWorldCoords(JobEntities.truck, 0.0, -2.5, 0.5)
+                        if not fifthWheelPos then
+                            local tMin, _ = GetModelDimensions(GetEntityModel(JobEntities.truck))
+                            local hitchY = (tMin.y < 0) and (tMin.y + 1.2) or -2.4
+                            fifthWheelPos = GetOffsetFromEntityInWorldCoords(JobEntities.truck, 0.0, hitchY, 0.45)
+                        end
 
-                        -- Ponto do pino rei da carreta (dianteira)
+                        -- Ponto do pino rei da carreta (dianteira precisa)
                         local trailerBone = GetEntityBoneIndexByName(JobEntities.trailer, "attach_male")
                         local kingpinPos = (trailerBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.trailer, trailerBone)
-                            or GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 3.5, 0.0)
+                        if not kingpinPos then
+                            local _, maxDim = GetModelDimensions(GetEntityModel(JobEntities.trailer))
+                            local kingpinY = (maxDim.y > 0) and (maxDim.y - 1.2) or 3.5
+                            kingpinPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, kingpinY, 0.2)
+                        end
 
                         local hitchDist = #(fifthWheelPos - kingpinPos)
 
-                        -- Acoplamento sutil e natural apenas ao encostar fisicamente (tolerância reduzida para 1.2m)
-                        if hitchDist <= 1.2 then
+                        -- Acoplamento sutil e natural a 1.0m de tolerância no contato físico exato
+                        if hitchDist <= 1.0 then
                             FreezeEntityPosition(JobEntities.trailer, false)
+                            SetVehicleHandbrake(JobEntities.trailer, false)
+                            SetVehicleBrake(JobEntities.trailer, false)
+
+                            -- Previne choque e repulsão Havok no milissegundo exato do encaixe da 5ª roda
+                            SetEntityNoCollisionEntity(JobEntities.truck, JobEntities.trailer, true)
+
+                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
+                            Wait(50)
+
+                            SetEntityNoCollisionEntity(JobEntities.truck, JobEntities.trailer, false)
                             SetEntityCollision(JobEntities.trailer, true, true)
                             SetEntityCollision(JobEntities.truck, true, true)
-
-                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.2)
-                            Wait(150)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
                             if not hasTrailer or trailerEnt == 0 then
@@ -759,6 +776,7 @@ local function StartCouplingWatcher()
                     break
                 end
             end
+            Wait(sleep)
         end
     end)
 end
