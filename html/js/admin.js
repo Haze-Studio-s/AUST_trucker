@@ -8,6 +8,7 @@
   let adminData = {
     customRoutes: {},
     spawns: {},
+    spawnFolders: ['Geral'],
     trailerOffsets: {},
     npcs: {},
     economy: {},
@@ -174,6 +175,19 @@
           renderEconomyTab();
         }
         break;
+      case 'adminSyncSpawns':
+        if (item.spawns) {
+          adminData.spawns = item.spawns;
+          renderSpawnsTab();
+        }
+        break;
+      case 'adminSyncSpawnFolders':
+        if (item.folders) {
+          adminData.spawnFolders = item.folders;
+          renderSpawnsTab();
+          populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
+        }
+        break;
       case 'admin_update_offsets':
         if (item.offsets) {
           adminData.trailerOffsets = item.offsets;
@@ -270,6 +284,7 @@
       adminData = {
         customRoutes: data.customRoutes || data.routes || {},
         spawns: data.spawns || {},
+        spawnFolders: data.spawnFolders || data.spawn_folders || ['Geral'],
         trailerOffsets: data.trailerOffsets || data.offsets || {},
         vehiclePropOffsets: data.vehiclePropOffsets || {},
         npcs: data.npcs || {},
@@ -393,8 +408,11 @@
   // ABA 1: ROTAS & CONTRATOS (COM FILTROS E BUSCA)
   // ============================================================
   function getSpawnFolders() {
-    const spawns = adminData.spawns || {};
     const folders = new Set(['Geral']);
+    if (adminData.spawnFolders && Array.isArray(adminData.spawnFolders)) {
+      adminData.spawnFolders.forEach(f => { if (f) folders.add(f); });
+    }
+    const spawns = adminData.spawns || {};
     Object.values(spawns).forEach(s => {
       if (s && s.folder_name) folders.add(s.folder_name);
     });
@@ -464,13 +482,23 @@
       const dist = r.distance || r.distance_km || 0;
 
       tr.innerHTML = `
-        <td style="font-weight:600;">#${escapeHtml(r.id || r.route_id || k)}</td>
-        <td title="${escapeHtml(r.name || r.title || 'Carga Sem Nome')}">${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
+        <td style="font-weight:600; text-overflow:ellipsis; overflow:hidden;" title="#${escapeHtml(r.id || r.route_id || k)}">#${escapeHtml(r.id || r.route_id || k)}</td>
+        <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(r.name || r.title || 'Carga Sem Nome')}">${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
         <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
-        <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary); font-size:10.5px;">(${escapeHtml(xp)} XP)</span></td>
-        <td>${Number(dist).toFixed(1)} km <small style="color:var(--admin-text-muted);">(Lv ${r.req_skill || r.required_level || 1})</small></td>
+        <td>
+          <div style="line-height:1.2;">
+            <span>R$ ${Number(payment).toLocaleString()}</span><br>
+            <span style="color:var(--admin-primary); font-size:10px; font-weight:600;">+${escapeHtml(xp)} XP</span>
+          </div>
+        </td>
+        <td>
+          <div style="line-height:1.2;">
+            <span>${Number(dist).toFixed(1)} km</span><br>
+            <span style="color:var(--admin-text-muted); font-size:10px;">Nv ${r.req_skill || r.required_level || 1}</span>
+          </div>
+        </td>
         <td style="text-align:center; white-space:nowrap;">
-          <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
+          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
             <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
             <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
           </div>
@@ -633,6 +661,12 @@
     const folders = {};
     folders['Geral'] = [];
 
+    if (adminData.spawnFolders && Array.isArray(adminData.spawnFolders)) {
+      adminData.spawnFolders.forEach(f => {
+        if (f && !folders[f]) folders[f] = [];
+      });
+    }
+
     spawnsList.forEach(s => {
       const fName = s.folder_name || 'Geral';
       if (!folders[fName]) folders[fName] = [];
@@ -775,10 +809,14 @@
         const f = this.getAttribute('data-folder');
         showConfirmModal('Excluir Pasta', `Deseja excluir a pasta "${f}"? Todos os pontos contidos nela serão movidos para "Geral".`, () => {
           postNUI('adminDeleteSpawnFolder', { folder_name: f });
+          if (adminData.spawnFolders) {
+            adminData.spawnFolders = adminData.spawnFolders.filter(x => x !== f);
+          }
           Object.values(adminData.spawns).forEach(s => {
             if (s.folder_name === f) s.folder_name = 'Geral';
           });
           renderSpawnsTab();
+          populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
           showAdminToast(`Pasta "${f}" excluída. Pontos movidos para "Geral".`);
         });
       });
@@ -792,6 +830,7 @@
       return;
     }
 
+    const folderVal = document.getElementById('spawn-form-folder')?.value || 'Geral';
     const coords = {
       x: parseFloat(document.getElementById('spawn-form-x').value) || 0.0,
       y: parseFloat(document.getElementById('spawn-form-y').value) || 0.0,
@@ -805,14 +844,19 @@
       name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
       spawn_name: document.getElementById('spawn-form-name').value.trim() || 'Ponto de Spawn',
       spawn_type: document.getElementById('spawn-form-type').value,
-      folder_name: document.getElementById('spawn-form-folder').value || 'Geral',
+      folder_name: folderVal,
       coords: coords
     };
 
     postNUI('adminSaveSpawn', payload);
     adminData.spawns[spawnId] = payload;
+    if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
+    if (!adminData.spawnFolders.includes(folderVal)) {
+      adminData.spawnFolders.push(folderVal);
+    }
     renderSpawnsTab();
-    showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso!`);
+    populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
+    showAdminToast(`Ponto de spawn #${spawnId} gravado na pasta "${folderVal}"!`);
   }
 
   // ============================================================
@@ -1600,20 +1644,15 @@
     if (btnNewFolder) {
       btnNewFolder.addEventListener('click', function () {
         showPromptModal('Nova Pasta de Spawns', 'Nome da pasta (ex: Pátio Norte)', (clean) => {
-          const folderSelect = document.getElementById('spawn-form-folder');
-          if (folderSelect) {
-            let exists = false;
-            for (let i = 0; i < folderSelect.options.length; i++) {
-              if (folderSelect.options[i].value === clean) exists = true;
-            }
-            if (!exists) {
-              const opt = document.createElement('option');
-              opt.value = clean;
-              opt.textContent = clean;
-              folderSelect.appendChild(opt);
-              folderSelect.value = clean;
-            }
+          postNUI('adminCreateSpawnFolder', { folder_name: clean });
+          if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
+          if (!adminData.spawnFolders.includes(clean)) {
+            adminData.spawnFolders.push(clean);
           }
+          renderSpawnsTab();
+          populateRouteSpawnFolders(clean);
+          const folderSelect = document.getElementById('spawn-form-folder');
+          if (folderSelect) folderSelect.value = clean;
           showAdminToast(`Pasta "${clean}" criada com sucesso!`);
         });
       });

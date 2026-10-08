@@ -5,6 +5,7 @@ AdminService = {}
 
 AdminService.CustomRoutes = {}
 AdminService.Spawns = {}
+AdminService.SpawnFolders = { 'Geral' }
 AdminService.TrailerOffsets = {}
 AdminService.VehiclePropOffsets = {}
 AdminService.HomologatedProps = {}
@@ -263,7 +264,23 @@ function AdminService.LoadAll()
         end
         AdminService.CustomRoutes = routeMap
 
-        -- 2. Carrega Spawns
+        -- 2. Carrega Pastas de Spawns Dinâmicos
+        local dbFolders = MySQL.query.await('SELECT name FROM aust_trucker_spawn_folders') or {}
+        local folderList = {}
+        local folderMap = {}
+        for _, f in ipairs(dbFolders) do
+            if f.name and f.name ~= '' then
+                table.insert(folderList, f.name)
+                folderMap[f.name] = true
+            end
+        end
+        if not folderMap['Geral'] then
+            table.insert(folderList, 'Geral')
+            MySQL.query.await("INSERT IGNORE INTO aust_trucker_spawn_folders (name) VALUES ('Geral')")
+        end
+        AdminService.SpawnFolders = folderList
+
+        -- 2.1. Carrega Spawns
         local spawns = MySQL.query.await('SELECT * FROM aust_trucker_spawns') or {}
         local spawnMap = {}
         for _, s in ipairs(spawns) do
@@ -598,6 +615,8 @@ RegisterCommand('truckeradmin', function(source, args)
         customRoutes = AdminService.CustomRoutes,
         routes = AdminService.CustomRoutes,
         spawns = AdminService.Spawns,
+        spawnFolders = AdminService.SpawnFolders,
+        spawn_folders = AdminService.SpawnFolders,
         trailerOffsets = cleanOffsets or currentOffsets,
         offsets = cleanOffsets or currentOffsets,
         homologatedProps = currentProps,
@@ -936,33 +955,49 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or type(spawnData) ~= 'table' then return end
 
-    local spawnId = CleanId(spawnData.id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local spawnId = CleanId(spawnData.id or spawnData.spawn_id, 50) or ('spawn_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
     local spawnType = CleanStr(spawnData.spawn_type, 20, 'truck')
     if not SPAWN_TYPES[spawnType] then spawnType = 'truck' end
 
     local existing = AdminService.Spawns[spawnId]
+    local rawHeading = (spawnData.coords and (spawnData.coords.heading or spawnData.coords.w)) or spawnData.heading or 0.0
+    local folderName = CleanStr(spawnData.folder_name, 100, (existing and existing.folder_name) or 'Geral')
+
     local clean = {
         id          = spawnId,
-        name        = CleanStr(spawnData.name, 100, 'Ponto de Spawn'),
+        name        = CleanStr(spawnData.name or spawnData.spawn_name, 100, 'Ponto de Spawn'),
         spawn_type  = spawnType,
         coords      = CleanCoords(spawnData.coords),
-        heading     = ClampNum(spawnData.heading, -360.0, 360.0, 0.0),
-        folder_name = (existing and existing.folder_name) or 'Geral',
+        heading     = ClampNum(rawHeading, -360.0, 360.0, 0.0),
+        folder_name = folderName,
     }
 
+    -- Garante que a pasta está registrada e persistida no banco
+    if folderName and folderName ~= '' then
+        MySQL.query.await("INSERT IGNORE INTO aust_trucker_spawn_folders (name) VALUES (?)", { folderName })
+        local folderExists = false
+        for _, f in ipairs(AdminService.SpawnFolders) do
+            if f == folderName then folderExists = true; break end
+        end
+        if not folderExists then
+            table.insert(AdminService.SpawnFolders, folderName)
+            TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
+        end
+    end
+
     MySQL.query.await([[
-        INSERT INTO aust_trucker_spawns (id, name, spawn_type, coords, heading)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
-        name = VALUES(name), spawn_type = VALUES(spawn_type), coords = VALUES(coords), heading = VALUES(heading)
+        name = VALUES(name), spawn_type = VALUES(spawn_type), folder_name = VALUES(folder_name), coords = VALUES(coords), heading = VALUES(heading)
     ]], {
-        clean.id, clean.name, clean.spawn_type, json.encode(clean.coords), clean.heading
+        clean.id, clean.name, clean.spawn_type, clean.folder_name, json.encode(clean.coords), clean.heading
     })
 
     AdminService.Spawns[spawnId] = clean
-    AdminLog(src, 'adminSaveSpawn', spawnId)
+    AdminLog(src, 'adminSaveSpawn', spawnId .. ' [' .. clean.folder_name .. ']')
     TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Ponto de spawn gravado com sucesso!', type = 'success' })
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Ponto de spawn gravado com sucesso na pasta "%s"!'):format(clean.folder_name), type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteSpawn', function(spawnId)
@@ -1213,6 +1248,27 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteHomologatedProp', function(mode
 end)
 
 -- 5. PASTAS E DRAG-AND-DROP DE SPAWNS
+RegisterNetEvent('aurp_trucker:server:adminCreateSpawnFolder', function(folderName)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) then return end
+    folderName = CleanStr(folderName, 100, nil)
+    if not folderName then return end
+
+    AdminLog(src, 'adminCreateSpawnFolder', folderName)
+    MySQL.query.await("INSERT IGNORE INTO aust_trucker_spawn_folders (name) VALUES (?)", { folderName })
+
+    local exists = false
+    for _, f in ipairs(AdminService.SpawnFolders) do
+        if f == folderName then exists = true; break end
+    end
+    if not exists then
+        table.insert(AdminService.SpawnFolders, folderName)
+    end
+
+    TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Pasta "%s" criada e sincronizada!'):format(folderName), type = 'success' })
+end)
+
 RegisterNetEvent('aurp_trucker:server:adminMoveSpawnFolder', function(spawnId, folderName)
     local src = source
     if not AdminService.IsPlayerAdmin(src) then return end
@@ -1221,6 +1277,18 @@ RegisterNetEvent('aurp_trucker:server:adminMoveSpawnFolder', function(spawnId, f
 
     folderName = CleanStr(folderName, 100, 'Geral')
     AdminLog(src, 'adminMoveSpawnFolder', spawnId .. ' -> ' .. folderName)
+
+    if folderName ~= 'Geral' then
+        MySQL.query.await("INSERT IGNORE INTO aust_trucker_spawn_folders (name) VALUES (?)", { folderName })
+        local exists = false
+        for _, f in ipairs(AdminService.SpawnFolders) do
+            if f == folderName then exists = true; break end
+        end
+        if not exists then
+            table.insert(AdminService.SpawnFolders, folderName)
+            TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
+        end
+    end
 
     MySQL.query.await('UPDATE aust_trucker_spawns SET folder_name = ? WHERE id = ?', { folderName, spawnId })
     if AdminService.Spawns[spawnId] then
@@ -1233,16 +1301,28 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteSpawnFolder', function(folderNa
     local src = source
     if not AdminService.IsPlayerAdmin(src) then return end
     folderName = CleanStr(folderName, 100, nil)
-    if not folderName then return end
+    if not folderName or folderName == 'Geral' then return end
     AdminLog(src, 'adminDeleteSpawnFolder', folderName)
 
     MySQL.query.await("UPDATE aust_trucker_spawns SET folder_name = 'Geral' WHERE folder_name = ?", { folderName })
+    MySQL.query.await("DELETE FROM aust_trucker_spawn_folders WHERE name = ?", { folderName })
+
     for _, s in pairs(AdminService.Spawns) do
         if s.folder_name == folderName then
             s.folder_name = 'Geral'
         end
     end
+
+    local newList = {}
+    for _, f in ipairs(AdminService.SpawnFolders) do
+        if f ~= folderName then
+            table.insert(newList, f)
+        end
+    end
+    AdminService.SpawnFolders = newList
+
     TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
+    TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Pasta "%s" removida. Itens movidos para "Geral".'):format(folderName), type = 'info' })
 end)
 

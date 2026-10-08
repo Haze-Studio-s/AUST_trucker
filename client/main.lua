@@ -3533,6 +3533,20 @@ RegisterNetEvent('aurp_trucker:client:adminSyncRoutes', function(routes)
     })
 end)
 
+RegisterNetEvent('aurp_trucker:client:adminSyncSpawns', function(spawns)
+    SendNUIMessage({
+        action = 'adminSyncSpawns',
+        spawns = spawns
+    })
+end)
+
+RegisterNetEvent('aurp_trucker:client:adminSyncSpawnFolders', function(folders)
+    SendNUIMessage({
+        action = 'adminSyncSpawnFolders',
+        folders = folders
+    })
+end)
+
 RegisterNUICallback('adminSaveSpawn', function(data, cb)
     TriggerServerEvent('aurp_trucker:server:adminSaveSpawn', data)
     if cb then cb('ok') end
@@ -3540,6 +3554,13 @@ end)
 
 RegisterNUICallback('adminDeleteSpawn', function(data, cb)
     TriggerServerEvent('aurp_trucker:server:adminDeleteSpawn', data and data.id)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminCreateSpawnFolder', function(data, cb)
+    if data and data.folder_name then
+        TriggerServerEvent('aurp_trucker:server:adminCreateSpawnFolder', data.folder_name)
+    end
     if cb then cb('ok') end
 end)
 

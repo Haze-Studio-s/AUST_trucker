@@ -327,7 +327,7 @@
 .admin-table-container {
   max-height: 520px;
   overflow-y: auto;
-  overflow-x: auto;
+  overflow-x: hidden;
   width: 100%;
 }
 
@@ -564,13 +564,20 @@
 }
 
 /* Colunas Específicas de Rotas */
-.admin-table-routes { width: 100%; }
-.admin-table-routes th:nth-child(1), .admin-table-routes td:nth-child(1) { width: 1%; white-space: nowrap; }
-.admin-table-routes th:nth-child(2), .admin-table-routes td:nth-child(2) { width: auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-routes th:nth-child(3), .admin-table-routes td:nth-child(3) { width: 1%; text-align: center; white-space: nowrap; }
-.admin-table-routes th:nth-child(4), .admin-table-routes td:nth-child(4) { width: 1%; white-space: nowrap; }
-.admin-table-routes th:nth-child(5), .admin-table-routes td:nth-child(5) { width: 1%; white-space: nowrap; }
-.admin-table-routes th:nth-child(6), .admin-table-routes td:nth-child(6) { width: 1%; text-align: center; white-space: nowrap; }
+.admin-table-routes {
+  width: 100%;
+  table-layout: fixed;
+}
+.admin-table-routes th,
+.admin-table-routes td {
+  padding: 6px 7px;
+}
+.admin-table-routes th:nth-child(1), .admin-table-routes td:nth-child(1) { width: 56px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.admin-table-routes th:nth-child(2), .admin-table-routes td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-routes th:nth-child(3), .admin-table-routes td:nth-child(3) { width: 58px; text-align: center; }
+.admin-table-routes th:nth-child(4), .admin-table-routes td:nth-child(4) { width: 78px; }
+.admin-table-routes th:nth-child(5), .admin-table-routes td:nth-child(5) { width: 62px; }
+.admin-table-routes th:nth-child(6), .admin-table-routes td:nth-child(6) { width: 72px; min-width: 72px; text-align: center; }
 
 /* Colunas Específicas de Economia */
 .admin-table-economy { width: 100%; }
@@ -583,21 +590,35 @@
 .admin-table-economy th:nth-child(7), .admin-table-economy td:nth-child(7) { width: 1%; text-align: center; white-space: nowrap; }
 
 /* Colunas Específicas de NPCs */
-.admin-table-npcs { width: 100%; }
-.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 1%; white-space: nowrap; }
-.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 1%; text-align: center; white-space: nowrap; }
-.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 1%; font-family: monospace; font-size: 10.5px; white-space: nowrap; }
-.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 1%; text-align: center; white-space: nowrap; }
+.admin-table-npcs {
+  width: 100%;
+  table-layout: fixed;
+}
+.admin-table-npcs th,
+.admin-table-npcs td {
+  padding: 6px 7px;
+}
+.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 50px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 85px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 110px; font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 72px; min-width: 72px; text-align: center; }
 
 /* Colunas Específicas do Prop Editor */
-.admin-table-props-6dof { width: 100%; }
-.admin-table-props-6dof th:nth-child(1), .admin-table-props-6dof td:nth-child(1) { width: 1%; white-space: nowrap; }
-.admin-table-props-6dof th:nth-child(2), .admin-table-props-6dof td:nth-child(2) { width: 1%; white-space: nowrap; }
-.admin-table-props-6dof th:nth-child(3), .admin-table-props-6dof td:nth-child(3) { width: auto; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-props-6dof th:nth-child(4), .admin-table-props-6dof td:nth-child(4) { width: 1%; font-family: monospace; font-size: 10.5px; white-space: nowrap; }
-.admin-table-props-6dof th:nth-child(5), .admin-table-props-6dof td:nth-child(5) { width: 1%; font-family: monospace; font-size: 10.5px; white-space: nowrap; }
-.admin-table-props-6dof th:nth-child(6), .admin-table-props-6dof td:nth-child(6) { width: 1%; text-align: center; white-space: nowrap; }
+.admin-table-props-6dof {
+  width: 100%;
+  table-layout: fixed;
+}
+.admin-table-props-6dof th,
+.admin-table-props-6dof td {
+  padding: 6px 7px;
+}
+.admin-table-props-6dof th:nth-child(1), .admin-table-props-6dof td:nth-child(1) { width: 45px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
+.admin-table-props-6dof th:nth-child(2), .admin-table-props-6dof td:nth-child(2) { width: 50px; text-align: center; }
+.admin-table-props-6dof th:nth-child(3), .admin-table-props-6dof td:nth-child(3) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-props-6dof th:nth-child(4), .admin-table-props-6dof td:nth-child(4) { width: 95px; font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-props-6dof th:nth-child(5), .admin-table-props-6dof td:nth-child(5) { width: 95px; font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-props-6dof th:nth-child(6), .admin-table-props-6dof td:nth-child(6) { width: 72px; min-width: 72px; text-align: center; }
 
 /* Badges de Categoria */
 .admin-badge {

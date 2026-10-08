@@ -454,6 +454,12 @@ local TABLES = {
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
+    -- Módulo Administrativo: Pastas de Spawns Dinâmicos
+    [[CREATE TABLE IF NOT EXISTS `aust_trucker_spawn_folders` (
+        `name` VARCHAR(100) PRIMARY KEY,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
+
     -- Módulo Administrativo: Offsets de Slots de Trailer Mapeados Visualmente (Chave Composta por Trailer + Prop)
     [[CREATE TABLE IF NOT EXISTS `aust_trucker_trailer_offsets` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -588,6 +594,9 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `custom_name` VARCHAR(150) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_count` INT NOT NULL DEFAULT 1",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    -- Pastas Dedicadas de Spawns Dinâmicos
+    "CREATE TABLE IF NOT EXISTS `aust_trucker_spawn_folders` (`name` VARCHAR(100) PRIMARY KEY, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+    "INSERT IGNORE INTO `aust_trucker_spawn_folders` (`name`) VALUES ('Geral')",
 }
 
 -- Erros esperados em migrations idempotentes (coluna/chave já existe ou não existe para drop)
