@@ -1016,44 +1016,23 @@ function OffsetEditor.StartSpawnCalibration(data)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1000 })
             end
 
-            -- Renderização Visual da Baia (DrawMarker)
+            -- Renderização Visual da Baia (DrawMarker 30 Zebrado Oficial)
             if isMarker then
-                local mr, mg, mb = 16, 185, 129
-                if spawnType == 'delivery_bay' then
-                    mr, mg, mb = 239, 68, 68
+                local markerZ = CurrentSpawnCoords.z - 0.45
+                local foundGround, groundZ = GetGroundZFor_3dCoord(CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 2.0, false)
+                if foundGround and groundZ > 0.0 then
+                    markerZ = groundZ + 0.05
                 end
 
-                -- Cilindro vertical da baia (Marker 1)
+                -- Vaga Zebrada DrawMarker 30 (Faixas no solo idênticas ao print)
                 DrawMarker(
-                    1,
-                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z - 0.95,
+                    30,
+                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ,
                     0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0,
-                    3.8, 3.8, 1.2,
-                    mr, mg, mb, 130,
-                    false, false, 2, false, nil, nil, false
-                )
-
-                -- Anel no solo rotacionado com o heading (Marker 27)
-                DrawMarker(
-                    27,
-                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 0.03,
-                    0.0, 0.0, 0.0,
-                    0.0, 0.0, CurrentSpawnCoords.heading or 0.0,
-                    3.8, 3.8, 1.0,
-                    mr, mg, mb, 200,
-                    false, false, 2, false, nil, nil, false
-                )
-
-                -- Seta direcional flutuante indicadora (Marker 2)
-                DrawMarker(
-                    2,
-                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 1.2,
-                    0.0, 0.0, 0.0,
-                    0.0, 180.0, 0.0,
-                    0.55, 0.55, 0.55,
-                    mr, mg, mb, 220,
-                    true, true, 2, false, nil, nil, false
+                    90.0, CurrentSpawnCoords.heading or 0.0, 0.0,
+                    3.0, 1.0, 10.0,
+                    255, 60, 60, 75,
+                    0, 0, 0, 0
                 )
             end
 
@@ -1242,40 +1221,24 @@ function OffsetEditor.StartPreview(spawnsList)
         while IsPreviewActive do
             Wait(0)
 
-            -- Renderiza marcadores visuais das baias no pátio
+            -- Renderiza marcadores visuais das baias no pátio (DrawMarker 30 Zebrado Oficial)
             for _, m in ipairs(ActivePreviewMarkers) do
                 local mc = m.coords
-                local mr, mg, mb = 16, 185, 129
-                if m.type == 'delivery_bay' then
-                    mr, mg, mb = 239, 68, 68
+                local mZ = mc.z - 0.45
+                local foundG, gZ = GetGroundZFor_3dCoord(mc.x, mc.y, mc.z + 2.0, false)
+                if foundG and gZ > 0.0 then
+                    mZ = gZ + 0.05
                 end
+                local targetHeading = mc.heading or mc.w or 0.0
 
                 DrawMarker(
-                    1,
-                    mc.x, mc.y, mc.z - 0.95,
+                    30,
+                    mc.x, mc.y, mZ,
                     0.0, 0.0, 0.0,
-                    0.0, 0.0, 0.0,
-                    3.8, 3.8, 1.2,
-                    mr, mg, mb, 120,
-                    false, false, 2, false, nil, nil, false
-                )
-                DrawMarker(
-                    27,
-                    mc.x, mc.y, mc.z + 0.03,
-                    0.0, 0.0, 0.0,
-                    0.0, 0.0, mc.heading or mc.w or 0.0,
-                    3.8, 3.8, 1.0,
-                    mr, mg, mb, 190,
-                    false, false, 2, false, nil, nil, false
-                )
-                DrawMarker(
-                    2,
-                    mc.x, mc.y, mc.z + 1.2,
-                    0.0, 0.0, 0.0,
-                    0.0, 180.0, 0.0,
-                    0.55, 0.55, 0.55,
-                    mr, mg, mb, 200,
-                    true, true, 2, false, nil, nil, false
+                    90.0, targetHeading, 0.0,
+                    3.0, 1.0, 10.0,
+                    255, 60, 60, 75,
+                    0, 0, 0, 0
                 )
             end
 
