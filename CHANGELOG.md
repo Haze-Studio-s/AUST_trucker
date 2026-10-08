@@ -11,7 +11,7 @@
   - O servidor replica o estado via StateBag OneSync (`isRigLoadingFrozen = true`).
   - O cliente acomoda as suspensões e rodas no piso por 150ms e trava a física estática com `FreezeEntityPosition(trailer, true)`.
   - Bloqueada a liberação prematura no `OnPlayerEnteredTruck` para `freighttrailer`.
-  - Liberação programada com `Wait(1) -> FreezeEntityPosition(trailer, false)` exatamente 1ms após o engate na 5ª roda.
+  - Liberação programada com `Wait(1000) -> FreezeEntityPosition(trailer, false)` exatamente 1 segundo (1000ms) após o engate na 5ª roda para estabilização sólida do conjunto.
 
 ## [20.9.15] — 2026-10-08 — Restauração Integral de Colisão Física entre Caminhão e Reboque
 

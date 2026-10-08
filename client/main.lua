@@ -612,9 +612,9 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
-                    -- Freeze global sai exatamente 1ms após o caminhão acoplar
+                    -- Freeze global sai exatamente 1s (1000ms) após o caminhão acoplar para garantir estabilização da 5ª roda
                     CreateThread(function()
-                        Wait(1)
+                        Wait(1000)
                         if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
                             FreezeEntityPosition(JobEntities.trailer, false)
                             SetVehicleHandbrake(JobEntities.trailer, false)
