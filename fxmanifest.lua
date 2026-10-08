@@ -93,17 +93,5 @@ client_scripts {
 ui_page 'html/index.html'
 
 files {
-    'html/index.html',
-    'html/style.css',
-    'html/panel.js',
-    'html/css/*',
-    'html/js/*',
-    'html/vendor/**',
-    'html/lang/*',
-    'html/img/*',
-    'html/img/avatar/*',
-    'html/img/icons/*',
-    'html/img/trailers/*',
-    'html/img/trucks/*',
-    'html/assets/*',
+    'html/**',
 }
