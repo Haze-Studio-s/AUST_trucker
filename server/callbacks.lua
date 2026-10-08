@@ -1696,8 +1696,19 @@ lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseTy
     LicenseExamBusy[citizenId] = true
 
     local okRun, res = pcall(function()
+        -- Consulta de nível unificada (trucker_player_progression + 0r_trucker)
+        local pStats = nil
+        if DB_GetPlayerStats then
+            pcall(function() pStats = DB_GetPlayerStats(citizenId) end)
+        end
+        if not pStats then
+            pStats = MySQL.single.await('SELECT level, xp FROM trucker_player_progression WHERE citizenid = ?', { citizenId })
+        end
+        local levelProg = pStats and tonumber(pStats.level) or 1
         local truckerRow = MySQL.single.await('SELECT level FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
-        local pLevel = truckerRow and truckerRow.level or 1
+        local level0r = truckerRow and tonumber(truckerRow.level) or 1
+        local pLevel = math.max(levelProg, level0r)
+
         if pLevel < (cfg.minLevel or 1) then
             return { success = false, reason = ('Nível insuficiente! Requer Nível %d'):format(cfg.minLevel or 1) }
         end

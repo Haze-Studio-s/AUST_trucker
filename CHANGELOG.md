@@ -1,5 +1,14 @@
 # Changelog — AUST_trucker
 
+## [20.9.11] — 2026-10-07 — Resolução Unificada de Nível de Motorista (`trucker_player_progression` vs `0r_trucker`)
+
+### Corrigido & Aprimorado
+- **Unificação de Nível do Jogador em Exames e Despachos (`server/callbacks.lua`, `server/main.lua`, `server/services/progression_service.lua`):**
+  - Corrigido falso-negativo "Falha na Emissão: Nível insuficiente! Requer Nível X" ao realizar exames de certificações técnicas (ADR / Heavy Lift).
+  - Causa raiz: O callback de exames consultava exclusivamente a tabela legada `0r_trucker` (onde o nível permanecia em 1), ignorando a tabela real e ativa de progressão `trucker_player_progression` (onde `/truckerxp`, bônus e level-ups reais são gravados).
+  - Implementada resolução autoritativa unificada via `math.max(levelProgression, level0r)` em `aurp_trucker:takeLicenseExam` e `StartTruckDelivery`.
+  - Inserida sincronização espelho em `ProgressionService.AddDirectXP` para manter `0r_trucker` e `trucker_player_progression` sempre consistentes no banco.
+
 ## [20.9.10] — 2026-10-07 — Correção de Persistência & Compatibilidade de Licenças Técnicas (Heavy Lift & ADR)
 
 ### Corrigido & Aprimorado

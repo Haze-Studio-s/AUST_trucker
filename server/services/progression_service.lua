@@ -142,6 +142,19 @@ local function AddDirectXPUnlocked(src, citizenId, exactXP)
     end
 
     local updatedStats = DB_GetPlayerStats(citizenId)
+    local finalLevel = (levelsGained > 0) and newLevel or oldLevel
+    local finalXP = updatedStats and updatedStats.xp or row.xp
+
+    -- Sincronização espelho em 0r_trucker
+    pcall(function()
+        MySQL.query.await([[
+            INSERT INTO 0r_trucker (citizenid, level, xp)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                level = VALUES(level),
+                xp = VALUES(xp)
+        ]], { citizenId, finalLevel, finalXP })
+    end)
 
     return {
         xpGained         = xpGained,

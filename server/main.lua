@@ -653,9 +653,18 @@ local function StartTruckDelivery(src, contractData)
     contractData.withForklift = (srvForkliftFlag ~= false) and not contractData.clientNoForklift
     if type(contractData.level_required) ~= 'number' then contractData.level_required = tonumber(contractData.level_required) end
 
-    -- Consulta nível na tabela 0r_trucker
+    -- Consulta nível autoritativo unificado (trucker_player_progression + 0r_trucker)
+    local pStats = nil
+    if DB_GetPlayerStats then
+        pcall(function() pStats = DB_GetPlayerStats(citizenId) end)
+    end
+    if not pStats then
+        pStats = MySQL.single.await('SELECT level, xp FROM trucker_player_progression WHERE citizenid = ?', { citizenId })
+    end
+    local levelProg = pStats and tonumber(pStats.level) or 1
     local truckerRow = MySQL.single.await('SELECT level, xp FROM `0r_trucker` WHERE `citizenid` = ?', { citizenId })
-    local playerLevel = truckerRow and truckerRow.level or 1
+    local level0r = truckerRow and tonumber(truckerRow.level) or 1
+    local playerLevel = math.max(levelProg, level0r)
     local requiredLevel = contractData.level_required or 1
 
     if playerLevel < requiredLevel then
