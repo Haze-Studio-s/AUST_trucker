@@ -435,6 +435,7 @@ local TABLES = {
         `req_skill` INT NOT NULL DEFAULT 0,
         `fragile` TINYINT(1) NOT NULL DEFAULT 0,
         `valuable` TINYINT(1) NOT NULL DEFAULT 0,
+        `spawn_folder` VARCHAR(100) NOT NULL DEFAULT 'Geral',
         `pickup_coords` JSON NOT NULL,
         `delivery_coords` JSON NOT NULL,
         `is_active` TINYINT(1) NOT NULL DEFAULT 1,
@@ -465,6 +466,9 @@ local TABLES = {
         `offset_z` FLOAT NOT NULL DEFAULT 0.0,
         `heading` FLOAT NOT NULL DEFAULT 0.0,
         `is_forklift` TINYINT(1) NOT NULL DEFAULT 0,
+        `custom_name` VARCHAR(150) DEFAULT NULL,
+        `prop_count` INT NOT NULL DEFAULT 1,
+        `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY `uq_trailer_prop_slot` (`trailer_model`, `prop_model`, `slot_index`, `is_forklift`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
@@ -578,6 +582,12 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` MODIFY COLUMN `prop_model` VARCHAR(100) NOT NULL DEFAULT 'hei_prop_carrier_cargo_04b'",
     "ALTER TABLE `aust_trucker_trailer_offsets` DROP INDEX `uq_trailer_slot`",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD UNIQUE INDEX `uq_trailer_prop_slot` (`trailer_model`, `prop_model`, `slot_index`, `is_forklift`)",
+    -- Vínculo de Rotas à Pasta de Spawns
+    "ALTER TABLE `aust_trucker_custom_routes` ADD COLUMN `spawn_folder` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    -- Offsets com Nome Personalizado, Quantidade de Props e Pastas
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `custom_name` VARCHAR(150) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_count` INT NOT NULL DEFAULT 1",
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
 }
 
 -- Erros esperados em migrations idempotentes (coluna/chave já existe ou não existe para drop)

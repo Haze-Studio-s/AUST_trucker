@@ -113,6 +113,8 @@ RegisterNUICallback('confirmGizmoSlot', function(data, cb)
         OffsetEditor.ConfirmCurrentSlot()
     elseif IsPropEditorActive then
         OffsetEditor.ConfirmPropEditorSlot()
+    elseif IsCalibratingSpawn then
+        OffsetEditor.StopSpawnCalibration(nil, true)
     end
     if cb then cb({ ok = true }) end
 end)
@@ -129,6 +131,8 @@ RegisterNUICallback('cancelGizmo', function(data, cb)
         OffsetEditor.CancelCalibration()
     elseif IsPropEditorActive then
         OffsetEditor.CancelPropEditorSession()
+    elseif IsCalibratingSpawn then
+        OffsetEditor.StopSpawnCalibration(nil, false)
     end
     if cb then cb({ ok = true }) end
 end)
@@ -200,6 +204,9 @@ function OffsetEditor.ConfirmCurrentSlot()
         isForklift = CalibParams.isForklift,
         propModel = CalibParams.propModel,
         label = CalibParams.label,
+        customName = CalibParams.customName,
+        propCount = CalibParams.propCount,
+        folderName = CalibParams.folderName,
         x = tonumber(string.format("%.3f", CurrentOffsets.x)),
         y = tonumber(string.format("%.3f", CurrentOffsets.y)),
         z = tonumber(string.format("%.3f", CurrentOffsets.z)),
@@ -342,7 +349,7 @@ end
 -- FERRAMENTA VISUAL IN-GAME DE OFFSETS (FREECAM & 3D GIZMO)
 -- ============================================================
 
-function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel, label)
+function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, propModel, label, customName, propCount, folderName)
     if IsCalibrating then return end
     IsCalibrating = true
     IsGizmoCursorActive = false
@@ -368,7 +375,10 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
         slotIndex = slotIndex,
         isForklift = isForklift,
         propModel = propModel,
-        label = label or (isForklift and 'Empilhadeira Traseira' or ('Slot ' .. tostring(slotIndex)))
+        label = label or (isForklift and 'Empilhadeira Traseira' or ('Slot ' .. tostring(slotIndex))),
+        customName = customName,
+        propCount = tonumber(propCount) or 1,
+        folderName = folderName or 'Geral'
     }
 
     -- Minimiza o menu administrativo principal
@@ -849,6 +859,7 @@ function OffsetEditor.StartSpawnCalibration(data)
         if spawnType == 'truck' then modelStr = 'hauler'
         elseif spawnType == 'trailer' then modelStr = 'trailers2'
         elseif spawnType == 'forklift' then modelStr = 'forklift'
+        elseif spawnType == 'handler' then modelStr = 'handler'
         else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
     else
         if spawnType == 'pallet' or spawnType == 'prop' then isVeh = false end
@@ -906,13 +917,14 @@ function OffsetEditor.StartSpawnCalibration(data)
     SetCamActive(spawnCam, true)
     RenderScriptCams(true, true, 500, true, true)
 
-    -- Inicia o Gizmo Three.js
+    -- Inicia o Gizmo Three.js sincronizado
     SendNUIMessage({
-        action = 'showGizmo',
+        action = 'initGizmo',
         data = {
             position = { x = spawnPos.x, y = spawnPos.y, z = spawnPos.z },
             rotation = { x = 0.0, y = 0.0, z = pHeading },
-            mode = 'translate'
+            mode = 'translate',
+            context = 'spawn'
         }
     })
 

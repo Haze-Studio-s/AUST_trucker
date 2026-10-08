@@ -172,6 +172,8 @@
 
         if (gizmoContext === 'propeditor') {
             sendCallback('moveGizmoPropOffset', payload);
+        } else if (gizmoContext === 'spawn') {
+            sendCallback('moveGizmoSpawn', payload);
         } else {
             sendCallback('moveGizmoOffset', payload);
         }
@@ -280,6 +282,9 @@
     }
 
     function setCursorActive(active) {
+        if (container) {
+            container.style.pointerEvents = active ? 'auto' : 'none';
+        }
         if (canvas) {
             canvas.style.pointerEvents = active ? 'auto' : 'none';
         }
@@ -312,6 +317,7 @@
 
         switch (item.action) {
             case 'initGizmo':
+            case 'showGizmo':
                 initGizmo(item.data);
                 break;
             case 'setCameraPosition':

@@ -167,6 +167,13 @@
       case 'admin_restore':
         restoreAdminPanel(item);
         break;
+      case 'adminSyncRoutes':
+        if (item.routes) {
+          adminData.customRoutes = item.routes;
+          renderRoutesTab();
+          renderEconomyTab();
+        }
+        break;
       case 'admin_update_offsets':
         if (item.offsets) {
           adminData.trailerOffsets = item.offsets;
@@ -385,7 +392,34 @@
   // ============================================================
   // ABA 1: ROTAS & CONTRATOS (COM FILTROS E BUSCA)
   // ============================================================
+  function getSpawnFolders() {
+    const spawns = adminData.spawns || {};
+    const folders = new Set(['Geral']);
+    Object.values(spawns).forEach(s => {
+      if (s && s.folder_name) folders.add(s.folder_name);
+    });
+    return Array.from(folders).sort();
+  }
+
+  function populateRouteSpawnFolders(selectedFolder) {
+    const folderSelect = document.getElementById('route-form-spawn-folder');
+    if (!folderSelect) return;
+    const currentVal = selectedFolder || folderSelect.value;
+    const folders = getSpawnFolders();
+    folderSelect.innerHTML = '<option value="">Selecione a Pasta de Spawn...</option>';
+    folders.forEach(fName => {
+      const opt = document.createElement('option');
+      opt.value = fName;
+      opt.textContent = fName;
+      folderSelect.appendChild(opt);
+    });
+    if (currentVal && folders.includes(currentVal)) {
+      folderSelect.value = currentVal;
+    }
+  }
+
   function renderRoutesTab() {
+    populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
     const tbody = document.getElementById('admin-routes-tbody');
     if (!tbody) return;
     tbody.innerHTML = '';
@@ -475,6 +509,8 @@
     document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
     document.getElementById('route-form-level').value = r.req_skill || r.required_level || 1;
 
+    populateRouteSpawnFolders(r.spawn_folder || 'Geral');
+
     const pCoords = r.pickup_coords ? (typeof r.pickup_coords === 'string' ? JSON.parse(r.pickup_coords) : r.pickup_coords) : {};
     document.getElementById('route-form-pickup-x').value = pCoords.x ? Number(pCoords.x).toFixed(2) : '';
     document.getElementById('route-form-pickup-y').value = pCoords.y ? Number(pCoords.y).toFixed(2) : '';
@@ -493,6 +529,12 @@
     const routeId = document.getElementById('route-form-id').value.trim();
     if (!routeId) {
       showAdminToast('Informe um identificador único para a rota (ex: rota_porto_oleo).', 'error');
+      return;
+    }
+
+    const spawnFolder = (document.getElementById('route-form-spawn-folder')?.value || '').trim();
+    if (!spawnFolder) {
+      showAdminToast('Vínculo Obrigatório: Selecione uma Pasta de Spawn para esta rota!', 'error');
       return;
     }
 
@@ -525,6 +567,7 @@
       distance_km: parseFloat(document.getElementById('route-form-distance').value) || 5.0,
       req_skill: parseInt(document.getElementById('route-form-level').value) || 1,
       required_level: parseInt(document.getElementById('route-form-level').value) || 1,
+      spawn_folder: spawnFolder,
       pickup_coords: pickup,
       delivery_coords: delivery,
       has_forklift: document.getElementById('route-form-forklift').checked ? 1 : 0,
@@ -858,117 +901,234 @@
   }
 
   // ============================================================
-  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS (COM CHAVE COMPOSTA TRAILER + PROP)
+  // ABA 4: CALIBRAÇÃO VISUAL 3D DE OFFSETS (COM PASTAS, ACORDEÃO E PROPS DINÂMICOS)
   // ============================================================
+  function getOffsetFolders() {
+    const offsets = adminData.trailerOffsets || {};
+    const folders = new Set(['Geral']);
+    Object.values(offsets).forEach(item => {
+      if (item && item.folder_name) folders.add(item.folder_name);
+      if (item && item.pallets) {
+        Object.values(item.pallets).forEach(p => {
+          if (p && p.folder_name) folders.add(p.folder_name);
+        });
+      }
+    });
+    return Array.from(folders).sort();
+  }
+
+  function populateOffsetFolders(selectedFolder) {
+    const folderSelect = document.getElementById('offset-form-folder');
+    if (!folderSelect) return;
+    const currentVal = selectedFolder || folderSelect.value;
+    const folders = getOffsetFolders();
+    folderSelect.innerHTML = '';
+    folders.forEach(fName => {
+      const opt = document.createElement('option');
+      opt.value = fName;
+      opt.textContent = fName;
+      folderSelect.appendChild(opt);
+    });
+    if (currentVal && folders.includes(currentVal)) {
+      folderSelect.value = currentVal;
+    } else {
+      folderSelect.value = 'Geral';
+    }
+  }
+
   function renderOffsetsTab() {
+    populateOffsetFolders(document.getElementById('offset-form-folder')?.value);
     const listContainer = document.getElementById('admin-offsets-list');
     if (!listContainer) return;
     listContainer.innerHTML = '';
 
     const offsets = adminData.trailerOffsets || {};
     let allKeys = Object.keys(offsets);
-    // Filtra chaves numéricas de hash 32-bit (mantém apenas chaves legíveis por string)
     const textKeys = allKeys.filter(k => isNaN(Number(k)));
 
-    // Se existirem chaves com '::' (chave composta), priorizamos elas
-    // Se um modelo existir apenas como chave simples sem '::', também é mantido
     const hasComposite = textKeys.some(k => k.includes('::'));
     let keys = textKeys;
     if (hasComposite) {
       keys = textKeys.filter(k => {
         if (k.includes('::')) return true;
-        // Mantém a chave simples apenas se não existir nenhuma chave composta para esse modelo
         return !textKeys.some(other => other.startsWith(k + '::'));
       });
     }
 
     if (keys.length === 0) {
-      listContainer.innerHTML = `<p style="color:var(--admin-text-muted); font-size:12px;">Nenhum offset customizado salvo em banco ainda.</p>`;
+      listContainer.innerHTML = `<p style="color:var(--admin-text-muted); font-size:12px; padding: 12px;">Nenhum offset customizado salvo em banco ainda.</p>`;
       return;
     }
 
-    // Ordena alfabeticamente por modelo e prop
     keys.sort();
+
+    // Agrupamento por Pastas / Categorias (Item 8)
+    const folders = {};
+    getOffsetFolders().forEach(f => { folders[f] = []; });
+    if (!folders['Geral']) folders['Geral'] = [];
 
     keys.forEach(compKey => {
       const item = offsets[compKey];
       if (!item) return;
+      const fName = item.folder_name || 'Geral';
+      if (!folders[fName]) folders[fName] = [];
+      folders[fName].push({ key: compKey, item: item });
+    });
 
-      const trailerModel = (item.trailer_model || compKey.split('::')[0] || compKey).toLowerCase();
-      const propModel = (item.prop_model || (compKey.includes('::') ? compKey.split('::')[1] : null) || 'hei_prop_carrier_cargo_04b');
-      const groupLabel = item.label || null;
+    window._openOffsetFolders = window._openOffsetFolders || new Set(['Geral']);
 
-      let palletSlots = [];
-      if (item.pallets) {
-        const seen = new Set();
-        Object.keys(item.pallets).forEach(k => {
-          const num = parseInt(k);
-          if (!isNaN(num) && !seen.has(num)) {
-            seen.add(num);
-            palletSlots.push({ slot: num, data: item.pallets[k] });
-          }
-        });
-        palletSlots.sort((a, b) => a.slot - b.slot);
-      }
+    Object.keys(folders).sort().forEach(folderName => {
+      const fList = folders[folderName];
+      const isExpanded = window._openOffsetFolders.has(folderName);
 
-      const card = document.createElement('div');
-      card.className = 'admin-card';
-      card.style.borderLeft = '4px solid var(--admin-primary)';
-      card.innerHTML = `
-        <div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-          <div>
-            <span class="admin-card-title"><i class="fas fa-truck"></i> Reboque: <strong>${escapeHtml(trailerModel.toUpperCase())}</strong></span>
-            <span class="admin-badge admin-badge-primary" style="margin-left: 8px; font-size: 11px;">
-              <i class="fas fa-box"></i> Carga / Prop: <strong>${escapeHtml(propModel)}</strong>
-            </span>
-            ${groupLabel ? `<span style="color:#94a3b8; font-size:11px; margin-left:6px;">(${escapeHtml(groupLabel)})</span>` : ''}
+      const folderWrapper = document.createElement('div');
+      folderWrapper.className = `admin-offsets-folder ${isExpanded ? 'expanded' : ''}`;
+      folderWrapper.setAttribute('data-folder', folderName);
+
+      folderWrapper.innerHTML = `
+        <div class="admin-offsets-folder-header" data-folder="${escapeHtml(folderName)}">
+          <div class="admin-offsets-folder-title">
+            <i class="fas fa-folder${isExpanded ? '-open' : ''}" style="color:var(--admin-primary)"></i>
+            <span>${escapeHtml(folderName)}</span>
+            <span class="admin-folder-badge">${fList.length} config${fList.length !== 1 ? 's' : ''}</span>
           </div>
-          <div style="display:flex; gap:6px;">
-            <button class="admin-btn admin-btn-outline btn-select-trailer" data-model="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Configurar Esta Carga</button>
-            <button class="admin-btn admin-btn-danger btn-del-group" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 8px; font-size: 11px;" title="Excluir Todos os Slots Desta Carga"><i class="fas fa-trash"></i></button>
-          </div>
+          <i class="fas fa-chevron-right admin-offsets-folder-chevron"></i>
         </div>
-        <div style="font-size:12px; line-height: 1.6;">
-          <div style="margin-bottom: 8px;"><strong>Slots de Paletes Calibrados:</strong></div>
-          <div style="display:flex; flex-direction:column; gap:6px; margin-bottom: 10px;">
-            ${palletSlots.length > 0 ? palletSlots.map(s => `
-              <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:6px 12px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
-                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-                  <strong style="color:var(--admin-primary)">Slot ${s.slot}</strong> 
-                  ${s.data.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(s.data.label)}"</span>` : ''}
-                  <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;" title="Prop Homologado / Carga">
-                    <i class="fas fa-box"></i> ${escapeHtml(s.data.prop_model || propModel)}
-                  </span>
-                  <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
-                </div>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
-              </div>
-            `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
-          </div>
-          <div>
-            <strong>Empilhadeira Traseira:</strong> 
-            ${item.forklift ? `
-              <div style="display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05); margin-left:8px;">
-                ${item.forklift.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(item.forklift.label)}"</span>` : ''}
-                <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;"><i class="fas fa-truck-ramp-box"></i> ${escapeHtml(item.forklift.prop_model || 'forklift')}</span>
-                <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
-                <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(item.forklift && item.forklift.id ? item.forklift.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="forklift" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
-              </div>
-            ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
-          </div>
+        <div class="admin-offsets-folder-content">
+          ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:10px; text-align:center;">Pasta vazia. Configure novos offsets nesta categoria.</div>` : ''}
         </div>
       `;
-      listContainer.appendChild(card);
+
+      const header = folderWrapper.querySelector('.admin-offsets-folder-header');
+      header.addEventListener('click', () => {
+        const currentlyOpen = folderWrapper.classList.contains('expanded');
+        if (currentlyOpen) {
+          folderWrapper.classList.remove('expanded');
+          window._openOffsetFolders.delete(folderName);
+          const icon = folderWrapper.querySelector('.admin-offsets-folder-title i');
+          if (icon) icon.className = 'fas fa-folder';
+        } else {
+          folderWrapper.classList.add('expanded');
+          window._openOffsetFolders.add(folderName);
+          const icon = folderWrapper.querySelector('.admin-offsets-folder-title i');
+          if (icon) icon.className = 'fas fa-folder-open';
+        }
+      });
+
+      const contentBox = folderWrapper.querySelector('.admin-offsets-folder-content');
+
+      fList.forEach(entry => {
+        const compKey = entry.key;
+        const item = entry.item;
+        const trailerModel = (item.trailer_model || compKey.split('::')[0] || compKey).toLowerCase();
+        const propModel = (item.prop_model || (compKey.includes('::') ? compKey.split('::')[1] : null) || 'hei_prop_carrier_cargo_04b');
+        const customName = item.custom_name || null;
+        const propCount = item.prop_count || 1;
+        const groupLabel = item.label || null;
+
+        let palletSlots = [];
+        if (item.pallets) {
+          const seen = new Set();
+          Object.keys(item.pallets).forEach(k => {
+            const num = parseInt(k);
+            if (!isNaN(num) && !seen.has(num)) {
+              seen.add(num);
+              palletSlots.push({ slot: num, data: item.pallets[k] });
+            }
+          });
+          palletSlots.sort((a, b) => a.slot - b.slot);
+        }
+
+        const card = document.createElement('div');
+        card.className = 'admin-card';
+        card.style.borderLeft = '4px solid var(--admin-primary)';
+        card.style.marginBottom = '6px';
+        card.innerHTML = `
+          <div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:6px;">
+              ${customName ? `
+                <span class="admin-badge admin-badge-adr" style="font-size: 11.5px; font-weight:700; padding: 3px 8px;" title="Nome Personalizado">
+                  <i class="fas fa-tag"></i> ${escapeHtml(customName)}
+                </span>
+              ` : ''}
+              <span class="admin-card-title"><i class="fas fa-truck"></i> <strong>${escapeHtml(trailerModel.toUpperCase())}</strong></span>
+              <span class="admin-badge admin-badge-primary" style="font-size: 10.5px;">
+                <i class="fas fa-box"></i> ${escapeHtml(propModel)}
+              </span>
+              <span class="admin-badge admin-badge-quick" style="font-size: 10px;" title="Quantidade de Props Exigidos">
+                <i class="fas fa-boxes-stacked"></i> ${propCount} prop${propCount > 1 ? 's' : ''}
+              </span>
+              ${groupLabel ? `<span style="color:#94a3b8; font-size:11px;">(${escapeHtml(groupLabel)})</span>` : ''}
+            </div>
+            <div style="display:flex; gap:6px;">
+              <button class="admin-btn admin-btn-outline btn-select-trailer" 
+                data-model="${escapeHtml(trailerModel)}" 
+                data-prop="${escapeHtml(propModel)}" 
+                data-custom="${escapeHtml(customName || '')}" 
+                data-count="${escapeHtml(propCount)}" 
+                data-folder="${escapeHtml(folderName)}" 
+                style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Configurar</button>
+              <button class="admin-btn admin-btn-danger btn-del-group" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 8px; font-size: 11px;" title="Excluir Todos os Slots"><i class="fas fa-trash"></i></button>
+            </div>
+          </div>
+          <div style="font-size:12px; line-height: 1.6;">
+            <div style="margin-bottom: 6px;"><strong>Slots de Paletes Calibrados:</strong></div>
+            <div style="display:flex; flex-direction:column; gap:6px; margin-bottom: 8px;">
+              ${palletSlots.length > 0 ? palletSlots.map(s => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:rgba(255,255,255,0.03); padding:5px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05);">
+                  <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <strong style="color:var(--admin-primary)">Slot ${s.slot}</strong> 
+                    ${s.data.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(s.data.label)}"</span>` : ''}
+                    <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;">
+                      <i class="fas fa-box"></i> ${escapeHtml(s.data.prop_model || propModel)}
+                    </span>
+                    <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
+                  </div>
+                  <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                </div>
+              `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
+            </div>
+            <div>
+              <strong>Empilhadeira Traseira:</strong> 
+              ${item.forklift ? `
+                <div style="display:inline-flex; align-items:center; gap:8px; background:rgba(255,255,255,0.03); padding:4px 10px; border-radius:6px; border: 1px solid rgba(255,255,255,0.05); margin-left:8px;">
+                  ${item.forklift.label ? `<span style="color:#f3f4f6; font-weight:600;">"${escapeHtml(item.forklift.label)}"</span>` : ''}
+                  <span class="admin-badge admin-badge-primary" style="display:inline-flex; align-items:center; gap:4px; font-size:10px; padding:2px 8px; border-radius:4px;"><i class="fas fa-truck-ramp-box"></i> ${escapeHtml(item.forklift.prop_model || 'forklift')}</span>
+                  <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(item.forklift.x).toFixed(2)}, Y:${Number(item.forklift.y).toFixed(2)}, Z:${Number(item.forklift.z).toFixed(2)}]</span>
+                  <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(item.forklift && item.forklift.id ? item.forklift.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="forklift" data-slot="7" data-fork="1" style="padding:3px 8px; font-size:10px;" title="Excluir Forklift"><i class="fas fa-trash"></i></button>
+                </div>
+              ` : '<span style="color:var(--admin-text-muted)">Padrão de Fábrica</span>'}
+            </div>
+          </div>
+        `;
+        contentBox.appendChild(card);
+      });
+
+      listContainer.appendChild(folderWrapper);
     });
 
     listContainer.querySelectorAll('.btn-select-trailer').forEach(btn => {
       btn.addEventListener('click', function () {
         const m = this.getAttribute('data-model');
         const p = this.getAttribute('data-prop');
+        const c = this.getAttribute('data-custom') || '';
+        const count = this.getAttribute('data-count') || '1';
+        const folder = this.getAttribute('data-folder') || 'Geral';
+
         const trailerInput = document.getElementById('offset-form-trailer');
         const propInput = document.getElementById('offset-form-prop');
+        const customInput = document.getElementById('offset-form-custom-name');
+        const countInput = document.getElementById('offset-form-prop-count');
+        const folderSelect = document.getElementById('offset-form-folder');
+
         if (trailerInput) trailerInput.value = m;
         if (propInput && p) propInput.value = p;
+        if (customInput) customInput.value = c;
+        if (countInput) countInput.value = count;
+        if (folderSelect) {
+          populateOffsetFolders(folder);
+          folderSelect.value = folder;
+        }
         if (trailerInput) trailerInput.focus();
       });
     });
@@ -1048,13 +1208,19 @@
     const slotIndex = isForklift ? 7 : (parseInt(document.getElementById('offset-form-slot').value) || 1);
     const propModel = isForklift ? 'forklift' : (document.getElementById('offset-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b');
     const label = document.getElementById('offset-form-label').value.trim();
+    const customName = (document.getElementById('offset-form-custom-name')?.value || '').trim();
+    const propCount = parseInt(document.getElementById('offset-form-prop-count')?.value) || 1;
+    const folderName = (document.getElementById('offset-form-folder')?.value || 'Geral').trim() || 'Geral';
 
     postNUI('adminStartOffsetCalibration', {
       trailerModel: trailerModel,
       slotIndex: slotIndex,
       isForklift: isForklift,
       propModel: propModel,
-      label: label
+      label: label,
+      customName: customName,
+      propCount: propCount,
+      folderName: folderName
     });
   }
 
@@ -1185,9 +1351,11 @@
         <td style="font-family: monospace; font-size: 10.5px;">
           X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0}
         </td>
-        <td style="text-align:center;">
-          <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
-          <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
+        <td style="text-align:right; white-space: nowrap;">
+          <div style="display:inline-flex; gap:6px; justify-content:flex-end;">
+            <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
+            <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);
@@ -1393,6 +1561,18 @@
             }
           }
           showAdminToast(`Pasta "${clean}" criada com sucesso!`);
+        });
+      });
+    }
+
+    const btnNewOffsetFolder = document.getElementById('btn-new-offset-folder');
+    if (btnNewOffsetFolder) {
+      btnNewOffsetFolder.addEventListener('click', function () {
+        showPromptModal('Nova Categoria de Offsets', 'Nome da pasta (ex: Carga Pesada, Líquidos...)', (clean) => {
+          populateOffsetFolders(clean);
+          const folderSelect = document.getElementById('offset-form-folder');
+          if (folderSelect) folderSelect.value = clean;
+          showAdminToast(`Pasta "${clean}" criada para novos offsets!`);
         });
       });
     }
@@ -1627,13 +1807,15 @@
         <td style="color:#f59e0b; font-weight:600;"><i class="fas fa-box"></i> ${item.prop_model}</td>
         <td><code>X: ${x} | Y: ${y} | Z: ${z}</code></td>
         <td><code>P: ${p}° | R: ${r}° | Y: ${yw}°</code></td>
-        <td>
-          <button class="admin-btn admin-btn-outline" style="padding:4px 8px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})">
-            <i class="fas fa-edit"></i> Carregar
-          </button>
-          <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px; margin-left:4px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')">
-            <i class="fas fa-trash"></i>
-          </button>
+        <td style="text-align:right; white-space:nowrap;">
+          <div style="display:inline-flex; gap:6px; justify-content:flex-end;">
+            <button class="admin-btn admin-btn-outline" style="padding:4px 8px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})" title="Carregar no Editor">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')" title="Excluir">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);

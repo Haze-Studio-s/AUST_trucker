@@ -971,7 +971,27 @@ local function StartTruckDelivery(src, contractData)
     local palletNetIds = {}
     local withForklift = (contractData.withForklift ~= false)
     local maxAllowedPallets = withForklift and 6 or 7
-    local reqPallets = math.min(maxAllowedPallets, math.max(4, tonumber(contractData.palletCount) or 4))
+
+    -- Quantidade dinâmica de props definida no offset ou no contrato
+    local dynamicPropCount = nil
+    local cModel = contractData.cargoModel or contractData.cargo_model
+    if AdminService and AdminService.GetOffsetsForTrailerAndCargo then
+        local tOffsets = AdminService.GetOffsetsForTrailerAndCargo(tostring(requestedTrailer or trailerModel):lower(), cModel)
+        if tOffsets and tOffsets.prop_count and tonumber(tOffsets.prop_count) and tonumber(tOffsets.prop_count) > 0 then
+            dynamicPropCount = tonumber(tOffsets.prop_count)
+        end
+    end
+    if not dynamicPropCount and AdminService and AdminService.TrailerOffsets then
+        local tOffsets = AdminService.TrailerOffsets[tostring(requestedTrailer or trailerModel):lower()]
+        if tOffsets and tOffsets.prop_count and tonumber(tOffsets.prop_count) and tonumber(tOffsets.prop_count) > 0 then
+            dynamicPropCount = tonumber(tOffsets.prop_count)
+        end
+    end
+    if not dynamicPropCount and contractData.prop_count and tonumber(contractData.prop_count) and tonumber(contractData.prop_count) > 0 then
+        dynamicPropCount = tonumber(contractData.prop_count)
+    end
+
+    local reqPallets = dynamicPropCount and math.min(maxAllowedPallets, math.max(1, dynamicPropCount)) or math.min(maxAllowedPallets, math.max(1, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
         local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift')) or {}
@@ -1264,9 +1284,29 @@ local function StartTruckDelivery(src, contractData)
     local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
     local destCoords = destCfg.coords
 
+    -- Consulta autoritativa da tabela de Economia e Rotas do painel admin
+    local eco = (AdminService and AdminService.Economy) or {}
+    local kmPay = eco.base_payment_per_km or eco.km_multiplier or 18.5
+    local kmXP = eco.base_xp_per_km or eco.xp_multiplier or 5.0
+    local estDistance = (chosenTruckCoord and destCoords) and (math.max(1.0, math.floor(#(vector3(destCoords.x, destCoords.y, destCoords.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) / 100.0) / 10.0)) or 3.5
+
+    local basePayment = tonumber(contractData.payment) or tonumber(contractData.base_payment)
+    if not basePayment or basePayment <= 0 then
+        basePayment = math.floor(estDistance * kmPay * 100 + (eco.base_salary or 1200))
+    end
+    if not basePayment or basePayment <= 0 then
+        basePayment = destCfg.reward or 5000
+    end
+
+    local baseXP = tonumber(contractData.xp) or tonumber(contractData.base_xp)
+    if not baseXP or baseXP <= 0 then
+        baseXP = math.floor(estDistance * kmXP * 15 + 150)
+    end
+    if not baseXP or baseXP <= 0 then
+        baseXP = destCfg.xp or 200
+    end
+
     -- Bônus de remuneração e XP por paletes extras (> 4)
-    local basePayment = destCfg.reward or 5000
-    local baseXP = destCfg.xp or 200
     if cargoType == 'dry' and reqPallets > 4 then
         local extraPallets = reqPallets - 4
         basePayment = math.floor(basePayment * (1 + (extraPallets * 0.15)))
@@ -1278,6 +1318,7 @@ local function StartTruckDelivery(src, contractData)
 
     local lobbyData = {
         jobId = jobId,
+        routeId = contractData.id or contractData.route_id or nil,
         src = src,
         citizenId = citizenId,
         bucketId = bucketId,
@@ -2003,9 +2044,36 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     -- (RemoveJobKeys/MySQL cedem a thread). Chamadas concorrentes caem no check de stage acima.
     lobby.stage = 'STATUS_COMPLETING'
 
-    -- Pagamento com cálculo de penalidade proporcional por paletes perdidos ou integridade ADR
+    -- Sincronia viva de Economia & XP com o painel administrativo antes de liquidar o pagamento
+    local eco = (AdminService and AdminService.Economy) or {}
+    local kmPay = eco.base_payment_per_km or eco.km_multiplier
+    local kmXP = eco.base_xp_per_km or eco.xp_multiplier
+    local dist = lobby.distance or 3.5
+
     local basePayment = lobby.payment or 5000
     local baseXP = lobby.xp or 200
+
+    -- Se a rota tiver cadastro no painel admin, atualiza com os valores estritos salvos no painel
+    if lobby.routeId and AdminService and AdminService.CustomRoutes and AdminService.CustomRoutes[lobby.routeId] then
+        local rData = AdminService.CustomRoutes[lobby.routeId]
+        if rData.base_payment and rData.base_payment > 0 then basePayment = rData.base_payment end
+        if rData.base_xp and rData.base_xp > 0 then baseXP = rData.base_xp end
+    elseif kmPay and kmPay > 0 then
+        -- Se não tem rota fixa gravada, recalcula usando os multiplicadores vivos da aba Economia
+        local calcPayment = math.floor(dist * kmPay * 100 + (eco.base_salary or 1200))
+        if calcPayment > 0 then basePayment = calcPayment end
+        if kmXP and kmXP > 0 then
+            local calcXP = math.floor(dist * kmXP * 15 + 150)
+            if calcXP > 0 then baseXP = calcXP end
+        end
+    end
+
+    -- Bônus configurados na aba Economia (ADR, Carga Pesada, etc.)
+    if lobby.cargoType == 'adr' and (eco.adr_bonus_pct or eco.adr_multiplier) then
+        local adrMult = eco.adr_multiplier or (1 + ((eco.adr_bonus_pct or 35.0) / 100))
+        basePayment = math.floor(basePayment * adrMult)
+    end
+
     local totalReq = lobby.requiredCount or 4
     local lostCount = lobby.lostPallets or 0
     local deliveredCount = math.max(0, totalReq - lostCount)
@@ -2013,7 +2081,6 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     if lobby.cargoType == 'adr' then
         ratio = math.max(0.2, (lobby.cargoIntegrity or 100) / 100)
     end
-
 
     local payment = math.floor(basePayment * ratio)
     local xp = math.floor(baseXP * ratio)

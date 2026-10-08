@@ -1099,9 +1099,17 @@
 										</div>
 									</div>
 
-									<div class="admin-form-group">
-										<label>Título / Descrição da Carga</label>
-										<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
+									<div class="admin-grid-2">
+										<div class="admin-form-group">
+											<label>Título / Descrição da Carga</label>
+											<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
+										</div>
+										<div class="admin-form-group">
+											<label><i class="fas fa-folder"></i> Pasta de Spawns <span style="color:#ef4444;">*</span></label>
+											<select id="route-form-spawn-folder" class="admin-select" required>
+												<option value="">Selecione a Pasta de Spawn...</option>
+											</select>
+										</div>
 									</div>
 
 									<div class="admin-grid-3">
@@ -1341,6 +1349,21 @@
 									</datalist>
 								</div>
 								<div class="admin-form-group">
+									<label><i class="fas fa-tag"></i> Nome Personalizado</label>
+									<input type="text" id="offset-form-custom-name" class="admin-input" placeholder="ex: Carga de Madeira - Flatbed">
+								</div>
+								<div class="admin-form-group">
+									<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+										<label style="margin:0;"><i class="fas fa-folder"></i> Pasta / Categoria</label>
+										<button type="button" id="btn-new-offset-folder" class="admin-btn admin-btn-outline" style="padding:1px 6px; font-size:10px;"><i class="fas fa-plus"></i> Nova</button>
+									</div>
+									<select id="offset-form-folder" class="admin-select">
+										<option value="Geral">Geral</option>
+									</select>
+								</div>
+							</div>
+							<div class="admin-grid-3" style="margin-top: 6px;">
+								<div class="admin-form-group">
 									<label>Slot Alvo</label>
 									<select id="offset-form-slot" class="admin-select">
 										<option value="1">Slot 1 (Frente)</option>
@@ -1354,6 +1377,10 @@
 								<div class="admin-form-group">
 									<label>Nomenclatura / Nome do Slot</label>
 									<input type="text" id="offset-form-label" class="admin-input" placeholder="ex: Palete Frente Esquerdo">
+								</div>
+								<div class="admin-form-group">
+									<label><i class="fas fa-boxes-stacked"></i> Quantidade de Props</label>
+									<input type="number" id="offset-form-prop-count" class="admin-input" min="1" max="12" value="1">
 								</div>
 							</div>
 							<div class="admin-grid-2" style="margin-top: 6px;">

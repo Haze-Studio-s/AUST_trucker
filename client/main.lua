@@ -3511,7 +3511,7 @@ end)
 
 RegisterNUICallback('adminStartOffsetCalibration', function(data, cb)
     if data and data.trailerModel then
-        OffsetEditor.StartCalibration(data.trailerModel, data.slotIndex or 1, data.isForklift or false, data.propModel, data.label)
+        OffsetEditor.StartCalibration(data.trailerModel, data.slotIndex or 1, data.isForklift or false, data.propModel, data.label, data.customName, data.propCount, data.folderName)
     end
     if cb then cb('ok') end
 end)
@@ -3524,6 +3524,13 @@ end)
 RegisterNUICallback('adminDeleteRoute', function(data, cb)
     TriggerServerEvent('aurp_trucker:server:adminDeleteRoute', data and data.id)
     if cb then cb('ok') end
+end)
+
+RegisterNetEvent('aurp_trucker:client:adminSyncRoutes', function(routes)
+    SendNUIMessage({
+        action = 'adminSyncRoutes',
+        routes = routes
+    })
 end)
 
 RegisterNUICallback('adminSaveSpawn', function(data, cb)

@@ -258,6 +258,7 @@ function AdminService.LoadAll()
             if r.delivery_coords and type(r.delivery_coords) == 'string' then
                 pcall(function() r.delivery_coords = json.decode(r.delivery_coords) end)
             end
+            r.spawn_folder = r.spawn_folder or 'Geral'
             routeMap[r.id] = r
         end
         AdminService.CustomRoutes = routeMap
@@ -323,29 +324,50 @@ function AdminService.ReloadTrailerOffsets()
         local prop = (o.prop_model and o.prop_model ~= '' and o.prop_model:lower()) or 'hei_prop_carrier_cargo_04b'
         local compKey = model .. '::' .. prop
 
+        local customName = o.custom_name and o.custom_name ~= '' and o.custom_name or nil
+        local propCount = tonumber(o.prop_count) or 1
+        local folderName = o.folder_name and o.folder_name ~= '' and o.folder_name or 'Geral'
+
         if not offsetMap[compKey] then
             offsetMap[compKey] = {
                 trailer_model = model,
                 prop_model = prop,
                 label = o.label or nil,
+                custom_name = customName,
+                prop_count = propCount,
+                folder_name = folderName,
                 pallets = {},
                 forklift = nil
             }
+        else
+            if customName and not offsetMap[compKey].custom_name then offsetMap[compKey].custom_name = customName end
+            if propCount > 1 and offsetMap[compKey].prop_count == 1 then offsetMap[compKey].prop_count = propCount end
+            if folderName ~= 'Geral' and offsetMap[compKey].folder_name == 'Geral' then offsetMap[compKey].folder_name = folderName end
         end
         if not rawModelMap[model] then
             rawModelMap[model] = {
                 trailer_model = model,
                 prop_model = prop,
                 label = o.label or nil,
+                custom_name = customName,
+                prop_count = propCount,
+                folder_name = folderName,
                 pallets = {},
                 forklift = nil
             }
+        else
+            if customName and not rawModelMap[model].custom_name then rawModelMap[model].custom_name = customName end
+            if propCount > 1 and rawModelMap[model].prop_count == 1 then rawModelMap[model].prop_count = propCount end
+            if folderName ~= 'Geral' and rawModelMap[model].folder_name == 'Geral' then rawModelMap[model].folder_name = folderName end
         end
 
         local vecData = {
             id = o.id,
             label = o.label or nil,
             prop_model = prop,
+            custom_name = customName,
+            prop_count = propCount,
+            folder_name = folderName,
             x = tonumber(o.offset_x) or 0.0,
             y = tonumber(o.offset_y) or 0.0,
             z = tonumber(o.offset_z) or 0.0,
@@ -868,6 +890,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
         req_skill       = math.floor(ClampNum(routeData.req_skill, 0, 100, 0)),
         fragile         = routeData.fragile and 1 or 0,
         valuable        = routeData.valuable and 1 or 0,
+        spawn_folder    = CleanStr(routeData.spawn_folder, 100, 'Geral'),
         pickup_coords   = CleanCoords(routeData.pickup_coords),
         delivery_coords = CleanCoords(routeData.delivery_coords),
         is_active       = (routeData.is_active ~= false and routeData.is_active ~= 0) and 1 or 0,
@@ -875,16 +898,17 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_custom_routes
-        (id, name, type, cargo_model, cargo_name, truck_model, trailer_model, base_payment, base_xp, req_skill, fragile, valuable, pickup_coords, delivery_coords, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, type, cargo_model, cargo_name, truck_model, trailer_model, base_payment, base_xp, req_skill, fragile, valuable, spawn_folder, pickup_coords, delivery_coords, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
         name = VALUES(name), type = VALUES(type), cargo_model = VALUES(cargo_model), cargo_name = VALUES(cargo_name),
         truck_model = VALUES(truck_model), trailer_model = VALUES(trailer_model), base_payment = VALUES(base_payment),
         base_xp = VALUES(base_xp), req_skill = VALUES(req_skill), fragile = VALUES(fragile), valuable = VALUES(valuable),
+        spawn_folder = VALUES(spawn_folder),
         pickup_coords = VALUES(pickup_coords), delivery_coords = VALUES(delivery_coords), is_active = VALUES(is_active)
     ]], {
         clean.id, clean.name, clean.type, clean.cargo_model, clean.cargo_name, clean.truck_model, clean.trailer_model,
-        clean.base_payment, clean.base_xp, clean.req_skill, clean.fragile, clean.valuable,
+        clean.base_payment, clean.base_xp, clean.req_skill, clean.fragile, clean.valuable, clean.spawn_folder,
         json.encode(clean.pickup_coords), json.encode(clean.delivery_coords), clean.is_active
     })
 
@@ -967,21 +991,24 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local label = CleanStr(data.label, 100, nil)
     local propModel = CleanStr(data.propModel, 100, nil)
     propModel = (propModel and propModel:lower()) or (isForklift == 1 and 'forklift' or 'hei_prop_carrier_cargo_04b')
+    local customName = CleanStr(data.customName or data.custom_name, 150, nil)
+    local propCount = math.floor(ClampNum(data.propCount or data.prop_count, 1, 64, 1))
+    local folderName = CleanStr(data.folderName or data.folder_name, 100, 'Geral')
     local ox, oy, oz = ClampNum(data.x, -50.0, 50.0, 0.0), ClampNum(data.y, -50.0, 50.0, 0.0), ClampNum(data.z, -50.0, 50.0, 0.0)
     local heading = ClampNum(data.heading, -360.0, 360.0, 0.0)
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_trailer_offsets
-        (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift, custom_name, prop_count, folder_name)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
         label = VALUES(label), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
-        heading = VALUES(heading)
+        heading = VALUES(heading), custom_name = VALUES(custom_name), prop_count = VALUES(prop_count), folder_name = VALUES(folder_name)
     ]], {
-        trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift
+        trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift, customName, propCount, folderName
     })
 
-    AdminLog(src, 'adminSaveTrailerOffset', ('%s prop=%s slot=%d fork=%d'):format(trailerModel, propModel, slotIndex, isForklift))
+    AdminLog(src, 'adminSaveTrailerOffset', ('%s prop=%s slot=%d fork=%d custom="%s" count=%d folder="%s"'):format(trailerModel, propModel, slotIndex, isForklift, customName or '', propCount, folderName))
 
     -- Recarrega e normaliza dados frescos do banco
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
@@ -990,6 +1017,9 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local offsetPayload = {
         label = label,
         prop_model = propModel,
+        custom_name = customName,
+        prop_count = propCount,
+        folder_name = folderName,
         x = ox,
         y = oy,
         z = oz,
