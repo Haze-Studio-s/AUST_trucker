@@ -548,6 +548,48 @@ local function StartCouplingWatcher()
                     hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
                 end
 
+                -- Assistência Inteligente de Acoplamento da 5ª Roda (Smart Hitch Assist)
+                -- Resolve a limitação de geometria física do GTA V para freighttrailer e outros reboques
+                if not hasTrailer and JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                    local truckCoords = GetEntityCoords(JobEntities.truck)
+                    local trailerCoords = GetEntityCoords(JobEntities.trailer)
+                    local dist = #(truckCoords - trailerCoords)
+
+                    if dist <= 14.0 then
+                        -- Ponto da 5ª roda do caminhão (traseira)
+                        local truckBone = GetEntityBoneIndexByName(JobEntities.truck, "attach_female")
+                        local fifthWheelPos = (truckBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.truck, truckBone)
+                            or GetOffsetFromEntityInWorldCoords(JobEntities.truck, 0.0, -2.5, 0.5)
+
+                        -- Ponto do pino rei da carreta (dianteira)
+                        local trailerBone = GetEntityBoneIndexByName(JobEntities.trailer, "attach_male")
+                        local kingpinPos = (trailerBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.trailer, trailerBone)
+                            or GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 3.5, 0.0)
+
+                        local hitchDist = #(fifthWheelPos - kingpinPos)
+
+                        -- Se a 5ª roda estiver a menos de 4.5m do engate ou colisão próxima
+                        if hitchDist <= 4.5 or dist <= 6.0 then
+                            FreezeEntityPosition(JobEntities.trailer, false)
+                            SetEntityCollision(JobEntities.trailer, true, true)
+                            SetEntityCollision(JobEntities.truck, true, true)
+
+                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 6.0)
+                            Wait(150)
+
+                            hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
+                            if not hasTrailer or trailerEnt == 0 then
+                                hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
+                            end
+
+                            if hasTrailer then
+                                PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
+                                SendMissionNotify('Central Logística', 'Carreta engatada na 5ª roda com sucesso!', 'success')
+                            end
+                        end
+                    end
+                end
+
                 if hasTrailer then
                     if TrailerBayWatcherPoint then
                         pcall(function() TrailerBayWatcherPoint:remove() end)
@@ -2379,8 +2421,9 @@ local function OnPlayerEnteredTruck(truck)
 
     JobEntities.truck = truck
 
-    -- Garante colisão ativa para permitir o acoplamento físico da 5ª roda
+    -- Garante colisão ativa e física dinâmica para permitir o acoplamento da 5ª roda
     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+        FreezeEntityPosition(JobEntities.trailer, false)
         SetEntityCollision(JobEntities.trailer, true, true)
         SetEntityCollision(truck, true, true)
     end

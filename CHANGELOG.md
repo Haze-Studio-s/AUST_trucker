@@ -1,5 +1,16 @@
 # Changelog — AUST_trucker
 
+## [20.9.14] — 2026-10-08 — Sistema de Engate Assistido Inteligente (Smart Hitch Assist) e Suporte Físico a Reboques Longos (Freighttrailer)
+
+### Corrigido & Aprimorado
+- **Smart Hitch Assist na 5ª Roda (`client/main.lua`):**
+  - Resolvido bug onde o caminhão colidia com o `freighttrailer` em marcha-ré mas a engine física do GTA V nunca travava a quinta roda, mantendo o jogador preso na etapa `STEP_3_COUPLE_TRAILER`.
+  - Causa raiz: A malha do `freighttrailer` e o colshape do pino-mestre (`attach_male`) não possuem o gatilho de colisão passiva de carretas comuns de estrada.
+  - Implementada detecção volumétrica contínua inspecionando os ossos `attach_female` (cavalo mecânico) e `attach_male` (reboque). Quando a 5ª roda se aproxima a $\le 4.5\text{m}$, o script invoca `AttachVehicleToTrailer(truck, trailer, 6.0)`.
+  - A restrição física da 5ª roda é travada instantaneamente pela engine FiveM, com feedback sonoro (`PIN_BUTTON`), notificação em tela e transição imediata de estágio de missão.
+- **Descongelamento Físico de Reboques (`client/main.lua`):**
+  - Garantido `FreezeEntityPosition(trailer, false)` na transição `OnPlayerEnteredTruck` e durante a aproximação de engate, prevenindo que carretas estáticas recusem acoplamentos dinâmicos.
+
 ## [20.9.13] — 2026-10-07 — Sincronização Dinâmica de Miniaturas de Caminhões e Carretas (NUI) com Fallback Silencioso
 
 ### Corrigido & Aprimorado
