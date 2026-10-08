@@ -953,10 +953,6 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
-    -- Freeze global sincronizado para freighttrailer / carga pesada (o client assenta no solo e trava a física)
-    if requestedTrailer == 'freighttrailer' or trailerModel == joaat('freighttrailer') or cargoType == 'heavy' then
-        Entity(trailer).state:set('isRigLoadingFrozen', true, true)
-    end
 
     -- ETAPA 3: Spawn Condicional (Empilhadeira vs Reach Stacker)
     local forklift = nil

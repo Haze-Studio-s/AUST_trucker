@@ -1,17 +1,16 @@
 # Changelog — AUST_trucker
 
-## [20.9.16] — 2026-10-08 — Assentamento Perfeito no Solo e Freeze Estabilizado no Freighttrailer
+## [20.9.16] — 2026-10-08 — Remoção de Freeze e Acoplamento Suave 2D da 5ª Roda (Zero Teleport)
 
 ### Corrigido & Aprimorado
-- **Correção de Afundamento no Solo (`client/main.lua`):**
-  - Resolvido bug onde o `freighttrailer` spawnava afundado dentro do asfalto.
-  - Causa raiz: O cálculo legado com `GetGroundZFor_3dCoord` aplicava `SetEntityCoordsNoOffset(trailer, x, y, groundZ + 0.15)`. Como o ponto pivô de origem do `freighttrailer` fica na metade do chassi, colocar a origem a 15cm do chão enterrava as rodas e a base em mais de 1 metro.
-  - Substituído pelo assentamento físico nativo da Rockstar: `SetVehicleOnGroundProperly(trailer)` e abertura dos pés de apoio com `SetTrailerLegsRaised(trailer, false)`.
-- **Freeze Global Estabilizado (`server/main.lua` & `client/main.lua`):**
-  - O servidor replica o estado via StateBag OneSync (`isRigLoadingFrozen = true`).
-  - O cliente acomoda as suspensões e rodas no piso por 150ms e trava a física estática com `FreezeEntityPosition(trailer, true)`.
-  - Bloqueada a liberação prematura no `OnPlayerEnteredTruck` para `freighttrailer`.
-  - Liberação programada com `Wait(1000) -> FreezeEntityPosition(trailer, false)` exatamente 1 segundo (1000ms) após o engate na 5ª roda para estabilização sólida do conjunto.
+- **Remoção Absoluta de Freeze (`server/main.lua` & `client/main.lua`):**
+  - Removido o congelamento artificial por `FreezeEntityPosition`, permitindo que o motor Havok do GTA V conecte naturalmente as juntas dinâmicas da 5ª roda sem recusas de acoplamento.
+  - A estabilidade estática no solo do pátio agora é assegurada por freio de mão físico ativo (`SetVehicleHandbrake` + `SetVehicleBrake`) e landing gear abaixado (`SetTrailerLegsRaised(trailer, false)`).
+- **Eliminação Completa do Teleport no Acoplamento (`client/main.lua`):**
+  - Causa raiz do teleport: A distância de acoplamento anterior de $1.0\text{m}$ puxava o reboque abruptamente pelo ar em direção ao caminhão, amplificado por um raio excessivo de busca no `AttachVehicleToTrailer` e falta de sincronização OneSync.
+  - Implementado cálculo planar 2D (`hitchDist2D`) entre a 5ª roda (`attach_female`) e o pino-rei (`attach_male`) com tolerância de toque físico real ($\le 0.35\text{m}$) e altura ($\le 0.65\text{m}$).
+  - Requisição de posse de rede local (`NetworkRequestControlOfEntity`) antes do engate para sincronização instantânea de frames.
+  - Amortecimento de velocidade (`SetEntityVelocity = 0`) no instante do contato e acoplamento com raio estrito de $0.2\text{m}$, garantindo conexão 100% lisa, imperceptível e livre de puxões.
 
 ## [20.9.15] — 2026-10-08 — Restauração Integral de Colisão Física entre Caminhão e Reboque
 

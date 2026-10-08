@@ -576,31 +576,28 @@ local function StartCouplingWatcher()
                             kingpinPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, kingpinY, 0.2)
                         end
 
-                        local hitchDist = #(fifthWheelPos - kingpinPos)
+                        local hitchDist2D = #(vector2(fifthWheelPos.x, fifthWheelPos.y) - vector2(kingpinPos.x, kingpinPos.y))
+                        local hitchDiffZ = math.abs(fifthWheelPos.z - kingpinPos.z)
 
-                        -- Acoplamento sutil e natural a 1.0m de tolerância no contato físico exato
-                        if hitchDist <= 1.0 then
+                        -- Acoplamento ultra-suave no contato físico milimétrico (<= 35cm) sem qualquer teleport
+                        if hitchDist2D <= 0.35 and hitchDiffZ <= 0.65 then
+                            -- Solicita controle autoritativo de rede local para evitar descompasso OneSync
+                            if not NetworkHasControlOfEntity(JobEntities.trailer) then
+                                NetworkRequestControlOfEntity(JobEntities.trailer)
+                            end
+
+                            -- Amortece velocidades relativas e libera freios da carreta
                             SetVehicleHandbrake(JobEntities.trailer, false)
                             SetVehicleBrake(JobEntities.trailer, false)
-                            SetEntityCollision(JobEntities.trailer, true, true)
-                            SetEntityCollision(JobEntities.truck, true, true)
+                            SetEntityVelocity(JobEntities.trailer, 0.0, 0.0, 0.0)
 
-                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
-                            Wait(10)
+                            -- Engate suave com raio mínimo de busca (0.2m) eliminando snaps e puxões bruscos
+                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 0.2)
+                            Wait(25)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
                             if not hasTrailer or trailerEnt == 0 then
                                 hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
-                            end
-
-                            if not hasTrailer then
-                                FreezeEntityPosition(JobEntities.trailer, false)
-                                AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
-                                Wait(10)
-                                hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
-                                if not hasTrailer or trailerEnt == 0 then
-                                    hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
-                                end
                             end
 
                             if hasTrailer then
@@ -612,18 +609,11 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
-                    -- Freeze global sai exatamente 1s (1000ms) após o caminhão acoplar para garantir estabilização da 5ª roda
-                    CreateThread(function()
-                        Wait(1000)
-                        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                            FreezeEntityPosition(JobEntities.trailer, false)
-                            SetVehicleHandbrake(JobEntities.trailer, false)
-                            SetVehicleBrake(JobEntities.trailer, false)
-                            pcall(function()
-                                Entity(JobEntities.trailer).state:set('isRigLoadingFrozen', false, true)
-                            end)
-                        end
-                    end)
+                    -- Garante freios liberados para tráfego imediato
+                    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                        SetVehicleHandbrake(JobEntities.trailer, false)
+                        SetVehicleBrake(JobEntities.trailer, false)
+                    end
 
                     if TrailerBayWatcherPoint then
                         pcall(function() TrailerBayWatcherPoint:remove() end)
@@ -2456,12 +2446,9 @@ local function OnPlayerEnteredTruck(truck)
 
     JobEntities.truck = truck
 
-    -- Garante colisão ativa; mantém o freighttrailer congelado no solo até o acoplamento
+    -- Garante colisão ativa e física dinâmica para acoplamento da 5ª roda
     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-        local tModel = GetEntityModel(JobEntities.trailer)
-        if tModel ~= joaat('freighttrailer') and (not ActiveJob or ActiveJob.cargoType ~= 'heavy') then
-            FreezeEntityPosition(JobEntities.trailer, false)
-        end
+        FreezeEntityPosition(JobEntities.trailer, false)
         SetEntityCollision(JobEntities.trailer, true, true)
         SetEntityCollision(truck, true, true)
     end
@@ -3050,7 +3037,7 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                         if DoesEntityExist(trailer) then
                             SetVehicleOnGroundProperly(trailer)
                             pcall(function() SetTrailerLegsRaised(trailer, false) end)
-                            FreezeEntityPosition(trailer, true)
+                            FreezeEntityPosition(trailer, false)
                             SetVehicleBrake(trailer, true)
                             SetVehicleHandbrake(trailer, true)
                         end
