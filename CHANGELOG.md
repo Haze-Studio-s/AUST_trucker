@@ -1,5 +1,15 @@
 # Changelog — AUST_trucker
 
+## [20.9.16] — 2026-10-08 — Freeze Global no Freighttrailer e Liberação Programada (1ms Pós-Acoplamento)
+
+### Corrigido & Aprimorado
+- **Freeze Global Estático no Solo (`server/main.lua` & `client/main.lua`):**
+  - Implementado congelamento físico global (`FreezeEntityPosition(trailer, true)` + StateBag OneSync `isRigLoadingFrozen = true`) para o modelo `freighttrailer` e cargas `heavy` desde o spawn.
+  - O reboque permanece 100% imóvel e firme durante as manobras com Reach Stacker e durante a aproximação de marcha-ré do caminhão, impedindo deslocamentos acidentais ou deslizamentos.
+  - Bloqueada a liberação prematura de física no evento `OnPlayerEnteredTruck` para carretas do tipo `freighttrailer`.
+- **Liberação Programada Pós-Acoplamento (`client/main.lua`):**
+  - Configurada liberação de física (`Wait(1) -> FreezeEntityPosition(JobEntities.trailer, false)`) exatamente 1ms após a confirmação do acoplamento da 5ª roda no `StartCouplingWatcher`.
+
 ## [20.9.15] — 2026-10-08 — Restauração Integral de Colisão Física entre Caminhão e Reboque
 
 ### Corrigido & Aprimorado

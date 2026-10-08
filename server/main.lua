@@ -953,6 +953,12 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
+    -- Freeze global para freighttrailer / carga pesada até o acoplamento do caminhão
+    if requestedTrailer == 'freighttrailer' or trailerModel == joaat('freighttrailer') or cargoType == 'heavy' then
+        FreezeEntityPosition(trailer, true)
+        Entity(trailer).state:set('isRigLoadingFrozen', true, true)
+    end
+
     -- ETAPA 3: Spawn Condicional (Empilhadeira vs Reach Stacker)
     local forklift = nil
     local forkliftPlate = nil

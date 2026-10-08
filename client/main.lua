@@ -580,18 +580,27 @@ local function StartCouplingWatcher()
 
                         -- Acoplamento sutil e natural a 1.0m de tolerância no contato físico exato
                         if hitchDist <= 1.0 then
-                            FreezeEntityPosition(JobEntities.trailer, false)
                             SetVehicleHandbrake(JobEntities.trailer, false)
                             SetVehicleBrake(JobEntities.trailer, false)
                             SetEntityCollision(JobEntities.trailer, true, true)
                             SetEntityCollision(JobEntities.truck, true, true)
 
                             AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
-                            Wait(50)
+                            Wait(10)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
                             if not hasTrailer or trailerEnt == 0 then
                                 hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
+                            end
+
+                            if not hasTrailer then
+                                FreezeEntityPosition(JobEntities.trailer, false)
+                                AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 1.0)
+                                Wait(10)
+                                hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
+                                if not hasTrailer or trailerEnt == 0 then
+                                    hasTrailer = IsVehicleAttachedToTrailer(JobEntities.truck)
+                                end
                             end
 
                             if hasTrailer then
@@ -603,6 +612,19 @@ local function StartCouplingWatcher()
                 end
 
                 if hasTrailer then
+                    -- Freeze global sai exatamente 1ms após o caminhão acoplar
+                    CreateThread(function()
+                        Wait(1)
+                        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                            FreezeEntityPosition(JobEntities.trailer, false)
+                            SetVehicleHandbrake(JobEntities.trailer, false)
+                            SetVehicleBrake(JobEntities.trailer, false)
+                            pcall(function()
+                                Entity(JobEntities.trailer).state:set('isRigLoadingFrozen', false, true)
+                            end)
+                        end
+                    end)
+
                     if TrailerBayWatcherPoint then
                         pcall(function() TrailerBayWatcherPoint:remove() end)
                         TrailerBayWatcherPoint = nil
@@ -2434,9 +2456,12 @@ local function OnPlayerEnteredTruck(truck)
 
     JobEntities.truck = truck
 
-    -- Garante colisão ativa e física dinâmica para permitir o acoplamento da 5ª roda
+    -- Garante colisão ativa; mantém o freighttrailer congelado no solo até o acoplamento
     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-        FreezeEntityPosition(JobEntities.trailer, false)
+        local tModel = GetEntityModel(JobEntities.trailer)
+        if tModel ~= joaat('freighttrailer') and (not ActiveJob or ActiveJob.cargoType ~= 'heavy') then
+            FreezeEntityPosition(JobEntities.trailer, false)
+        end
         SetEntityCollision(JobEntities.trailer, true, true)
         SetEntityCollision(truck, true, true)
     end
@@ -3020,6 +3045,13 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                             SetVehicleExtra(trailer, extraId, 1)
                         end
                     end
+                end
+
+                local trModel = GetEntityModel(trailer)
+                if trModel == joaat('freighttrailer') or (payload and payload.cargoType == 'heavy') then
+                    FreezeEntityPosition(trailer, true)
+                    SetVehicleBrake(trailer, true)
+                    SetVehicleHandbrake(trailer, true)
                 end
 
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
