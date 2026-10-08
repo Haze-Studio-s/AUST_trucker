@@ -1,14 +1,17 @@
 # Changelog — AUST_trucker
 
-## [20.9.16] — 2026-10-08 — Freeze Global no Freighttrailer e Liberação Programada (1ms Pós-Acoplamento)
+## [20.9.16] — 2026-10-08 — Assentamento Perfeito no Solo e Freeze Estabilizado no Freighttrailer
 
 ### Corrigido & Aprimorado
-- **Freeze Global Estático no Solo (`server/main.lua` & `client/main.lua`):**
-  - Implementado congelamento físico global (`FreezeEntityPosition(trailer, true)` + StateBag OneSync `isRigLoadingFrozen = true`) para o modelo `freighttrailer` e cargas `heavy` desde o spawn.
-  - O reboque permanece 100% imóvel e firme durante as manobras com Reach Stacker e durante a aproximação de marcha-ré do caminhão, impedindo deslocamentos acidentais ou deslizamentos.
-  - Bloqueada a liberação prematura de física no evento `OnPlayerEnteredTruck` para carretas do tipo `freighttrailer`.
-- **Liberação Programada Pós-Acoplamento (`client/main.lua`):**
-  - Configurada liberação de física (`Wait(1) -> FreezeEntityPosition(JobEntities.trailer, false)`) exatamente 1ms após a confirmação do acoplamento da 5ª roda no `StartCouplingWatcher`.
+- **Correção de Afundamento no Solo (`client/main.lua`):**
+  - Resolvido bug onde o `freighttrailer` spawnava afundado dentro do asfalto.
+  - Causa raiz: O cálculo legado com `GetGroundZFor_3dCoord` aplicava `SetEntityCoordsNoOffset(trailer, x, y, groundZ + 0.15)`. Como o ponto pivô de origem do `freighttrailer` fica na metade do chassi, colocar a origem a 15cm do chão enterrava as rodas e a base em mais de 1 metro.
+  - Substituído pelo assentamento físico nativo da Rockstar: `SetVehicleOnGroundProperly(trailer)` e abertura dos pés de apoio com `SetTrailerLegsRaised(trailer, false)`.
+- **Freeze Global Estabilizado (`server/main.lua` & `client/main.lua`):**
+  - O servidor replica o estado via StateBag OneSync (`isRigLoadingFrozen = true`).
+  - O cliente acomoda as suspensões e rodas no piso por 150ms e trava a física estática com `FreezeEntityPosition(trailer, true)`.
+  - Bloqueada a liberação prematura no `OnPlayerEnteredTruck` para `freighttrailer`.
+  - Liberação programada com `Wait(1) -> FreezeEntityPosition(trailer, false)` exatamente 1ms após o engate na 5ª roda.
 
 ## [20.9.15] — 2026-10-08 — Restauração Integral de Colisão Física entre Caminhão e Reboque
 

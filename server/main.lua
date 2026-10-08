@@ -953,9 +953,8 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
-    -- Freeze global para freighttrailer / carga pesada até o acoplamento do caminhão
+    -- Freeze global sincronizado para freighttrailer / carga pesada (o client assenta no solo e trava a física)
     if requestedTrailer == 'freighttrailer' or trailerModel == joaat('freighttrailer') or cargoType == 'heavy' then
-        FreezeEntityPosition(trailer, true)
         Entity(trailer).state:set('isRigLoadingFrozen', true, true)
     end
 

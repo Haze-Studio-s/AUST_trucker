@@ -3023,16 +3023,12 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 SetEntityVisible(trailer, true)
                 ResetEntityAlpha(trailer)
 
-                -- Assentamento de Solo Autoritativo (Raycast Z)
-                local trCoords = GetEntityCoords(trailer)
-                if trCoords and #(trCoords) > 1.0 then
-                    local foundGround, groundZ = GetGroundZFor_3dCoord(trCoords.x, trCoords.y, trCoords.z + 1.0, false)
-                    if foundGround then
-                        SetEntityCoordsNoOffset(trailer, trCoords.x, trCoords.y, groundZ + 0.15, false, false, false)
-                    end
-                end
-
+                -- Assentamento de Solo Autoritativo com física nativa de suspensão e pernas de apoio
+                FreezeEntityPosition(trailer, false)
                 SetEntityCollision(trailer, true, true)
+                SetVehicleOnGroundProperly(trailer)
+                pcall(function() SetTrailerLegsRaised(trailer, false) end)
+
                 SetVehicleDoorsLocked(trailer, 1)
                 SetVehicleDoorsLockedForAllPlayers(trailer, false)
                 SetVehicleExplodesOnHighExplosionDamage(trailer, false)
@@ -3049,9 +3045,16 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
                 local trModel = GetEntityModel(trailer)
                 if trModel == joaat('freighttrailer') or (payload and payload.cargoType == 'heavy') then
-                    FreezeEntityPosition(trailer, true)
-                    SetVehicleBrake(trailer, true)
-                    SetVehicleHandbrake(trailer, true)
+                    CreateThread(function()
+                        Wait(150)
+                        if DoesEntityExist(trailer) then
+                            SetVehicleOnGroundProperly(trailer)
+                            pcall(function() SetTrailerLegsRaised(trailer, false) end)
+                            FreezeEntityPosition(trailer, true)
+                            SetVehicleBrake(trailer, true)
+                            SetVehicleHandbrake(trailer, true)
+                        end
+                    end)
                 end
 
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
