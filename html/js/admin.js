@@ -469,9 +469,11 @@
         <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
         <td>R$ ${Number(payment).toLocaleString()} <span style="color:var(--admin-primary); font-size:10.5px;">(${escapeHtml(xp)} XP)</span></td>
         <td>${Number(dist).toFixed(1)} km <small style="color:var(--admin-text-muted);">(Lv ${r.req_skill || r.required_level || 1})</small></td>
-        <td style="text-align:center;">
-          <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
-          <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
+        <td style="text-align:center; white-space:nowrap;">
+          <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
+            <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
+            <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
+          </div>
         </td>
       `;
       tbody.appendChild(tr);
@@ -490,12 +492,39 @@
         showConfirmModal('Excluir Rota', `Deseja realmente remover a rota #${id}?`, () => {
           postNUI('adminDeleteRoute', { id: id });
           delete adminData.customRoutes[id];
+          const currId = document.getElementById('route-form-id')?.value.trim();
+          if (currId === id) {
+            clearRouteForm();
+          }
           renderRoutesTab();
           renderEconomyTab();
           showAdminToast(`Rota #${id} excluída com sucesso.`);
         });
       });
     });
+  }
+
+  function clearRouteForm() {
+    document.getElementById('route-form-id').value = '';
+    document.getElementById('route-form-title').value = '';
+    document.getElementById('route-form-type').value = 'freight';
+    document.getElementById('route-form-prop').value = 'hei_prop_carrier_cargo_04b';
+    document.getElementById('route-form-payment').value = 2500;
+    document.getElementById('route-form-xp').value = 150;
+    document.getElementById('route-form-distance').value = 5.0;
+    document.getElementById('route-form-level').value = 1;
+    populateRouteSpawnFolders('Geral');
+    document.getElementById('route-form-pickup-x').value = '';
+    document.getElementById('route-form-pickup-y').value = '';
+    document.getElementById('route-form-pickup-z').value = '';
+    document.getElementById('route-form-deliv-x').value = '';
+    document.getElementById('route-form-deliv-y').value = '';
+    document.getElementById('route-form-deliv-z').value = '';
+    document.getElementById('route-form-forklift').checked = false;
+    document.getElementById('route-form-adr').checked = false;
+
+    const delBtn = document.getElementById('btn-delete-route');
+    if (delBtn) delBtn.style.display = 'none';
   }
 
   function fillRouteForm(r) {
@@ -523,6 +552,9 @@
 
     document.getElementById('route-form-forklift').checked = (r.has_forklift == 1 || r.has_forklift === true);
     document.getElementById('route-form-adr').checked = (r.requires_adr == 1 || r.requires_adr === true || r.type === 'adr');
+
+    const delBtn = document.getElementById('btn-delete-route');
+    if (delBtn) delBtn.style.display = 'inline-flex';
   }
 
   function saveRouteForm() {
@@ -1526,6 +1558,28 @@
 
     const btnSaveRoute = document.getElementById('btn-save-route');
     if (btnSaveRoute) btnSaveRoute.addEventListener('click', saveRouteForm);
+
+    const btnDelRouteForm = document.getElementById('btn-delete-route');
+    if (btnDelRouteForm) {
+      btnDelRouteForm.addEventListener('click', function () {
+        const id = document.getElementById('route-form-id').value.trim();
+        if (!id) {
+          showAdminToast('Nenhuma rota selecionada para excluir.', 'error');
+          return;
+        }
+        showConfirmModal('Excluir Rota', `Deseja realmente remover a rota #${id}?`, () => {
+          postNUI('adminDeleteRoute', { id: id });
+          delete adminData.customRoutes[id];
+          renderRoutesTab();
+          renderEconomyTab();
+          clearRouteForm();
+          showAdminToast(`Rota #${id} excluída com sucesso.`);
+        });
+      });
+    }
+
+    const btnClearRouteForm = document.getElementById('btn-clear-route');
+    if (btnClearRouteForm) btnClearRouteForm.addEventListener('click', clearRouteForm);
 
     const btnSaveSpawn = document.getElementById('btn-save-spawn');
     if (btnSaveSpawn) btnSaveSpawn.addEventListener('click', saveSpawnForm);
