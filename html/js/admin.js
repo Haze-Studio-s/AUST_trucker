@@ -1383,8 +1383,8 @@
         <td style="font-family: monospace; font-size: 10.5px;">
           X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0}
         </td>
-        <td style="text-align:right; white-space: nowrap;">
-          <div style="display:inline-flex; gap:6px; justify-content:flex-end;">
+        <td style="text-align:center; white-space: nowrap;">
+          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
             <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
             <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
           </div>
@@ -1861,12 +1861,12 @@
         <td style="color:#f59e0b; font-weight:600;"><i class="fas fa-box"></i> ${item.prop_model}</td>
         <td><code>X: ${x} | Y: ${y} | Z: ${z}</code></td>
         <td><code>P: ${p}° | R: ${r}° | Y: ${yw}°</code></td>
-        <td style="text-align:right; white-space:nowrap;">
-          <div style="display:inline-flex; gap:6px; justify-content:flex-end;">
-            <button class="admin-btn admin-btn-outline" style="padding:4px 8px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})" title="Carregar no Editor">
+        <td style="text-align:center; white-space:nowrap;">
+          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
+            <button class="admin-btn admin-btn-outline" style="padding:3px 6px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})" title="Carregar no Editor">
               <i class="fas fa-edit"></i>
             </button>
-            <button class="admin-btn admin-btn-danger" style="padding:4px 8px; font-size:11px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')" title="Excluir">
+            <button class="admin-btn admin-btn-danger" style="padding:3px 6px; font-size:11px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')" title="Excluir">
               <i class="fas fa-trash"></i>
             </button>
           </div>
