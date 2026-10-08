@@ -2348,6 +2348,20 @@ RegisterNetEvent('aurp_trucker:client:levelUp', function(data)
     })
 end)
 
+RegisterNetEvent('aurp_trucker:client:refreshSkillsUI', function()
+    SendNUIMessage({
+        action = 'updateSkills',
+        refreshStats = true,
+    })
+end)
+
+CreateThread(function()
+    TriggerEvent('chat:addSuggestion', '/truckerxp', 'Comando ADM: Concede XP de caminhoneiro para testar skills e níveis.', {
+        { name = 'id', help = 'ID do jogador no servidor (ex: 1)' },
+        { name = 'quantidade', help = 'Quantidade de XP a conceder (ex: 5000)' }
+    })
+end)
+
 -- NUI Callbacks para gestão de empresas
 RegisterNUICallback('depositMoney', function(data, cb)
     local amount = tonumber(data.amount)

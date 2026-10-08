@@ -1,5 +1,18 @@
 # Changelog — AUST_trucker
 
+## [20.9.9] — 2026-10-07 — Comando Administrativo `/truckerxp`, Concessão de Níveis & Testes de Skill Tree
+
+### Adicionado & Aprimorado
+- **Comando Administrativo `/truckerxp` (`server/services/admin_service.lua`):**
+  - Implementado comando `/truckerxp [id] [quantidade]` com validação de permissões multi-framework via `AdminService.IsPlayerAdmin(src)` (FiveM ACE, QBX, QBCore, ESX Legacy e Console).
+  - Suporte a execução in-game com auto-atribuição ao omitir o ID (`/truckerxp <quantidade>`) e execução remota para qualquer jogador online (`/truckerxp <id> <quantidade>`).
+  - Convocação atômica de `ProgressionService.AddDirectXP(targetId, citizenId, amount)` com trava de concorrência (`WithProgLock`) e recálculo dinâmico de nível/rank com base em `Config.required_xp_to_levelup`.
+  - Atribuição automática de **+1 Skill Point por nível ganho** diretamente no banco de dados (`trucker_player_progression.skill_points`).
+  - Sincronização em tempo real com a interface NUI de habilidades (`action = 'updateSkills'`) e disparo de som/notificação de conquista (`aurp_trucker:client:levelUp`).
+- **Sugestão de Chat & Eventos Auxiliares (`client/client.lua`):**
+  - Registro de autocompletar e ajuda de parâmetros via `chat:addSuggestion`.
+  - Evento `aurp_trucker:client:refreshSkillsUI` para atualização instantânea da interface de habilidades mesmo em ganhos fracionários de XP.
+
 ## [20.9.8] — 2026-10-07 — Mecânica de Acoplamento de Containers (Reach Stacker), Blindagem Seletiva Anti-Catapulta & Multi-Slots
 
 ### Adicionado & Aprimorado

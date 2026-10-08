@@ -589,6 +589,123 @@ RegisterCommand('truckeradmin', function(source, args)
     TriggerClientEvent('aurp_trucker:client:openAdminPanel', src, payload)
 end, false)
 
+-- ============================================================
+-- COMANDO ADMINISTRATIVO: /truckerxp [id] [quantidade]
+-- Concede XP de caminhoneiro diretamente para testar o sistema
+-- de progressão, level-ups e árvore de skills.
+-- ============================================================
+
+RegisterCommand('truckerxp', function(source, args)
+    local src = source
+
+    -- Validação de Permissão Administrativa (Console + Multi-Framework)
+    if not AdminService.IsPlayerAdmin(src) then
+        if src ~= 0 then
+            TriggerClientEvent('ox_lib:notify', src, {
+                title = 'Acesso Negado',
+                description = 'Você não possui permissão administrativa para conceder XP.',
+                type = 'error'
+            })
+        else
+            print("[AUST_Trucker Admin] Permissão negada.")
+        end
+        return
+    end
+
+    local targetId = nil
+    local amount = nil
+
+    if #args >= 2 then
+        targetId = tonumber(args[1])
+        amount = tonumber(args[2])
+    elseif #args == 1 and src ~= 0 then
+        -- Se executado in-game com 1 argumento, auto-atribui ao admin
+        targetId = src
+        amount = tonumber(args[1])
+    end
+
+    local function NotifyCaller(title, desc, nType)
+        if src ~= 0 then
+            TriggerClientEvent('ox_lib:notify', src, {
+                title = title,
+                description = desc,
+                type = nType or 'inform',
+                duration = 7000
+            })
+        else
+            print(('[AUST_Trucker Admin] %s: %s'):format(title, desc))
+        end
+    end
+
+    if not targetId or not amount or amount <= 0 or amount ~= amount or amount == math.huge then
+        NotifyCaller('Sintaxe Inválida', 'Uso: /truckerxp [id] [quantidade]\nExemplo: /truckerxp 1 5000', 'error')
+        return
+    end
+
+    amount = math.floor(amount)
+    if amount > 10000000 then
+        NotifyCaller('Limite Excedido', 'A quantidade máxima de XP por comando é 10.000.000.', 'error')
+        return
+    end
+
+    local targetPlayer = Framework.GetPlayer(targetId)
+    if not targetPlayer then
+        NotifyCaller('Jogador Não Encontrado', ('O jogador com ID %s não está online ou não foi encontrado.'):format(tostring(targetId)), 'error')
+        return
+    end
+
+    local citizenId = Framework.GetCitizenId(targetPlayer)
+    if not citizenId or citizenId == '' then
+        NotifyCaller('Identificador Ausente', 'Não foi possível obter o CitizenID do jogador alvo.', 'error')
+        return
+    end
+
+    local targetName = Framework.GetCharName(targetPlayer) or ('ID ' .. tostring(targetId))
+
+    -- Concessão atômica via ProgressionService
+    local res = ProgressionService.AddDirectXP(targetId, citizenId, amount)
+
+    -- Feedback para o jogador alvo
+    if res.levelsGained and res.levelsGained > 0 then
+        if targetId ~= src then
+            TriggerClientEvent('ox_lib:notify', targetId, {
+                title = 'XP Administrativo Recebido',
+                description = ('Um administrador concedeu +%d XP para você! Nível %d alcançado (+%d Skill Points).'):format(
+                    amount, res.newLevel, res.levelsGained
+                ),
+                type = 'success',
+                duration = 8000
+            })
+        end
+    else
+        TriggerClientEvent('ox_lib:notify', targetId, {
+            title = 'XP de Caminhoneiro',
+            description = ('Você recebeu +%d XP de um administrador! (XP Total: %d)'):format(
+                amount, res.totalXP or 0
+            ),
+            type = 'inform',
+            duration = 6000
+        })
+        TriggerClientEvent('aurp_trucker:client:refreshSkillsUI', targetId)
+    end
+
+    -- Feedback detalhado para o Administrador
+    local adminFeedback = ('Concedido +%d XP para %s (ID: %d).\nNível: %d (+%d) | XP Total: %d | Skill Points: %d'):format(
+        amount,
+        targetName,
+        targetId,
+        res.newLevel or 1,
+        res.levelsGained or 0,
+        res.totalXP or 0,
+        res.totalSkillPoints or 0
+    )
+
+    NotifyCaller('XP Concedido com Sucesso', adminFeedback, 'success')
+    AdminLog(src, 'GRANT_XP', ('Target=%s (ID=%s) Amount=%d NewLevel=%s SkillPoints=%s'):format(
+        tostring(citizenId), tostring(targetId), amount, tostring(res.newLevel), tostring(res.totalSkillPoints)
+    ))
+end, false)
+
 lib.callback.register('aurp_trucker:server:getAdminData', function(source)
     if not AdminService.IsPlayerAdmin(source) then return nil end
     local currentOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
