@@ -844,6 +844,7 @@ local IsCalibratingSpawn = false
 local SpawnGhostEnt = nil
 local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local ActivePreviewEntities = {}
+local ActivePreviewMarkers = {}
 local IsPreviewActive = false
 
 function OffsetEditor.StartSpawnCalibration(data)
@@ -852,8 +853,9 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     data = data or {}
     local spawnType = tostring(data.spawn_type or 'truck'):lower()
+    local isMarker = (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
     local modelStr = data.model
-    local isVeh = true
+    local isVeh = not isMarker
 
     if not modelStr or modelStr == '' then
         if spawnType == 'truck' then modelStr = 'hauler'
@@ -862,7 +864,7 @@ function OffsetEditor.StartSpawnCalibration(data)
         elseif spawnType == 'handler' then modelStr = 'handler'
         else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
     else
-        if spawnType == 'pallet' or spawnType == 'prop' then isVeh = false end
+        if spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end
     end
 
     local ped = cache.ped or PlayerPedId()
@@ -897,7 +899,12 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     SetEntityAsMissionEntity(ghost, true, true)
     SetEntityLodDist(ghost, 0xFFFF)
-    SetEntityAlpha(ghost, 190, false)
+    if isMarker then
+        SetEntityVisible(ghost, false, false)
+        SetEntityAlpha(ghost, 0, false)
+    else
+        SetEntityAlpha(ghost, 190, false)
+    end
     SetEntityCollision(ghost, false, false)
     SetEntityInvincible(ghost, true)
     FreezeEntityPosition(ghost, true)
@@ -1009,14 +1016,57 @@ function OffsetEditor.StartSpawnCalibration(data)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1000 })
             end
 
+            -- Renderização Visual da Baia (DrawMarker)
+            if isMarker then
+                local mr, mg, mb = 16, 185, 129
+                if spawnType == 'delivery_bay' then
+                    mr, mg, mb = 239, 68, 68
+                end
+
+                -- Cilindro vertical da baia (Marker 1)
+                DrawMarker(
+                    1,
+                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z - 0.95,
+                    0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0,
+                    3.8, 3.8, 1.2,
+                    mr, mg, mb, 130,
+                    false, false, 2, false, nil, nil, false
+                )
+
+                -- Anel no solo rotacionado com o heading (Marker 27)
+                DrawMarker(
+                    27,
+                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 0.03,
+                    0.0, 0.0, 0.0,
+                    0.0, 0.0, CurrentSpawnCoords.heading or 0.0,
+                    3.8, 3.8, 1.0,
+                    mr, mg, mb, 200,
+                    false, false, 2, false, nil, nil, false
+                )
+
+                -- Seta direcional flutuante indicadora (Marker 2)
+                DrawMarker(
+                    2,
+                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 1.2,
+                    0.0, 0.0, 0.0,
+                    0.0, 180.0, 0.0,
+                    0.55, 0.55, 0.55,
+                    mr, mg, mb, 220,
+                    true, true, 2, false, nil, nil, false
+                )
+            end
+
             -- HUD
+            local titleTag = isMarker and ((spawnType == 'delivery_bay' and "~r~[GIZMO 3D - PONTO DE ENTREGA]~s~" or "~g~[GIZMO 3D - BAIA DE CARGA]~s~") .. "\n~c~(Marcador Visual DrawMarker)~s~") or "~g~[GIZMO DE SPAWN 3D]~s~"
             local hudText = string.format(
-                "~g~[GIZMO DE SPAWN 3D]~s~\n" ..
+                "%s\n" ..
                 "X: ~y~%.2f~s~ | Y: ~y~%.2f~s~ | Z: ~y~%.2f~s~\n" ..
                 "Heading: ~y~%.1f°~s~\n\n" ..
                 "[ALT]: Liberar Cursor Gizmo\n" ..
                 "[ENTER]: Confirmar Coordenadas\n" ..
                 "[ESC]: Cancelar",
+                titleTag,
                 CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z, CurrentSpawnCoords.heading
             )
             SetTextFont(0)
@@ -1118,6 +1168,7 @@ function OffsetEditor.StartPreview(spawnsList)
 
     IsPreviewActive = true
     ActivePreviewEntities = {}
+    ActivePreviewMarkers = {}
 
     -- Minimiza NUI para o admin caminhar pelo pátio
     SetNuiFocus(false, false)
@@ -1127,33 +1178,44 @@ function OffsetEditor.StartPreview(spawnsList)
         local c = s.coords
         if c then
             local sType = tostring(s.spawn_type or 'truck'):lower()
-            local modelStr = 'hauler'
-            local isVeh = true
+            local isMarker = (sType == 'load_bay' or sType == 'delivery_bay' or sType == 'marker' or sType == 'drawmarker' or sType == 'bay')
 
-            if sType == 'truck' then modelStr = 'hauler'
-            elseif sType == 'trailer' then modelStr = 'trailers2'
-            elseif sType == 'forklift' then modelStr = 'forklift'
-            else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
-
-            local h = joaat(modelStr)
-            lib.requestModel(h, 5000)
-
-            local ent = nil
-            if isVeh then
-                ent = CreateVehicle(h, c.x, c.y, c.z, c.heading or c.w or 0.0, false, false)
-                if ent and DoesEntityExist(ent) then SetVehicleDoorsLocked(ent, 2) end
+            if isMarker then
+                table.insert(ActivePreviewMarkers, {
+                    coords = c,
+                    type = sType,
+                    name = s.name or s.spawn_name or 'Baia'
+                })
             else
-                ent = CreateObject(h, c.x, c.y, c.z, false, false, false)
-            end
+                local modelStr = 'hauler'
+                local isVeh = true
 
-            if ent and DoesEntityExist(ent) then
-                SetEntityAsMissionEntity(ent, true, true)
-                SetEntityAlpha(ent, 185, false)
-                SetEntityCollision(ent, false, false)
-                SetEntityInvincible(ent, true)
-                FreezeEntityPosition(ent, true)
-                SetEntityHeading(ent, c.heading or c.w or 0.0)
-                table.insert(ActivePreviewEntities, ent)
+                if sType == 'truck' then modelStr = 'hauler'
+                elseif sType == 'trailer' then modelStr = 'trailers2'
+                elseif sType == 'forklift' then modelStr = 'forklift'
+                elseif sType == 'handler' then modelStr = 'handler'
+                else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+
+                local h = joaat(modelStr)
+                lib.requestModel(h, 5000)
+
+                local ent = nil
+                if isVeh then
+                    ent = CreateVehicle(h, c.x, c.y, c.z, c.heading or c.w or 0.0, false, false)
+                    if ent and DoesEntityExist(ent) then SetVehicleDoorsLocked(ent, 2) end
+                else
+                    ent = CreateObject(h, c.x, c.y, c.z, false, false, false)
+                end
+
+                if ent and DoesEntityExist(ent) then
+                    SetEntityAsMissionEntity(ent, true, true)
+                    SetEntityAlpha(ent, 185, false)
+                    SetEntityCollision(ent, false, false)
+                    SetEntityInvincible(ent, true)
+                    FreezeEntityPosition(ent, true)
+                    SetEntityHeading(ent, c.heading or c.w or 0.0)
+                    table.insert(ActivePreviewEntities, ent)
+                end
             end
         end
     end
@@ -1168,16 +1230,55 @@ function OffsetEditor.StartPreview(spawnsList)
         }
     })
 
+    local totalPreview = #ActivePreviewEntities + #ActivePreviewMarkers
     lib.notify({
         title = 'Modo Preview Ativo',
-        description = ('Visualizando %d pontos de spawn instanciados no pátio com segurança.'):format(#ActivePreviewEntities),
+        description = ('Visualizando %d pontos de spawn (veículos e baias) com segurança.'):format(totalPreview),
         type = 'success',
         duration = 5000
     })
 
     CreateThread(function()
         while IsPreviewActive do
-            Wait(5)
+            Wait(0)
+
+            -- Renderiza marcadores visuais das baias no pátio
+            for _, m in ipairs(ActivePreviewMarkers) do
+                local mc = m.coords
+                local mr, mg, mb = 16, 185, 129
+                if m.type == 'delivery_bay' then
+                    mr, mg, mb = 239, 68, 68
+                end
+
+                DrawMarker(
+                    1,
+                    mc.x, mc.y, mc.z - 0.95,
+                    0.0, 0.0, 0.0,
+                    0.0, 0.0, 0.0,
+                    3.8, 3.8, 1.2,
+                    mr, mg, mb, 120,
+                    false, false, 2, false, nil, nil, false
+                )
+                DrawMarker(
+                    27,
+                    mc.x, mc.y, mc.z + 0.03,
+                    0.0, 0.0, 0.0,
+                    0.0, 0.0, mc.heading or mc.w or 0.0,
+                    3.8, 3.8, 1.0,
+                    mr, mg, mb, 190,
+                    false, false, 2, false, nil, nil, false
+                )
+                DrawMarker(
+                    2,
+                    mc.x, mc.y, mc.z + 1.2,
+                    0.0, 0.0, 0.0,
+                    0.0, 180.0, 0.0,
+                    0.55, 0.55, 0.55,
+                    mr, mg, mb, 200,
+                    true, true, 2, false, nil, nil, false
+                )
+            end
+
             if IsControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 177) then -- Backspace / ESC
                 OffsetEditor.StopPreview()
                 break
@@ -1198,6 +1299,7 @@ function OffsetEditor.StopPreview()
         end
     end
     ActivePreviewEntities = {}
+    ActivePreviewMarkers = {}
 
     SendNUIMessage({ action = 'admin_restore' })
     SetNuiFocus(true, true)

@@ -1631,6 +1631,22 @@
       });
     }
 
+    const spawnTypeSelect = document.getElementById('spawn-form-type');
+    const spawnModelInput = document.getElementById('spawn-form-model');
+    if (spawnTypeSelect && spawnModelInput) {
+      spawnTypeSelect.addEventListener('change', function () {
+        const val = this.value;
+        if (val === 'load_bay' || val === 'delivery_bay') {
+          spawnModelInput.placeholder = 'Marcador DrawMarker (sem modelo 3D)';
+          spawnModelInput.value = '';
+          spawnModelInput.disabled = true;
+        } else {
+          spawnModelInput.disabled = false;
+          spawnModelInput.placeholder = 'ex: hauler, trailers2, forklift...';
+        }
+      });
+    }
+
     const btnGizmoSpawn = document.getElementById('btn-gizmo-spawn');
     if (btnGizmoSpawn) {
       btnGizmoSpawn.addEventListener('click', function () {
