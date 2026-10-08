@@ -545,12 +545,19 @@ window.addEventListener("message", async function (event) {
                 border = ` style="border: 1px solid rgba(239, 68, 68, 0.4); opacity: 0.72;"`;
             }
 
-            if (config.dealership && config.dealership[contract.truck]) {
-                icon = `<img src="${Utils.escapeHtml(config.dealership[contract.truck].img)}" class="img-width" alt="${Utils.escapeHtml(config.dealership[contract.truck].img)}">`;
-            } else {
-                icon = `<img src="img/trucks/hauler.png" class="img-width" alt="truck">`;
+            const truckModel = (contract.truck || contract.truckModel || 'hauler').toString().toLowerCase().trim();
+            const trailerModel = (contract.trailer || contract.trailerModel || 'trailers').toString().toLowerCase().trim();
+
+            let truckImg = `img/trucks/${Utils.escapeHtml(truckModel)}.png`;
+            if (config.dealership && config.dealership[contract.truck] && config.dealership[contract.truck].img) {
+                truckImg = config.dealership[contract.truck].img;
+            } else if (config.dealership && config.dealership[truckModel] && config.dealership[truckModel].img) {
+                truckImg = config.dealership[truckModel].img;
             }
-            icon += `<img src="img/trailers/${Utils.escapeHtml(contract.trailer)}.png" class="img-width" alt="${Utils.escapeHtml(contract.trailer)}">`;
+            const trailerImg = `img/trailers/${Utils.escapeHtml(trailerModel)}.png`;
+
+            icon = `<img src="${Utils.escapeHtml(truckImg)}" class="img-width" alt="${Utils.escapeHtml(truckModel)}" onerror="this.onerror=null; this.src='img/trucks/default.png';">`;
+            icon += `<img src="${Utils.escapeHtml(trailerImg)}" class="img-width" alt="${Utils.escapeHtml(trailerModel)}" onerror="this.onerror=null; this.src='img/trailers/default.png';">`;
 
             let partystart_btn = "";
             let button = "";
@@ -698,13 +705,20 @@ window.addEventListener("message", async function (event) {
         $("#trucks-page-list").empty();
         list_item = "";
         for (const truck of myTrucks) {
-            let truckInfo = (config.dealership && config.dealership[truck.truck_name]) ? config.dealership[truck.truck_name] : { name: truck.truck_name, img: "img/trucks/hauler.png" };
+            const truckModelKey = (truck.truck_name || 'hauler').toString().toLowerCase().trim();
+            const fallbackImg = `img/trucks/${truckModelKey}.png`;
+            let truckInfo = (config.dealership && config.dealership[truck.truck_name]) 
+                ? config.dealership[truck.truck_name] 
+                : ((config.dealership && config.dealership[truckModelKey]) 
+                    ? config.dealership[truckModelKey] 
+                    : { name: truck.truck_name || 'Caminhão', img: fallbackImg });
             truck.body = truck.body > 100 ? (truck.body / 10) : truck.body;
             truck.engine = truck.engine > 100 ? (truck.engine / 10) : truck.engine;
             truck.transmission = truck.transmission > 100 ? (truck.transmission / 10) : truck.transmission;
             truck.wheels = truck.wheels > 100 ? (truck.wheels / 10) : truck.wheels;
             if (truck.driver == 0 || truck.driver == null) {
                 $("#repair-truck-img").attr("src", truckInfo.img);
+                $("#repair-truck-img").attr("onerror", "this.onerror=null; this.src='img/trucks/default.png';");
                 $("#diagnostic-title-div").empty();
                 $("#diagnostic-title-div").append(`
 					<h4 class="text-uppercase">${Utils.translate("diagnostic_page_title")} <small>(${truckInfo.name})</small></h4>
@@ -842,7 +856,7 @@ window.addEventListener("message", async function (event) {
             }
             list_item += `
 				<li class="d-flex justify-content-between card-theme">
-					<div class="d-flex flex-row align-items-center"><img src="${Utils.escapeHtml(truckInfo.img)}" class="img-width" alt="Truck-Image">
+					<div class="d-flex flex-row align-items-center"><img src="${Utils.escapeHtml(truckInfo.img)}" class="img-width" alt="Truck-Image" onerror="this.onerror=null; this.src='img/trucks/default.png';">
 						<div class="ml-2">
 							<h6 class="mb-0">${Utils.escapeHtml(truckInfo.name)}</h6>
 							<div class="d-flex flex-row mt-1 text-black-50 date-time">

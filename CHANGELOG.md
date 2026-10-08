@@ -1,5 +1,23 @@
 # Changelog — AUST_trucker
 
+## [20.9.13] — 2026-10-07 — Sincronização Dinâmica de Miniaturas de Caminhões e Carretas (NUI) com Fallback Silencioso
+
+### Corrigido & Aprimorado
+- **Sincronização Dinâmica Front-end/Back-end (`html/panel.js`):**
+  - Resolvido bug visual onde cartões de contratos exibiam fotos genéricas ou estáticas (ex: `hauler.png` forçado quando o veículo não existia na concessionária estática).
+  - A renderização do painel agora lê dinamicamente `contract.truck` / `contract.truckModel` e `contract.trailer` / `contract.trailerModel`, buscando as imagens exatas na pasta de assets.
+  - Adicionado suporte dinâmico com fallback inteligente também na página de visualização da frota de caminhões da empresa (`#repair-truck-img` e lista de veículos).
+- **Sistema de Fallback Silencioso via HTML `onerror` (`html/panel.js`):**
+  - Implementado tratamento resiliente de erro com substituição imediata e silenciosa para silhuetas limpas (`img/trucks/default.png` e `img/trailers/default.png`) caso uma imagem de add-on ou modelo customizado não exista na pasta.
+  - Elimina completamente ícones de imagem quebrada no NUI do FiveM.
+- **Novos Assets Visuais Padronizados (`html/img/`):**
+  - Inserido `html/img/trailers/freighttrailer.png` (render do chassi de transporte de contêineres).
+  - Inserido `html/img/trailers/trflat.png` (render da carreta prancha / flatbed).
+  - Inserido `html/img/trucks/default.png` (silhueta transparente moderna de cavalo mecânico para fallback).
+  - Inserido `html/img/trailers/default.png` (silhueta transparente moderna de carreta/reboque para fallback).
+- **Propagação Dinâmica no Cliente Lua (`client/client.lua`):**
+  - Corrigido fallback legado de contratos para respeitar `j.truck or j.truckModel or "hauler"`.
+
 ## [20.9.12] — 2026-10-07 — Correção do Fluxo de Cargas Pesadas (Contêineres), Desacoplamento de Chassi e Operação do Reach Stacker
 
 ### Corrigido & Aprimorado
