@@ -6,7 +6,7 @@
 - **Correção de Chassi e Remoção de Contêiner Pré-Moldado (`shared/config.lua`, `server/main.lua`, `config/logistics_config.lua`, `client/main.lua`):**
   - Resolvido bug onde a carreta spawnava com um contêiner já soldado/moldado sobre ela antes mesmo do jogador içar a carga.
   - Causa raiz: O modelo nativo `docktrailer` do GTA V possui uma malha 3D fixa de contêiner fundida ao reboque, e diversas cargas gerais de paletes estavam incorretamente configuradas com `trailer = "docktrailer"`.
-  - Reboque padrão para cargas pesadas (`heavy`) atualizado para `freighttrailer` (chassi portuário genuíno e vazio) e suporte total ao `trflat`.
+  - **Obrigatoriedade Estrita de Reboque:** Todos os trabalhos e contratos voltados a contêiner (`heavy` / contêiner) spawnarão **obrigatoriamente** com o modelo `freighttrailer` (chassi portuário intermodal original vazio), com whitelist restrita a este modelo e override autoritativo garantido no servidor.
   - Implementada desativação automática de extras 1..14 (`SetVehicleExtra(trailer, i, 1)`) no servidor e no cliente, garantindo que o chassi da carreta permaneça 100% plano e vazio para o acoplamento do contêiner.
   - Cargas de paletes em `config/logistics_config.lua` corrigidas para `trflat`, e adicionados contratos dedicados de contêiner com `freighttrailer`.
 - **Desbloqueio e Início Imediato do Fluxo de Cargas Pesadas (`client/main.lua`, `html/panel.js`):**

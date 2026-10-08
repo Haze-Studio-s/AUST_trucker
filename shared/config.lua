@@ -377,9 +377,6 @@ Config.CargoTypes = {
         label = 'Carga Pesada (Contêiner / Reach Stacker)',
         allowedTrailers = {
             joaat('freighttrailer'),
-            joaat('trflat'),
-            joaat('trailers2'),
-            joaat('docktrailer'),
         },
         allowedTrucks = {
             joaat('hauler'),

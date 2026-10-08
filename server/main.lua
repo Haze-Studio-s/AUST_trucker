@@ -811,6 +811,10 @@ local function StartTruckDelivery(src, contractData)
     if not typeConfig then typeConfig = Config.CargoTypes.dry end
 
     local requestedTrailer = contractData.trailerModel or typeConfig.defaultTrailer
+    -- OBRIGATORIEDADE ABSOLUTA: Todos os trabalhos voltados a contêiner / carga pesada devem spawnar com freighttrailer
+    if cargoType == 'heavy' then
+        requestedTrailer = 'freighttrailer'
+    end
     local trailerModel = joaat(requestedTrailer)
 
     -- Validação autoritativa do modelo da carreta contra a lista permitida
@@ -831,7 +835,8 @@ local function StartTruckDelivery(src, contractData)
         elseif cargoType == 'heavy' then
             fallbackModel = 'freighttrailer'
         end
-        trailerModel = joaat(typeConfig.defaultTrailer or fallbackModel)
+        requestedTrailer = typeConfig.defaultTrailer or fallbackModel
+        trailerModel = joaat(requestedTrailer)
     end
 
     -- STEP A: SPAWN AND PLATE ENFORCEMENT

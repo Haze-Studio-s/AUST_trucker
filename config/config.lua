@@ -96,8 +96,9 @@ Config.TrailerCompany = {
     -- Trailers disponíveis
     trailers = {
         {model = "tanker", label = "Caminhão Tanque", price = 0},
-        {model = "trailers", label = "Container", price = 0},
-        {model = "trailers2", label = "Container Duplo", price = 0}
+        {model = "freighttrailer", label = "Chassi Porta-Contêiner (40ft / 20ft)", price = 0},
+        {model = "trailers", label = "Baú Carga Geral", price = 0},
+        {model = "trailers2", label = "Baú Duplo / Frigorífico", price = 0}
     }
 }
 
