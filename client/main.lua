@@ -2720,9 +2720,16 @@ lib.onCache('vehicle', function(veh)
                         sOffset = defOff
                         sRot = defHead
                     end
-                    if not sOffset then sOffset = vector3(0.0, 0.0, 0.35) end
+                    local finalPos = type(sOffset) == 'vector3' and sOffset or vector3(
+                        (type(sOffset) == 'table' and sOffset.x) or 0.0,
+                        (type(sOffset) == 'table' and sOffset.y) or 0.0,
+                        (type(sOffset) == 'table' and sOffset.z) or 0.35
+                    )
 
-                    local finalRot = type(sRot) == 'vector3' and sRot or vector3(0.0, 0.0, tonumber(sRot) or (type(sOffset) == 'table' and sOffset.heading) or 0.0)
+                    local pPitch = (type(sOffset) == 'table' and sOffset.rot_pitch) or 0.0
+                    local pRoll = (type(sOffset) == 'table' and sOffset.rot_roll) or 0.0
+                    local pYaw = (type(sOffset) == 'table' and (sOffset.rot_yaw or sOffset.heading)) or tonumber(sRot) or 0.0
+                    local finalRot = (type(sRot) == 'vector3' and sRot) or vector3(pPitch, pRoll, pYaw)
 
                     table.insert(LoadedPallets, {
                         entity = palletEnt,
@@ -2730,7 +2737,7 @@ lib.onCache('vehicle', function(veh)
                         riskLevel = 0,
                         lost = false,
                         slotIndex = stowedSlot or loaded,
-                        relOffset = sOffset,
+                        relOffset = finalPos,
                         relHeading = finalRot.z,
                         relRot = finalRot
                     })
@@ -2863,25 +2870,46 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     if payload and payload.trailerOffsets then
         pcall(function()
             for mKey, data in pairs(payload.trailerOffsets) do
-                local numKey = tonumber(mKey)
-                local h = numKey or joaat(tostring(mKey):lower())
-                if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
-                if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
-                if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
-                for idx, v in pairs(data.pallets or {}) do
-                    local sIdx = tonumber(idx)
-                    if sIdx and v then
-                        local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
-                        Config.TrailerSlots[h].pallets[sIdx] = slotEntry
-                        Config.TrailerSlots[mKey].pallets[sIdx] = slotEntry
-                        if numKey then Config.TrailerSlots[numKey].pallets[sIdx] = slotEntry end
+                if mKey ~= '_specific' and type(data) == 'table' then
+                    local numKey = tonumber(mKey)
+                    local h = numKey or joaat(tostring(mKey):lower())
+                    if not Config.TrailerSlots[h] then Config.TrailerSlots[h] = { pallets = {}, forklift = nil } end
+                    if not Config.TrailerSlots[mKey] then Config.TrailerSlots[mKey] = { pallets = {}, forklift = nil } end
+                    if numKey and not Config.TrailerSlots[numKey] then Config.TrailerSlots[numKey] = { pallets = {}, forklift = nil } end
+                    for idx, v in pairs(data.pallets or {}) do
+                        local sIdx = tonumber(idx)
+                        if sIdx and v then
+                            local slotEntry = {
+                                id = v.id,
+                                label = v.label,
+                                prop_model = v.prop_model,
+                                x = tonumber(v.x) or 0.0,
+                                y = tonumber(v.y) or 0.0,
+                                z = tonumber(v.z) or 0.0,
+                                heading = tonumber(v.heading) or 0.0,
+                                rot_pitch = tonumber(v.rot_pitch) or 0.0,
+                                rot_roll = tonumber(v.rot_roll) or 0.0,
+                                rot_yaw = tonumber(v.rot_yaw) or tonumber(v.heading) or 0.0
+                            }
+                            Config.TrailerSlots[h].pallets[sIdx] = slotEntry
+                            Config.TrailerSlots[mKey].pallets[sIdx] = slotEntry
+                            if numKey then Config.TrailerSlots[numKey].pallets[sIdx] = slotEntry end
+                        end
                     end
-                end
-                if data.forklift then
-                    local slotEntry = { id = data.forklift.id, label = data.forklift.label, prop_model = data.forklift.prop_model or 'forklift', x = tonumber(data.forklift.x) or 0.0, y = tonumber(data.forklift.y) or 0.0, z = tonumber(data.forklift.z) or 0.0, heading = tonumber(data.forklift.heading) or 0.0 }
-                    Config.TrailerSlots[h].forklift = slotEntry
-                    Config.TrailerSlots[mKey].forklift = slotEntry
-                    if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
+                    if data.forklift then
+                        local slotEntry = {
+                            id = data.forklift.id,
+                            label = data.forklift.label,
+                            prop_model = data.forklift.prop_model or 'forklift',
+                            x = tonumber(data.forklift.x) or 0.0,
+                            y = tonumber(data.forklift.y) or 0.0,
+                            z = tonumber(data.forklift.z) or 0.0,
+                            heading = tonumber(data.forklift.heading) or 0.0
+                        }
+                        Config.TrailerSlots[h].forklift = slotEntry
+                        Config.TrailerSlots[mKey].forklift = slotEntry
+                        if numKey then Config.TrailerSlots[numKey].forklift = slotEntry end
+                    end
                 end
             end
         end)
@@ -2891,8 +2919,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
     StartMissionStep1(nil, nil, nil)
 
     CreateThread(function()
-        -- Pré-carregamento assíncrono e protegido dos modelos de palete e contêiner
+        -- Pré-carregamento assíncrono e protegido do modelo de prop herdado da pasta
         CreateThread(function()
+            if payload and payload.cargoModel then
+                pcall(function()
+                    local cHash = type(payload.cargoModel) == 'number' and payload.cargoModel or joaat(payload.cargoModel)
+                    if IsModelInCdimage(cHash) or IsModelValid(cHash) then RequestModel(cHash) end
+                end)
+            end
             local palletProps = Config.PalletProps or (Config.Polarix and Config.Polarix.PalletModels) or {}
             for _, modelName in ipairs(palletProps) do
                 pcall(function()

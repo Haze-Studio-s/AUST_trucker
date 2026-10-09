@@ -196,20 +196,32 @@ end
 exports('GetVehiclePropOffset', GetVehiclePropOffset)
 
 function ForkliftModule.GetSlotOffset(trailer, slotIndex)
+    -- 1. Prioridade Absoluta: Offsets 3D da missão atual do jogador (_G.ActiveJob)
+    if _G.ActiveJob and _G.ActiveJob.trailerOffsets then
+        local spec = _G.ActiveJob.trailerOffsets._specific
+        if spec and spec.pallets then
+            local off = spec.pallets[slotIndex] or spec.pallets[tonumber(slotIndex)] or spec.pallets[tostring(slotIndex)]
+            if off then
+                local h = (type(off) == 'table' and (off.rot_yaw or off.heading)) or 0.0
+                return off, h
+            end
+        end
+    end
+
     local keys = GetTrailerHashKeys(trailer)
     if Config and Config.TrailerSlots then
-        -- 1. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
+        -- 2. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
         for _, k in ipairs(keys) do
             local slotData = Config.TrailerSlots[k]
             if slotData and slotData.pallets then
                 local off = slotData.pallets[slotIndex] or slotData.pallets[tonumber(slotIndex)] or slotData.pallets[tostring(slotIndex)]
                 if off then
-                    local h = (type(off) == 'table' and off.heading) or 0.0
+                    local h = (type(off) == 'table' and (off.rot_yaw or off.heading)) or 0.0
                     return off, h
                 end
             end
         end
-        -- 2. Varredura flexível por todas as entradas de Config.TrailerSlots comparando hash unsigned
+        -- 3. Varredura flexível por todas as entradas de Config.TrailerSlots comparando hash unsigned
         local targetU = keys[2]
         if targetU then
             for modelKey, sData in pairs(Config.TrailerSlots) do
@@ -219,7 +231,7 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
                 if keyU == targetU and sData.pallets then
                     local off = sData.pallets[slotIndex] or sData.pallets[tonumber(slotIndex)] or sData.pallets[tostring(slotIndex)]
                     if off then
-                        local h = (type(off) == 'table' and off.heading) or 0.0
+                        local h = (type(off) == 'table' and (off.rot_yaw or off.heading)) or 0.0
                         return off, h
                     end
                 end
@@ -238,18 +250,26 @@ function ForkliftModule.GetSlotOffset(trailer, slotIndex)
             end
         end
     end
-    -- Fallback sequencial em fileiras duplas (frente para trás)
-    local col = ((slotIndex - 1) % 2 == 0) and -0.55 or 0.55
-    local row = math.floor((slotIndex - 1) / 2)
-    local yOffset = 3.6 - (row * 2.4)
-    local fallback = { x = col, y = yOffset, z = 0.35, heading = 0.0 }
+
+    -- Posição neutra no chassis sem criar fileiras arbitrárias fictícias
+    local fallback = { x = 0.0, y = 0.0, z = 0.35, heading = 0.0 }
     return fallback, 0.0
 end
 
 function ForkliftModule.GetForkliftSlotOffset(trailer)
+    -- 1. Prioridade Absoluta: Offset da empilhadeira definido na missão atual
+    if _G.ActiveJob and _G.ActiveJob.trailerOffsets then
+        local spec = _G.ActiveJob.trailerOffsets._specific
+        if spec and spec.forklift then
+            local off = spec.forklift
+            local h = (type(off) == 'table' and off.heading) or 0.0
+            return off, h
+        end
+    end
+
     local keys = GetTrailerHashKeys(trailer)
     if Config and Config.TrailerSlots then
-        -- 1. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
+        -- 2. Verificação direta por todas as variações de chaves (raw, unsigned, signed, strings)
         for _, k in ipairs(keys) do
             local slotData = Config.TrailerSlots[k]
             if slotData and slotData.forklift then

@@ -639,6 +639,7 @@ local function StartTruckDelivery(src, contractData)
             contractData.pickupCoords = customRoute.pickup_coords
             contractData.deliveryCoords = customRoute.delivery_coords
             contractData.level_required = customRoute.req_skill or customRoute.required_level
+            contractData.spawn_folder = customRoute.spawn_folder
             if customRoute.has_forklift ~= nil then
                 srvForkliftFlag = (customRoute.has_forklift == 1 or customRoute.has_forklift == true)
             end
@@ -649,6 +650,61 @@ local function StartTruckDelivery(src, contractData)
             contractData.trailerModel = load.trailer
         end
     end
+
+    -- TRAVA DE HERANÇA ABSOLUTA: A Pasta de Spawns vinculada à rota é a autoridade máxima em tempo real
+    local targetFolder = contractData.spawn_folder
+    if targetFolder and targetFolder ~= '' and AdminService and AdminService.Spawns then
+        local tfLower = tostring(targetFolder):lower()
+        local folderSpawns = {}
+        for _, s in pairs(AdminService.Spawns) do
+            if tostring(s.folder_name or 'Geral'):lower() == tfLower then
+                table.insert(folderSpawns, s)
+            end
+        end
+
+        if #folderSpawns > 0 then
+            -- 1. Ponto de Coleta / Baia (prioriza 'load_bay')
+            local foundBay = nil
+            for _, s in ipairs(folderSpawns) do
+                if tostring(s.spawn_type):lower() == 'load_bay' and s.coords then
+                    foundBay = s.coords
+                    break
+                end
+            end
+            if not foundBay and folderSpawns[1] and folderSpawns[1].coords then
+                foundBay = folderSpawns[1].coords
+            end
+            if foundBay then
+                contractData.pickupCoords = foundBay
+            end
+
+            -- 2. Caminhão / Veículo da Pasta (tipo 'truck')
+            for _, s in ipairs(folderSpawns) do
+                if tostring(s.spawn_type):lower() == 'truck' and s.model and s.model ~= '' then
+                    contractData.truckModel = s.model
+                    break
+                end
+            end
+
+            -- 3. Reboque / Trailer da Pasta (tipo 'trailer')
+            for _, s in ipairs(folderSpawns) do
+                if tostring(s.spawn_type):lower() == 'trailer' and s.model and s.model ~= '' then
+                    contractData.trailerModel = s.model
+                    break
+                end
+            end
+
+            -- 4. Prop / Carga da Pasta (tipo 'pallet' ou 'prop')
+            for _, s in ipairs(folderSpawns) do
+                local st = tostring(s.spawn_type):lower()
+                if (st == 'pallet' or st == 'prop') and s.model and s.model ~= '' then
+                    contractData.cargoModel = s.model
+                    break
+                end
+            end
+        end
+    end
+
     -- withForklift: valor do servidor; o cliente só pode abrir mão da empilhadeira (sujeito à taxa de descarga)
     contractData.withForklift = (srvForkliftFlag ~= false) and not contractData.clientNoForklift
     if type(contractData.level_required) ~= 'number' then contractData.level_required = tonumber(contractData.level_required) end
@@ -811,15 +867,18 @@ local function StartTruckDelivery(src, contractData)
     if not typeConfig then typeConfig = Config.CargoTypes.dry end
 
     local requestedTrailer = contractData.trailerModel or typeConfig.defaultTrailer
-    -- OBRIGATORIEDADE ABSOLUTA: Todos os trabalhos voltados a contêiner / carga pesada devem spawnar com freighttrailer
-    if cargoType == 'heavy' then
+    -- Se o contrato/pasta não definiu reboque e for carga pesada, assume freighttrailer
+    if cargoType == 'heavy' and (not contractData.trailerModel or contractData.trailerModel == '') then
         requestedTrailer = 'freighttrailer'
     end
     local trailerModel = joaat(requestedTrailer)
 
     -- Validação autoritativa do modelo da carreta contra a lista permitida
     local isAllowedTrailer = false
-    if typeConfig.allowedTrailers then
+    if contractData.trailerModel and contractData.trailerModel ~= '' then
+        -- Trava de Herança Absoluta: reboque definido na pasta/contrato é 100% soberano
+        isAllowedTrailer = true
+    elseif typeConfig.allowedTrailers then
         for _, allowedHash in ipairs(typeConfig.allowedTrailers) do
             if trailerModel == allowedHash then
                 isAllowedTrailer = true
@@ -1063,16 +1122,16 @@ local function StartTruckDelivery(src, contractData)
             if AdminService and AdminService.GetOffsetsForTrailerAndCargo then
                 tOffsets = AdminService.GetOffsetsForTrailerAndCargo(reqKey, cModel)
             elseif AdminService and AdminService.TrailerOffsets then
-                tOffsets = AdminService.TrailerOffsets[reqKey]
+                tOffsets = AdminService.TrailerOffsets[reqKey .. '::' .. tostring(cModel or ''):lower()]
+                    or AdminService.TrailerOffsets[reqKey]
                     or AdminService.TrailerOffsets[requestedTrailer]
                     or AdminService.TrailerOffsets[trailerModel]
             end
             local slotData = tOffsets and tOffsets.pallets and (tOffsets.pallets[slotIdx] or tOffsets.pallets[tostring(slotIdx)])
+            -- Trava de Herança Absoluta: prop do slot configurado no offset > prop herdado da pasta
             local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)
                 or cModel
                 or contractData.cargo_model
-                or (Config.Polarix and Config.Polarix.PalletModels and Config.Polarix.PalletModels[((slotIdx - 1) % #Config.Polarix.PalletModels) + 1])
-                or (Config.Polarix and Config.Polarix.DefaultPalletModel)
                 or 'hei_prop_carrier_cargo_04b'
 
             local finalHash = nil
@@ -1440,10 +1499,31 @@ local function StartTruckDelivery(src, contractData)
         loadedCount = 0,
         deliveryCoords = destCoords,
         trailerModel = requestedTrailer or contractData.trailerModel,
-        trailerOffsets = (AdminService and AdminService.GetOffsetsForTrailerAndCargo and AdminService.GetOffsetsForTrailerAndCargo(requestedTrailer or contractData.trailerModel, contractData.cargoModel or contractData.cargo_model))
-            or (AdminService and AdminService.TrailerOffsets and (AdminService.TrailerOffsets[requestedTrailer or contractData.trailerModel]))
-            or (Config.TrailerSlots and Config.TrailerSlots[requestedTrailer or contractData.trailerModel])
-            or {}
+        trailerOffsets = (function()
+            local trkTrailer = requestedTrailer or contractData.trailerModel
+            local trkCargo = contractData.cargoModel or lobbyData.cargoModel
+            local specific = (AdminService and AdminService.GetOffsetsForTrailerAndCargo and AdminService.GetOffsetsForTrailerAndCargo(trkTrailer, trkCargo))
+            local allOffsets = (AdminService and AdminService.TrailerOffsets) or {}
+            local tKey = tostring(trkTrailer):lower()
+            local tHash = joaat(tKey)
+            local res = {}
+
+            if specific and specific.pallets and next(specific.pallets) ~= nil then
+                res[tKey] = specific
+                res[tHash] = specific
+                res[tostring(tHash)] = specific
+                res[(tHash & 0xFFFFFFFF)] = specific
+                res[tostring(tHash & 0xFFFFFFFF)] = specific
+            elseif allOffsets[tKey] then
+                res[tKey] = allOffsets[tKey]
+                res[tHash] = allOffsets[tKey]
+            elseif Config.TrailerSlots and Config.TrailerSlots[trkTrailer] then
+                res[tKey] = Config.TrailerSlots[trkTrailer]
+                res[tHash] = Config.TrailerSlots[trkTrailer]
+            end
+            res._specific = specific
+            return res
+        end)(),
     }
 
     if Config.Debug then
