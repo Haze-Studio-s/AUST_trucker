@@ -904,63 +904,122 @@ local function StartTruckDelivery(src, contractData)
         plate = ("TRK%04d"):format(math.random(1000, 9999))
     end
 
-    -- Iteração dinâmica com verificação de área livre no servidor (OneSync)
-    local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck', contractData and contractData.spawn_folder)) or {}
-    local truckSpawns = (#dynamicTruckSpawns > 0 and dynamicTruckSpawns) or wh.TruckSpawns or { wh.TruckSpawnCoords }
+    local isFreightContract = (contractData.contractType == 'freight' or contractData.contract_type == 'freight' or contractData.type == 'freight' or (contractData.contractType == 1) or (contractData.contract_type == 1) or isOwned)
+
+    -- Identificação Autoritativa de Caminhão Próprio do Jogador no Pátio (Frete)
+    local isPlayerWithOwnTruck = false
+    local ped = GetPlayerPed(src)
+    local curVeh = ped and (ped ~= 0) and GetVehiclePedIsIn(ped, false) or 0
     local truck = nil
     local chosenTruckCoord = nil
 
-    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para caminhão (Modelo: %s, Placa: %s)..."):format(selectedTruckModel, plate)) end
+    if curVeh ~= 0 and DoesEntityExist(curVeh) then
+        local curPlate = GetVehicleNumberPlateText(curVeh)
+        local cleanCur = curPlate and string.gsub(curPlate, "%s+", ""):upper() or ""
+        local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
+        if cleanCur == cleanSel or isOwned then
+            truck = curVeh
+            plate = curPlate
+            chosenTruckCoord = GetEntityCoords(truck)
+            isPlayerWithOwnTruck = true
+            isOwned = true
+        end
+    end
 
-    for idx, coord in ipairs(truckSpawns) do
-        if IsSpawnPointClear(coord, 4.5) then
-            truck = CreateVehicle(truckModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
-            local waitTimer = GetGameTimer()
-            while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
-            if DoesEntityExist(truck) then
-                chosenTruckCoord = coord
-                if Config.Debug then
-                    print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão criado com sucesso na vaga %d. NetID: %s"):format(
-                        idx, tostring(NetworkGetNetworkIdFromEntity(truck))
-                    ))
+    if not isPlayerWithOwnTruck and isOwned then
+        -- Procura o caminhão com a placa selecionada nas proximidades do jogador (pátio, raio de 120m)
+        local pedCoords = ped and (ped ~= 0) and GetEntityCoords(ped) or vector3(0,0,0)
+        local allVehs = GetAllVehicles()
+        for _, v in ipairs(allVehs) do
+            if DoesEntityExist(v) then
+                local vCoords = GetEntityCoords(v)
+                if #(vCoords - pedCoords) <= 120.0 then
+                    local vPlate = GetVehicleNumberPlateText(v)
+                    local cleanV = vPlate and string.gsub(vPlate, "%s+", ""):upper() or ""
+                    local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
+                    if cleanV == cleanSel then
+                        truck = v
+                        plate = vPlate
+                        chosenTruckCoord = vCoords
+                        isPlayerWithOwnTruck = true
+                        break
+                    end
                 end
-                break
             end
         end
     end
 
-    -- Fallback: Se nenhuma vaga esteve livre no loop inicial
-    if not truck or not DoesEntityExist(truck) then
-        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Todas as vagas primárias ocupadas para caminhão!")):format() end
+    -- Se o contrato for de Frete (Caminhão Próprio) mas o caminhão não estiver presente no pátio:
+    if isFreightContract and not isPlayerWithOwnTruck then
         ActiveSpawningPlayers[citizenId] = nil
-        TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de caminhão estão ocupadas no momento. Aguarde a liberação do pátio.', 'error')
+        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão Não Encontrado', 'Traga seu caminhão próprio para o pátio da transportadora antes de iniciar este frete!', 'error')
         return
     end
 
-    SetVehicleNumberPlateText(truck, plate)
-    SetVehicleDoorsLocked(truck, 1)
+    if isPlayerWithOwnTruck and truck and DoesEntityExist(truck) then
+        -- O jogador já está com seu caminhão próprio no pátio: NUNCA gera um 2º caminhão
+        if exports['qbx_vehiclekeys'] then pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end) end
+        if exports['qb-vehiclekeys'] then pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end) end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
+        TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Frete com caminhão próprio validado. Placa: %s, NetID: %s"):format(plate, tostring(NetworkGetNetworkIdFromEntity(truck)))) end
+    else
+        -- Trabalho Rápido / Caminhão de Frota Fornecido pela Transportadora
+        local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck', contractData and contractData.spawn_folder)) or {}
+        local truckSpawns = (#dynamicTruckSpawns > 0 and dynamicTruckSpawns) or wh.TruckSpawns or { wh.TruckSpawnCoords }
 
-    -- ENTREGA IMEDIATA DE CHAVES DO CAMINHÃO (ox_inventory + qbx_vehiclekeys)
-    if exports.ox_inventory then
-        local keyMetadata = {
-            plate = plate,
-            description = "Chave do Veículo - " .. plate
-        }
-        local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
-        if not added then
-            exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para caminhão (Modelo: %s, Placa: %s)..."):format(selectedTruckModel, plate)) end
+
+        for idx, coord in ipairs(truckSpawns) do
+            if IsSpawnPointClear(coord, 4.5) then
+                truck = CreateVehicle(truckModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(truck) and (GetGameTimer() - waitTimer < 5000) do Wait(10) end
+                if DoesEntityExist(truck) then
+                    chosenTruckCoord = coord
+                    if Config.Debug then
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão criado com sucesso na vaga %d. NetID: %s"):format(
+                            idx, tostring(NetworkGetNetworkIdFromEntity(truck))
+                        ))
+                    end
+                    break
+                end
+            end
         end
-    end
-    if exports['qbx_vehiclekeys'] then
-        pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
-    end
-    if exports['qb-vehiclekeys'] then
-        pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
-    end
-    TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
-    TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
 
-    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src))) end
+        -- Fallback: Se nenhuma vaga esteve livre no loop inicial
+        if not truck or not DoesEntityExist(truck) then
+            if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Todas as vagas primárias ocupadas para caminhão!")):format() end
+            ActiveSpawningPlayers[citizenId] = nil
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de caminhão estão ocupadas no momento. Aguarde a liberação do pátio.', 'error')
+            return
+        end
+
+        SetVehicleNumberPlateText(truck, plate)
+        SetVehicleDoorsLocked(truck, 1)
+
+        -- ENTREGA IMEDIATA DE CHAVES DO CAMINHÃO (ox_inventory + qbx_vehiclekeys)
+        if exports.ox_inventory then
+            local keyMetadata = {
+                plate = plate,
+                description = "Chave do Veículo - " .. plate
+            }
+            local added = exports.ox_inventory:AddItem(src, 'keys', 1, keyMetadata)
+            if not added then
+                exports.ox_inventory:AddItem(src, 'vehiclekey', 1, keyMetadata)
+            end
+        end
+        if exports['qbx_vehiclekeys'] then
+            pcall(function() exports['qbx_vehiclekeys']:GiveKeys(src, truck) end)
+        end
+        if exports['qb-vehiclekeys'] then
+            pcall(function() exports['qb-vehiclekeys']:GiveKeys(src, plate) end)
+        end
+        TriggerClientEvent('vehiclekeys:client:SetOwner', src, plate)
+        TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, plate)
+
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src))) end
+    end
 
     -- STEP B: TRAILER SPAWN
     local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer', contractData and contractData.spawn_folder)) or {}
@@ -968,22 +1027,46 @@ local function StartTruckDelivery(src, contractData)
     local trailer = nil
     local chosenTrailerCoord = nil
 
-    if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para carreta (Modelo: %s)..."):format(requestedTrailer)) end
+    local isQuickJobPallets = (cargoType == 'dry' and not isOwned)
 
-    for idx, coord in ipairs(trailerSpawns) do
-        local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
-        if distToTruck >= 14.0 and IsSpawnPointClear(coord, 5.0) then
-            trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
-            local waitTimer = GetGameTimer()
-            while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
-            if DoesEntityExist(trailer) then
-                chosenTrailerCoord = coord
-                if Config.Debug then
-                    print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s (Distância do Cavalo: %.1fm)"):format(
-                        idx, tostring(NetworkGetNetworkIdFromEntity(trailer)), distToTruck
-                    ))
+    -- Para Trabalho Rápido de Paletes: tenta posicionar o trailer alinhado logo atrás do cavalo
+    if isQuickJobPallets and chosenTruckCoord then
+        local rad = math.rad(chosenTruckCoord.w or 90.0)
+        local fwdX = -math.sin(rad)
+        local fwdY = math.cos(rad)
+        local trailerX = chosenTruckCoord.x - (fwdX * 5.8)
+        local trailerY = chosenTruckCoord.y - (fwdY * 5.8)
+        local trailerZ = chosenTruckCoord.z
+        local tH = chosenTruckCoord.w or 90.0
+
+        trailer = CreateVehicle(trailerModel, trailerX, trailerY, trailerZ + 0.4, tH, true, true)
+        local waitTimer = GetGameTimer()
+        while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+        if DoesEntityExist(trailer) then
+            chosenTrailerCoord = vector4(trailerX, trailerY, trailerZ, tH)
+            if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta de Quick Job gerada alinhada atrás do cavalo. NetID: %s"):format(tostring(NetworkGetNetworkIdFromEntity(trailer)))) end
+        end
+    end
+
+    -- Se não gerou alinhada (ou se for Frete com Caminhão Próprio / Outro tipo de carga): busca vaga livre no pátio
+    if not trailer or not DoesEntityExist(trailer) then
+        if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para carreta (Modelo: %s)..."):format(requestedTrailer)) end
+
+        for idx, coord in ipairs(trailerSpawns) do
+            local distToTruck = chosenTruckCoord and #(vector3(coord.x, coord.y, coord.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) or 999.0
+            if (isOwned or distToTruck >= 14.0) and IsSpawnPointClear(coord, 5.0) then
+                trailer = CreateVehicle(trailerModel, coord.x, coord.y, coord.z + 0.5, coord.w or 90.0, true, true)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(trailer) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+                if DoesEntityExist(trailer) then
+                    chosenTrailerCoord = coord
+                    if Config.Debug then
+                        print(("[AUST_Trucker DEBUG - ETAPA 3] Carreta criada com sucesso na vaga %d. NetID: %s (Distância do Cavalo: %.1fm)"):format(
+                            idx, tostring(NetworkGetNetworkIdFromEntity(trailer)), distToTruck
+                        ))
+                    end
+                    break
                 end
-                break
             end
         end
     end
@@ -991,7 +1074,7 @@ local function StartTruckDelivery(src, contractData)
     if not trailer or not DoesEntityExist(trailer) then
         if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Todas as vagas primárias de carreta ocupadas!")):format() end
         ActiveSpawningPlayers[citizenId] = nil
-        if DoesEntityExist(truck) then DeleteEntity(truck) end
+        if not isOwned and DoesEntityExist(truck) then DeleteEntity(truck) end
         TriggerClientEvent('aurp_trucker:notify', src, 'Pátio Bloqueado', 'Todas as vagas de carreta/reboque estão ocupadas no momento. Aguarde a liberação do pátio.', 'error')
         return
     end
@@ -1473,6 +1556,7 @@ local function StartTruckDelivery(src, contractData)
     local payload = {
         jobId = jobId,
         cargoType = cargoType,
+        isQuickJob = not isOwned,
         stage = 'STEP_GET_TRUCK',
         truckNetId = NetworkGetNetworkIdFromEntity(truck),
         truckCoords = chosenTruckCoord and vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z),

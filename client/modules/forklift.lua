@@ -10,6 +10,17 @@ local ActiveMissionPallets = {}
 local OperationActive = false
 local TextUIShowing = nil
 
+-- =======================================================================
+-- TOLERÂNCIA DE ENCAIXE / SNAP DOS PALETES (Configurável, Ampla e Suave)
+-- =======================================================================
+local FORKLIFT_SNAP_CONFIG = {
+    MaxDistXY = 1.35,      -- Raio horizontal ampliado (em vez de 0.65m)
+    MinDeltaZ = -0.45,     -- Tolerância de desnível inferior (em vez de -0.25m)
+    MaxDeltaZ = 0.45,      -- Tolerância de desnível superior (em vez de +0.25m)
+    MaxAngleDiff = 45.0,   -- Desvio angular permissivo (em vez de 25.0 graus)
+    MaxTrailerDist = 7.5   -- Raio máximo operacional em relação à carreta (em vez de 5.5m)
+}
+
 function ForkliftModule.IsPlayerInForklift()
     local ped = cache.ped or PlayerPedId()
     local veh = GetVehiclePedIsIn(ped, false)
@@ -1014,7 +1025,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                 local pState = PalletPhysState[p] or 'frozen'
 
                                 -- Tolerância de área de trabalho em relação ao trailer
-                                if distToTrailer <= 5.5 then
+                                if distToTrailer <= FORKLIFT_SNAP_CONFIG.MaxTrailerDist then
                                     local distXY = #(vector2(pCoords.x, pCoords.y) - vector2(ghostWorldCoords.x, ghostWorldCoords.y))
                                     local deltaZ = pCoords.z - ghostWorldCoords.z
 
@@ -1022,9 +1033,11 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local diffAngle = math.abs((curH - targetHeading) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                                    -- FAIXA DE ALINHAMENTO AMPLA (Diretriz 1 - Decisão do Usuário):
-                                    -- Raio horizontal XY <= 0.65m, altura Z entre -0.25m e +0.25m e ângulo <= 25 graus
-                                    local isAlignedWithGhost = (distXY <= 0.65) and (deltaZ >= -0.25 and deltaZ <= 0.25) and (diffAngle <= 25.0)
+                                    -- FAIXA DE ALINHAMENTO AMPLA E CONFORTÁVEL (Diretriz de Refatoração):
+                                    -- Raio horizontal XY <= 1.35m, altura Z entre -0.45m e +0.45m e ângulo <= 45.0 graus
+                                    local isAlignedWithGhost = (distXY <= FORKLIFT_SNAP_CONFIG.MaxDistXY)
+                                        and (deltaZ >= FORKLIFT_SNAP_CONFIG.MinDeltaZ and deltaZ <= FORKLIFT_SNAP_CONFIG.MaxDeltaZ)
+                                        and (diffAngle <= FORKLIFT_SNAP_CONFIG.MaxAngleDiff)
 
                                     if isAlignedWithGhost or pState == 'stowed_awaiting_recoil' then
                                         slotPalletCandidate = p

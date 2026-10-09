@@ -384,6 +384,15 @@ local function CleanupCurrentJob()
         end
     end
 
+    if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+        FreezeEntityPosition(JobEntities.truck, false)
+        SetVehicleHandbrake(JobEntities.truck, false)
+    end
+    if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+        FreezeEntityPosition(JobEntities.trailer, false)
+        SetVehicleHandbrake(JobEntities.trailer, false)
+    end
+
     ActiveJob = nil
     CurrentStage = 'IDLE'
     hasRopes = false
@@ -659,7 +668,25 @@ local function StartCouplingWatcher()
                         break
                     end
 
-                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR
+                    -- FLUXO DE PALETES: PULA COMPLETAMENTE A ETAPA DE BAIA!
+                    if ActiveJob and ActiveJob.cargoType == 'dry' then
+                        -- Congela fisicamente o caminhão e a carreta para evitar deslocamento com a empilhadeira
+                        if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                            FreezeEntityPosition(JobEntities.truck, true)
+                        end
+                        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                            FreezeEntityPosition(JobEntities.trailer, true)
+                        end
+
+                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                        if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                            UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                        end
+                        SendMissionNotify('Central Logística', 'Carreta engatada na 5ª roda com sucesso! O conjunto foi imobilizado. Assuma a empilhadeira para iniciar o carregamento.', 'success')
+                        break
+                    end
+
+                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR (APENAS PARA CONTAINER / TANQUE)
                     CurrentStage = 'STEP_4_PARK_DOCK'
                     local allocatedBay = nil
                     local reqJobId = ActiveJob and ActiveJob.jobId
@@ -841,6 +868,18 @@ local function CheckAllTiedAndStartRoute()
             pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
             ActiveStrappingZoneId = nil
         end
+
+        -- DESCONGELAMENTO FÍSICO DO CONJUNTO (CAMINHÃO E CARRETA) PARA A VIAGEM
+        if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+            FreezeEntityPosition(JobEntities.truck, false)
+            SetVehicleHandbrake(JobEntities.truck, false)
+        end
+        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+            FreezeEntityPosition(JobEntities.trailer, false)
+            SetVehicleHandbrake(JobEntities.trailer, false)
+        end
+
+        SendMissionNotify('Central Logística', 'Carga 100% amarrada e fixada! Entre no caminhão e inicie a rota rodoviária.', 'success')
 
         local dest = (ActiveJob and ActiveJob.deliveryCoords) or (Config.DeliveryCoords)
         if StartDeliveryRoute then
@@ -3190,6 +3229,63 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
 
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
                     UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
+                end
+            end
+
+            -- ACOPLAMENTO AUTOMÁTICO EM TRABALHOS RÁPIDOS DE PALETES (Diretriz do Usuário)
+            if truck and DoesEntityExist(truck) and trailer and DoesEntityExist(trailer) then
+                local isQuickJobPallets = (payload and payload.cargoType == 'dry' and not payload.isOwned)
+                if isQuickJobPallets then
+                    CreateThread(function()
+                        Wait(300) -- Aguarda estabilização física do spawn OneSync
+                        if not DoesEntityExist(truck) or not DoesEntityExist(trailer) then return end
+
+                        SetVehicleHandbrake(trailer, false)
+                        SetVehicleBrake(trailer, false)
+                        SetVehicleHandbrake(truck, false)
+                        SetVehicleBrake(truck, false)
+
+                        -- Tentativa de engate suave na 5ª roda
+                        AttachVehicleToTrailer(truck, trailer, 3.0)
+                        Wait(100)
+                        local hasTrailer, trailerEnt = GetVehicleTrailerVehicle(truck)
+                        if not hasTrailer or trailerEnt == 0 then
+                            hasTrailer = IsVehicleAttachedToTrailer(truck)
+                        end
+
+                        if not hasTrailer then
+                            -- Assistência com raio estendido
+                            AttachVehicleToTrailer(truck, trailer, 6.5)
+                            Wait(150)
+                            hasTrailer = IsVehicleAttachedToTrailer(truck)
+                        end
+
+                        if hasTrailer then
+                            -- CONGELAMENTO FÍSICO DE AMBOS OS VEÍCULOS DURANTE O CARREGAMENTO
+                            FreezeEntityPosition(truck, true)
+                            FreezeEntityPosition(trailer, true)
+
+                            -- Pula STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER e STEP_4_PARK_DOCK:
+                            -- Avança diretamente para a fase de carregamento com a empilhadeira!
+                            CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                            ClearObjectiveMarkers(false)
+
+                            -- Aguarda a empilhadeira ser instanciada para vincular o objetivo
+                            CreateThread(function()
+                                local wTimer = 0
+                                while (not JobEntities.forklift or not DoesEntityExist(JobEntities.forklift)) and wTimer < 4000 do
+                                    Wait(100)
+                                    wTimer = wTimer + 100
+                                end
+                                if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                    UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                end
+                            end)
+
+                            PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
+                            SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Assuma a empilhadeira para iniciar o carregamento dos paletes.', 'success')
+                        end
+                    end)
                 end
             end
         end)
