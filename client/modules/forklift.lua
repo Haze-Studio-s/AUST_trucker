@@ -14,11 +14,11 @@ local TextUIShowing = nil
 -- TOLERÂNCIA DE ENCAIXE / SNAP DOS PALETES (Configurável, Ampla e Suave)
 -- =======================================================================
 local FORKLIFT_SNAP_CONFIG = {
-    MaxDistXY = 5.00,      -- Raio horizontal ampliado 2x (em vez de 2.50m)
-    MinDeltaZ = -1.70,     -- Tolerância de desnível inferior ampliada 2x (em vez de -0.85m)
-    MaxDeltaZ = 1.70,      -- Tolerância de desnível superior ampliada 2x (em vez de +0.85m)
-    MaxAngleDiff = 90.0,   -- Desvio angular ampliado (permite aproximação frontal/diagonal total)
-    MaxTrailerDist = 20.0  -- Raio máximo operacional em relação à carreta ampliado 2x (em vez de 10.0m)
+    MaxDistXY = 2.00,      -- Raio horizontal (2.00m)
+    MinDeltaZ = -1.00,     -- Tolerância de desnível inferior (-1.00m)
+    MaxDeltaZ = 1.00,      -- Tolerância de desnível superior (+1.00m)
+    MaxAngleDiff = 90.0,   -- Desvio angular (90.0°)
+    MaxTrailerDist = 7.5   -- Alcance operacional em relação à carreta (7.5m)
 }
 
 function ForkliftModule.IsPlayerInForklift()
@@ -1033,8 +1033,8 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     local diffAngle = math.abs((curH - targetHeading) % 180)
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
-                                    -- FAIXA DE ALINHAMENTO AMPLA E CONFORTÁVEL (Diretriz de Tolerância 2x):
-                                    -- Raio horizontal XY <= 5.00m, altura Z entre -1.70m e +1.70m e ângulo <= 90.0 graus
+                                    -- FAIXA DE ALINHAMENTO CONFIGURADA:
+                                    -- Raio horizontal XY <= 2.00m, altura Z entre -1.00m e +1.00m e ângulo <= 90.0 graus
                                     local isAlignedWithGhost = (distXY <= FORKLIFT_SNAP_CONFIG.MaxDistXY)
                                         and (deltaZ >= FORKLIFT_SNAP_CONFIG.MinDeltaZ and deltaZ <= FORKLIFT_SNAP_CONFIG.MaxDeltaZ)
                                         and (diffAngle <= FORKLIFT_SNAP_CONFIG.MaxAngleDiff)
