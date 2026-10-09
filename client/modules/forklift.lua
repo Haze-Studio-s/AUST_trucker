@@ -14,11 +14,11 @@ local TextUIShowing = nil
 -- TOLERÂNCIA DE ENCAIXE / SNAP DOS PALETES (Configurável, Ampla e Suave)
 -- =======================================================================
 local FORKLIFT_SNAP_CONFIG = {
-    MaxDistXY = 1.35,      -- Raio horizontal ampliado (em vez de 0.65m)
-    MinDeltaZ = -0.45,     -- Tolerância de desnível inferior (em vez de -0.25m)
-    MaxDeltaZ = 0.45,      -- Tolerância de desnível superior (em vez de +0.25m)
-    MaxAngleDiff = 45.0,   -- Desvio angular permissivo (em vez de 25.0 graus)
-    MaxTrailerDist = 7.5   -- Raio máximo operacional em relação à carreta (em vez de 5.5m)
+    MaxDistXY = 2.50,      -- Raio horizontal ampliado para encaixe ágil (em vez de 1.35m)
+    MinDeltaZ = -0.85,     -- Tolerância de desnível inferior (em vez de -0.45m)
+    MaxDeltaZ = 0.85,      -- Tolerância de desnível superior (em vez de +0.45m)
+    MaxAngleDiff = 65.0,   -- Desvio angular generoso (em vez de 45.0 graus)
+    MaxTrailerDist = 10.0  -- Raio máximo operacional em relação à carreta (em vez de 7.5m)
 }
 
 function ForkliftModule.IsPlayerInForklift()
@@ -1034,7 +1034,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                                     if diffAngle > 90 then diffAngle = 180 - diffAngle end
 
                                     -- FAIXA DE ALINHAMENTO AMPLA E CONFORTÁVEL (Diretriz de Refatoração):
-                                    -- Raio horizontal XY <= 1.35m, altura Z entre -0.45m e +0.45m e ângulo <= 45.0 graus
+                                    -- Raio horizontal XY <= 2.50m, altura Z entre -0.85m e +0.85m e ângulo <= 65.0 graus
                                     local isAlignedWithGhost = (distXY <= FORKLIFT_SNAP_CONFIG.MaxDistXY)
                                         and (deltaZ >= FORKLIFT_SNAP_CONFIG.MinDeltaZ and deltaZ <= FORKLIFT_SNAP_CONFIG.MaxDeltaZ)
                                         and (diffAngle <= FORKLIFT_SNAP_CONFIG.MaxAngleDiff)
