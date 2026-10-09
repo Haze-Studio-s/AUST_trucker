@@ -353,6 +353,15 @@ local function CleanupCurrentJob()
 
     if LoadedPallets then
         for idx, pData in ipairs(LoadedPallets) do
+            if pData.strapEntity and DoesEntityExist(pData.strapEntity) then
+                if IsEntityAttached(pData.strapEntity) then
+                    DetachEntity(pData.strapEntity, false, false)
+                end
+                SetEntityAsMissionEntity(pData.strapEntity, true, true)
+                DeleteObject(pData.strapEntity)
+                DeleteEntity(pData.strapEntity)
+                pData.strapEntity = nil
+            end
             if pData.entity and DoesEntityExist(pData.entity) then
                 pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'aust_tie_current_pallet') end)
                 pcall(function() exports.ox_target:removeLocalEntity(pData.entity, 'tie_pallet_' .. idx) end)
@@ -951,6 +960,45 @@ local function ExecutePalletTie(index)
     if success then
         palletData.isSecured = true
         palletData.riskLevel = 0
+
+        -- SPAWN & ATTACH DA CINTA CATRACA CUSTOMIZADA (prop_ratchet_strap)
+        if palletEnt and DoesEntityExist(palletEnt) then
+            if palletData.strapEntity and DoesEntityExist(palletData.strapEntity) then
+                if IsEntityAttached(palletData.strapEntity) then
+                    DetachEntity(palletData.strapEntity, false, false)
+                end
+                DeleteEntity(palletData.strapEntity)
+                palletData.strapEntity = nil
+            end
+
+            local strapModel = joaat('prop_ratchet_strap')
+            RequestModel(strapModel)
+            local timeout = 100
+            while not HasModelLoaded(strapModel) and timeout > 0 do
+                Wait(10)
+                timeout = timeout - 1
+            end
+
+            if HasModelLoaded(strapModel) then
+                local pCoords = GetEntityCoords(palletEnt)
+                local strapObj = CreateObject(strapModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
+                if DoesEntityExist(strapObj) then
+                    SetEntityAsMissionEntity(strapObj, true, true)
+                    SetEntityCollision(strapObj, false, false)
+                    SetEntityInvincible(strapObj, true)
+                    AttachEntityToEntity(
+                        strapObj, palletEnt, 0,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        false, false, false, false, 2, true
+                    )
+                    palletData.strapEntity = strapObj
+                    table.insert(JobEntities.pallets, strapObj)
+                end
+                SetModelAsNoLongerNeeded(strapModel)
+            end
+        end
+
         PlaySoundFrontend(-1, "LOCAL_PLYR_CASH_COUNTER_COMPLETE", "DLC_HEISTS_GENERAL_FRONTEND_SOUNDS", true)
         SendMissionNotify('Central Logística', 'Palete amarrado com firmeza total.', 'success')
 
@@ -3497,6 +3545,7 @@ AddEventHandler('onResourceStop', function(resourceName)
         [joaat('sm3d_prop_logi_shelf_2')] = true,
         [joaat('sm3d_prop_logi_shelf_3')] = true,
         [joaat('prop_cs_fuel_nozle')] = true,
+        [joaat('prop_ratchet_strap')] = true,
     }
 
     local objects = GetGamePool('CObject')
