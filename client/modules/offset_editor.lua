@@ -1225,16 +1225,24 @@ function OffsetEditor.StartSpawnCalibration(data)
             local isEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
                 and not IsDisabledControlPressed(0, 24)
                 and not IsDisabledControlJustPressed(0, 24)
+                and not IsDisabledControlPressed(0, 18)
+                and not IsDisabledControlJustPressed(0, 18)
 
             if isEnter then
                 OffsetEditor.StopSpawnCalibration(SpawnCam, true)
-                break
+                if not IsCalibratingSpawn then
+                    break
+                else
+                    Wait(250)
+                end
             end
 
             -- Cancelar com ESC / Backspace
             if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
                 OffsetEditor.StopSpawnCalibration(SpawnCam, false)
-                break
+                if not IsCalibratingSpawn then
+                    break
+                end
             end
         end
     end)
