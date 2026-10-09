@@ -2272,14 +2272,14 @@
         <td style="font-weight:600; color:#cbd5e1;">#${item.id || '-'}</td>
         <td style="color:#38bdf8; font-weight:600;"><i class="fas fa-truck"></i> ${item.vehicle_model}</td>
         <td style="color:#f59e0b; font-weight:600;"><i class="fas fa-box"></i> ${item.prop_model}</td>
-        <td><code>X: ${x} | Y: ${y} | Z: ${z}</code></td>
-        <td><code>P: ${p}° | R: ${r}° | Y: ${yw}°</code></td>
+        <td><code style="color:#38bdf8;">X: ${x} | Y: ${y} | Z: ${z}</code></td>
+        <td><code style="color:#34d399;">P: ${p}° | R: ${r}° | Y: ${yw}°</code></td>
         <td style="text-align:center; white-space:nowrap;">
-          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
-            <button class="admin-btn admin-btn-outline" style="padding:3px 6px; font-size:11px;" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})" title="Carregar no Editor">
+          <div style="display:inline-flex; gap:6px; justify-content:center; align-items:center;">
+            <button class="admin-btn admin-btn-outline" onclick="loadPropEditorData('${item.vehicle_model}', '${item.prop_model}', ${x}, ${y}, ${z}, ${p}, ${r}, ${yw})" title="Carregar no Editor">
               <i class="fas fa-edit"></i>
             </button>
-            <button class="admin-btn admin-btn-danger" style="padding:3px 6px; font-size:11px;" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')" title="Excluir">
+            <button class="admin-btn admin-btn-danger" onclick="deletePropEditorData(${item.id || 0}, '${item.vehicle_model}', '${item.prop_model}')" title="Excluir">
               <i class="fas fa-trash"></i>
             </button>
           </div>
