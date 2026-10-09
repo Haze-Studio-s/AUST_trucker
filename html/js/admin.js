@@ -603,18 +603,14 @@
     document.getElementById('route-form-id').value = r.id || r.route_id || '';
     document.getElementById('route-form-title').value = r.name || r.title || '';
     document.getElementById('route-form-type').value = r.type || r.job_type || 'freight';
-    document.getElementById('route-form-prop').value = r.cargo_model || r.cargo_prop || 'hei_prop_carrier_cargo_04b';
+    const propInput = document.getElementById('route-form-prop');
+    if (propInput) propInput.value = r.cargo_model || r.cargo_prop || 'hei_prop_carrier_cargo_04b';
     document.getElementById('route-form-payment').value = r.base_payment || r.payment || 2500;
     document.getElementById('route-form-xp').value = r.base_xp || r.xp || 150;
     document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
     document.getElementById('route-form-level').value = r.req_skill || r.required_level || 1;
 
     populateRouteSpawnFolders(r.spawn_folder || 'Geral');
-
-    const pCoords = r.pickup_coords ? (typeof r.pickup_coords === 'string' ? JSON.parse(r.pickup_coords) : r.pickup_coords) : {};
-    document.getElementById('route-form-pickup-x').value = pCoords.x ? Number(pCoords.x).toFixed(2) : '';
-    document.getElementById('route-form-pickup-y').value = pCoords.y ? Number(pCoords.y).toFixed(2) : '';
-    document.getElementById('route-form-pickup-z').value = pCoords.z ? Number(pCoords.z).toFixed(2) : '';
 
     const dCoords = r.delivery_coords ? (typeof r.delivery_coords === 'string' ? JSON.parse(r.delivery_coords) : r.delivery_coords) : {};
     document.getElementById('route-form-deliv-x').value = dCoords.x ? Number(dCoords.x).toFixed(2) : '';
@@ -641,11 +637,11 @@
       return;
     }
 
-    const pickup = {
-      x: parseFloat(document.getElementById('route-form-pickup-x').value) || 0.0,
-      y: parseFloat(document.getElementById('route-form-pickup-y').value) || 0.0,
-      z: parseFloat(document.getElementById('route-form-pickup-z').value) || 0.0
-    };
+    const spawnsInFolder = Object.values(adminData.spawns || {}).filter(s => (s.folder_name || 'Geral') === spawnFolder);
+    if (spawnsInFolder.length === 0) {
+      showAdminToast("A pasta selecionada está incompleta. Configure o Ponto de Coleta, Veículos e Props na aba 'Spawns Dinâmicos' antes de vinculá-la a esta rota.", 'error');
+      return;
+    }
 
     const delivery = {
       x: parseFloat(document.getElementById('route-form-deliv-x').value) || 0.0,
@@ -660,8 +656,6 @@
       title: document.getElementById('route-form-title').value.trim() || 'Carga Personalizada',
       type: document.getElementById('route-form-type').value,
       job_type: document.getElementById('route-form-type').value,
-      cargo_model: document.getElementById('route-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b',
-      cargo_prop: document.getElementById('route-form-prop').value.trim() || 'hei_prop_carrier_cargo_04b',
       base_payment: parseInt(document.getElementById('route-form-payment').value) || 2500,
       payment: parseInt(document.getElementById('route-form-payment').value) || 2500,
       base_xp: parseInt(document.getElementById('route-form-xp').value) || 150,
@@ -671,7 +665,6 @@
       req_skill: parseInt(document.getElementById('route-form-level').value) || 1,
       required_level: parseInt(document.getElementById('route-form-level').value) || 1,
       spawn_folder: spawnFolder,
-      pickup_coords: pickup,
       delivery_coords: delivery,
       has_forklift: document.getElementById('route-form-forklift').checked ? 1 : 0,
       requires_adr: document.getElementById('route-form-adr').checked ? 1 : 0

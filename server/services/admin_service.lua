@@ -938,22 +938,84 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
     local rType = CleanStr(routeData.type, 20, 'quick')
     if not ROUTE_TYPES[rType] then rType = 'quick' end
 
+    -- Herança inteligente da Pasta de Spawns Dinâmicos
+    local inheritedPickup = nil
+    local inheritedTruck = nil
+    local inheritedTrailer = nil
+    local inheritedCargo = nil
+
+    local sFolderTarget = tostring(routeData.spawn_folder or 'Geral'):lower()
+    local folderSpawns = {}
+    if AdminService.Spawns then
+        for _, s in pairs(AdminService.Spawns) do
+            local fName = tostring(s.folder_name or 'Geral'):lower()
+            if fName == sFolderTarget then
+                table.insert(folderSpawns, s)
+            end
+        end
+    end
+
+    if #folderSpawns > 0 then
+        -- 1. Ponto de Coleta (Prioriza tipo 'load_bay', fallback para o primeiro ponto da pasta)
+        for _, s in ipairs(folderSpawns) do
+            if tostring(s.spawn_type):lower() == 'load_bay' and s.coords then
+                inheritedPickup = s.coords
+                break
+            end
+        end
+        if not inheritedPickup and folderSpawns[1] and folderSpawns[1].coords then
+            inheritedPickup = folderSpawns[1].coords
+        end
+
+        -- 2. Caminhão / Veículo (tipo 'truck')
+        for _, s in ipairs(folderSpawns) do
+            if tostring(s.spawn_type):lower() == 'truck' and s.model and s.model ~= '' then
+                inheritedTruck = s.model
+                break
+            end
+        end
+
+        -- 3. Trailer / Reboque (tipo 'trailer')
+        for _, s in ipairs(folderSpawns) do
+            if tostring(s.spawn_type):lower() == 'trailer' and s.model and s.model ~= '' then
+                inheritedTrailer = s.model
+                break
+            end
+        end
+
+        -- 4. Prop / Carga (tipo 'pallet' ou 'prop' ou qualquer com model configurado)
+        for _, s in ipairs(folderSpawns) do
+            local st = tostring(s.spawn_type):lower()
+            if (st == 'pallet' or st == 'prop') and s.model and s.model ~= '' then
+                inheritedCargo = s.model
+                break
+            end
+        end
+    end
+
+    -- Resolução com Fallback seguro para rotas legadas
+    local existing = AdminService.CustomRoutes[routeId]
+    local fallbackPickup = (existing and existing.pickup_coords) or routeData.pickup_coords
+    local fallbackTruck = (existing and existing.truck_model) or routeData.truck_model or 'hauler'
+    local fallbackTrailer = (existing and existing.trailer_model) or routeData.trailer_model or 'trailers2'
+    local fallbackCargo = (existing and existing.cargo_model) or routeData.cargo_model or 'hei_prop_carrier_cargo_04b'
+
     -- Somente campos sanitizados (nunca a tabela crua do cliente) vão para o banco e para a memória
     local clean = {
         id              = routeId,
         name            = CleanStr(routeData.name, 100, 'Nova Rota Customizada'),
         type            = rType,
-        cargo_model     = CleanStr(routeData.cargo_model, 100, 'hei_prop_carrier_cargo_04b'),
+        cargo_model     = CleanStr(inheritedCargo or fallbackCargo, 100, 'hei_prop_carrier_cargo_04b'),
         cargo_name      = CleanStr(routeData.cargo_name, 100, 'Paletes de Carga'),
-        truck_model     = CleanStr(routeData.truck_model, 50, 'hauler'),
-        trailer_model   = CleanStr(routeData.trailer_model, 50, 'trailers2'),
+        truck_model     = CleanStr(inheritedTruck or fallbackTruck, 50, 'hauler'),
+        trailer_model   = CleanStr(inheritedTrailer or fallbackTrailer, 50, 'trailers2'),
         base_payment    = math.floor(ClampNum(routeData.base_payment, 0, MAX_BASE_PAYMENT, 5000)),
         base_xp         = math.floor(ClampNum(routeData.base_xp, 0, MAX_BASE_XP, 200)),
         req_skill       = math.floor(ClampNum(routeData.req_skill, 0, 100, 0)),
         fragile         = routeData.fragile and 1 or 0,
         valuable        = routeData.valuable and 1 or 0,
         spawn_folder    = CleanStr(routeData.spawn_folder, 100, 'Geral'),
-        pickup_coords   = CleanCoords(routeData.pickup_coords),
+        pickup_coords   = CleanCoords(inheritedPickup or fallbackPickup),
         delivery_coords = CleanCoords(routeData.delivery_coords),
         is_active       = (routeData.is_active ~= false and routeData.is_active ~= 0) and 1 or 0,
     }
@@ -1562,6 +1624,7 @@ function AdminService.GetActiveContracts(citizenId)
                 adrRequired    = isAdr,
                 adrLocked      = adrLocked,
                 withForklift   = (r.has_forklift == 1 or r.has_forklift == true),
+                spawn_folder   = r.spawn_folder or 'Geral',
                 pickup_coords  = r.pickup_coords,
                 delivery_coords = r.delivery_coords,
                 palletCount    = 4,
@@ -1583,10 +1646,26 @@ function AdminService.GetActiveContracts(citizenId)
     return contracts
 end
 
-function AdminService.GetSpawnsByType(spawnType)
+function AdminService.GetSpawnsByType(spawnType, folderName)
     local results = {}
     if not AdminService.Spawns then return results end
     local targetType = tostring(spawnType or ''):lower()
+    local targetFolder = folderName and tostring(folderName):lower()
+
+    -- 1. Se informou folderName, busca primeiramente na pasta correspondente
+    if targetFolder and targetFolder ~= '' then
+        for _, s in pairs(AdminService.Spawns) do
+            local sFolder = tostring(s.folder_name or 'Geral'):lower()
+            if sFolder == targetFolder and tostring(s.spawn_type):lower() == targetType and s.coords then
+                table.insert(results, s.coords)
+            end
+        end
+    end
+
+    -- 2. Se encontrou spawns na pasta indicada, retorna eles
+    if #results > 0 then return results end
+
+    -- 3. Fallback: se não informou pasta ou a pasta não continha pontos daquele tipo, busca em todos os spawns
     for _, s in pairs(AdminService.Spawns) do
         if tostring(s.spawn_type):lower() == targetType and s.coords then
             table.insert(results, s.coords)

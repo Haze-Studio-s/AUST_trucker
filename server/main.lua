@@ -846,7 +846,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     -- Iteração dinâmica com verificação de área livre no servidor (OneSync)
-    local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck')) or {}
+    local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck', contractData and contractData.spawn_folder)) or {}
     local truckSpawns = (#dynamicTruckSpawns > 0 and dynamicTruckSpawns) or wh.TruckSpawns or { wh.TruckSpawnCoords }
     local truck = nil
     local chosenTruckCoord = nil
@@ -904,7 +904,7 @@ local function StartTruckDelivery(src, contractData)
     if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Caminhão destrancado com chaves entregues. Placa: %s, Jogador: %s"):format(plate, tostring(src))) end
 
     -- STEP B: TRAILER SPAWN
-    local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer')) or {}
+    local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer', contractData and contractData.spawn_folder)) or {}
     local trailerSpawns = (#dynamicTrailerSpawns > 0 and dynamicTrailerSpawns) or Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
     local trailer = nil
     local chosenTrailerCoord = nil
@@ -994,7 +994,7 @@ local function StartTruckDelivery(src, contractData)
     local reqPallets = dynamicPropCount and math.min(maxAllowedPallets, math.max(1, dynamicPropCount)) or math.min(maxAllowedPallets, math.max(1, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
-        local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift')) or {}
+        local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift', contractData and contractData.spawn_folder)) or {}
         local forkliftSpawns = (#dynamicForkSpawns > 0 and dynamicForkSpawns) or wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
         for idx, coord in ipairs(forkliftSpawns) do
@@ -1042,7 +1042,7 @@ local function StartTruckDelivery(src, contractData)
         end
 
         -- Spawn de Paletes Pré-Gerados (Polarix com Suporte a Props Customizados do Admin)
-        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet')) or {}
+        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet', contractData and contractData.spawn_folder)) or {}
         local rawPalletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
         local palletSpawns = {}
         for _, rawC in ipairs(rawPalletSpawns) do
@@ -1181,7 +1181,8 @@ local function StartTruckDelivery(src, contractData)
     elseif cargoType == 'heavy' then
         reqPallets = 1
         local yardCfg = (Config.CargoTypes and Config.CargoTypes.heavy and Config.CargoTypes.heavy.yard) or {}
-        local handlerSpawns = yardCfg.handlerSpawns or { wh.HandlerBayCoords or vector4(1130.11, -3083.45, 6.01, 269.29) }
+        local dynamicHandlerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('handler', contractData and contractData.spawn_folder)) or {}
+        local handlerSpawns = (#dynamicHandlerSpawns > 0 and dynamicHandlerSpawns) or yardCfg.handlerSpawns or { wh.HandlerBayCoords or vector4(1130.11, -3083.45, 6.01, 269.29) }
 
         for idx, coord in ipairs(handlerSpawns) do
             if IsSpawnPointClear(coord, 5.0, { [truck] = true, [trailer] = true }) then
@@ -1319,6 +1320,7 @@ local function StartTruckDelivery(src, contractData)
     local lobbyData = {
         jobId = jobId,
         routeId = contractData.id or contractData.route_id or nil,
+        spawnFolder = contractData.spawn_folder or 'Geral',
         src = src,
         citizenId = citizenId,
         bucketId = bucketId,

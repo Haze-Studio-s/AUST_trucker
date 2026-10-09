@@ -1112,11 +1112,7 @@
 										</div>
 									</div>
 
-									<div class="admin-grid-3">
-										<div class="admin-form-group">
-											<label>Prop 3D</label>
-											<input type="text" id="route-form-prop" class="admin-input" value="hei_prop_carrier_cargo_04b">
-										</div>
+									<div class="admin-grid-2">
 										<div class="admin-form-group">
 											<label>Pagamento (R$)</label>
 											<input type="number" id="route-form-payment" class="admin-input" value="2500">
@@ -1139,17 +1135,6 @@
 									</div>
 
 									<div class="admin-box-subtle" style="margin-bottom: 14px;">
-										<div style="margin-bottom: 10px;">
-											<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
-												<label style="margin:0; font-size:11px;">Ponto de Coleta (X, Y, Z)</label>
-												<button id="btn-cap-pickup" class="admin-btn admin-btn-outline" style="padding: 3px 8px; font-size:10.5px;"><i class="fas fa-crosshairs"></i> Capturar</button>
-											</div>
-											<div style="display:grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
-												<input type="number" step="0.01" id="route-form-pickup-x" class="admin-input" placeholder="X" style="height:32px; font-size:11px;">
-												<input type="number" step="0.01" id="route-form-pickup-y" class="admin-input" placeholder="Y" style="height:32px; font-size:11px;">
-												<input type="number" step="0.01" id="route-form-pickup-z" class="admin-input" placeholder="Z" style="height:32px; font-size:11px;">
-											</div>
-										</div>
 										<div>
 											<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom: 6px;">
 												<label style="margin:0; font-size:11px;">Ponto de Entrega (X, Y, Z)</label>
@@ -1160,6 +1145,10 @@
 												<input type="number" step="0.01" id="route-form-deliv-y" class="admin-input" placeholder="Y" style="height:32px; font-size:11px;">
 												<input type="number" step="0.01" id="route-form-deliv-z" class="admin-input" placeholder="Z" style="height:32px; font-size:11px;">
 											</div>
+										</div>
+										<div style="margin-top: 8px; font-size: 11px; color: #94a3b8; display:flex; align-items:center; gap:6px;">
+											<i class="fas fa-info-circle" style="color:var(--admin-primary);"></i>
+											<span>Coleta, veículos e props são herdados automaticamente da <strong>Pasta de Spawns</strong>.</span>
 										</div>
 									</div>
 

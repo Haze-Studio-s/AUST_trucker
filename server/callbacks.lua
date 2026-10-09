@@ -1769,7 +1769,9 @@ end)
 local ReservedBays = {} -- [bayIndex] = jobId
 
 lib.callback.register('aurp_trucker:server:requestLoadingBay', function(source, jobId)
-    local bays = Config.LoadingBays or (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.LoadingBays) or {
+    local lobby = jobId and PolarixLobbies and PolarixLobbies[jobId]
+    local dynamicBays = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('load_bay', lobby and lobby.spawnFolder)) or {}
+    local bays = (#dynamicBays > 0 and dynamicBays) or Config.LoadingBays or (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.LoadingBays) or {
         vector4(1244.02, -3135.68, 4.53, 90.0),
         vector4(1244.15, -3142.38, 4.53, 90.0),
         vector4(1243.28, -3149.17, 4.53, 90.0),
