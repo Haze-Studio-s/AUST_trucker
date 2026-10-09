@@ -34,6 +34,16 @@ local BatchSpawnState = {
 local ActiveCreatedTrailer = false
 local ActiveCalibCam = nil
 
+-- Variáveis de Calibração Visual de Pontos de Spawn (Visibilidade Global no Módulo)
+local IsCalibratingSpawn = false
+local SpawnGhostEnt = nil
+local SpawnCam = nil
+local ActiveDuplicationData = nil
+local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
+local ActivePreviewEntities = {}
+local ActivePreviewMarkers = {}
+local IsPreviewActive = false
+
 -- Cache de NPCs dinâmicos criados pelo Admin
 local DynamicAdminPeds = {}
 
@@ -747,13 +757,14 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 OffsetEditor.CopyPreviousSlot()
             end
 
-            -- 8. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) ESTRITAMENTE VIA TECLADO ENTER
-            -- NOTA: Controles 18 e 24 (Cliques de Mouse) são estritamente excluídos para não acidentar no Gizmo
-            local isKeyboardEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
-                and not IsDisabledControlPressed(0, 24)
-                and not IsDisabledControlJustPressed(0, 24)
-                and not IsDisabledControlPressed(0, 18)
-                and not IsDisabledControlJustPressed(0, 18)
+            -- 8. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) VIA TECLADO ENTER
+            local isKeyboardEnter = (
+                IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191) or
+                IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201) or
+                IsDisabledControlJustPressed(0, 18)  or IsControlJustPressed(0, 18)
+            )
+            and not IsDisabledControlPressed(0, 24)
+            and not IsDisabledControlJustPressed(0, 24)
 
             if isKeyboardEnter then
                 OffsetEditor.ConfirmCurrentSlot()
@@ -960,14 +971,6 @@ end)
 -- GIZMO 3D: CALIBRAÇÃO VISUAL DE PONTOS DE SPAWN
 -- ============================================================
 
-local IsCalibratingSpawn = false
-local SpawnGhostEnt = nil
-local SpawnCam = nil
-local ActiveDuplicationData = nil
-local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
-local ActivePreviewEntities = {}
-local ActivePreviewMarkers = {}
-local IsPreviewActive = false
 
 function OffsetEditor.StartSpawnCalibration(data)
     if IsCalibrating then return end
@@ -1013,6 +1016,7 @@ function OffsetEditor.StartSpawnCalibration(data)
         elseif spawnType == 'trailer' then modelStr = 'trailers2'
         elseif spawnType == 'forklift' then modelStr = 'forklift'
         elseif spawnType == 'handler' then modelStr = 'handler'
+        elseif spawnType == 'pallet' or spawnType == 'prop' then modelStr = 'prop_wood_pallet_01'; isVeh = false
         else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
     else
         if spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end
@@ -1221,12 +1225,14 @@ function OffsetEditor.StartSpawnCalibration(data)
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
 
-            -- Confirmar com ENTER
-            local isEnter = (IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191))
-                and not IsDisabledControlPressed(0, 24)
-                and not IsDisabledControlJustPressed(0, 24)
-                and not IsDisabledControlPressed(0, 18)
-                and not IsDisabledControlJustPressed(0, 18)
+            -- Confirmar com ENTER (Frontend R-Down 191, Accept 201, Enter 18)
+            local isEnter = (
+                IsDisabledControlJustPressed(0, 191) or IsControlJustPressed(0, 191) or
+                IsDisabledControlJustPressed(0, 201) or IsControlJustPressed(0, 201) or
+                IsDisabledControlJustPressed(0, 18)  or IsControlJustPressed(0, 18)
+            )
+            and not IsDisabledControlPressed(0, 24)
+            and not IsDisabledControlJustPressed(0, 24)
 
             if isEnter then
                 OffsetEditor.StopSpawnCalibration(SpawnCam, true)
@@ -1262,6 +1268,7 @@ function OffsetEditor.SpawnNextBatchItem()
         elseif spawnType == 'trailer' then modelStr = 'trailers2'
         elseif spawnType == 'forklift' then modelStr = 'forklift'
         elseif spawnType == 'handler' then modelStr = 'handler'
+        elseif spawnType == 'pallet' or spawnType == 'prop' then modelStr = 'prop_wood_pallet_01'; isVeh = false
         else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
     else
         if spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end

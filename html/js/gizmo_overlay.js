@@ -71,13 +71,31 @@
                 sendCallback('switchGizmoTarget', { target: 'strap' });
             };
         }
+        let isConfirming = false;
+        function triggerConfirm() {
+            if (isConfirming) return;
+            isConfirming = true;
+            if (btnConfirm) {
+                btnConfirm.style.transform = 'scale(0.95)';
+                btnConfirm.style.filter = 'brightness(1.2)';
+                setTimeout(() => {
+                    if (btnConfirm) {
+                        btnConfirm.style.transform = 'none';
+                        btnConfirm.style.filter = 'none';
+                    }
+                    isConfirming = false;
+                }, 300);
+            } else {
+                setTimeout(() => { isConfirming = false; }, 300);
+            }
+            sendCallback('confirmGizmoSlot');
+        }
+
         if (btnConfirm) {
             btnConfirm.onclick = function (e) {
                 e.preventDefault();
                 e.stopPropagation();
-                btnConfirm.style.transform = 'scale(0.95)';
-                setTimeout(() => { if (btnConfirm) btnConfirm.style.transform = 'none'; }, 150);
-                sendCallback('confirmGizmoSlot');
+                triggerConfirm();
             };
         }
         if (btnMode) {
@@ -108,11 +126,7 @@
             if (e.key === 'Enter') {
                 e.preventDefault();
                 e.stopPropagation();
-                if (btnConfirm) {
-                    btnConfirm.style.transform = 'scale(0.95)';
-                    setTimeout(() => { if (btnConfirm) btnConfirm.style.transform = 'none'; }, 150);
-                }
-                sendCallback('confirmGizmoSlot');
+                triggerConfirm();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
                 e.stopPropagation();
