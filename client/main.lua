@@ -353,6 +353,19 @@ local function CleanupCurrentJob()
 
     if LoadedPallets then
         for idx, pData in ipairs(LoadedPallets) do
+            if pData.strapEntities then
+                for _, sEnt in ipairs(pData.strapEntities) do
+                    if DoesEntityExist(sEnt) then
+                        if IsEntityAttached(sEnt) then
+                            DetachEntity(sEnt, false, false)
+                        end
+                        SetEntityAsMissionEntity(sEnt, true, true)
+                        DeleteObject(sEnt)
+                        DeleteEntity(sEnt)
+                    end
+                end
+                pData.strapEntities = nil
+            end
             if pData.strapEntity and DoesEntityExist(pData.strapEntity) then
                 if IsEntityAttached(pData.strapEntity) then
                     DetachEntity(pData.strapEntity, false, false)
@@ -963,6 +976,16 @@ local function ExecutePalletTie(index)
 
         -- SPAWN & ATTACH DA CINTA CATRACA CUSTOMIZADA (prop_ratchet_strap)
         if palletEnt and DoesEntityExist(palletEnt) then
+            if palletData.strapEntities then
+                for _, sEnt in ipairs(palletData.strapEntities) do
+                    if DoesEntityExist(sEnt) then
+                        if IsEntityAttached(sEnt) then DetachEntity(sEnt, false, false) end
+                        DeleteEntity(sEnt)
+                    end
+                end
+            end
+            palletData.strapEntities = {}
+
             if palletData.strapEntity and DoesEntityExist(palletData.strapEntity) then
                 if IsEntityAttached(palletData.strapEntity) then
                     DetachEntity(palletData.strapEntity, false, false)
@@ -980,20 +1003,58 @@ local function ExecutePalletTie(index)
             end
 
             if HasModelLoaded(strapModel) then
-                local pCoords = GetEntityCoords(palletEnt)
-                local strapObj = CreateObject(strapModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
-                if DoesEntityExist(strapObj) then
-                    SetEntityAsMissionEntity(strapObj, true, true)
-                    SetEntityCollision(strapObj, false, false)
-                    SetEntityInvincible(strapObj, true)
-                    AttachEntityToEntity(
-                        strapObj, palletEnt, 0,
-                        0.0, 0.0, 0.0,
-                        0.0, 0.0, 0.0,
-                        false, false, false, false, 2, true
-                    )
-                    palletData.strapEntity = strapObj
-                    table.insert(JobEntities.pallets, strapObj)
+                -- Busca configurações de cinta calibradas no banco para este slot/trailer
+                local slotIdx = palletData.slotIndex or index
+                local offData, _ = ForkliftModule.GetSlotOffset and ForkliftModule.GetSlotOffset(trailer, slotIdx)
+                local configuredStraps = (palletData.straps) or (offData and offData.straps)
+
+                if configuredStraps and type(configuredStraps) == 'table' and #configuredStraps > 0 then
+                    -- Aplica as cintas 6DoF exatas calibradas pelo admin vinculadas ao trailer
+                    for _, sData in ipairs(configuredStraps) do
+                        local sX = tonumber(sData.x) or 0.0
+                        local sY = tonumber(sData.y) or 0.0
+                        local sZ = tonumber(sData.z) or 0.0
+                        local sRx = tonumber(sData.rx) or 0.0
+                        local sRy = tonumber(sData.ry) or 0.0
+                        local sRz = tonumber(sData.rz or sData.heading) or 0.0
+
+                        local tCoords = GetEntityCoords(trailer)
+                        local strapObj = CreateObject(strapModel, tCoords.x, tCoords.y, tCoords.z, true, true, false)
+                        if DoesEntityExist(strapObj) then
+                            SetEntityAsMissionEntity(strapObj, true, true)
+                            SetEntityCollision(strapObj, false, false)
+                            SetEntityInvincible(strapObj, true)
+                            AttachEntityToEntity(
+                                strapObj, trailer, 0,
+                                sX, sY, sZ,
+                                sRx, sRy, sRz,
+                                false, false, false, false, 2, true
+                            )
+                            table.insert(palletData.strapEntities, strapObj)
+                            table.insert(JobEntities.pallets, strapObj)
+                            if not palletData.strapEntity then
+                                palletData.strapEntity = strapObj
+                            end
+                        end
+                    end
+                else
+                    -- Fallback padrão suave: cinta centralizada diretamente sobre o palete
+                    local pCoords = GetEntityCoords(palletEnt)
+                    local strapObj = CreateObject(strapModel, pCoords.x, pCoords.y, pCoords.z, true, true, false)
+                    if DoesEntityExist(strapObj) then
+                        SetEntityAsMissionEntity(strapObj, true, true)
+                        SetEntityCollision(strapObj, false, false)
+                        SetEntityInvincible(strapObj, true)
+                        AttachEntityToEntity(
+                            strapObj, palletEnt, 0,
+                            0.0, 0.0, 0.0,
+                            0.0, 0.0, 0.0,
+                            false, false, false, false, 2, true
+                        )
+                        palletData.strapEntity = strapObj
+                        table.insert(palletData.strapEntities, strapObj)
+                        table.insert(JobEntities.pallets, strapObj)
+                    end
                 end
                 SetModelAsNoLongerNeeded(strapModel)
             end
@@ -2937,7 +2998,8 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                                 heading = tonumber(v.heading) or 0.0,
                                 rot_pitch = tonumber(v.rot_pitch) or 0.0,
                                 rot_roll = tonumber(v.rot_roll) or 0.0,
-                                rot_yaw = tonumber(v.rot_yaw) or tonumber(v.heading) or 0.0
+                                rot_yaw = tonumber(v.rot_yaw) or tonumber(v.heading) or 0.0,
+                                straps = v.straps
                             }
                             Config.TrailerSlots[h].pallets[sIdx] = slotEntry
                             Config.TrailerSlots[mKey].pallets[sIdx] = slotEntry
@@ -3882,7 +3944,7 @@ CreateThread(function()
                 for _, sk in ipairs(storeKeys) do
                     if not Config.TrailerSlots[sk] then Config.TrailerSlots[sk] = { pallets = {}, forklift = nil } end
                     for idx, v in pairs(data.pallets or {}) do
-                        local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                        local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0, straps = v.straps }
                         Config.TrailerSlots[sk].pallets[tonumber(idx)] = slotEntry
                         Config.TrailerSlots[sk].pallets[tostring(idx)] = slotEntry
                     end

@@ -1219,7 +1219,7 @@
 										<input type="text" id="spawn-form-name" class="admin-input" placeholder="ex: Vaga de Caminhão Paleto">
 									</div>
 
-									<div class="admin-grid-2">
+									<div style="display:grid; grid-template-columns: 1.2fr 1.6fr 0.8fr; gap: 8px;">
 										<div class="admin-form-group">
 											<label>Tipo de Entidade</label>
 											<select id="spawn-form-type" class="admin-select">
@@ -1236,6 +1236,10 @@
 											<label>Modelo / Prop Específico</label>
 											<input type="text" id="spawn-form-model" list="spawn-model-suggestions" class="admin-input" placeholder="ex: prop_boxpile_07d, hauler, forklift...">
 											<datalist id="spawn-model-suggestions"></datalist>
+										</div>
+										<div class="admin-form-group">
+											<label>Quantidade</label>
+											<input type="number" id="spawn-form-quantity" class="admin-input" min="1" max="20" value="1" placeholder="1" title="Posicionamento sequencial contínuo em lote via Gizmo 3D">
 										</div>
 									</div>
 
@@ -1681,6 +1685,17 @@
 			<canvas id="gizmo-three-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
 			<!-- Barra Flutuante de Ação do Gizmo 3D -->
 			<div id="gizmo-hud-bar" style="position: absolute; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; align-items: center; z-index: 1000000; pointer-events: auto;">
+				<div id="gizmo-batch-badge" style="display:none; background: rgba(15, 23, 42, 0.9); color: #38bdf8; border: 1px solid #0284c7; padding: 9px 16px; border-radius: 8px; font-weight: 700; font-size: 13px; box-shadow: 0 4px 15px rgba(2,132,199,0.3);">
+					<i class="fas fa-layer-group"></i> <span id="gizmo-batch-text">Item 1 de 1</span>
+				</div>
+				<div id="gizmo-target-toggle-group" style="display:none; background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(255,255,255,0.15); padding: 4px; border-radius: 8px; gap: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">
+					<button id="btn-gizmo-target-cargo" style="background: #10b981; color: white; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; transition: all 0.15s ease;">
+						<i class="fas fa-box"></i> Carga
+					</button>
+					<button id="btn-gizmo-target-strap" style="background: transparent; color: #94a3b8; border: none; padding: 7px 14px; border-radius: 6px; font-weight: 600; font-size: 12px; cursor: pointer; transition: all 0.15s ease;">
+						<i class="fas fa-link"></i> Cinta Catraca
+					</button>
+				</div>
 				<button id="btn-gizmo-confirm" style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(16,185,129,0.4); transition: transform 0.15s ease;">
 					<i class="fas fa-check"></i> Confirmar Posição (ENTER)
 				</button>

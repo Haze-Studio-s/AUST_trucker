@@ -2038,11 +2038,20 @@
     const btnGizmoSpawn = document.getElementById('btn-gizmo-spawn');
     if (btnGizmoSpawn) {
       btnGizmoSpawn.addEventListener('click', function () {
-        const sType = document.getElementById('spawn-form-type').value || 'truck';
-        const sModel = document.getElementById('spawn-form-model').value.trim() || '';
+        const sType = document.getElementById('spawn-form-type')?.value || 'truck';
+        const sModel = (document.getElementById('spawn-form-model')?.value || '').trim();
+        const sQty = parseInt(document.getElementById('spawn-form-quantity')?.value, 10) || 1;
+        const sName = (document.getElementById('spawn-form-name')?.value || '').trim();
+        const sId = (document.getElementById('spawn-form-id')?.value || '').trim();
+        const sFolder = (document.getElementById('spawn-form-folder')?.value || '').trim() || 'Geral';
+
         postNUI('adminStartSpawnGizmo', {
           spawn_type: sType,
-          model: sModel
+          model: sModel,
+          quantity: Math.max(1, sQty),
+          base_name: sName,
+          base_id: sId,
+          folder_name: sFolder
         });
       });
     }

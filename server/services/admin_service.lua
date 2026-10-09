@@ -381,6 +381,14 @@ function AdminService.ReloadTrailerOffsets()
             if folderName ~= 'Geral' and rawModelMap[model].folder_name == 'Geral' then rawModelMap[model].folder_name = folderName end
         end
 
+        local strapsList = nil
+        if o.straps and o.straps ~= '' then
+            local ok, dec = pcall(json.decode, o.straps)
+            if ok and type(dec) == 'table' then
+                strapsList = dec
+            end
+        end
+
         local vecData = {
             id = o.id,
             label = o.label or nil,
@@ -391,7 +399,8 @@ function AdminService.ReloadTrailerOffsets()
             x = tonumber(o.offset_x) or 0.0,
             y = tonumber(o.offset_y) or 0.0,
             z = tonumber(o.offset_z) or 0.0,
-            heading = tonumber(o.heading) or 0.0
+            heading = tonumber(o.heading) or 0.0,
+            straps = strapsList
         }
         local isFork = (o.is_forklift == 1 or o.is_forklift == true or tonumber(o.is_forklift) == 1 or tostring(o.is_forklift) == '1')
         if isFork then
@@ -1153,6 +1162,90 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('Ponto de spawn "%s" gravado na pasta "%s"!'):format(clean.id, clean.folder_name), type = 'success', duration = 5000 })
 end)
 
+RegisterNetEvent('aurp_trucker:server:adminSaveBatchSpawns', function(items)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) or type(items) ~= 'table' or #items == 0 then return end
+
+    local countSaved = 0
+    for _, item in ipairs(items) do
+        if type(item) == 'table' then
+            local spawnId = CleanId(item.id, 50)
+            local name = CleanStr(item.name, 100, spawnId)
+            local sType = CleanStr(item.spawn_type, 50, 'truck'):lower()
+            local model = CleanStr(item.model, 100, nil)
+            local folderName = CleanStr(item.folder_name, 100, 'Geral')
+            local coords = item.coords
+
+            if spawnId and coords and type(coords) == 'table' and coords.x and coords.y and coords.z then
+                local x = tonumber(coords.x) or 0.0
+                local y = tonumber(coords.y) or 0.0
+                local z = tonumber(coords.z) or 0.0
+                local heading = tonumber(coords.heading or coords.w or item.heading) or 0.0
+
+                local cleanCoords = {
+                    x = tonumber(string.format("%.2f", x)),
+                    y = tonumber(string.format("%.2f", y)),
+                    z = tonumber(string.format("%.2f", z)),
+                    heading = tonumber(string.format("%.1f", heading)),
+                    w = tonumber(string.format("%.1f", heading))
+                }
+
+                local clean = {
+                    id = spawnId,
+                    name = name,
+                    spawn_type = sType,
+                    model = model or '',
+                    folder_name = folderName,
+                    coords = cleanCoords,
+                    heading = cleanCoords.heading
+                }
+
+                -- Garante que a pasta exista
+                local folderExists = false
+                for _, f in ipairs(AdminService.SpawnFolders) do
+                    if f == folderName then folderExists = true; break end
+                end
+                if not folderExists then
+                    table.insert(AdminService.SpawnFolders, folderName)
+                end
+
+                local coordsJson = json.encode(clean.coords)
+                pcall(function()
+                    local existingRow = MySQL.single.await('SELECT id FROM aust_trucker_spawns WHERE id = ? LIMIT 1', { clean.id })
+                    if existingRow and existingRow.id then
+                        MySQL.query.await([[
+                            UPDATE aust_trucker_spawns
+                            SET name = ?, spawn_type = ?, model = ?, folder_name = ?, coords = ?, heading = ?
+                            WHERE id = ?
+                        ]], { clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading, clean.id })
+                    else
+                        MySQL.query.await([[
+                            INSERT INTO aust_trucker_spawns (id, name, spawn_type, model, folder_name, coords, heading)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        ]], { clean.id, clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading })
+                    end
+                end)
+
+                AdminService.Spawns[spawnId] = clean
+                countSaved = countSaved + 1
+            end
+        end
+    end
+
+    if countSaved > 0 then
+        AdminLog(src, 'adminSaveBatchSpawns', ('%d ponto(s) de spawn salvos em lote'):format(countSaved))
+        TriggerClientEvent('aurp_trucker:client:adminSyncSpawnFolders', -1, AdminService.SpawnFolders)
+        TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
+        TriggerClientEvent('ox_lib:notify', src, {
+            title = 'Admin Trucker',
+            description = ('Lote de %d ponto(s) de spawn salvo com sucesso!'):format(countSaved),
+            type = 'success',
+            duration = 5000
+        })
+    end
+end)
+
+
 RegisterNetEvent('aurp_trucker:server:adminDeleteSpawn', function(spawnId)
     local src = source
     if not AdminService.IsPlayerAdmin(src) then return end
@@ -1184,19 +1277,28 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
     local folderName = CleanStr(data.folderName or data.folder_name, 100, 'Geral')
     local ox, oy, oz = ClampNum(data.x, -50.0, 50.0, 0.0), ClampNum(data.y, -50.0, 50.0, 0.0), ClampNum(data.z, -50.0, 50.0, 0.0)
     local heading = ClampNum(data.heading, -360.0, 360.0, 0.0)
+    local strapsJson = nil
+    if data.straps then
+        if type(data.straps) == 'table' then
+            strapsJson = json.encode(data.straps)
+        elseif type(data.straps) == 'string' and data.straps ~= '' then
+            strapsJson = data.straps
+        end
+    end
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_trailer_offsets
-        (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift, custom_name, prop_count, folder_name)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (trailer_model, label, prop_model, slot_index, offset_x, offset_y, offset_z, heading, is_forklift, custom_name, prop_count, folder_name, straps)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
         label = VALUES(label), offset_x = VALUES(offset_x), offset_y = VALUES(offset_y), offset_z = VALUES(offset_z),
-        heading = VALUES(heading), custom_name = VALUES(custom_name), prop_count = VALUES(prop_count), folder_name = VALUES(folder_name)
+        heading = VALUES(heading), custom_name = VALUES(custom_name), prop_count = VALUES(prop_count), folder_name = VALUES(folder_name),
+        straps = VALUES(straps)
     ]], {
-        trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift, customName, propCount, folderName
+        trailerModel, label, propModel, slotIndex, ox, oy, oz, heading, isForklift, customName, propCount, folderName, strapsJson
     })
 
-    AdminLog(src, 'adminSaveTrailerOffset', ('%s prop=%s slot=%d fork=%d custom="%s" count=%d folder="%s"'):format(trailerModel, propModel, slotIndex, isForklift, customName or '', propCount, folderName))
+    AdminLog(src, 'adminSaveTrailerOffset', ('%s prop=%s slot=%d fork=%d custom="%s" count=%d folder="%s" hasStraps=%s'):format(trailerModel, propModel, slotIndex, isForklift, customName or '', propCount, folderName, tostring(strapsJson ~= nil)))
 
     -- Recarrega e normaliza dados frescos do banco
     local updatedOffsets, cleanOffsets = AdminService.ReloadTrailerOffsets()
@@ -1211,7 +1313,8 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
         x = ox,
         y = oy,
         z = oz,
-        heading = heading
+        heading = heading,
+        straps = (type(data.straps) == 'table' and data.straps) or (strapsJson and json.decode(strapsJson)) or nil
     }
     TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, offsetPayload, heading, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {

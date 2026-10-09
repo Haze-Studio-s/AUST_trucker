@@ -672,7 +672,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                     for _, sk in ipairs(storeKeys) do
                         if not Config.TrailerSlots[sk] then Config.TrailerSlots[sk] = { pallets = {}, forklift = nil } end
                         for idx, v in pairs(data.pallets or {}) do
-                            local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0 }
+                            local slotEntry = { id = v.id, label = v.label, prop_model = v.prop_model, x = tonumber(v.x) or 0.0, y = tonumber(v.y) or 0.0, z = tonumber(v.z) or 0.0, heading = tonumber(v.heading) or 0.0, straps = v.straps }
                             Config.TrailerSlots[sk].pallets[tonumber(idx)] = slotEntry
                             Config.TrailerSlots[sk].pallets[tostring(idx)] = slotEntry
                         end

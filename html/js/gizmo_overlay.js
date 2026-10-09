@@ -20,6 +20,13 @@
     const btnMode = document.getElementById('btn-gizmo-mode');
     const btnCopy = document.getElementById('btn-gizmo-copy');
     const btnCancel = document.getElementById('btn-gizmo-cancel');
+    const batchBadge = document.getElementById('gizmo-batch-badge');
+    const batchText = document.getElementById('gizmo-batch-text');
+    const targetToggleGroup = document.getElementById('gizmo-target-toggle-group');
+    const btnTargetCargo = document.getElementById('btn-gizmo-target-cargo');
+    const btnTargetStrap = document.getElementById('btn-gizmo-target-strap');
+
+    let currentTarget = 'cargo'; // 'cargo' | 'strap'
 
     function sendCallback(endpoint, data = {}) {
         const resName = (typeof GetParentResourceName === 'function') ? GetParentResourceName() : 'AUST_trucker';
@@ -30,7 +37,40 @@
         }).catch(() => {});
     }
 
+    function updateTargetButtonsUI(target) {
+        currentTarget = target || 'cargo';
+        if (btnTargetCargo && btnTargetStrap) {
+            if (currentTarget === 'cargo') {
+                btnTargetCargo.style.background = '#10b981';
+                btnTargetCargo.style.color = '#ffffff';
+                btnTargetStrap.style.background = 'transparent';
+                btnTargetStrap.style.color = '#94a3b8';
+            } else {
+                btnTargetCargo.style.background = 'transparent';
+                btnTargetCargo.style.color = '#94a3b8';
+                btnTargetStrap.style.background = '#3b82f6';
+                btnTargetStrap.style.color = '#ffffff';
+            }
+        }
+    }
+
     function initButtons() {
+        if (btnTargetCargo) {
+            btnTargetCargo.onclick = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                updateTargetButtonsUI('cargo');
+                sendCallback('switchGizmoTarget', { target: 'cargo' });
+            };
+        }
+        if (btnTargetStrap) {
+            btnTargetStrap.onclick = function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                updateTargetButtonsUI('strap');
+                sendCallback('switchGizmoTarget', { target: 'strap' });
+            };
+        }
         if (btnConfirm) {
             btnConfirm.onclick = function (e) {
                 e.preventDefault();
@@ -306,6 +346,12 @@
         if (canvas) {
             canvas.style.pointerEvents = 'none';
         }
+        if (batchBadge) {
+            batchBadge.style.display = 'none';
+        }
+        if (targetToggleGroup) {
+            targetToggleGroup.style.display = 'none';
+        }
         if (transformControls) {
             transformControls.detach();
         }
@@ -338,6 +384,24 @@
                 break;
             case 'setGizmoCursor':
                 setCursorActive(item.data.active);
+                break;
+            case 'updateGizmoBatch':
+                if (batchBadge && batchText) {
+                    if (item.data && item.data.total > 1) {
+                        batchText.textContent = `Item ${item.data.current || 1} de ${item.data.total}`;
+                        batchBadge.style.display = 'block';
+                    } else {
+                        batchBadge.style.display = 'none';
+                    }
+                }
+                break;
+            case 'setGizmoTarget':
+                if (targetToggleGroup) {
+                    targetToggleGroup.style.display = (item.data && item.data.showToggle) ? 'flex' : 'none';
+                }
+                if (item.data && item.data.target) {
+                    updateTargetButtonsUI(item.data.target);
+                }
                 break;
             case 'hideGizmo':
                 hideGizmo();

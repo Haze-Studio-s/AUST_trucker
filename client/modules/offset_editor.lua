@@ -15,6 +15,22 @@ local CalibParams = { trailerModel = 'trailers2', slotIndex = 1, isForklift = fa
 local CurrentGizmoMode = 'translate' -- 'translate' | 'rotate'
 local IsGizmoCursorActive = false
 
+-- Alvo de Calibração 3D em Offsets de Trailer: Carga vs Cinta Catraca
+local CalibTarget = 'cargo' -- 'cargo' | 'strap'
+local CalibStrapGhost = nil
+local CurrentStrapOffsets = { x = 0.0, y = 0.0, z = 0.0, rx = 0.0, ry = 0.0, rz = 0.0 }
+local CurrentSlotStraps = {}
+
+-- Estado de Posicionamento Sequencial em Lote (Spawns Dinâmicos)
+local BatchSpawnState = {
+    active = false,
+    total = 1,
+    current = 1,
+    baseData = nil,
+    confirmedItems = {},
+    previewEntities = {}
+}
+
 local ActiveCreatedTrailer = false
 local ActiveCalibCam = nil
 
@@ -73,8 +89,71 @@ end
 -- NUI CALLBACKS: MANIPULAÇÃO DO GIZMO 3D (THREE.JS)
 -- ============================================================
 
+function OffsetEditor.SwitchCalibrationTarget(target)
+    if not IsCalibrating or not CalibTrailer or not DoesEntityExist(CalibTrailer) then return end
+    target = target or 'cargo'
+
+    if target == 'strap' then
+        if not CalibGhost or not DoesEntityExist(CalibGhost) then return end
+        CalibTarget = 'strap'
+
+        if not CalibStrapGhost or not DoesEntityExist(CalibStrapGhost) then
+            local strapHash = joaat('prop_ratchet_strap')
+            lib.requestModel(strapHash, 5000)
+            local gCoords = GetEntityCoords(CalibGhost)
+            local gHeading = GetEntityHeading(CalibGhost)
+
+            local strapObj = CreateObject(strapHash, gCoords.x, gCoords.y, gCoords.z + 0.05, false, false, false)
+            if strapObj and DoesEntityExist(strapObj) then
+                SetEntityAsMissionEntity(strapObj, true, true)
+                SetEntityAlpha(strapObj, 220, false)
+                SetEntityCollision(strapObj, false, false)
+                SetEntityInvincible(strapObj, true)
+                FreezeEntityPosition(strapObj, true)
+                SetEntityHeading(strapObj, gHeading)
+                CalibStrapGhost = strapObj
+            end
+        end
+
+        if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+            local sPos = GetEntityCoords(CalibStrapGhost)
+            local sRot = GetEntityRotation(CalibStrapGhost, 2)
+            SendNUIMessage({
+                action = 'setGizmoEntity',
+                data = {
+                    position = { x = sPos.x, y = sPos.y, z = sPos.z },
+                    rotation = { x = sRot.x, y = sRot.y, z = sRot.z }
+                }
+            })
+            SendNUIMessage({ action = 'setGizmoTarget', data = { target = 'strap', showToggle = true } })
+            lib.notify({ title = 'Gizmo: Cinta de Amarração', description = 'Ajuste a cinta sobre a carga. [ENTER] para confirmar.', type = 'info', duration = 3000 })
+        end
+    else
+        CalibTarget = 'cargo'
+        if CalibGhost and DoesEntityExist(CalibGhost) then
+            local cPos = GetEntityCoords(CalibGhost)
+            local cRot = GetEntityRotation(CalibGhost, 2)
+            SendNUIMessage({
+                action = 'setGizmoEntity',
+                data = {
+                    position = { x = cPos.x, y = cPos.y, z = cPos.z },
+                    rotation = { x = cRot.x, y = cRot.y, z = cRot.z }
+                }
+            })
+            SendNUIMessage({ action = 'setGizmoTarget', data = { target = 'cargo', showToggle = true } })
+            lib.notify({ title = 'Gizmo: Prop da Carga', description = 'Ajuste o posicionamento da carga no reboque.', type = 'info', duration = 3000 })
+        end
+    end
+end
+
+RegisterNUICallback('switchGizmoTarget', function(data, cb)
+    local target = (data and data.target) or 'cargo'
+    OffsetEditor.SwitchCalibrationTarget(target)
+    if cb then cb({ ok = true }) end
+end)
+
 RegisterNUICallback('moveGizmoOffset', function(data, cb)
-    if not IsCalibrating or not CalibTrailer or not DoesEntityExist(CalibTrailer) or not CalibGhost or not DoesEntityExist(CalibGhost) then
+    if not IsCalibrating or not CalibTrailer or not DoesEntityExist(CalibTrailer) then
         if cb then cb({ ok = false }) end
         return
     end
@@ -83,25 +162,42 @@ RegisterNUICallback('moveGizmoOffset', function(data, cb)
     local worldRot = data.rotation
 
     if worldPos then
-        -- 1. Converte coordenadas globais (World) do Gizmo para Offset Relativo ao reboque
-        local relOffset = GetOffsetFromEntityGivenWorldCoords(CalibTrailer, worldPos.x, worldPos.y, worldPos.z)
         local tRot = GetEntityRotation(CalibTrailer, 2)
+        local relOffset = GetOffsetFromEntityGivenWorldCoords(CalibTrailer, worldPos.x, worldPos.y, worldPos.z)
         local relHeading = 0.0
         if worldRot and worldRot.z then
             relHeading = (worldRot.z - tRot.z) % 360.0
         end
 
-        CurrentOffsets = {
-            x = tonumber(string.format("%.3f", relOffset.x)),
-            y = tonumber(string.format("%.3f", relOffset.y)),
-            z = tonumber(string.format("%.3f", relOffset.z)),
-            heading = tonumber(string.format("%.1f", relHeading))
-        }
-
-        -- 2. Atualiza entidade fantasma em tempo real
-        SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
-        if worldRot and worldRot.z then
-            SetEntityHeading(CalibGhost, worldRot.z)
+        if CalibTarget == 'strap' then
+            if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+                CurrentStrapOffsets = {
+                    x = tonumber(string.format("%.3f", relOffset.x)),
+                    y = tonumber(string.format("%.3f", relOffset.y)),
+                    z = tonumber(string.format("%.3f", relOffset.z)),
+                    rx = tonumber(string.format("%.1f", ((worldRot and worldRot.x or 0.0) - tRot.x) % 360.0)),
+                    ry = tonumber(string.format("%.1f", ((worldRot and worldRot.y or 0.0) - tRot.y) % 360.0)),
+                    rz = tonumber(string.format("%.1f", relHeading)),
+                    heading = tonumber(string.format("%.1f", relHeading))
+                }
+                SetEntityCoordsNoOffset(CalibStrapGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+                if worldRot then
+                    SetEntityRotation(CalibStrapGhost, worldRot.x or 0.0, worldRot.y or 0.0, worldRot.z or 0.0, 2, true)
+                end
+            end
+        else
+            if CalibGhost and DoesEntityExist(CalibGhost) then
+                CurrentOffsets = {
+                    x = tonumber(string.format("%.3f", relOffset.x)),
+                    y = tonumber(string.format("%.3f", relOffset.y)),
+                    z = tonumber(string.format("%.3f", relOffset.z)),
+                    heading = tonumber(string.format("%.1f", relHeading))
+                }
+                SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+                if worldRot and worldRot.z then
+                    SetEntityHeading(CalibGhost, worldRot.z)
+                end
+            end
         end
     end
 
@@ -197,6 +293,11 @@ end
 function OffsetEditor.ConfirmCurrentSlot()
     if not IsCalibrating then return end
 
+    local strapsPayload = nil
+    if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+        strapsPayload = { CurrentStrapOffsets }
+    end
+
     -- 1. Dispara salvamento no banco de dados
     TriggerServerEvent('aurp_trucker:server:adminSaveTrailerOffset', {
         trailerModel = CalibParams.trailerModel,
@@ -210,7 +311,8 @@ function OffsetEditor.ConfirmCurrentSlot()
         x = tonumber(string.format("%.3f", CurrentOffsets.x)),
         y = tonumber(string.format("%.3f", CurrentOffsets.y)),
         z = tonumber(string.format("%.3f", CurrentOffsets.z)),
-        heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
+        heading = tonumber(string.format("%.1f", CurrentOffsets.heading)),
+        straps = strapsPayload
     })
     PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
 
@@ -219,7 +321,8 @@ function OffsetEditor.ConfirmCurrentSlot()
         x = tonumber(string.format("%.3f", CurrentOffsets.x)),
         y = tonumber(string.format("%.3f", CurrentOffsets.y)),
         z = tonumber(string.format("%.3f", CurrentOffsets.z)),
-        heading = tonumber(string.format("%.1f", CurrentOffsets.heading))
+        heading = tonumber(string.format("%.1f", CurrentOffsets.heading)),
+        straps = strapsPayload
     }
     LastSavedSlotIndex = CalibParams.slotIndex
 
@@ -237,6 +340,13 @@ function OffsetEditor.ConfirmCurrentSlot()
         table.insert(SavedGhosts, CalibGhost)
         CalibGhost = nil
     end
+
+    if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+        SetEntityAlpha(CalibStrapGhost, 110, false)
+        table.insert(SavedGhosts, CalibStrapGhost)
+        CalibStrapGhost = nil
+    end
+    CalibTarget = 'cargo'
 
     -- 4. Transição contínua entre slots
     if not CalibParams.isForklift then
@@ -468,6 +578,10 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             rotation = { x = gWorldRot.x, y = gWorldRot.y, z = gWorldRot.z }
         }
     })
+    SendNUIMessage({
+        action = 'setGizmoTarget',
+        data = { target = 'cargo', showToggle = (not isForklift) }
+    })
 
     lib.notify({
         title = 'Gizmo 3D Ativo',
@@ -677,6 +791,11 @@ function OffsetEditor.StopCalibration(deleteTrailer, cam)
         DeleteEntity(CalibGhost)
         CalibGhost = nil
     end
+    if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+        DeleteEntity(CalibStrapGhost)
+        CalibStrapGhost = nil
+    end
+    CalibTarget = 'cargo'
     for _, gEnt in ipairs(SavedGhosts) do
         if gEnt and DoesEntityExist(gEnt) then
             DeleteEntity(gEnt)
@@ -727,7 +846,8 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
         x = tonumber(offsetVec.x) or 0.0,
         y = tonumber(offsetVec.y) or 0.0,
         z = tonumber(offsetVec.z) or 0.0,
-        heading = tonumber(heading) or (type(offsetVec) == 'table' and offsetVec.heading) or 0.0
+        heading = tonumber(heading) or (type(offsetVec) == 'table' and offsetVec.heading) or 0.0,
+        straps = (type(offsetVec) == 'table' and offsetVec.straps) or nil
     }
 
     for _, k in ipairs(keys) do
@@ -859,6 +979,29 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     data = data or {}
     ActiveDuplicationData = (data.is_duplication and data.duplicate_data) or nil
+
+    -- Inicializa Posicionamento Sequencial em Lote se quantity > 1
+    local qty = tonumber(data.quantity) or 1
+    if qty > 1 then
+        BatchSpawnState.active = true
+        BatchSpawnState.total = math.floor(qty)
+        BatchSpawnState.current = 1
+        BatchSpawnState.baseData = data
+        BatchSpawnState.confirmedItems = {}
+        BatchSpawnState.previewEntities = {}
+        SendNUIMessage({
+            action = 'updateGizmoBatch',
+            data = { current = 1, total = BatchSpawnState.total }
+        })
+    else
+        BatchSpawnState.active = false
+        BatchSpawnState.total = 1
+        BatchSpawnState.current = 1
+        BatchSpawnState.baseData = nil
+        BatchSpawnState.confirmedItems = {}
+        BatchSpawnState.previewEntities = {}
+        SendNUIMessage({ action = 'updateGizmoBatch', data = { total = 0 } })
+    end
 
     local spawnType = tostring(data.spawn_type or 'truck'):lower()
     local isMarker = (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
@@ -1097,26 +1240,138 @@ function OffsetEditor.StartSpawnCalibration(data)
     end)
 end
 
+function OffsetEditor.SpawnNextBatchItem()
+    if not BatchSpawnState.active or not IsCalibratingSpawn then return end
+
+    local bData = BatchSpawnState.baseData or {}
+    local spawnType = tostring(bData.spawn_type or 'truck'):lower()
+    local isMarker = (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
+    local modelStr = bData.model
+    local isVeh = not isMarker
+
+    if not modelStr or modelStr == '' then
+        if spawnType == 'truck' then modelStr = 'hauler'
+        elseif spawnType == 'trailer' then modelStr = 'trailers2'
+        elseif spawnType == 'forklift' then modelStr = 'forklift'
+        elseif spawnType == 'handler' then modelStr = 'handler'
+        else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+    else
+        if spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end
+    end
+
+    local hash = joaat(modelStr)
+    lib.requestModel(hash, 5000)
+
+    -- Desloca suavemente para a posição à frente para visualização clara
+    local radH = math.rad(CurrentSpawnCoords.heading or 0.0)
+    local nextX = CurrentSpawnCoords.x + math.cos(radH) * 2.0
+    local nextY = CurrentSpawnCoords.y + math.sin(radH) * 2.0
+    local nextZ = CurrentSpawnCoords.z
+
+    local ghost = nil
+    if isVeh then
+        ghost = CreateVehicle(hash, nextX, nextY, nextZ, CurrentSpawnCoords.heading, false, false)
+        if ghost and DoesEntityExist(ghost) then SetVehicleDoorsLocked(ghost, 2) end
+    else
+        ghost = CreateObject(hash, nextX, nextY, nextZ, false, false, false)
+    end
+
+    if ghost and DoesEntityExist(ghost) then
+        SetEntityAsMissionEntity(ghost, true, true)
+        SetEntityLodDist(ghost, 0xFFFF)
+        if isMarker then
+            SetEntityVisible(ghost, false, false)
+            SetEntityAlpha(ghost, 0, false)
+        else
+            SetEntityAlpha(ghost, 190, false)
+        end
+        SetEntityCollision(ghost, false, false)
+        SetEntityInvincible(ghost, true)
+        FreezeEntityPosition(ghost, true)
+        SetEntityHeading(ghost, CurrentSpawnCoords.heading)
+
+        SpawnGhostEnt = ghost
+        CurrentSpawnCoords = {
+            x = tonumber(string.format("%.2f", nextX)),
+            y = tonumber(string.format("%.2f", nextY)),
+            z = tonumber(string.format("%.2f", nextZ)),
+            heading = CurrentSpawnCoords.heading
+        }
+
+        SendNUIMessage({
+            action = 'setGizmoEntity',
+            data = {
+                position = { x = nextX, y = nextY, z = nextZ },
+                rotation = { x = 0.0, y = 0.0, z = CurrentSpawnCoords.heading }
+            }
+        })
+    end
+end
+
 function OffsetEditor.StopSpawnCalibration(cam, confirmed)
-    IsCalibratingSpawn = false
-    SetNuiFocus(false, false)
-    SetNuiFocusKeepInput(false)
-    SendNUIMessage({ action = 'hideGizmo' })
-
-    local activeCam = cam or SpawnCam
-    if activeCam and DoesCamExist(activeCam) then
-        DestroyCam(activeCam, false)
-    end
-    SpawnCam = nil
-    RenderScriptCams(false, true, 500, true, true)
-
-    if SpawnGhostEnt and DoesEntityExist(SpawnGhostEnt) then
-        DeleteEntity(SpawnGhostEnt)
-        SpawnGhostEnt = nil
-    end
-
     if confirmed then
-        if ActiveDuplicationData then
+        if BatchSpawnState.active then
+            local idx = BatchSpawnState.current
+            local bData = BatchSpawnState.baseData or {}
+            local baseName = bData.base_name
+            if not baseName or baseName == '' then baseName = 'Ponto de Spawn' end
+            local baseId = bData.base_id
+            local sId = (baseId and baseId ~= '' and (baseId .. '_' .. tostring(idx))) or ('spawn_' .. tostring(GetGameTimer()) .. '_' .. tostring(idx))
+
+            local itemPayload = {
+                id = sId,
+                name = baseName,
+                spawn_type = bData.spawn_type or 'truck',
+                model = bData.model or '',
+                folder_name = bData.folder_name or 'Geral',
+                coords = {
+                    x = CurrentSpawnCoords.x,
+                    y = CurrentSpawnCoords.y,
+                    z = CurrentSpawnCoords.z,
+                    heading = CurrentSpawnCoords.heading,
+                    w = CurrentSpawnCoords.heading
+                }
+            }
+            table.insert(BatchSpawnState.confirmedItems, itemPayload)
+
+            -- Preserva entidade atual como preview transparente no chão
+            if SpawnGhostEnt and DoesEntityExist(SpawnGhostEnt) then
+                SetEntityAlpha(SpawnGhostEnt, 120, false)
+                table.insert(BatchSpawnState.previewEntities, SpawnGhostEnt)
+                SpawnGhostEnt = nil
+            end
+
+            -- Verifica se ainda há mais itens no lote
+            if BatchSpawnState.current < BatchSpawnState.total then
+                local nextIdx = BatchSpawnState.current + 1
+                BatchSpawnState.current = nextIdx
+
+                PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
+                lib.notify({
+                    title = 'Lote de Spawns',
+                    description = ('Item %d de %d confirmado! Posicione o Item %d...'):format(idx, BatchSpawnState.total, nextIdx),
+                    type = 'info',
+                    duration = 3000
+                })
+
+                SendNUIMessage({
+                    action = 'updateGizmoBatch',
+                    data = { current = nextIdx, total = BatchSpawnState.total }
+                })
+
+                OffsetEditor.SpawnNextBatchItem()
+                return -- Continua na mesma sessão do Gizmo sem fechar!
+            else
+                -- Lote completo finalizado com sucesso!
+                TriggerServerEvent('aurp_trucker:server:adminSaveBatchSpawns', BatchSpawnState.confirmedItems)
+                lib.notify({
+                    title = 'Lote Concluído',
+                    description = ('Todos os %d itens foram salvos na pasta "%s"!'):format(#BatchSpawnState.confirmedItems, bData.folder_name or 'Geral'),
+                    type = 'success',
+                    duration = 4500
+                })
+            end
+        elseif ActiveDuplicationData then
             ActiveDuplicationData.coords = {
                 x = CurrentSpawnCoords.x,
                 y = CurrentSpawnCoords.y,
@@ -1141,12 +1396,56 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
             })
         end
     else
-        if ActiveDuplicationData then
+        if BatchSpawnState.active then
+            if #BatchSpawnState.confirmedItems > 0 then
+                TriggerServerEvent('aurp_trucker:server:adminSaveBatchSpawns', BatchSpawnState.confirmedItems)
+                lib.notify({
+                    title = 'Lote Salvo Parcialmente',
+                    description = ('Posicionamento finalizado. %d item(ns) salvos na pasta "%s".'):format(#BatchSpawnState.confirmedItems, (BatchSpawnState.baseData and BatchSpawnState.baseData.folder_name) or 'Geral'),
+                    type = 'warning',
+                    duration = 4500
+                })
+            else
+                lib.notify({ title = 'Calibração', description = 'Calibração de lote cancelada.', type = 'info' })
+            end
+        elseif ActiveDuplicationData then
             ActiveDuplicationData = nil
             OffsetEditor.StopPreview()
+            lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
+        else
+            lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
         end
-        lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
     end
+
+    -- Limpeza completa de encerramento
+    IsCalibratingSpawn = false
+    SetNuiFocus(false, false)
+    SetNuiFocusKeepInput(false)
+    SendNUIMessage({ action = 'hideGizmo' })
+    SendNUIMessage({ action = 'updateGizmoBatch', data = { total = 0 } })
+
+    local activeCam = cam or SpawnCam
+    if activeCam and DoesCamExist(activeCam) then
+        DestroyCam(activeCam, false)
+    end
+    SpawnCam = nil
+    RenderScriptCams(false, true, 500, true, true)
+
+    if SpawnGhostEnt and DoesEntityExist(SpawnGhostEnt) then
+        DeleteEntity(SpawnGhostEnt)
+        SpawnGhostEnt = nil
+    end
+
+    if #BatchSpawnState.previewEntities > 0 then
+        for _, pEnt in ipairs(BatchSpawnState.previewEntities) do
+            if pEnt and DoesEntityExist(pEnt) then
+                DeleteEntity(pEnt)
+            end
+        end
+        BatchSpawnState.previewEntities = {}
+    end
+    BatchSpawnState.active = false
+    BatchSpawnState.confirmedItems = {}
 
     SendNUIMessage({ action = 'admin_restore' })
     SetNuiFocus(true, true)

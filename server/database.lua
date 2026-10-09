@@ -475,6 +475,7 @@ local TABLES = {
         `custom_name` VARCHAR(150) DEFAULT NULL,
         `prop_count` INT NOT NULL DEFAULT 1,
         `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
+        `straps` LONGTEXT DEFAULT NULL,
         `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY `uq_trailer_prop_slot` (`trailer_model`, `prop_model`, `slot_index`, `is_forklift`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
@@ -594,6 +595,7 @@ local MIGRATIONS = {
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `custom_name` VARCHAR(150) DEFAULT NULL",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `prop_count` INT NOT NULL DEFAULT 1",
     "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral'",
+    "ALTER TABLE `aust_trucker_trailer_offsets` ADD COLUMN `straps` LONGTEXT DEFAULT NULL",
     -- Pastas Dedicadas de Spawns Dinâmicos
     "CREATE TABLE IF NOT EXISTS `aust_trucker_spawn_folders` (`name` VARCHAR(100) PRIMARY KEY, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     "INSERT IGNORE INTO `aust_trucker_spawn_folders` (`name`) VALUES ('Geral')",
