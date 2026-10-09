@@ -843,6 +843,7 @@ end)
 local IsCalibratingSpawn = false
 local SpawnGhostEnt = nil
 local SpawnCam = nil
+local ActiveDuplicationData = nil
 local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local ActivePreviewEntities = {}
 local ActivePreviewMarkers = {}
@@ -857,6 +858,8 @@ function OffsetEditor.StartSpawnCalibration(data)
     IsCalibratingSpawn = true
 
     data = data or {}
+    ActiveDuplicationData = (data.is_duplication and data.duplicate_data) or nil
+
     local spawnType = tostring(data.spawn_type or 'truck'):lower()
     local isMarker = (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
     local modelStr = data.model
@@ -878,6 +881,12 @@ function OffsetEditor.StartSpawnCalibration(data)
     local forward = GetEntityForwardVector(ped)
     local spawnPos = pCoords + forward * 3.5
 
+    -- Se vier com coordenadas pré-definidas (ex: duplicação do item existente)
+    if data.coords and data.coords.x and data.coords.y and data.coords.z then
+        spawnPos = vector3(tonumber(data.coords.x) + 0.0, tonumber(data.coords.y) + 0.0, tonumber(data.coords.z) + 0.0)
+        pHeading = tonumber(data.coords.heading or data.coords.w or data.coords.h or pHeading)
+    end
+
     -- Minimiza o menu administrativo principal
     SetNuiFocus(false, false)
     SetNuiFocusKeepInput(false)
@@ -896,6 +905,7 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     if not ghost or not DoesEntityExist(ghost) then
         IsCalibratingSpawn = false
+        ActiveDuplicationData = nil
         lib.notify({ title = 'Erro', description = 'Falha ao instanciar holograma para calibração.', type = 'error' })
         SendNUIMessage({ action = 'admin_restore' })
         SetNuiFocus(true, true)
@@ -923,8 +933,12 @@ function OffsetEditor.StartSpawnCalibration(data)
         heading = tonumber(string.format("%.1f", pHeading))
     }
 
-    -- Câmera orbital
+    -- Câmera orbital focada na posição
     local camPos = spawnPos + vector3(-forward.x * 5.0, -forward.y * 5.0, 2.5)
+    if data.coords then
+        local radH = math.rad(pHeading)
+        camPos = spawnPos + vector3(math.sin(radH) * -6.0, math.cos(radH) * -6.0, 3.0)
+    end
     SpawnCam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", camPos.x, camPos.y, camPos.z, -15.0, 0.0, pHeading, 60.0, true, 2)
     SetCamActive(SpawnCam, true)
     RenderScriptCams(true, true, 500, true, true)
@@ -1102,12 +1116,35 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
     end
 
     if confirmed then
-        lib.notify({ title = 'Coordenadas Capturadas', description = 'Coordenadas e rotação aplicadas com precisão!', type = 'success' })
-        SendNUIMessage({
-            action = 'admin_spawn_coords_calibrated',
-            coords = CurrentSpawnCoords
-        })
+        if ActiveDuplicationData then
+            ActiveDuplicationData.coords = {
+                x = CurrentSpawnCoords.x,
+                y = CurrentSpawnCoords.y,
+                z = CurrentSpawnCoords.z,
+                heading = CurrentSpawnCoords.heading,
+                w = CurrentSpawnCoords.heading
+            }
+            TriggerServerEvent('aurp_trucker:server:adminSaveSpawn', ActiveDuplicationData)
+            lib.notify({
+                title = 'Spawn Duplicado com Sucesso',
+                description = ('Ponto "%s" salvo na pasta "%s"!'):format(ActiveDuplicationData.name or 'Clone', ActiveDuplicationData.folder_name or 'Geral'),
+                type = 'success',
+                duration = 4500
+            })
+            ActiveDuplicationData = nil
+            OffsetEditor.StopPreview()
+        else
+            lib.notify({ title = 'Coordenadas Capturadas', description = 'Coordenadas e rotação aplicadas com precisão!', type = 'success' })
+            SendNUIMessage({
+                action = 'admin_spawn_coords_calibrated',
+                coords = CurrentSpawnCoords
+            })
+        end
     else
+        if ActiveDuplicationData then
+            ActiveDuplicationData = nil
+            OffsetEditor.StopPreview()
+        end
         lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
     end
 

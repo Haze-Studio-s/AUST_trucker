@@ -226,6 +226,13 @@
           showAdminToast('Coordenadas capturadas com sucesso!');
         }
         break;
+      case 'admin_spawn_saved':
+        if (item.spawn && item.spawn.id) {
+          adminData.spawns[item.spawn.id] = item.spawn;
+          renderSpawnsTab();
+          showAdminToast(`Ponto "${item.spawn.name || item.spawn.id}" duplicado e salvo com sucesso!`, 'success');
+        }
+        break;
     }
   });
 
@@ -715,6 +722,48 @@
     if (sh) sh.value = parseFloat(hVal).toFixed(1);
   }
 
+  function getNextSequentialName(baseName, existingList) {
+    if (!baseName) baseName = 'Ponto de Spawn';
+    // Remove qualquer sufixo numérico existente, ex: "Vaga (2)" -> "Vaga"
+    const cleanBase = baseName.replace(/\s*\(\d+\)$/, '').trim();
+    let maxNum = 1;
+    const escapedBase = cleanBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escapedBase}(?:\\s*\\((\\d+)\\))?$`, 'i');
+
+    (existingList || []).forEach(item => {
+      const name = (item.name || item.spawn_name || item.custom_name || '').trim();
+      const match = name.match(regex);
+      if (match) {
+        if (match[1]) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        } else {
+          if (maxNum < 1) maxNum = 1;
+        }
+      }
+    });
+
+    return `${cleanBase} (${maxNum + 1})`;
+  }
+
+  function sanitizeSlug(name, existingMap) {
+    if (!name) name = 'spawn';
+    let slug = name
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!slug) slug = 'spawn';
+
+    let uniqueId = slug;
+    let counter = 2;
+    while (existingMap && existingMap[uniqueId]) {
+      uniqueId = `${slug}_${counter}`;
+      counter++;
+    }
+    return uniqueId;
+  }
+
   function renderSpawnsTab() {
     const container = document.getElementById('admin-spawns-folders-container');
     const folderSelect = document.getElementById('spawn-form-folder');
@@ -793,7 +842,7 @@
 
       // Seleção rápida da pasta clicando no card
       folderCard.addEventListener('click', function (e) {
-        if (e.target.closest('.btn-del-folder') || e.target.closest('.admin-spawn-row') || e.target.closest('.btn-tp-spawn') || e.target.closest('.btn-del-spawn') || e.target.closest('.btn-edit-spawn')) return;
+        if (e.target.closest('.btn-del-folder') || e.target.closest('.admin-spawn-row') || e.target.closest('.btn-tp-spawn') || e.target.closest('.btn-del-spawn') || e.target.closest('.btn-edit-spawn') || e.target.closest('.btn-dup-spawn')) return;
         selectedSpawnFolder = folderName;
         if (folderSelect) folderSelect.value = folderName;
         document.querySelectorAll('.admin-folder-card').forEach(c => c.style.borderColor = '');
@@ -823,6 +872,7 @@
           </div>
           <div style="display:flex; gap:6px;">
             <button class="admin-btn admin-btn-outline btn-edit-spawn" data-id="${escapeHtml(s.id || s.key || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Editar no Formulário"><i class="fas fa-edit"></i></button>
+            <button class="admin-btn admin-btn-outline btn-dup-spawn" data-id="${escapeHtml(s.id || s.key || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Duplicar (Gizmo 3D)"><i class="fas fa-copy"></i></button>
             <button class="admin-btn admin-btn-outline btn-tp-spawn" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(hVal)}" style="padding: 3px 8px; font-size:11px;" title="Teleportar"><i class="fas fa-location-arrow"></i> TP</button>
             <button class="admin-btn admin-btn-danger btn-del-spawn" data-id="${escapeHtml(s.id || s.key || s.spawn_id)}" style="padding: 3px 8px; font-size:11px;" title="Excluir"><i class="fas fa-trash"></i></button>
           </div>
@@ -880,6 +930,52 @@
           fillSpawnForm(s);
           showAdminToast(`Spawn #${id} carregado no formulário.`);
         }
+      });
+    });
+
+    container.querySelectorAll('.btn-dup-spawn').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const id = this.getAttribute('data-id');
+        const s = adminData.spawns[id];
+        if (!s) return;
+
+        const spawnsList = Object.values(adminData.spawns || {});
+        const baseName = s.name || s.spawn_name || s.id || 'Ponto de Spawn';
+        const newName = getNextSequentialName(baseName, spawnsList);
+        const newId = sanitizeSlug(newName, adminData.spawns);
+        const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
+        const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
+
+        const cloneObj = {
+          id: newId,
+          name: newName,
+          spawn_type: s.spawn_type || 'truck',
+          model: s.model || '',
+          folder_name: s.folder_name || 'Geral',
+          coords: {
+            x: parseFloat(coords.x) || 0.0,
+            y: parseFloat(coords.y) || 0.0,
+            z: parseFloat(coords.z) || 0.0,
+            heading: parseFloat(hVal) || 0.0,
+            w: parseFloat(hVal) || 0.0
+          }
+        };
+
+        // 1. Ativa Preview da Área com todos os spawns existentes
+        if (spawnsList.length > 0) {
+          postNUI('adminStartPreview', { spawns: spawnsList });
+        }
+
+        // 2. Aciona o Gizmo 3D posicionado nas coordenadas originais
+        postNUI('adminStartSpawnGizmo', {
+          spawn_type: cloneObj.spawn_type,
+          model: cloneObj.model,
+          coords: cloneObj.coords,
+          is_duplication: true,
+          duplicate_data: cloneObj
+        });
+
+        showAdminToast(`Duplicando "${baseName}" como "${newName}"... Ajuste a posição no Gizmo e aperte [ENTER]!`, 'info');
       });
     });
 
@@ -1293,6 +1389,13 @@
                 data-count="${escapeHtml(propCount)}" 
                 data-folder="${escapeHtml(folderName)}" 
                 style="padding: 4px 10px; font-size: 11px;"><i class="fas fa-edit"></i> Configurar</button>
+              <button class="admin-btn admin-btn-outline btn-duplicate-trailer-config" 
+                data-model="${escapeHtml(trailerModel)}" 
+                data-prop="${escapeHtml(propModel)}" 
+                data-custom="${escapeHtml(customName || '')}" 
+                data-count="${escapeHtml(propCount)}" 
+                data-folder="${escapeHtml(folderName)}" 
+                style="padding: 4px 8px; font-size: 11px;" title="Duplicar Configuração"><i class="fas fa-copy"></i> Duplicar</button>
               <button class="admin-btn admin-btn-danger btn-del-group" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(propModel)}" style="padding: 4px 8px; font-size: 11px;" title="Excluir Todos os Slots"><i class="fas fa-trash"></i></button>
             </div>
           </div>
@@ -1309,7 +1412,10 @@
                     </span>
                     <span style="font-family:monospace; color:var(--admin-text-muted); font-size:11px;">[X:${Number(s.data.x).toFixed(2)}, Y:${Number(s.data.y).toFixed(2)}, Z:${Number(s.data.z).toFixed(2)}, H:${Number(s.data.heading || 0).toFixed(0)}°]</span>
                   </div>
-                  <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                  <div style="display:flex; gap:4px; align-items:center;">
+                    <button class="admin-btn admin-btn-outline btn-dup-slot" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-custom="${escapeHtml(customName || '')}" data-folder="${escapeHtml(folderName)}" data-count="${escapeHtml(propCount)}" style="padding:3px 8px; font-size:10px;" title="Duplicar para Próximo Slot (Gizmo 3D)"><i class="fas fa-copy"></i></button>
+                    <button class="admin-btn admin-btn-danger btn-del-offset" data-id="${escapeHtml(s.data && s.data.id ? s.data.id : '')}" data-trailer="${escapeHtml(trailerModel)}" data-prop="${escapeHtml(s.data.prop_model || propModel)}" data-slot="${escapeHtml(s.slot)}" data-fork="0" style="padding:3px 8px; font-size:10px;" title="Excluir Offset"><i class="fas fa-trash"></i></button>
+                  </div>
                 </div>
               `).join('') : '<span style="color:var(--admin-text-muted)">Nenhum slot cadastrado</span>'}
             </div>
@@ -1355,6 +1461,70 @@
           folderSelect.value = folder;
         }
         if (trailerInput) trailerInput.focus();
+      });
+    });
+
+    listContainer.querySelectorAll('.btn-duplicate-trailer-config').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const m = this.getAttribute('data-model');
+        const p = this.getAttribute('data-prop');
+        const c = this.getAttribute('data-custom') || m;
+        const count = this.getAttribute('data-count') || '1';
+        const folder = this.getAttribute('data-folder') || 'Geral';
+
+        const allOffsets = Object.values(adminData.trailerOffsets || {});
+        const newCustomName = getNextSequentialName(c, allOffsets);
+
+        const trailerInput = document.getElementById('offset-form-trailer');
+        const propInput = document.getElementById('offset-form-prop');
+        const customInput = document.getElementById('offset-form-custom-name');
+        const countInput = document.getElementById('offset-form-prop-count');
+        const folderSelect = document.getElementById('offset-form-folder');
+        const slotInput = document.getElementById('offset-form-slot');
+
+        if (trailerInput) trailerInput.value = m;
+        if (propInput && p) propInput.value = p;
+        if (customInput) customInput.value = newCustomName;
+        if (countInput) countInput.value = count;
+        if (folderSelect) {
+          populateOffsetFolders(folder);
+          folderSelect.value = folder;
+        }
+        if (slotInput) slotInput.value = '1';
+
+        showAdminToast(`Clonando para "${newCustomName}". Ajuste o primeiro slot com o Gizmo 3D!`, 'info');
+      });
+    });
+
+    listContainer.querySelectorAll('.btn-dup-slot').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const trailer = this.getAttribute('data-trailer');
+        const prop = this.getAttribute('data-prop');
+        const slot = parseInt(this.getAttribute('data-slot')) || 1;
+        const nextSlot = slot + 1;
+        const custom = this.getAttribute('data-custom') || '';
+        const folder = this.getAttribute('data-folder') || 'Geral';
+        const count = this.getAttribute('data-count') || '1';
+
+        const trailerInput = document.getElementById('offset-form-trailer');
+        const propInput = document.getElementById('offset-form-prop');
+        const slotInput = document.getElementById('offset-form-slot');
+        const customInput = document.getElementById('offset-form-custom-name');
+        const folderSelect = document.getElementById('offset-form-folder');
+        const countInput = document.getElementById('offset-form-prop-count');
+
+        if (trailerInput) trailerInput.value = trailer;
+        if (propInput) propInput.value = prop;
+        if (slotInput) slotInput.value = String(nextSlot);
+        if (customInput) customInput.value = custom;
+        if (folderSelect) {
+          populateOffsetFolders(folder);
+          folderSelect.value = folder;
+        }
+        if (countInput) countInput.value = count;
+
+        showAdminToast(`Slot ${slot} duplicado para o Slot ${nextSlot}. Abrindo Gizmo 3D...`, 'info');
+        startCalibrationTool();
       });
     });
 
