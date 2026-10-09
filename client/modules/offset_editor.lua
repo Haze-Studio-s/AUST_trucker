@@ -1212,14 +1212,18 @@ function OffsetEditor.StartPreview(spawnsList)
                     name = s.name or s.spawn_name or 'Baia'
                 })
             else
-                local modelStr = 'hauler'
-                local isVeh = true
+                local modelStr = s.model
+                local isVeh = not isMarker
 
-                if sType == 'truck' then modelStr = 'hauler'
-                elseif sType == 'trailer' then modelStr = 'trailers2'
-                elseif sType == 'forklift' then modelStr = 'forklift'
-                elseif sType == 'handler' then modelStr = 'handler'
-                else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+                if not modelStr or modelStr == '' then
+                    if sType == 'truck' then modelStr = 'hauler'
+                    elseif sType == 'trailer' then modelStr = 'trailers2'
+                    elseif sType == 'forklift' then modelStr = 'forklift'
+                    elseif sType == 'handler' then modelStr = 'handler'
+                    else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
+                else
+                    if sType == 'pallet' or sType == 'prop' or isMarker then isVeh = false end
+                end
 
                 local h = joaat(modelStr)
                 lib.requestModel(h, 5000)

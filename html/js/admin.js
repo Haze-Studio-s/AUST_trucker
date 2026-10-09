@@ -715,11 +715,46 @@
       sType.value = s.spawn_type || 'truck';
       sType.dispatchEvent(new Event('change'));
     }
-    if (sModel && s.model) sModel.value = s.model;
+    if (sModel) sModel.value = s.model || '';
     if (sx && coords.x != null) sx.value = parseFloat(coords.x).toFixed(2);
     if (sy && coords.y != null) sy.value = parseFloat(coords.y).toFixed(2);
     if (sz && coords.z != null) sz.value = parseFloat(coords.z).toFixed(2);
     if (sh) sh.value = parseFloat(hVal).toFixed(1);
+  }
+
+  function populateSpawnModelSuggestions() {
+    const datalist = document.getElementById('spawn-model-suggestions');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+
+    const suggestions = [
+      { val: 'hauler', desc: 'Caminhão Hauler' },
+      { val: 'packer', desc: 'Caminhão Packer' },
+      { val: 'phantom', desc: 'Caminhão Phantom' },
+      { val: 'trailers2', desc: 'Reboque Carga Geral' },
+      { val: 'trailerlogs', desc: 'Reboque de Troncos' },
+      { val: 'docktrailer', desc: 'Reboque Baixo Portuário' },
+      { val: 'tanker', desc: 'Reboque Tanque Combustível' },
+      { val: 'forklift', desc: 'Empilhadeira Padrão' },
+      { val: 'handler', desc: 'Guindaste Dock Handler' },
+      { val: 'hei_prop_carrier_cargo_04b', desc: 'Container Marítimo' }
+    ];
+
+    // Adiciona props homologados da aba de cargas
+    const props = adminData.homologatedProps || [];
+    props.forEach(p => {
+      const model = p.prop_model || p.model_hash || p.name;
+      if (model && !suggestions.some(s => s.val === model)) {
+        suggestions.push({ val: model, desc: p.label || p.name || 'Prop Homologado' });
+      }
+    });
+
+    suggestions.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.val;
+      opt.label = item.desc;
+      datalist.appendChild(opt);
+    });
   }
 
   function getNextSequentialName(baseName, existingList) {
@@ -769,6 +804,7 @@
     const folderSelect = document.getElementById('spawn-form-folder');
     if (!container) return;
     container.innerHTML = '';
+    populateSpawnModelSuggestions();
 
     adminData.spawns = normalizeSpawns(adminData.spawns);
     const spawnsList = Object.values(adminData.spawns);
@@ -866,6 +902,7 @@
             <strong>#${escapeHtml(s.id || s.key || s.spawn_id)}</strong>
             <span style="color:#fff;">${escapeHtml(s.name || s.spawn_name || 'Ponto')}</span>
             <span class="admin-badge admin-badge-quick">${escapeHtml((s.spawn_type || 'truck').toUpperCase())}</span>
+            ${s.model ? `<span class="admin-badge admin-badge-primary" style="font-size:10px;"><i class="fas fa-box"></i> ${escapeHtml(s.model)}</span>` : ''}
           </div>
           <div style="font-family:monospace; font-size:11px; color:var(--admin-text-muted);">
             X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0} H:${Number(hVal).toFixed(0)}°

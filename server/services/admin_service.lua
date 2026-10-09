@@ -290,6 +290,7 @@ function AdminService.LoadAll()
                 pcall(function() s.coords = json.decode(s.coords) end)
             end
             s.folder_name = s.folder_name or 'Geral'
+            s.model = s.model or ''
             spawnMap[s.id] = s
         end
         AdminService.Spawns = spawnMap
@@ -602,6 +603,13 @@ local function EnsureAdminDBSchema()
     end)
     pcall(function()
         MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
+    end)
+
+    pcall(function()
+        MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `model` VARCHAR(100) NULL DEFAULT NULL;")
+    end)
+    pcall(function()
+        MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `model` VARCHAR(100) NULL DEFAULT NULL;")
     end)
 
     pcall(function()
@@ -1008,10 +1016,16 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         coords.w = heading
     end
 
+    local spawnModel = CleanStr(spawnData.model, 100, nil)
+    if not spawnModel or spawnModel == '' then
+        spawnModel = nil
+    end
+
     local clean = {
         id          = spawnId,
         name        = CleanStr(spawnData.name or spawnData.spawn_name, 100, 'Ponto de Spawn'),
         spawn_type  = spawnType,
+        model       = spawnModel,
         coords      = coords,
         heading     = heading,
         folder_name = folderName,
@@ -1037,17 +1051,17 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         if existingRow and existingRow.id then
             MySQL.query.await([[
                 UPDATE aust_trucker_spawns
-                SET name = ?, spawn_type = ?, folder_name = ?, coords = ?, heading = ?
+                SET name = ?, spawn_type = ?, model = ?, folder_name = ?, coords = ?, heading = ?
                 WHERE id = ?
             ]], {
-                clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading, clean.id
+                clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading, clean.id
             })
         else
             MySQL.query.await([[
-                INSERT INTO aust_trucker_spawns (id, name, spawn_type, folder_name, coords, heading)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO aust_trucker_spawns (id, name, spawn_type, model, folder_name, coords, heading)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ]], {
-                clean.id, clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading
+                clean.id, clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading
             })
         end
     end)
@@ -1055,15 +1069,17 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
     if not dbOk then
         print(("^1[AUST_Trucker Admin] Falha ao persistir spawn no banco (%s). Aplicando reparo de emergência...^7"):format(tostring(dbErr)))
         pcall(function()
+            MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `model` VARCHAR(100) NULL DEFAULT NULL;")
+            MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `model` VARCHAR(100) NULL DEFAULT NULL;")
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN IF NOT EXISTS `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` ADD COLUMN `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral';")
             MySQL.query.await("ALTER TABLE `aust_trucker_spawns` MODIFY COLUMN `spawn_type` VARCHAR(50) NOT NULL;")
             MySQL.query.await([[
                 UPDATE aust_trucker_spawns
-                SET name = ?, spawn_type = ?, folder_name = ?, coords = ?, heading = ?
+                SET name = ?, spawn_type = ?, model = ?, folder_name = ?, coords = ?, heading = ?
                 WHERE id = ?
             ]], {
-                clean.name, clean.spawn_type, clean.folder_name, coordsJson, clean.heading, clean.id
+                clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading, clean.id
             })
         end)
     end
