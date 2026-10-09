@@ -196,18 +196,22 @@
             canvas.style.pointerEvents = 'none';
         }
 
+        if (transformControls && targetMesh) {
+            transformControls.attach(targetMesh);
+            transformControls.setMode('translate');
+            transformControls.enabled = true;
+        }
+
         if (data && data.position) {
             updateTargetMesh(data.position, data.rotation || { x: 0, y: 0, z: 0 });
         }
 
         currentMode = 'translate';
         updateModeButtonUI();
-        if (transformControls) {
-            transformControls.setMode('translate');
-            transformControls.enabled = true;
-        }
 
-        renderer.render(scene, camera);
+        if (renderer && scene && camera) {
+            renderer.render(scene, camera);
+        }
     }
 
     function updateCamera(pos, rot) {
@@ -252,6 +256,9 @@
         }
 
         if (transformControls) {
+            if (transformControls.object !== targetMesh) {
+                transformControls.attach(targetMesh);
+            }
             transformControls.updateMatrixWorld();
         }
 

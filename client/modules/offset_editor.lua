@@ -114,7 +114,7 @@ RegisterNUICallback('confirmGizmoSlot', function(data, cb)
     elseif IsPropEditorActive then
         OffsetEditor.ConfirmPropEditorSlot()
     elseif IsCalibratingSpawn then
-        OffsetEditor.StopSpawnCalibration(nil, true)
+        OffsetEditor.StopSpawnCalibration(SpawnCam, true)
     end
     if cb then cb({ ok = true }) end
 end)
@@ -132,7 +132,7 @@ RegisterNUICallback('cancelGizmo', function(data, cb)
     elseif IsPropEditorActive then
         OffsetEditor.CancelPropEditorSession()
     elseif IsCalibratingSpawn then
-        OffsetEditor.StopSpawnCalibration(nil, false)
+        OffsetEditor.StopSpawnCalibration(SpawnCam, false)
     end
     if cb then cb({ ok = true }) end
 end)
@@ -842,13 +842,18 @@ end)
 
 local IsCalibratingSpawn = false
 local SpawnGhostEnt = nil
+local SpawnCam = nil
 local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local ActivePreviewEntities = {}
 local ActivePreviewMarkers = {}
 local IsPreviewActive = false
 
 function OffsetEditor.StartSpawnCalibration(data)
-    if IsCalibrating or IsCalibratingSpawn then return end
+    if IsCalibrating then return end
+    if IsCalibratingSpawn or SpawnGhostEnt or SpawnCam then
+        OffsetEditor.StopSpawnCalibration(SpawnCam, false)
+        Wait(50)
+    end
     IsCalibratingSpawn = true
 
     data = data or {}
@@ -920,8 +925,8 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     -- Câmera orbital
     local camPos = spawnPos + vector3(-forward.x * 5.0, -forward.y * 5.0, 2.5)
-    local spawnCam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", camPos.x, camPos.y, camPos.z, -15.0, 0.0, pHeading, 60.0, true, 2)
-    SetCamActive(spawnCam, true)
+    SpawnCam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", camPos.x, camPos.y, camPos.z, -15.0, 0.0, pHeading, 60.0, true, 2)
+    SetCamActive(SpawnCam, true)
     RenderScriptCams(true, true, 500, true, true)
 
     -- Inicia o Gizmo Three.js sincronizado
@@ -984,7 +989,7 @@ function OffsetEditor.StartSpawnCalibration(data)
                         0.0,
                         (camRot.z - mouseX * 4.0) % 360.0
                     )
-                    SetCamRot(spawnCam, camRot.x, camRot.y, camRot.z, 2)
+                    SetCamRot(SpawnCam, camRot.x, camRot.y, camRot.z, 2)
                 end
             end
 
@@ -996,7 +1001,7 @@ function OffsetEditor.StartSpawnCalibration(data)
             local rgt = vector3(cosZ, sinZ, 0.0)
             local up  = vector3(0.0, 0.0, 1.0)
             local camSpeed = IsDisabledControlPressed(0, 21) and 0.45 or 0.16
-            local cPos = GetCamCoord(spawnCam)
+            local cPos = GetCamCoord(SpawnCam)
             local moved = false
 
             if IsDisabledControlPressed(0, 32) then cPos = cPos + fwd * camSpeed; moved = true end
@@ -1005,7 +1010,7 @@ function OffsetEditor.StartSpawnCalibration(data)
             if IsDisabledControlPressed(0, 35) then cPos = cPos + rgt * camSpeed; moved = true end
             if IsDisabledControlPressed(0, 22) then cPos = cPos + up  * camSpeed; moved = true end
             if IsDisabledControlPressed(0, 36) then cPos = cPos - up  * camSpeed; moved = true end
-            if moved then SetCamCoord(spawnCam, cPos.x, cPos.y, cPos.z) end
+            if moved then SetCamCoord(SpawnCam, cPos.x, cPos.y, cPos.z) end
 
             -- Alternância Modo Gizmo (T / R)
             if IsDisabledControlJustPressed(0, 245) or IsControlJustPressed(0, 245) then
@@ -1065,13 +1070,13 @@ function OffsetEditor.StartSpawnCalibration(data)
                 and not IsDisabledControlJustPressed(0, 24)
 
             if isEnter then
-                OffsetEditor.StopSpawnCalibration(spawnCam, true)
+                OffsetEditor.StopSpawnCalibration(SpawnCam, true)
                 break
             end
 
             -- Cancelar com ESC / Backspace
             if IsDisabledControlJustPressed(0, 177) or IsDisabledControlJustPressed(0, 194) then
-                OffsetEditor.StopSpawnCalibration(spawnCam, false)
+                OffsetEditor.StopSpawnCalibration(SpawnCam, false)
                 break
             end
         end
@@ -1084,7 +1089,11 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
     SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'hideGizmo' })
 
-    if cam and DoesCamExist(cam) then DestroyCam(cam, false) end
+    local activeCam = cam or SpawnCam
+    if activeCam and DoesCamExist(activeCam) then
+        DestroyCam(activeCam, false)
+    end
+    SpawnCam = nil
     RenderScriptCams(false, true, 500, true, true)
 
     if SpawnGhostEnt and DoesEntityExist(SpawnGhostEnt) then
