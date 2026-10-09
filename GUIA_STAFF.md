@@ -706,6 +706,33 @@ SELECT driver_id, earnings, distance, completed_at FROM trucker_npc_jobs ORDER B
 
 ---
 
+## Painel Administrativo (`/truckeradmin`) & Ferramentas 3D Gizmo
+
+Acesso exclusivo para administradores com permissão ACE `command.truckeradmin`. O painel centraliza a configuração em tempo real sem necessidade de reiniciar o resource.
+
+### 1. Spawns Dinâmicos e Pastas
+- **Organização por Pastas:** Agrupe pontos de spawn por locais ou clientes (ex: `Porto de Los Santos`, `Depósito Paleto`).
+- **Posicionamento Sequencial em Lote:** Configure o campo de quantidade (ex: `5`). O Gizmo 3D abrirá para o primeiro item, e ao confirmar com `ENTER`, o próximo item será instanciado imediatamente à frente com badge `Item X de Y` sem reabrir a UI. Todos os itens são salvos atomicamente no banco ao final.
+- **Duplicação Rápida:** O botão de clonagem lê o ponto original e cria cópias com sufixos incrementais automáticos (`Nome (2)`, `Nome (3)`), abrindo o Gizmo diretamente no ponto copiado.
+
+### 2. Offsets Trailer 3D & Cintas de Amarração (6DoF)
+- **Calibração de Cargas e Cintas:** Na aba **Offsets Trailer 3D**, use o alternador flutuante `[ Carga ]` e `[ Cinta Catraca ]`.
+- **Cintas Catraca (`prop_ratchet_strap`):** Posicione e rotacione cintas individualmente com precisão 6DoF sobre cada carga do reboque. Os dados são salvos na coluna `straps` e aplicados fisicamente no gameplay quando o jogador conclui o minigame de amarração.
+
+### 3. Controles do Gizmo 3D
+| Comando / Tecla | Ação |
+|---|---|
+| `W`, `A`, `S`, `D` | Voo livre e navegação da câmera |
+| `L-SHIFT` | Aceleração da câmera (Turbo) |
+| `Mouse Look` | Rotação orbital da câmera |
+| `[ALT]` (Segurar) | Libera o cursor do mouse para arrastar as alças do Gizmo |
+| `T` | Alterna para o modo de Translação (Setas de eixos X, Y, Z) |
+| `R` | Alterna para o modo de Rotação (Anéis de rotação 3D) |
+| `ENTER` | Confirma o item atual e avança para o próximo / salva |
+| `ESC` ou `Backspace` | Cancela ou encerra a calibração com salvamento parcial dos confirmados |
+
+---
+
 ## Infrações (integração com AUST_sala)
 
 O sistema registra e expõe infrações de motoristas para uso externo:

@@ -1,5 +1,29 @@
 # Changelog — AUST_trucker
 
+## [20.9.17] — 2026-10-09 — Cintas de Amarração 6DoF em Offsets 3D, Spawns Contínuos em Lote & Trava de Herança de Rotas
+
+### Adicionado & Aprimorado
+- **Cintas de Amarração 6DoF em Offsets Trailer 3D (`client/modules/offset_editor.lua`, `server/services/admin_service.lua`, `server/database.lua`):**
+  - Implementada calibração visual de cintas/catracas (`prop_ratchet_strap`) acopladas à configuração da carga no reboque.
+  - Coluna `straps` (JSON) persistida na tabela `aust_trucker_trailer_offsets`.
+  - Adicionado seletor de alvo na barra flutuante do Gizmo 3D (`[ Carga ]` vs `[ Cinta Catraca ]`), permitindo ao administrador alternar e ajustar individualmente o posicionamento e rotações 6DoF (X, Y, Z, Pitch, Roll, Yaw) da cinta sobre a carga.
+  - Sincronização em tempo real via `aurp_trucker:client:adminSyncOffsets` propagando o array `straps` diretamente para os slots de trailer em memória.
+- **Amarração de Cintas no Gameplay (`client/main.lua`):**
+  - Ao concluir o minigame de perícia (`ExecutePalletTie`), o jogo agora lê os dados de `offData.straps` e gera as cintas personalizadas nas posições e rotações exatas configuradas pelo admin, acopladas rigidamente ao reboque/palete com colisão desativada contra veículos.
+  - Fallback suave para amarração padrão centralizada caso o slot não possua calibração manual de cintas.
+  - Limpeza limpa de múltiplas entidades de cintas em `CleanupCurrentJob` ao cancelar ou concluir a missão, evitando vazamento de entidades no OneSync.
+- **Posicionamento Sequencial em Lote para Spawns Dinâmicos (`html/index.html`, `html/js/admin.js`, `client/modules/offset_editor.lua`, `server/services/admin_service.lua`):**
+  - Campo numérico de "Quantidade" (1 a 20) inserido na aba de Spawns Dinâmicos no painel `/truckeradmin`.
+  - Fluxo contínuo e sem interrupções no Gizmo 3D: o administrador posiciona o Item 1 de N, aperta `ENTER`, e o sistema gera o Item 2 à frente com badge de progresso sem fechar o painel administrativo.
+  - Novo evento de gravação atômica `aurp_trucker:server:adminSaveBatchSpawns` que insere todos os itens confirmados de uma só vez no banco de dados na pasta indicada, com preservação dos itens já posicionados em caso de cancelamento parcial com `ESC`.
+- **Correção da Thread do Gizmo em Lote (`client/modules/offset_editor.lua`):**
+  - Resolvido bug crítico onde pressionar `ENTER` para avançar ao próximo item gerava o prop mas congelava a interação, sumindo com o mouse e travando o loop de edição.
+  - Causa raiz: A condicional de `isEnter` executava um `break` incondicional que encerrava prematuramente a thread `while IsCalibratingSpawn do`.
+  - Ajustado para manter o loop vivo enquanto `IsCalibratingSpawn` for verdadeiro, garantindo que voo livre WASD, HUD informativo e o cursor de mouse via `[ALT]` permaneçam 100% responsivos até o término de todo o lote.
+- **Trava de Herança Absoluta e Limpeza de Rotas (`html/admin.html`, `server/main.lua`):**
+  - Removidos campos manuais redundantes de Prop, Trailer e Coordenadas de Coleta no formulário de Rotas.
+  - O início de contratos (`StartPolarixJob`) agora herda rigorosamente as configurações, modelo de prop, modelo de carreta e ponto de spawn da pasta vinculada à rota, eliminando fallbacks genéricos desatualizados.
+
 ## [20.9.16] — 2026-10-08 — Remoção de Freeze e Acoplamento Suave 2D da 5ª Roda (Zero Teleport)
 
 ### Corrigido & Aprimorado

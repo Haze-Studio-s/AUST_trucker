@@ -4,7 +4,7 @@ lua54 'yes'
 
 author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
-version '20.9.3'
+version '20.9.17'
 
 data_file 'DLC_ITYP_REQUEST' 'stream/prop_ratchet_strap.ytyp'
 

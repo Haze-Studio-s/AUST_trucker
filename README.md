@@ -1,10 +1,10 @@
 # AURP Trucker
 
-![Version](https://img.shields.io/badge/version-20.9.5-blue)
+![Version](https://img.shields.io/badge/version-20.9.17-blue)
 ![FiveM](https://img.shields.io/badge/FiveM-QBox%20%7C%20QBCore%20%7C%20ESX-green)
 ![Lua](https://img.shields.io/badge/lua-5.4-purple)
 
-Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios, calibracao visual 3D com Gizmo vetorial, ancoragem padronizada no Bone 0 (Root), embarque continuo de empilhadeira via tecla [G], sistema visual de cintas de amarração 3D em malha poligonal planar realista (DrawPoly bilateral de 6cm) condicionadas milissegundo a milissegundo à vitória no minigame de perícia com alvos laterais no ox_target, colisao inteligente adaptativa, OneSync Observer Shield & Network Ownership Lock (imunidade contra desync de proximidade), cinemática rígida anti-inércia (zero-desync na arrancada), OneSync StateBags, blindagem anti-exploit e interface React.
+Sistema completo de transportadora e caminhoneiro para FiveM. Jobs de entrega com qualquer veiculo (capacidade por peso), contratos empresa-cliente com niveis de confianca, economia dinamica tri-setor, convoy multiplayer, entregas de encomendas multi-parada, operacao de conteineres portuarios com Reach Stacker (handler), calibracao visual 3D com Gizmo vetorial, calibração 6DoF de cintas de amarração catraca (`prop_ratchet_strap`), posicionamento contínuo em lote para spawns dinâmicos, pastas de organização de spawns com herança estrita em rotas, ancoragem padronizada no Bone 0 (Root), embarque continuo de empilhadeira via tecla [G], colisao inteligente adaptativa, OneSync Observer Shield & Network Ownership Lock (imunidade contra desync de proximidade), cinemática rígida anti-inércia, OneSync StateBags, blindagem anti-exploit e interface React.
 
 ---
 
