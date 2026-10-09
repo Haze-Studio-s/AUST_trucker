@@ -420,38 +420,22 @@ local function GetNextAvailablePallet()
 end
 
 local function WaitForNetworkEntity(netId, maxTimeoutMs)
-    if not netId or netId == 0 then return nil end
+    if not netId or netId == 0 or type(netId) ~= 'number' then return nil end
     local timeout = GetGameTimer() + (maxTimeoutMs or 6000)
 
     while GetGameTimer() < timeout do
-        if NetworkDoesNetworkIdExist(netId) then
-            local okNet, ent = pcall(NetworkGetEntityFromNetworkId, netId)
-            if okNet and ent and ent ~= 0 and DoesEntityExist(ent) then
+        if NetworkDoesEntityExistWithNetworkId(netId) then
+            local ent = NetworkGetEntityFromNetworkId(netId)
+            if ent and ent ~= 0 and DoesEntityExist(ent) then
                 return ent
             end
         end
-
-        local okVeh, veh = pcall(NetToVeh, netId)
-        if okVeh and veh and veh ~= 0 and DoesEntityExist(veh) then
-            return veh
-        end
-
-        local okObj, obj = pcall(NetToObj, netId)
-        if okObj and obj and obj ~= 0 and DoesEntityExist(obj) then
-            return obj
-        end
-
-        local okEnt, ent = pcall(NetToEnt, netId)
-        if okEnt and ent and ent ~= 0 and DoesEntityExist(ent) then
-            return ent
-        end
-
         Wait(50)
     end
 
-    if NetworkDoesNetworkIdExist(netId) then
-        local okNet, ent = pcall(NetworkGetEntityFromNetworkId, netId)
-        if okNet and ent and ent ~= 0 and DoesEntityExist(ent) then
+    if NetworkDoesEntityExistWithNetworkId(netId) then
+        local ent = NetworkGetEntityFromNetworkId(netId)
+        if ent and ent ~= 0 and DoesEntityExist(ent) then
             return ent
         end
     end
@@ -3097,14 +3081,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
             local trailer = WaitForNetworkEntity(payload.trailerNetId, 8000)
 
             if not truck or not DoesEntityExist(truck) then
-                if payload.truckNetId and NetworkDoesNetworkIdExist(payload.truckNetId) then
+                if payload.truckNetId and NetworkDoesEntityExistWithNetworkId(payload.truckNetId) then
                     local ent = NetworkGetEntityFromNetworkId(payload.truckNetId)
                     if ent ~= 0 and DoesEntityExist(ent) then truck = ent end
                 end
             end
 
             if not trailer or not DoesEntityExist(trailer) then
-                if payload.trailerNetId and NetworkDoesNetworkIdExist(payload.trailerNetId) then
+                if payload.trailerNetId and NetworkDoesEntityExistWithNetworkId(payload.trailerNetId) then
                     local ent = NetworkGetEntityFromNetworkId(payload.trailerNetId)
                     if ent ~= 0 and DoesEntityExist(ent) then trailer = ent end
                 end
