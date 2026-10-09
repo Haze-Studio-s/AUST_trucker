@@ -630,6 +630,7 @@ local function StartTruckDelivery(src, contractData)
             contractData.name = customRoute.name or customRoute.title
             contractData.trailerModel = customRoute.trailer_model
             contractData.truckModel = customRoute.truck_model
+            contractData.routeType = customRoute.type
             contractData.cargoType = customRoute.type
             contractData.cargoName = customRoute.cargo_name
             contractData.cargoModel = customRoute.cargo_model
@@ -729,79 +730,102 @@ local function StartTruckDelivery(src, contractData)
         return
     end
 
-    -- ETAPA 1.5: Resolução Autoritativa de Caminhão (Frota trucker_trucks ou Garagem player_vehicles vs Alugado)
+    -- ETAPA 1.5: Resolução Autoritativa de Caminhão (Trabalho Rápido vs Frete com Caminhão Próprio)
+    local isQuickJob = (
+        contractData.contractType == 'quick' 
+        or contractData.contract_type == 'quick' 
+        or contractData.type == 'quick' 
+        or contractData.routeType == 'quick'
+        or contractData.contractType == 0 
+        or contractData.contract_type == 0 
+        or (contractData.isOwned == false)
+    )
+
+    local isFreightContract = not isQuickJob and (
+        contractData.contractType == 'freight' 
+        or contractData.contract_type == 'freight' 
+        or contractData.type == 'freight' 
+        or contractData.routeType == 'freight'
+        or contractData.contractType == 1 
+        or contractData.contract_type == 1 
+        or (contractData.isOwned == true)
+        or (contractData.truckPlate and contractData.truckPlate ~= '')
+    )
+
     local selectedTruckModel = nil
     local selectedPlate = nil
     local savedMods = nil
     local isOwned = false
 
-    -- 1. Verificação por placa informada no contrato
-    if contractData.truckPlate and contractData.truckPlate ~= '' then
-        local pRow = MySQL.single.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ? AND plate = ? LIMIT 1', { citizenId, contractData.truckPlate })
-        if pRow then
-            selectedTruckModel = pRow.vehicle
-            selectedPlate = pRow.plate
-            savedMods = pRow.mods
-            isOwned = true
-        else
-            local tRow = MySQL.single.await('SELECT truck_name, properties FROM trucker_trucks WHERE user_id = ? AND properties LIKE ? LIMIT 1', { citizenId, '%' .. contractData.truckPlate .. '%' })
-            if tRow then
-                selectedTruckModel = tRow.truck_name
-                selectedPlate = contractData.truckPlate
-                savedMods = tRow.properties
+    -- Apenas busca frota e garagem do jogador se o contrato for expressamente de FRETE COM CAMINHÃO PRÓPRIO
+    if isFreightContract then
+        -- 1. Verificação por placa informada no contrato
+        if contractData.truckPlate and contractData.truckPlate ~= '' then
+            local pRow = MySQL.single.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ? AND plate = ? LIMIT 1', { citizenId, contractData.truckPlate })
+            if pRow then
+                selectedTruckModel = pRow.vehicle
+                selectedPlate = pRow.plate
+                savedMods = pRow.mods
+                isOwned = true
+            else
+                local tRow = MySQL.single.await('SELECT truck_name, properties FROM trucker_trucks WHERE user_id = ? AND properties LIKE ? LIMIT 1', { citizenId, '%' .. contractData.truckPlate .. '%' })
+                if tRow then
+                    selectedTruckModel = tRow.truck_name
+                    selectedPlate = contractData.truckPlate
+                    savedMods = tRow.properties
+                    isOwned = true
+                end
+            end
+        end
+
+        -- 2. Busca na frota interna do script (trucker_trucks)
+        if not selectedTruckModel then
+            local fleetTrucks = MySQL.query.await('SELECT truck_id, truck_name, properties FROM trucker_trucks WHERE user_id = ? ORDER BY truck_id DESC LIMIT 1', { citizenId })
+            if fleetTrucks and fleetTrucks[1] then
+                local t = fleetTrucks[1]
+                selectedTruckModel = t.truck_name
+                local props = json.decode(t.properties or '{}') or {}
+                selectedPlate = props.plate
+                savedMods = t.properties
                 isOwned = true
             end
         end
-    end
 
-    -- 2. Busca na frota interna do script (trucker_trucks)
-    if not selectedTruckModel then
-        local fleetTrucks = MySQL.query.await('SELECT truck_id, truck_name, properties FROM trucker_trucks WHERE user_id = ? ORDER BY truck_id DESC LIMIT 1', { citizenId })
-        if fleetTrucks and fleetTrucks[1] then
-            local t = fleetTrucks[1]
-            selectedTruckModel = t.truck_name
-            local props = json.decode(t.properties or '{}') or {}
-            selectedPlate = props.plate
-            savedMods = t.properties
-            isOwned = true
-        end
-    end
-
-    -- 3. Busca na garagem de veículos do jogador (player_vehicles) por cavalos mecânicos
-    if not selectedTruckModel then
-        local validModels = {
-            'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'vetirs', 'pounder', 'pounder2', 'biff'
-        }
-        if Config.TruckRental and Config.TruckRental.trucks then
-            for _, trk in ipairs(Config.TruckRental.trucks) do
-                table.insert(validModels, trk.model)
-            end
-        end
-        if Config.LC_Dealership then
-            for k in pairs(Config.LC_Dealership) do
-                table.insert(validModels, k)
-            end
-        end
-
-        local pVehicles = MySQL.query.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ?', { citizenId }) or {}
-        for _, pv in ipairs(pVehicles) do
-            local pvModel = string.lower(pv.vehicle or '')
-            for _, vm in ipairs(validModels) do
-                if pvModel == string.lower(vm) then
-                    selectedTruckModel = pv.vehicle
-                    selectedPlate = pv.plate
-                    savedMods = pv.mods
-                    isOwned = true
-                    break
+        -- 3. Busca na garagem de veículos do jogador (player_vehicles) por cavalos mecânicos
+        if not selectedTruckModel then
+            local validModels = {
+                'hauler', 'phantom', 'packer', 'phantom3', 'hauler2', 'vetirs', 'pounder', 'pounder2', 'biff'
+            }
+            if Config.TruckRental and Config.TruckRental.trucks then
+                for _, trk in ipairs(Config.TruckRental.trucks) do
+                    table.insert(validModels, trk.model)
                 end
             end
-            if selectedTruckModel then break end
+            if Config.LC_Dealership then
+                for k in pairs(Config.LC_Dealership) do
+                    table.insert(validModels, k)
+                end
+            end
+
+            local pVehicles = MySQL.query.await('SELECT vehicle, plate, mods FROM player_vehicles WHERE citizenid = ?', { citizenId }) or {}
+            for _, pv in ipairs(pVehicles) do
+                local pvModel = string.lower(pv.vehicle or '')
+                for _, vm in ipairs(validModels) do
+                    if pvModel == string.lower(vm) then
+                        selectedTruckModel = pv.vehicle
+                        selectedPlate = pv.plate
+                        savedMods = pv.mods
+                        isOwned = true
+                        break
+                    end
+                end
+                if selectedTruckModel then break end
+            end
         end
     end
 
-    -- 4. Fallback: Caminhão de Serviço Padrão / Alugado
-    if not selectedTruckModel then
-        -- SEGURANÇA: modelo só vem do servidor (rota admin) e precisa estar na whitelist de modelos permitidos
+    -- Trabalho Rápido / Fallback de Aluguel (A transportadora sempre fornece o caminhão)
+    if not selectedTruckModel or not isOwned then
         local allowedTrucks = GetAllowedTruckModels()
         local wanted = contractData.truckModel
         if type(wanted) ~= 'string' or not allowedTrucks[wanted:lower()] then
@@ -813,6 +837,7 @@ local function StartTruckDelivery(src, contractData)
         end
         selectedPlate = ('RENT%04d'):format(math.random(1000, 9999))
         isOwned = false
+        isFreightContract = false
     end
 
     if not selectedPlate or selectedPlate == '' then
@@ -904,56 +929,55 @@ local function StartTruckDelivery(src, contractData)
         plate = ("TRK%04d"):format(math.random(1000, 9999))
     end
 
-    local isFreightContract = (contractData.contractType == 'freight' or contractData.contract_type == 'freight' or contractData.type == 'freight' or (contractData.contractType == 1) or (contractData.contract_type == 1) or isOwned)
-
-    -- Identificação Autoritativa de Caminhão Próprio do Jogador no Pátio (Frete)
+    -- Identificação Autoritativa de Caminhão Próprio do Jogador no Pátio (EXCLUSIVO PARA FRETE)
     local isPlayerWithOwnTruck = false
     local ped = GetPlayerPed(src)
     local curVeh = ped and (ped ~= 0) and GetVehiclePedIsIn(ped, false) or 0
     local truck = nil
     local chosenTruckCoord = nil
 
-    if curVeh ~= 0 and DoesEntityExist(curVeh) then
-        local curPlate = GetVehicleNumberPlateText(curVeh)
-        local cleanCur = curPlate and string.gsub(curPlate, "%s+", ""):upper() or ""
-        local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
-        if cleanCur == cleanSel or isOwned then
-            truck = curVeh
-            plate = curPlate
-            chosenTruckCoord = GetEntityCoords(truck)
-            isPlayerWithOwnTruck = true
-            isOwned = true
+    if isFreightContract then
+        if curVeh ~= 0 and DoesEntityExist(curVeh) then
+            local curPlate = GetVehicleNumberPlateText(curVeh)
+            local cleanCur = curPlate and string.gsub(curPlate, "%s+", ""):upper() or ""
+            local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
+            if cleanCur == cleanSel or isOwned then
+                truck = curVeh
+                plate = curPlate
+                chosenTruckCoord = GetEntityCoords(truck)
+                isPlayerWithOwnTruck = true
+            end
         end
-    end
 
-    if not isPlayerWithOwnTruck and isOwned then
-        -- Procura o caminhão com a placa selecionada nas proximidades do jogador (pátio, raio de 120m)
-        local pedCoords = ped and (ped ~= 0) and GetEntityCoords(ped) or vector3(0,0,0)
-        local allVehs = GetAllVehicles()
-        for _, v in ipairs(allVehs) do
-            if DoesEntityExist(v) then
-                local vCoords = GetEntityCoords(v)
-                if #(vCoords - pedCoords) <= 120.0 then
-                    local vPlate = GetVehicleNumberPlateText(v)
-                    local cleanV = vPlate and string.gsub(vPlate, "%s+", ""):upper() or ""
-                    local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
-                    if cleanV == cleanSel then
-                        truck = v
-                        plate = vPlate
-                        chosenTruckCoord = vCoords
-                        isPlayerWithOwnTruck = true
-                        break
+        if not isPlayerWithOwnTruck and isOwned then
+            -- Procura o caminhão com a placa selecionada nas proximidades do jogador (pátio, raio de 120m)
+            local pedCoords = ped and (ped ~= 0) and GetEntityCoords(ped) or vector3(0,0,0)
+            local allVehs = GetAllVehicles()
+            for _, v in ipairs(allVehs) do
+                if DoesEntityExist(v) then
+                    local vCoords = GetEntityCoords(v)
+                    if #(vCoords - pedCoords) <= 120.0 then
+                        local vPlate = GetVehicleNumberPlateText(v)
+                        local cleanV = vPlate and string.gsub(vPlate, "%s+", ""):upper() or ""
+                        local cleanSel = selectedPlate and string.gsub(selectedPlate, "%s+", ""):upper() or ""
+                        if cleanV == cleanSel then
+                            truck = v
+                            plate = vPlate
+                            chosenTruckCoord = vCoords
+                            isPlayerWithOwnTruck = true
+                            break
+                        end
                     end
                 end
             end
         end
-    end
 
-    -- Se o contrato for de Frete (Caminhão Próprio) mas o caminhão não estiver presente no pátio:
-    if isFreightContract and not isPlayerWithOwnTruck then
-        ActiveSpawningPlayers[citizenId] = nil
-        TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão Não Encontrado', 'Traga seu caminhão próprio para o pátio da transportadora antes de iniciar este frete!', 'error')
-        return
+        -- Se o contrato for de Frete (Caminhão Próprio) mas o caminhão não estiver presente no pátio:
+        if not isPlayerWithOwnTruck then
+            ActiveSpawningPlayers[citizenId] = nil
+            TriggerClientEvent('aurp_trucker:notify', src, 'Caminhão Não Encontrado', 'Traga seu caminhão próprio para o pátio da transportadora antes de iniciar este frete!', 'error')
+            return
+        end
     end
 
     if isPlayerWithOwnTruck and truck and DoesEntityExist(truck) then
