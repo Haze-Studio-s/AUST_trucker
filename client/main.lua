@@ -652,46 +652,30 @@ local function StartCouplingWatcher()
                         break
                     end
 
-                    -- FLUXO DE PALETES: PULA COMPLETAMENTE A ETAPA DE BAIA!
-                    if ActiveJob and ActiveJob.cargoType == 'dry' then
-                        -- Congela fisicamente o caminhão e a carreta para evitar deslocamento com a empilhadeira
-                        if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
-                            FreezeEntityPosition(JobEntities.truck, true)
-                        end
-                        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
-                            FreezeEntityPosition(JobEntities.trailer, true)
-                        end
-
-                        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
-                        if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                            UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                        end
-                        SendMissionNotify('Central Logística', 'Carreta engatada na 5ª roda com sucesso! O conjunto foi imobilizado. Assuma a empilhadeira para iniciar o carregamento.', 'success')
-                        break
-                    end
-
-                    -- ETAPA 3 CONCLUÍDA -> SOLICITAÇÃO AUTORITATIVA DE BAIA LIVRE NO SERVIDOR (APENAS PARA CONTAINER / TANQUE)
+                    -- ETAPA 3 CONCLUÍDA -> TRANSIÇÃO AUTORITATIVA PARA A BAIA DE CARREGAMENTO DA PASTA
                     CurrentStage = 'STEP_4_PARK_DOCK'
                     local allocatedBay = nil
                     local reqJobId = ActiveJob and ActiveJob.jobId
 
-                    -- Tenta obter baia livre via servidor
+                    -- Tenta obter baia livre da pasta selecionada (ou via servidor)
                     local function AcquireBayAndStartDock()
-                        local res = lib.callback.await('aurp_trucker:server:requestLoadingBay', false, reqJobId)
-                        if res and res.success and res.coords then
-                            allocatedBay = res.coords
+                        if ActiveJob and ActiveJob.loadBayCoords then
+                            allocatedBay = ActiveJob.loadBayCoords
                         else
-                            -- Fallback inteligente na Baia 1 caso falhe
-                            allocatedBay = (Config.LoadingBays and Config.LoadingBays[1]) or vector4(1244.02, -3135.68, 4.53, 90.0)
-                            SendMissionNotify('Central Logística', 'Aguardando liberação de doca. Siga para a baía indicada provisoriamente.', 'info')
+                            local res = lib.callback.await('aurp_trucker:server:requestLoadingBay', false, reqJobId)
+                            if res and res.success and res.coords then
+                                allocatedBay = res.coords
+                            else
+                                allocatedBay = (Config.LoadingBays and Config.LoadingBays[1]) or vector4(1244.02, -3135.68, 4.53, 90.0)
+                            end
                         end
 
                         local dockCoords = vector3(allocatedBay.x, allocatedBay.y, allocatedBay.z)
                         local dockHeading = (type(allocatedBay) == 'vector4' and allocatedBay.w) or 90.0
 
-                        -- Atualiza objetivo e rota GPS para a baía demarcada
+                        -- Atualiza objetivo e rota GPS para a baía demarcada da pasta
                         UpdateMissionObjective('dock', dockCoords, 'Baía de Carregamento')
-                        SendMissionNotify('Central Logística', 'Carreta engatada! Posicione e dê ré perfeitamente alinhada na doca.', 'info')
+                        SendMissionNotify('Central Logística', 'Carreta engatada na 5ª roda! Leve o conjunto e estacione de ré na baía de carregamento indicada.', 'info')
 
                         if DockWatcherPoint then pcall(function() DockWatcherPoint:remove() end) end
                         local currentDockTextUi = nil
@@ -758,6 +742,13 @@ local function StartCouplingWatcher()
                                         -- Libera a baia ocupada no servidor
                                         if reqJobId then
                                             TriggerServerEvent('aurp_trucker:server:releaseLoadingBay', reqJobId)
+                                        end
+                                        -- Congela fisicamente o conjunto na baía para estabilidade do carregamento
+                                        if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
+                                            FreezeEntityPosition(JobEntities.truck, true)
+                                        end
+                                        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                                            FreezeEntityPosition(JobEntities.trailer, true)
                                         end
 
                                         -- ETAPA 4 CONCLUÍDA -> TRANSIÇÃO DIRETA COM BASE NO TIPO DE CARGA

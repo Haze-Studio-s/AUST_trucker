@@ -888,6 +888,19 @@ local function StartTruckDelivery(src, contractData)
         end
     end
 
+    -- VALIDAÇÃO FAIL-CLOSED ESTRITA DA PASTA DE SPAWNS SELECIONADA
+    local targetFolder = contractData.spawn_folder or 'Geral'
+    if AdminService and AdminService.ValidateFolderCompleteness then
+        local isValid, missingEntities = AdminService.ValidateFolderCompleteness(targetFolder, isQuickJob, cargoType)
+        if not isValid then
+            ActiveSpawningPlayers[citizenId] = nil
+            local missingStr = table.concat(missingEntities, ", ")
+            TriggerClientEvent('aurp_trucker:notify', src, 'Pasta de Spawns Incompleta', 
+                ('A pasta "%s" não possui: %s. Cadastre os pontos no /truckeradmin antes de iniciar!'):format(targetFolder, missingStr), 'error')
+            return
+        end
+    end
+
     local typeConfig = Config.CargoTypes and Config.CargoTypes[cargoType]
     if not typeConfig then typeConfig = Config.CargoTypes.dry end
 
@@ -989,7 +1002,7 @@ local function StartTruckDelivery(src, contractData)
         if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Frete com caminhão próprio validado. Placa: %s, NetID: %s"):format(plate, tostring(NetworkGetNetworkIdFromEntity(truck)))) end
     else
         -- Trabalho Rápido / Caminhão de Frota Fornecido pela Transportadora
-        local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck', contractData and contractData.spawn_folder)) or {}
+        local dynamicTruckSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('truck', targetFolder, true)) or {}
         local truckSpawns = (#dynamicTruckSpawns > 0 and dynamicTruckSpawns) or wh.TruckSpawns or { wh.TruckSpawnCoords }
 
         if Config.Debug then print(("[AUST_Trucker DEBUG - ETAPA 3] Buscando vaga livre para caminhão (Modelo: %s, Placa: %s)..."):format(selectedTruckModel, plate)) end
@@ -1046,7 +1059,7 @@ local function StartTruckDelivery(src, contractData)
     end
 
     -- STEP B: TRAILER SPAWN
-    local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer', contractData and contractData.spawn_folder)) or {}
+    local dynamicTrailerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('trailer', targetFolder, true)) or {}
     local trailerSpawns = (#dynamicTrailerSpawns > 0 and dynamicTrailerSpawns) or Config.TrailerSpawns or (wh and wh.TrailerSpawns) or { wh.TrailerSpawnCoords }
     local trailer = nil
     local chosenTrailerCoord = nil
@@ -1160,7 +1173,7 @@ local function StartTruckDelivery(src, contractData)
     local reqPallets = dynamicPropCount and math.min(maxAllowedPallets, math.max(1, dynamicPropCount)) or math.min(maxAllowedPallets, math.max(1, tonumber(contractData.palletCount) or 4))
 
     if cargoType == 'dry' then
-        local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift', contractData and contractData.spawn_folder)) or {}
+        local dynamicForkSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('forklift', targetFolder, true)) or {}
         local forkliftSpawns = (#dynamicForkSpawns > 0 and dynamicForkSpawns) or wh.ForkliftSpawns or { wh.ForkliftBayCoords }
 
         for idx, coord in ipairs(forkliftSpawns) do
@@ -1207,22 +1220,24 @@ local function StartTruckDelivery(src, contractData)
             TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, forkliftPlate)
         end
 
-        -- Spawn de Paletes Pré-Gerados (Polarix com Suporte a Props Customizados do Admin)
-        local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet', contractData and contractData.spawn_folder)) or {}
-        local rawPalletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
-        local palletSpawns = {}
-        for _, rawC in ipairs(rawPalletSpawns) do
-            local px = tonumber(rawC.x)
-            local py = tonumber(rawC.y)
-            local pz = tonumber(rawC.z)
-            if px and py and pz then
-                table.insert(palletSpawns, vector3(px, py, pz))
+        -- Spawn de Paletes Pré-Gerados (Fidelidade Absoluta aos Props do Gizmo 3D da Pasta)
+        local folderEntities = (AdminService and AdminService.GetFolderEntities and AdminService.GetFolderEntities(targetFolder)) or {}
+        local folderPallets = {}
+        for _, ent in ipairs(folderEntities) do
+            local st = tostring(ent.spawn_type):lower()
+            if (st == 'pallet' or st == 'prop') and ent.coords then
+                table.insert(folderPallets, ent)
             end
         end
 
         local ignoreEntities = { [truck] = true, [trailer] = true, [forklift] = true }
 
-        local function ResolveCargoPropHash(slotIdx)
+        local function ResolveCargoPropHash(slotIdx, customModel)
+            if customModel and customModel ~= '' then
+                local asNum = tonumber(customModel)
+                if asNum then return asNum end
+                return joaat(tostring(customModel))
+            end
             local tOffsets = nil
             local reqKey = tostring(requestedTrailer or ''):lower()
             local cModel = contractData.cargoModel or contractData.cargo_model
@@ -1235,7 +1250,6 @@ local function StartTruckDelivery(src, contractData)
                     or AdminService.TrailerOffsets[trailerModel]
             end
             local slotData = tOffsets and tOffsets.pallets and (tOffsets.pallets[slotIdx] or tOffsets.pallets[tostring(slotIdx)])
-            -- Trava de Herança Absoluta: prop do slot configurado no offset > prop herdado da pasta
             local candidate = (slotData and slotData.prop_model and slotData.prop_model ~= '' and slotData.prop_model)
                 or cModel
                 or contractData.cargo_model
@@ -1259,59 +1273,18 @@ local function StartTruckDelivery(src, contractData)
             return finalHash
         end
 
-        for _, coord in ipairs(palletSpawns) do
-            if #pallets >= reqPallets then break end
-            local slotTargetIdx = #pallets + 1
-            local pModel = ResolveCargoPropHash(slotTargetIdx)
-            local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)
-            local waitTimer = GetGameTimer()
-            while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
-            if DoesEntityExist(pObj) then
-                FreezeEntityPosition(pObj, true)
-                LockEntityNetworkOwner(pObj, src)
-                SetEntityDistanceCullingRadius(pObj, 450.0)
-                local pNet = NetworkGetNetworkIdFromEntity(pObj)
-                if pNet and pNet ~= 0 then
-                    table.insert(palletNetIds, pNet)
-                end
-                ignoreEntities[pObj] = true
-                table.insert(pallets, pObj)
-            else
-                -- Fallback imediato com prop nativo padrão caso o prop customizado falhe no streaming do servidor
-                local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), coord.x, coord.y, coord.z + 0.15, true, true, false)
-                local fbTimer = GetGameTimer()
-                while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
-                if DoesEntityExist(fallbackObj) then
-                    FreezeEntityPosition(fallbackObj, true)
-                    LockEntityNetworkOwner(fallbackObj, src)
-                    SetEntityDistanceCullingRadius(fallbackObj, 450.0)
-                    local fbNet = NetworkGetNetworkIdFromEntity(fallbackObj)
-                    if fbNet and fbNet ~= 0 then
-                        table.insert(palletNetIds, fbNet)
-                    end
-                    ignoreEntities[fallbackObj] = true
-                    table.insert(pallets, fallbackObj)
-                end
-            end
-        end
+        if #folderPallets > 0 then
+            for idx, ent in ipairs(folderPallets) do
+                if #pallets >= maxAllowedPallets then break end
+                local pModel = ResolveCargoPropHash(idx, ent.model)
+                local pCoords = ent.coords
+                local pHeading = tonumber(ent.heading) or 0.0
 
-        -- Se a quantidade necessária de paletes for maior que os slots individuais livres, utiliza fallback seguro
-        if #pallets < reqPallets and wh.PalletStagingAnchor then
-            local anchor = wh.PalletStagingAnchor
-            local rad = math.rad(wh.PalletStagingHeading or 180.0)
-            local rowDir = vector3(math.cos(rad), math.sin(rad), 0.0)
-            local colDir = vector3(-math.sin(rad), math.cos(rad), 0.0)
-
-            for i = #pallets + 1, reqPallets do
-                local col = (i - 1) % 3
-                local row = math.floor((i - 1) / 3)
-                local pos = anchor + rowDir * (col * 2.2) + colDir * (row * 2.2)
-
-                local pModel = ResolveCargoPropHash(i)
-                local pObj = CreateObject(pModel, pos.x, pos.y, pos.z + 0.15, true, true, false)
+                local pObj = CreateObject(pModel, pCoords.x, pCoords.y, pCoords.z + 0.15, true, true, false)
                 local waitTimer = GetGameTimer()
                 while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
                 if DoesEntityExist(pObj) then
+                    SetEntityHeading(pObj, pHeading)
                     FreezeEntityPosition(pObj, true)
                     LockEntityNetworkOwner(pObj, src)
                     SetEntityDistanceCullingRadius(pObj, 450.0)
@@ -1322,10 +1295,11 @@ local function StartTruckDelivery(src, contractData)
                     ignoreEntities[pObj] = true
                     table.insert(pallets, pObj)
                 else
-                    local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pos.x, pos.y, pos.z + 0.15, true, true, false)
+                    local fallbackObj = CreateObject(joaat('hei_prop_carrier_cargo_04b'), pCoords.x, pCoords.y, pCoords.z + 0.15, true, true, false)
                     local fbTimer = GetGameTimer()
                     while not DoesEntityExist(fallbackObj) and (GetGameTimer() - fbTimer < 3000) do Wait(50) end
                     if DoesEntityExist(fallbackObj) then
+                        SetEntityHeading(fallbackObj, pHeading)
                         FreezeEntityPosition(fallbackObj, true)
                         LockEntityNetworkOwner(fallbackObj, src)
                         SetEntityDistanceCullingRadius(fallbackObj, 450.0)
@@ -1338,6 +1312,40 @@ local function StartTruckDelivery(src, contractData)
                     end
                 end
             end
+            reqPallets = #pallets
+        else
+            -- Fallback para pátio padrão se a pasta não continha paletes
+            local dynamicPalletSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('pallet', targetFolder)) or {}
+            local rawPalletSpawns = (#dynamicPalletSpawns > 0 and dynamicPalletSpawns) or wh.PalletSpawns or {}
+            local palletSpawns = {}
+            for _, rawC in ipairs(rawPalletSpawns) do
+                local px = tonumber(rawC.x)
+                local py = tonumber(rawC.y)
+                local pz = tonumber(rawC.z)
+                if px and py and pz then
+                    table.insert(palletSpawns, vector3(px, py, pz))
+                end
+            end
+
+            for _, coord in ipairs(palletSpawns) do
+                if #pallets >= reqPallets then break end
+                local slotTargetIdx = #pallets + 1
+                local pModel = ResolveCargoPropHash(slotTargetIdx)
+                local pObj = CreateObject(pModel, coord.x, coord.y, coord.z + 0.15, true, true, false)
+                local waitTimer = GetGameTimer()
+                while not DoesEntityExist(pObj) and (GetGameTimer() - waitTimer < 5000) do Wait(50) end
+                if DoesEntityExist(pObj) then
+                    FreezeEntityPosition(pObj, true)
+                    LockEntityNetworkOwner(pObj, src)
+                    SetEntityDistanceCullingRadius(pObj, 450.0)
+                    local pNet = NetworkGetNetworkIdFromEntity(pObj)
+                    if pNet and pNet ~= 0 then
+                        table.insert(palletNetIds, pNet)
+                    end
+                    ignoreEntities[pObj] = true
+                    table.insert(pallets, pObj)
+                end
+            end
         end
 
         if Config.Debug or #pallets < reqPallets then
@@ -1347,7 +1355,7 @@ local function StartTruckDelivery(src, contractData)
     elseif cargoType == 'heavy' then
         reqPallets = 1
         local yardCfg = (Config.CargoTypes and Config.CargoTypes.heavy and Config.CargoTypes.heavy.yard) or {}
-        local dynamicHandlerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('handler', contractData and contractData.spawn_folder)) or {}
+        local dynamicHandlerSpawns = (AdminService and AdminService.GetSpawnsByType and AdminService.GetSpawnsByType('handler', targetFolder, true)) or {}
         local handlerSpawns = (#dynamicHandlerSpawns > 0 and dynamicHandlerSpawns) or yardCfg.handlerSpawns or { wh.HandlerBayCoords or vector4(1130.11, -3083.45, 6.01, 269.29) }
 
         for idx, coord in ipairs(handlerSpawns) do
@@ -1448,8 +1456,31 @@ local function StartTruckDelivery(src, contractData)
         reqPallets = 100 -- Carga Líquida e ADR
     end
 
-    local destCfg = Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
-    local destCoords = destCfg.coords
+    -- OBRIGATORIEDADE DA ROTA: O destino final é estritamente o deliveryCoords/delivery_coords da rota
+    local routeDest = contractData.deliveryCoords or contractData.delivery_coords
+    local destCoords = nil
+    if routeDest then
+        if type(routeDest) == 'table' and routeDest.x then
+            destCoords = vector3(tonumber(routeDest.x), tonumber(routeDest.y), tonumber(routeDest.z))
+        elseif type(routeDest) == 'vector3' or type(routeDest) == 'vector4' then
+            destCoords = vector3(routeDest.x, routeDest.y, routeDest.z)
+        end
+    end
+    local destCfg = nil
+    if not destCoords then
+        destCfg = Config.Polarix.DeliveryDestinations and Config.Polarix.DeliveryDestinations[math.random(#Config.Polarix.DeliveryDestinations)]
+        destCoords = destCfg and destCfg.coords or Config.DeliveryCoords
+    end
+
+    -- RESOLUÇÃO AUTORITATIVA DA BAIA DE CARREGAMENTO (LOAD_BAY) DA PASTA
+    local chosenLoadBay = nil
+    if AdminService and AdminService.GetSpawnsByType then
+        local lbList = AdminService.GetSpawnsByType('load_bay', targetFolder, true)
+        if lbList and lbList[1] then chosenLoadBay = lbList[1] end
+    end
+    if not chosenLoadBay then
+        chosenLoadBay = (Config.LoadingBays and Config.LoadingBays[1]) or vector4(1244.02, -3135.68, 4.53, 90.0)
+    end
 
     -- Consulta autoritativa da tabela de Economia e Rotas do painel admin
     local eco = (AdminService and AdminService.Economy) or {}
@@ -1462,7 +1493,7 @@ local function StartTruckDelivery(src, contractData)
         basePayment = math.floor(estDistance * kmPay * 100 + (eco.base_salary or 1200))
     end
     if not basePayment or basePayment <= 0 then
-        basePayment = destCfg.reward or 5000
+        basePayment = (destCfg and destCfg.reward) or 5000
     end
 
     local baseXP = tonumber(contractData.xp) or tonumber(contractData.base_xp)
@@ -1470,7 +1501,7 @@ local function StartTruckDelivery(src, contractData)
         baseXP = math.floor(estDistance * kmXP * 15 + 150)
     end
     if not baseXP or baseXP <= 0 then
-        baseXP = destCfg.xp or 200
+        baseXP = (destCfg and destCfg.xp) or 200
     end
 
     -- Bônus de remuneração e XP por paletes extras (> 4)
@@ -1526,6 +1557,7 @@ local function StartTruckDelivery(src, contractData)
         xp = baseXP,
         distance = (chosenTruckCoord and destCoords) and (math.max(1.0, math.floor(#(vector3(destCoords.x, destCoords.y, destCoords.z) - vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z)) / 100.0) / 10.0)) or 3.5,
         deliveryCoords = destCoords,
+        loadBayCoords = chosenLoadBay,
         stage = 'STEP_GET_TRUCK',
         current_object = nil,
         hoseProp = nil,
@@ -1606,6 +1638,7 @@ local function StartTruckDelivery(src, contractData)
         requiredCount = reqPallets,
         loadedCount = 0,
         deliveryCoords = destCoords,
+        loadBayCoords = chosenLoadBay,
         trailerModel = requestedTrailer or contractData.trailerModel,
         trailerOffsets = (function()
             local trkTrailer = requestedTrailer or contractData.trailerModel
@@ -2645,6 +2678,27 @@ AddEventHandler('onResourceStop', function(resourceName)
         end
         VP_Trucker.PlayerJobEntities = {}
     end
+end)
+
+-- =======================================================================
+-- GERENCIAMENTO DE BAIAS DE CARREGAMENTO (LOAD_BAY)
+-- =======================================================================
+
+lib.callback.register('aurp_trucker:server:requestLoadingBay', function(source, jobId)
+    local citizenId = GetCitizenId(source)
+    local lobbyId = jobId or (citizenId and PlayerPolarixLobbies[citizenId])
+    local lobby = lobbyId and PolarixLobbies[lobbyId]
+
+    if lobby and lobby.loadBayCoords then
+        return { success = true, coords = lobby.loadBayCoords }
+    end
+
+    local fallbackBay = (Config.LoadingBays and Config.LoadingBays[1]) or vector4(1244.02, -3135.68, 4.53, 90.0)
+    return { success = true, coords = fallbackBay }
+end)
+
+RegisterNetEvent('aurp_trucker:server:releaseLoadingBay', function(jobId)
+    -- Liberação de baia idempotente
 end)
 
 

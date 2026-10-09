@@ -1749,17 +1749,22 @@ function AdminService.GetActiveContracts(citizenId)
     return contracts
 end
 
-function AdminService.GetSpawnsByType(spawnType, folderName)
+function AdminService.GetSpawnsByType(spawnType, folderName, strict)
     local results = {}
     if not AdminService.Spawns then return results end
     local targetType = tostring(spawnType or ''):lower()
+    if targetType == 'loading_bay' then targetType = 'load_bay' end
+    if targetType == 'prop' then targetType = 'pallet' end
     local targetFolder = folderName and tostring(folderName):lower()
 
     -- 1. Se informou folderName, busca primeiramente na pasta correspondente
     if targetFolder and targetFolder ~= '' then
         for _, s in pairs(AdminService.Spawns) do
             local sFolder = tostring(s.folder_name or 'Geral'):lower()
-            if sFolder == targetFolder and tostring(s.spawn_type):lower() == targetType and s.coords then
+            local st = tostring(s.spawn_type):lower()
+            if st == 'loading_bay' then st = 'load_bay' end
+            if st == 'prop' then st = 'pallet' end
+            if sFolder == targetFolder and st == targetType and s.coords then
                 table.insert(results, s.coords)
             end
         end
@@ -1767,12 +1772,69 @@ function AdminService.GetSpawnsByType(spawnType, folderName)
 
     -- 2. Se encontrou spawns na pasta indicada, retorna eles
     if #results > 0 then return results end
+    if strict then return results end
 
-    -- 3. Fallback: se não informou pasta ou a pasta não continha pontos daquele tipo, busca em todos os spawns
+    -- 3. Fallback seguro apenas se strict não for exigido e não houver pasta
     for _, s in pairs(AdminService.Spawns) do
-        if tostring(s.spawn_type):lower() == targetType and s.coords then
+        local st = tostring(s.spawn_type):lower()
+        if st == 'loading_bay' then st = 'load_bay' end
+        if st == 'prop' then st = 'pallet' end
+        if st == targetType and s.coords then
             table.insert(results, s.coords)
         end
     end
     return results
+end
+
+function AdminService.GetFolderEntities(folderName)
+    local results = {}
+    if not AdminService.Spawns then return results end
+    local targetFolder = tostring(folderName or 'Geral'):lower()
+    for _, s in pairs(AdminService.Spawns) do
+        local sFolder = tostring(s.folder_name or 'Geral'):lower()
+        if sFolder == targetFolder and s.coords then
+            table.insert(results, s)
+        end
+    end
+    return results
+end
+
+function AdminService.ValidateFolderCompleteness(folderName, isQuickJob, cargoType)
+    local entities = AdminService.GetFolderEntities(folderName)
+    local counts = { truck = 0, trailer = 0, forklift = 0, handler = 0, pallet = 0, load_bay = 0 }
+
+    for _, ent in ipairs(entities) do
+        local st = tostring(ent.spawn_type):lower()
+        if st == 'loading_bay' then st = 'load_bay' end
+        if st == 'prop' then st = 'pallet' end
+        if counts[st] ~= nil then
+            counts[st] = counts[st] + 1
+        end
+    end
+
+    local missing = {}
+    if isQuickJob and counts.truck == 0 then
+        table.insert(missing, "Vaga de Caminhão (truck)")
+    end
+    if counts.trailer == 0 then
+        table.insert(missing, "Vaga de Carreta/Reboque (trailer)")
+    end
+    if counts.load_bay == 0 then
+        table.insert(missing, "Baia de Carregamento (load_bay)")
+    end
+
+    if cargoType == 'dry' then
+        if counts.forklift == 0 then
+            table.insert(missing, "Empilhadeira (forklift)")
+        end
+        if counts.pallet == 0 then
+            table.insert(missing, "Ponto de Palete/Carga (pallet)")
+        end
+    elseif cargoType == 'heavy' then
+        if counts.handler == 0 then
+            table.insert(missing, "Reach Stacker (handler)")
+        end
+    end
+
+    return (#missing == 0), missing, entities
 end
