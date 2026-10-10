@@ -380,6 +380,7 @@
         defaultProps: data.defaultProps || []
       };
     }
+    initLationChips();
     const panel = document.getElementById('admin-panel');
     if (panel) {
       panel.style.display = 'flex';
@@ -510,22 +511,84 @@
   window._activeRouteHubId = null;
   window._activeRouteHubName = null;
 
+  window.setRouteType = function (val) {
+    val = val || 'freight';
+    const input = document.getElementById('route-form-type');
+    if (input) input.value = val;
+    document.querySelectorAll('#route-type-chips .lation-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-type') === val);
+    });
+  };
+
+  window.setSpawnType = function (val) {
+    val = val || 'truck';
+    const input = document.getElementById('spawn-form-type');
+    if (input) {
+      input.value = val;
+      input.dispatchEvent(new Event('change'));
+    }
+    document.querySelectorAll('#spawn-type-chips .lation-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-type') === val);
+    });
+  };
+
+  window.setPropCategory = function (val) {
+    val = val || 'dry';
+    const input = document.getElementById('prop-form-category');
+    if (input) input.value = val;
+    document.querySelectorAll('#prop-category-chips .lation-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-type') === val);
+    });
+  };
+
+  function initLationChips() {
+    document.querySelectorAll('#route-type-chips .lation-chip').forEach(btn => {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        window.setRouteType(this.getAttribute('data-type'));
+      };
+    });
+
+    document.querySelectorAll('#spawn-type-chips .lation-chip').forEach(btn => {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        window.setSpawnType(this.getAttribute('data-type'));
+      };
+    });
+
+    document.querySelectorAll('#prop-category-chips .lation-chip').forEach(btn => {
+      btn.onclick = function (e) {
+        e.preventDefault();
+        window.setPropCategory(this.getAttribute('data-type'));
+      };
+    });
+  }
+
   function updateRouteNpcBadge(npcId, npcName) {
+    const hubCard = document.getElementById('route-hub-context-card');
+    const hubNameEl = document.getElementById('route-form-hub-name');
+    const hubIdEl = document.getElementById('route-form-hub-id');
+    const hiddenInput = document.getElementById('route-form-npc-id');
     const badge = document.getElementById('route-form-npc-badge');
     const label = document.getElementById('route-form-npc-label');
-    const hiddenInput = document.getElementById('route-form-npc-id');
 
-    if (npcId) {
+    if (npcId && npcId !== '__unassigned__') {
       window._activeRouteHubId = npcId;
       window._activeRouteHubName = npcName;
       if (hiddenInput) hiddenInput.value = npcId;
       if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
       if (badge) badge.style.display = 'inline-flex';
+      if (hubNameEl) hubNameEl.textContent = npcName || `Despachante #${npcId}`;
+      if (hubIdEl) hubIdEl.textContent = `#${npcId}`;
+      if (hubCard) hubCard.classList.remove('unlinked');
     } else {
       window._activeRouteHubId = null;
       window._activeRouteHubName = null;
       if (hiddenInput) hiddenInput.value = '';
       if (badge) badge.style.display = 'none';
+      if (hubNameEl) hubNameEl.textContent = 'Geral / Não Vinculado';
+      if (hubIdEl) hubIdEl.textContent = '#GERAL';
+      if (hubCard) hubCard.classList.add('unlinked');
     }
   }
 
@@ -630,6 +693,11 @@
             </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
+            ${!isUnassigned ? `
+              <button type="button" class="btn-folder-quick-add btn-quick-route-add" data-npc-id="${escapeHtml(npcId)}" data-npc-name="${escapeHtml(hubTitle)}" title="Criar nova rota para este Hub">
+                <i class="fas fa-plus"></i> + Nova Rota
+              </button>
+            ` : ''}
             <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
@@ -689,6 +757,19 @@
           }
         }
       });
+
+      // Botão rápido no header da pasta
+      const btnQuickRoute = folderCard.querySelector('.btn-quick-route-add');
+      if (btnQuickRoute) {
+        btnQuickRoute.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const targetNpcId = this.getAttribute('data-npc-id');
+          const targetNpcName = this.getAttribute('data-npc-name');
+          clearRouteForm(targetNpcId, targetNpcName);
+          document.getElementById('route-form-id')?.focus();
+          showAdminToast(`Formulário vinculado ao Hub "${targetNpcName}".`);
+        });
+      }
 
       // Botão primário "+ Criar Nova Rota neste Hub" no topo do corpo da pasta
       const btnCreateInHub = folderCard.querySelector('.btn-create-route-hub');
@@ -837,7 +918,7 @@
   function clearRouteForm(defaultNpcId, defaultNpcName) {
     document.getElementById('route-form-id').value = '';
     document.getElementById('route-form-title').value = '';
-    document.getElementById('route-form-type').value = 'freight';
+    window.setRouteType('freight');
     document.getElementById('route-form-payment').value = 2500;
     document.getElementById('route-form-xp').value = 150;
     document.getElementById('route-form-distance').value = 5.0;
@@ -864,7 +945,7 @@
     if (!r) return;
     document.getElementById('route-form-id').value = r.id || r.route_id || '';
     document.getElementById('route-form-title').value = r.name || r.title || '';
-    document.getElementById('route-form-type').value = r.type || r.job_type || 'freight';
+    window.setRouteType(r.type || r.job_type || 'freight');
     document.getElementById('route-form-payment').value = r.base_payment || r.payment || 2500;
     document.getElementById('route-form-xp').value = r.base_xp || r.xp || 150;
     document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
@@ -940,31 +1021,39 @@
   window._activeSpawnHubName = null;
 
   function updateSpawnNpcBadge(npcId, npcName) {
-    const badge = document.getElementById('spawn-form-npc-badge');
-    const label = document.getElementById('spawn-form-npc-label');
+    const hubCard = document.getElementById('spawn-hub-context-card');
+    const hubNameEl = document.getElementById('spawn-form-hub-name');
+    const hubIdEl = document.getElementById('spawn-form-hub-id');
     const hiddenId = document.getElementById('spawn-form-npc-id');
     const hiddenFolder = document.getElementById('spawn-form-folder');
+    const badge = document.getElementById('spawn-form-npc-badge');
+    const label = document.getElementById('spawn-form-npc-label');
 
-    if (npcId && npcId !== 'Geral') {
+    if (npcId && npcId !== 'Geral' && npcId !== '__unassigned__') {
       window._activeSpawnHubId = npcId;
       window._activeSpawnHubName = npcName;
       if (hiddenId) hiddenId.value = npcId;
       if (hiddenFolder) hiddenFolder.value = npcId;
       if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
       if (badge) badge.style.display = 'inline-flex';
+      if (hubNameEl) hubNameEl.textContent = npcName || `Hub #${npcId}`;
+      if (hubIdEl) hubIdEl.textContent = `#${npcId}`;
+      if (hubCard) hubCard.classList.remove('unlinked');
     } else {
       window._activeSpawnHubId = null;
       window._activeSpawnHubName = null;
       if (hiddenId) hiddenId.value = '';
       if (hiddenFolder) hiddenFolder.value = 'Geral';
       if (badge) badge.style.display = 'none';
+      if (hubNameEl) hubNameEl.textContent = 'Geral / Não Vinculado';
+      if (hubIdEl) hubIdEl.textContent = '#GERAL';
+      if (hubCard) hubCard.classList.add('unlinked');
     }
   }
 
   function clearSpawnForm(defaultHubId, defaultHubName) {
     const sId = document.getElementById('spawn-form-id');
     const sName = document.getElementById('spawn-form-name');
-    const sType = document.getElementById('spawn-form-type');
     const sModel = document.getElementById('spawn-form-model');
     const sx = document.getElementById('spawn-form-x');
     const sy = document.getElementById('spawn-form-y');
@@ -973,7 +1062,7 @@
 
     if (sId) sId.value = '';
     if (sName) sName.value = '';
-    if (sType) sType.value = 'truck';
+    window.setSpawnType('truck');
     if (sModel) sModel.value = '';
     if (sx) sx.value = '';
     if (sy) sy.value = '';
@@ -997,7 +1086,6 @@
     const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
     const sId = document.getElementById('spawn-form-id');
     const sName = document.getElementById('spawn-form-name');
-    const sType = document.getElementById('spawn-form-type');
     const sModel = document.getElementById('spawn-form-model');
     const sx = document.getElementById('spawn-form-x');
     const sy = document.getElementById('spawn-form-y');
@@ -1015,10 +1103,7 @@
     });
 
     if (sName) sName.value = s.name || s.spawn_name || '';
-    if (sType) {
-      sType.value = s.spawn_type || 'truck';
-      sType.dispatchEvent(new Event('change'));
-    }
+    window.setSpawnType(s.spawn_type || 'truck');
     if (sModel) sModel.value = s.model || '';
     if (sx && coords.x != null) sx.value = parseFloat(coords.x).toFixed(2);
     if (sy && coords.y != null) sy.value = parseFloat(coords.y).toFixed(2);
@@ -1196,6 +1281,11 @@
             </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
+            ${!isGeral ? `
+              <button type="button" class="btn-folder-quick-add btn-quick-spawn-add" data-npc-id="${escapeHtml(fKey)}" data-npc-name="${escapeHtml(hubTitle)}" title="Adicionar ponto de spawn a este Hub">
+                <i class="fas fa-plus"></i> + Novo Spawn
+              </button>
+            ` : ''}
             <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
@@ -1257,6 +1347,19 @@
           c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
         });
       });
+
+      // Botão rápido no header da pasta de spawns
+      const btnQuickSpawn = folderCard.querySelector('.btn-quick-spawn-add');
+      if (btnQuickSpawn) {
+        btnQuickSpawn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const targetHubId = this.getAttribute('data-npc-id');
+          const targetHubName = this.getAttribute('data-npc-name');
+          clearSpawnForm(targetHubId, targetHubName);
+          document.getElementById('spawn-form-id')?.focus();
+          showAdminToast(`Formulário de Spawns vinculado ao Hub "${targetHubName}".`);
+        });
+      }
 
       // Botão "+ Adicionar Ponto neste Hub" no banner interno da pasta
       const btnCreateInHub = folderCard.querySelector('.btn-create-spawn-hub');
@@ -2903,5 +3006,11 @@
       }
     );
   };
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initLationChips);
+  } else {
+    initLationChips();
+  }
 
 })();
