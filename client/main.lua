@@ -223,6 +223,16 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
 
     if not isSecondary then
         PurgeObjectiveMarkersAndWait(true)
+    else
+        if SecondaryObjectivePoint then
+            pcall(function() SecondaryObjectivePoint:remove() end)
+            SecondaryObjectivePoint = nil
+        end
+        if SecondaryObjectiveBlip and DoesBlipExist(SecondaryObjectiveBlip) then
+            pcall(function() SetBlipRoute(SecondaryObjectiveBlip, false) end)
+            RemoveBlip(SecondaryObjectiveBlip)
+            SecondaryObjectiveBlip = nil
+        end
     end
 
     local isEntity = false
@@ -2658,14 +2668,67 @@ end
 -- =======================================================================
 
 local function OnPlayerEnteredTruck(truck)
+    -- Descongelamento imediato do caminhão e liberação de freios sempre que o jogador assumir a cabine
+    FreezeEntityPosition(truck, false)
+    SetVehicleHandbrake(truck, false)
+    SetVehicleBrake(truck, false)
+    JobEntities.truck = truck
+    if lcActiveJob then lcActiveJob.truck = truck end
+
+    -- Verifica se a carreta já se encontra acoplada na 5ª roda
+    local hasTrailer, trailerEnt = GetVehicleTrailerVehicle(truck)
+    if not hasTrailer or trailerEnt == 0 then
+        hasTrailer = IsVehicleAttachedToTrailer(truck)
+    end
+
+    if hasTrailer then
+        -- Carreta já acoplada: purga imediatamente qualquer marcador de carreta e descongela
+        PurgeObjectiveMarkersAndWait(false)
+        if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+            FreezeEntityPosition(JobEntities.trailer, false)
+            SetVehicleHandbrake(JobEntities.trailer, false)
+            SetVehicleBrake(JobEntities.trailer, false)
+            local trBlip = GetBlipFromEntity(JobEntities.trailer)
+            if trBlip and DoesBlipExist(trBlip) then RemoveBlip(trBlip) end
+        end
+
+        -- Se for carga pesada (contêiner)
+        if ActiveJob and ActiveJob.cargoType == 'heavy' then
+            local isContainerLoaded = false
+            if JobEntities.container and DoesEntityExist(JobEntities.container) and JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
+                isContainerLoaded = IsEntityAttachedToEntity(JobEntities.container, JobEntities.trailer)
+            end
+
+            if isContainerLoaded then
+                CurrentStage = 'STEP_8_IN_TRANSIT'
+                SendMissionNotify('Central Logística', 'Conjunto acoplado com contêiner carregado! Inicie o trajeto até o destino.', 'success')
+                if ActiveJob.deliveryCoords then
+                    StartDeliveryRoute(ActiveJob.deliveryCoords, ActiveJob.jobId)
+                end
+            else
+                -- Contêiner no pátio: avança para a operação do Reach Stacker
+                CurrentStage = 'STEP_6_LOAD_CONTAINER'
+                local containerList = (JobEntities.containers and #JobEntities.containers > 0 and JobEntities.containers) or (JobEntities.container and { JobEntities.container }) or {}
+                if containerList[1] and DoesEntityExist(containerList[1]) then
+                    UpdateMissionObjective('pallet', containerList[1], 'Contêiner Marítimo')
+                end
+                SendMissionNotify('Central Logística', 'Carreta engatada! Assuma o Reach Stacker no pátio para carregar o contêiner.', 'info')
+            end
+            return
+        end
+
+        -- Se for outra carga (ex: paletes)
+        CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+        SendMissionNotify('Central Logística', 'Carreta engatada na 5ª roda! Prossiga para o carregamento dos paletes.', 'success')
+        return
+    end
+
     if CurrentStage ~= 'STEP_2_ENTER_TRUCK' then return end
 
     -- Transição Estrita: Purga todos os marcadores anteriores com trava síncrona antes de avançar
     PurgeObjectiveMarkersAndWait(false)
 
     CurrentStage = 'STEP_3_COUPLE_TRAILER'
-
-    JobEntities.truck = truck
 
     -- Garante colisão ativa e física dinâmica para acoplamento da 5ª roda
     if JobEntities.trailer and DoesEntityExist(JobEntities.trailer) then
@@ -2840,9 +2903,15 @@ local function StartMissionStep1(truck, trailer, forklift)
     local truckTarget = (truck and DoesEntityExist(truck) and truck) or (ActiveJob and ActiveJob.truckCoords)
     UpdateMissionObjective('truck', truckTarget, 'Seu Caminhão')
 
-    -- Blip secundário da carreta/carga
+    -- Blip secundário da carreta/carga (apenas se a carreta NÃO estiver acoplada)
+    local isAttached = false
+    if truck and DoesEntityExist(truck) then
+        local hasTr, trEnt = GetVehicleTrailerVehicle(truck)
+        isAttached = (hasTr and trEnt ~= 0) or IsVehicleAttachedToTrailer(truck)
+    end
+
     local trailerTarget = (trailer and DoesEntityExist(trailer) and trailer) or (ActiveJob and ActiveJob.trailerCoords)
-    if trailerTarget then
+    if trailerTarget and not isAttached then
         UpdateMissionObjective('trailer', trailerTarget, 'Carreta / Carga', true)
     end
 
@@ -3044,6 +3113,23 @@ lib.onCache('vehicle', function(veh)
         end
     end
 
+    if IsMissionTruck(veh) then
+        local ped = cache.ped or PlayerPedId()
+        if GetPedInVehicleSeat(veh, -1) == ped then
+            FreezeEntityPosition(veh, false)
+            SetVehicleHandbrake(veh, false)
+            SetVehicleBrake(veh, false)
+            JobEntities.truck = veh
+            if lcActiveJob then lcActiveJob.truck = veh end
+            local trEnt = JobEntities.trailer or GetVehicleTrailerVehicle(veh)
+            if trEnt and trEnt ~= 0 and DoesEntityExist(trEnt) then
+                FreezeEntityPosition(trEnt, false)
+                SetVehicleHandbrake(trEnt, false)
+                SetVehicleBrake(trEnt, false)
+            end
+        end
+    end
+
     if CurrentStage == 'STEP_8_IN_TRANSIT' and IsMissionTruck(veh) then
         JobEntities.truck = veh
         if lcActiveJob then lcActiveJob.truck = veh end
@@ -3056,10 +3142,21 @@ end)
 lib.onCache('seat', function(seat)
     if not ActiveJob or seat ~= -1 then return end
     local veh = cache.vehicle
-    if CurrentStage == 'STEP_2_ENTER_TRUCK' and veh and veh ~= 0 and IsMissionTruck(veh) then
+    if veh and veh ~= 0 and IsMissionTruck(veh) then
+        FreezeEntityPosition(veh, false)
+        SetVehicleHandbrake(veh, false)
+        SetVehicleBrake(veh, false)
         JobEntities.truck = veh
         if lcActiveJob then lcActiveJob.truck = veh end
-        OnPlayerEnteredTruck(veh)
+        local trEnt = JobEntities.trailer or GetVehicleTrailerVehicle(veh)
+        if trEnt and trEnt ~= 0 and DoesEntityExist(trEnt) then
+            FreezeEntityPosition(trEnt, false)
+            SetVehicleHandbrake(trEnt, false)
+            SetVehicleBrake(trEnt, false)
+        end
+        if CurrentStage == 'STEP_2_ENTER_TRUCK' or CurrentStage == 'STEP_3_COUPLE_TRAILER' then
+            OnPlayerEnteredTruck(veh)
+        end
     end
 end)
 
@@ -3302,7 +3399,14 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
 
                 if CurrentStage == 'STEP_2_ENTER_TRUCK' then
-                    UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
+                    local isAlreadyAttached = false
+                    if truck and DoesEntityExist(truck) then
+                        local hasTr, trEnt = GetVehicleTrailerVehicle(truck)
+                        isAlreadyAttached = (hasTr and trEnt ~= 0) or IsVehicleAttachedToTrailer(truck)
+                    end
+                    if not isAlreadyAttached then
+                        UpdateMissionObjective('trailer', trailer, 'Carreta / Carga', true)
+                    end
                 end
             end
 
@@ -3340,28 +3444,50 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                         end
 
                         if trkAttached then
-                            -- TRAVA CONDICIONAL: Congela apenas com confirmação absoluta do acoplamento
-                            FreezeEntityPosition(truck, true)
-                            FreezeEntityPosition(trailer, true)
-
-                            -- Pula etapas preliminares e avança diretamente para a fase de carregamento
-                            CurrentStage = 'STEP_5_ENTER_FORKLIFT'
                             ClearObjectiveMarkers(false)
+                            local isHeavy = (payload and payload.cargoType == 'heavy')
 
-                            -- Aguarda a empilhadeira ser instanciada para vincular o objetivo
-                            CreateThread(function()
-                                local wTimer = 0
-                                while (not JobEntities.forklift or not DoesEntityExist(JobEntities.forklift)) and wTimer < 4000 do
-                                    Wait(100)
-                                    wTimer = wTimer + 100
-                                end
-                                if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                    UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                                end
-                            end)
+                            if isHeavy then
+                                -- Carga pesada (contêiner): caminhão livre para manobrar no pátio sem nenhum freeze
+                                FreezeEntityPosition(truck, false)
+                                FreezeEntityPosition(trailer, false)
+                                SetVehicleHandbrake(truck, false)
+                                SetVehicleHandbrake(trailer, false)
+                                CurrentStage = 'STEP_6_LOAD_CONTAINER'
 
-                            PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
-                            SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Prossiga para o carregamento da carga.', 'success')
+                                CreateThread(function()
+                                    local wTimer = 0
+                                    while (not JobEntities.handler or not DoesEntityExist(JobEntities.handler)) and wTimer < 4000 do
+                                        Wait(100)
+                                        wTimer = wTimer + 100
+                                    end
+                                    if JobEntities.handler and DoesEntityExist(JobEntities.handler) then
+                                        UpdateMissionObjective('forklift', JobEntities.handler, 'Reach Stacker')
+                                    end
+                                end)
+
+                                PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
+                                SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Assuma o Reach Stacker para carregar o contêiner.', 'success')
+                            else
+                                -- Carga de paletes: congelamento preventivo na baia durante o carregamento com empilhadeira
+                                FreezeEntityPosition(truck, true)
+                                FreezeEntityPosition(trailer, true)
+                                CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+
+                                CreateThread(function()
+                                    local wTimer = 0
+                                    while (not JobEntities.forklift or not DoesEntityExist(JobEntities.forklift)) and wTimer < 4000 do
+                                        Wait(100)
+                                        wTimer = wTimer + 100
+                                    end
+                                    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
+                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
+                                    end
+                                end)
+
+                                PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
+                                SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Assuma a empilhadeira para iniciar o carregamento dos paletes.', 'success')
+                            end
                         else
                             -- Se o acoplamento automático não engatar em 5s, mantém descongelado para o jogador manobrar manualmente
                             FreezeEntityPosition(truck, false)
