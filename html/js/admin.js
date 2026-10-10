@@ -507,57 +507,29 @@
   }
 
   let draggedRouteId = null;
-
-  function populateRouteNPCSelect(selectedId) {
-    const npcSelect = document.getElementById('route-form-npc-select');
-    if (!npcSelect) return;
-    const currentVal = selectedId || npcSelect.value;
-    const npcs = adminData.npcs || {};
-    const npcKeys = Object.keys(npcs);
-
-    npcSelect.innerHTML = '<option value="">Selecione o NPC Despachante...</option>';
-    npcKeys.forEach(k => {
-      const n = npcs[k];
-      const opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = `${n.npc_name || n.name || 'Despachante'} (#${k})`;
-      npcSelect.appendChild(opt);
-    });
-
-    if (currentVal && npcs[currentVal]) {
-      npcSelect.value = currentVal;
-      updateRouteNpcBadge(currentVal, npcs[currentVal]?.npc_name);
-    } else {
-      updateRouteNpcBadge(null);
-    }
-
-    npcSelect.onchange = function () {
-      const val = this.value;
-      const nObj = npcs[val];
-      updateRouteNpcBadge(val, nObj ? (nObj.npc_name || nObj.name) : null);
-      const hiddenInput = document.getElementById('route-form-npc-id');
-      if (hiddenInput) hiddenInput.value = val || '';
-    };
-  }
+  window._activeRouteHubId = null;
+  window._activeRouteHubName = null;
 
   function updateRouteNpcBadge(npcId, npcName) {
     const badge = document.getElementById('route-form-npc-badge');
     const label = document.getElementById('route-form-npc-label');
     const hiddenInput = document.getElementById('route-form-npc-id');
-    if (!badge) return;
 
     if (npcId) {
+      window._activeRouteHubId = npcId;
+      window._activeRouteHubName = npcName;
       if (hiddenInput) hiddenInput.value = npcId;
       if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
-      badge.style.display = 'inline-flex';
+      if (badge) badge.style.display = 'inline-flex';
     } else {
+      window._activeRouteHubId = null;
+      window._activeRouteHubName = null;
       if (hiddenInput) hiddenInput.value = '';
-      badge.style.display = 'none';
+      if (badge) badge.style.display = 'none';
     }
   }
 
   function renderRoutesTab() {
-    populateRouteNPCSelect(document.getElementById('route-form-npc-id')?.value || document.getElementById('route-form-npc-select')?.value);
     const container = document.getElementById('admin-routes-folders-container');
     if (!container) return;
     container.innerHTML = '';
@@ -618,13 +590,19 @@
       folderKeys.push('__unassigned__');
     }
 
+    // Se não houver Hub ativo pré-selecionado, define o primeiro NPC como padrão
+    if (!window._activeRouteHubId && npcKeys.length > 0) {
+      const firstNpc = npcs[npcKeys[0]];
+      updateRouteNpcBadge(npcKeys[0], firstNpc?.npc_name || firstNpc?.name);
+    }
+
     folderKeys.forEach((npcId, idx) => {
       const isUnassigned = (npcId === '__unassigned__');
       const npc = isUnassigned ? null : npcs[npcId];
       const rList = routesByNpc[npcId] || [];
       const folderKey = `route_hub_${npcId}`;
 
-      // Por padrão, se nenhuma pasta tiver sido aberta ainda, abre a primeira pasta
+      // Abre a primeira pasta por padrão
       if (window._openRouteFolders.size === 0 && idx === 0) {
         window._openRouteFolders.add(folderKey);
       }
@@ -652,19 +630,26 @@
             </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            ${!isUnassigned ? `
-              <button class="admin-btn admin-btn-outline btn-new-route-hub" data-npc-id="${escapeHtml(npcId)}" style="padding: 3px 8px; font-size:10.5px;" title="Criar Nova Rota neste Hub">
-                <i class="fas fa-plus"></i> + Nova Rota
-              </button>
-            ` : ''}
             <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
         <div class="admin-folder-body">
+          ${!isUnassigned ? `
+            <div class="admin-folder-action-bar">
+              <div class="action-hub-info">
+                <i class="fas fa-user-tie"></i>
+                <span>Hub Operacional: <strong>${escapeHtml(hubTitle)}</strong></span>
+              </div>
+              <button class="btn-folder-action-primary btn-create-route-hub" data-npc-id="${escapeHtml(npcId)}" data-npc-name="${escapeHtml(hubTitle)}">
+                <i class="fas fa-plus-circle"></i> + Criar Nova Rota neste Hub
+              </button>
+            </div>
+          ` : ''}
+
           ${rList.length === 0 ? `
-            <div style="color:var(--admin-text-muted); font-size:11px; padding:16px; text-align:center;">
-              <i class="fas fa-route" style="opacity:0.4; font-size:18px; margin-bottom:6px; display:block;"></i>
-              Nenhuma rota vinculada a este Hub. Arraste rotas para cá ou clique em <b>+ Nova Rota</b> acima.
+            <div style="color:var(--admin-text-muted); font-size:11px; padding:20px; text-align:center;">
+              <i class="fas fa-route" style="opacity:0.4; font-size:20px; margin-bottom:8px; display:block;"></i>
+              Nenhuma rota vinculada a este Hub. Clique em <b>+ Criar Nova Rota neste Hub</b> acima ou arraste rotas para cá.
             </div>
           ` : `
             <table class="admin-table">
@@ -687,8 +672,7 @@
 
       // Header click toggle
       const header = folderCard.querySelector('.admin-routes-folder-header');
-      header.addEventListener('click', function (e) {
-        if (e.target.closest('.btn-new-route-hub')) return;
+      header.addEventListener('click', function () {
         const currentlyOpen = folderCard.classList.contains('expanded');
         if (currentlyOpen) {
           folderCard.classList.remove('expanded');
@@ -700,22 +684,26 @@
           window._openRouteFolders.add(folderKey);
           const icon = folderCard.querySelector('.admin-folder-title > i');
           if (icon && !isUnassigned) icon.className = 'fas fa-folder-open';
+          if (!isUnassigned) {
+            updateRouteNpcBadge(npcId, hubTitle);
+          }
         }
       });
 
-      // Botão "+ Nova Rota neste Hub"
-      const btnNewInHub = folderCard.querySelector('.btn-new-route-hub');
-      if (btnNewInHub) {
-        btnNewInHub.addEventListener('click', function (e) {
+      // Botão primário "+ Criar Nova Rota neste Hub" no topo do corpo da pasta
+      const btnCreateInHub = folderCard.querySelector('.btn-create-route-hub');
+      if (btnCreateInHub) {
+        btnCreateInHub.addEventListener('click', function (e) {
           e.stopPropagation();
           const targetNpcId = this.getAttribute('data-npc-id');
-          clearRouteForm(targetNpcId);
+          const targetNpcName = this.getAttribute('data-npc-name');
+          clearRouteForm(targetNpcId, targetNpcName);
           document.getElementById('route-form-id')?.focus();
-          showAdminToast(`Formulário vinculado ao Hub "${hubTitle}".`);
+          showAdminToast(`Formulário vinculado ao Hub "${targetNpcName}".`);
         });
       }
 
-      // Drag & Drop no Header da Pasta (para soltar e alocar rota)
+      // Drag & Drop no Header da Pasta
       header.addEventListener('dragover', function (e) {
         e.preventDefault();
         header.classList.add('drag-over');
@@ -750,7 +738,7 @@
         }
       });
 
-      // Se tiver rotas, popula a tabela dentro da pasta
+      // Popula rotas na tabela
       if (rList.length > 0) {
         const tbody = folderCard.querySelector('.admin-routes-hub-tbody');
         rList.forEach(e => {
@@ -803,7 +791,6 @@
             </td>
           `;
 
-          // Drag Events da Linha de Rota
           tr.addEventListener('dragstart', function (ev) {
             draggedRouteId = this.getAttribute('data-id');
             this.classList.add('dragging');
@@ -818,7 +805,6 @@
           tbody.appendChild(tr);
         });
 
-        // Eventos de Editar e Deletar
         tbody.querySelectorAll('.btn-edit-route').forEach(btn => {
           btn.addEventListener('click', function () {
             const id = this.getAttribute('data-id');
@@ -848,7 +834,7 @@
     });
   }
 
-  function clearRouteForm(defaultNpcId) {
+  function clearRouteForm(defaultNpcId, defaultNpcName) {
     document.getElementById('route-form-id').value = '';
     document.getElementById('route-form-title').value = '';
     document.getElementById('route-form-type').value = 'freight';
@@ -862,13 +848,12 @@
     document.getElementById('route-form-forklift').checked = false;
     document.getElementById('route-form-adr').checked = false;
 
-    if (defaultNpcId && (adminData.npcs || {})[defaultNpcId]) {
-      const npcSelect = document.getElementById('route-form-npc-select');
-      if (npcSelect) npcSelect.value = defaultNpcId;
-      const nObj = (adminData.npcs || {})[defaultNpcId];
-      updateRouteNpcBadge(defaultNpcId, nObj?.npc_name || nObj?.name);
+    const targetNpcId = defaultNpcId || window._activeRouteHubId;
+    if (targetNpcId && (adminData.npcs || {})[targetNpcId]) {
+      const nObj = (adminData.npcs || {})[targetNpcId];
+      updateRouteNpcBadge(targetNpcId, defaultNpcName || nObj?.npc_name || nObj?.name);
     } else {
-      populateRouteNPCSelect('');
+      updateRouteNpcBadge(null);
     }
 
     const delBtn = document.getElementById('btn-delete-route');
@@ -885,7 +870,8 @@
     document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
     document.getElementById('route-form-level').value = r.req_skill || r.required_level || 1;
 
-    populateRouteNPCSelect(r.npc_id || '');
+    const npcObj = (adminData.npcs || {})[r.npc_id];
+    updateRouteNpcBadge(r.npc_id, npcObj ? (npcObj.npc_name || npcObj.name) : null);
 
     const dCoords = r.delivery_coords ? (typeof r.delivery_coords === 'string' ? JSON.parse(r.delivery_coords) : r.delivery_coords) : {};
     document.getElementById('route-form-deliv-x').value = dCoords.x ? Number(dCoords.x).toFixed(2) : '';
@@ -906,11 +892,9 @@
       return;
     }
 
-    const npcSelect = document.getElementById('route-form-npc-select');
-    const npcId = (npcSelect?.value || document.getElementById('route-form-npc-id')?.value || '').trim();
+    const npcId = (document.getElementById('route-form-npc-id')?.value || window._activeRouteHubId || '').trim();
     if (!npcId) {
-      showAdminToast('Vínculo Obrigatório: Selecione o NPC Despachante (Hub) responsável por esta rota!', 'error');
-      if (npcSelect) npcSelect.focus();
+      showAdminToast('Vínculo Obrigatório: Abra a pasta de um NPC Despachante e clique em "+ Criar Nova Rota neste Hub"!', 'error');
       return;
     }
 
@@ -952,67 +936,59 @@
   // ============================================================
   // ABA 2: SPAWNS DINÂMICOS (PASTAS & DRAG-AND-DROP)
   // ============================================================
+  window._activeSpawnHubId = null;
+  window._activeSpawnHubName = null;
+
   function updateSpawnNpcBadge(npcId, npcName) {
     const badge = document.getElementById('spawn-form-npc-badge');
     const label = document.getElementById('spawn-form-npc-label');
-    const hiddenInput = document.getElementById('spawn-form-npc-id');
-    if (!badge) return;
+    const hiddenId = document.getElementById('spawn-form-npc-id');
+    const hiddenFolder = document.getElementById('spawn-form-folder');
 
     if (npcId && npcId !== 'Geral') {
-      if (hiddenInput) hiddenInput.value = npcId;
+      window._activeSpawnHubId = npcId;
+      window._activeSpawnHubName = npcName;
+      if (hiddenId) hiddenId.value = npcId;
+      if (hiddenFolder) hiddenFolder.value = npcId;
       if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
-      badge.style.display = 'inline-flex';
+      if (badge) badge.style.display = 'inline-flex';
     } else {
-      if (hiddenInput) hiddenInput.value = '';
-      badge.style.display = 'none';
+      window._activeSpawnHubId = null;
+      window._activeSpawnHubName = null;
+      if (hiddenId) hiddenId.value = '';
+      if (hiddenFolder) hiddenFolder.value = 'Geral';
+      if (badge) badge.style.display = 'none';
     }
   }
 
-  function populateSpawnNPCFolders(selectedFolder) {
-    const folderSelect = document.getElementById('spawn-form-folder');
-    if (!folderSelect) return;
-    const npcs = adminData.npcs || {};
-    const npcKeys = Object.keys(npcs);
-    const currentVal = selectedFolder || folderSelect.value;
+  function clearSpawnForm(defaultHubId, defaultHubName) {
+    const sId = document.getElementById('spawn-form-id');
+    const sName = document.getElementById('spawn-form-name');
+    const sType = document.getElementById('spawn-form-type');
+    const sModel = document.getElementById('spawn-form-model');
+    const sx = document.getElementById('spawn-form-x');
+    const sy = document.getElementById('spawn-form-y');
+    const sz = document.getElementById('spawn-form-z');
+    const sh = document.getElementById('spawn-form-h');
 
-    folderSelect.innerHTML = '';
-    if (npcKeys.length === 0) {
-      folderSelect.innerHTML = '<option value="Geral">Geral (Sem Hubs Cadastrados)</option>';
+    if (sId) sId.value = '';
+    if (sName) sName.value = '';
+    if (sType) sType.value = 'truck';
+    if (sModel) sModel.value = '';
+    if (sx) sx.value = '';
+    if (sy) sy.value = '';
+    if (sz) sz.value = '';
+    if (sh) sh.value = '';
+
+    const targetHubId = defaultHubId || window._activeSpawnHubId || selectedSpawnFolder;
+    if (targetHubId && targetHubId !== 'Geral' && (adminData.npcs || {})[targetHubId]) {
+      const nObj = (adminData.npcs || {})[targetHubId];
+      selectedSpawnFolder = targetHubId;
+      updateSpawnNpcBadge(targetHubId, defaultHubName || nObj?.npc_name || nObj?.name);
+    } else {
+      selectedSpawnFolder = 'Geral';
       updateSpawnNpcBadge(null);
-      return;
     }
-
-    npcKeys.forEach(k => {
-      const n = npcs[k];
-      const opt = document.createElement('option');
-      opt.value = k;
-      opt.textContent = `${n.npc_name || n.name || 'Despachante'} (#${k})`;
-      folderSelect.appendChild(opt);
-    });
-
-    const optGeral = document.createElement('option');
-    optGeral.value = 'Geral';
-    optGeral.textContent = 'Geral / Pátio Global';
-    folderSelect.appendChild(optGeral);
-
-    if (currentVal && (npcs[currentVal] || currentVal === 'Geral')) {
-      folderSelect.value = currentVal;
-      selectedSpawnFolder = currentVal;
-      updateSpawnNpcBadge(currentVal, npcs[currentVal]?.npc_name);
-    } else if (npcKeys.length > 0) {
-      folderSelect.value = npcKeys[0];
-      selectedSpawnFolder = npcKeys[0];
-      updateSpawnNpcBadge(npcKeys[0], npcs[npcKeys[0]]?.npc_name);
-    }
-
-    folderSelect.onchange = function () {
-      selectedSpawnFolder = this.value;
-      const nObj = npcs[this.value];
-      updateSpawnNpcBadge(this.value, nObj ? (nObj.npc_name || nObj.name) : null);
-      document.querySelectorAll('.admin-folder-card').forEach(c => {
-        c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
-      });
-    };
   }
 
   function fillSpawnForm(s) {
@@ -1020,7 +996,6 @@
     const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
     const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
     const sId = document.getElementById('spawn-form-id');
-    const sFolder = document.getElementById('spawn-form-folder');
     const sName = document.getElementById('spawn-form-name');
     const sType = document.getElementById('spawn-form-type');
     const sModel = document.getElementById('spawn-form-model');
@@ -1032,14 +1007,13 @@
     if (sId) sId.value = s.id || s.key || s.spawn_id || '';
     const f = s.npc_id || s.folder_name || s.folderName || s.folder || 'Geral';
     selectedSpawnFolder = f;
-    populateSpawnNPCFolders(f);
+    const nObj = (adminData.npcs || {})[f];
+    updateSpawnNpcBadge(f, nObj ? (nObj.npc_name || nObj.name) : null);
 
-    if (sFolder) {
-      sFolder.value = f;
-      document.querySelectorAll('.admin-folder-card').forEach(c => {
-        c.style.borderColor = (c.getAttribute('data-folder') === f) ? 'var(--admin-primary)' : '';
-      });
-    }
+    document.querySelectorAll('.admin-folder-card').forEach(c => {
+      c.style.borderColor = (c.getAttribute('data-folder') === f) ? 'var(--admin-primary)' : '';
+    });
+
     if (sName) sName.value = s.name || s.spawn_name || '';
     if (sType) {
       sType.value = s.spawn_type || 'truck';
@@ -1145,8 +1119,6 @@
     const npcs = adminData.npcs || {};
     const npcKeys = Object.keys(npcs);
 
-    populateSpawnNPCFolders(selectedSpawnFolder);
-
     // Mapeia spawns para cada Hub de NPC
     const folders = {};
     npcKeys.forEach(k => {
@@ -1168,6 +1140,12 @@
     const folderList = [...npcKeys];
     if (folders['Geral'].length > 0 || npcKeys.length === 0) {
       folderList.push('Geral');
+    }
+
+    // Se nenhum Hub de spawn estiver ativo, ativa o primeiro
+    if (!window._activeSpawnHubId && npcKeys.length > 0) {
+      const firstNpc = npcs[npcKeys[0]];
+      updateSpawnNpcBadge(npcKeys[0], firstNpc?.npc_name || firstNpc?.name);
     }
 
     folderList.forEach((fKey, idx) => {
@@ -1218,15 +1196,22 @@
             </span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            ${!isGeral ? `
-              <button class="admin-btn admin-btn-outline btn-new-spawn-hub" data-npc-id="${escapeHtml(fKey)}" style="padding: 3px 8px; font-size:10.5px;" title="Adicionar Ponto neste Hub">
-                <i class="fas fa-plus"></i> + Novo Ponto
-              </button>
-            ` : ''}
             <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
         <div class="admin-folder-body">
+          ${!isGeral ? `
+            <div class="admin-folder-action-bar">
+              <div class="action-hub-info">
+                <i class="fas fa-warehouse"></i>
+                <span>Hub Operacional: <strong>${escapeHtml(hubTitle)}</strong></span>
+              </div>
+              <button class="btn-folder-action-primary btn-create-spawn-hub" data-npc-id="${escapeHtml(fKey)}" data-npc-name="${escapeHtml(hubTitle)}">
+                <i class="fas fa-plus-circle"></i> + Adicionar Ponto neste Hub
+              </button>
+            </div>
+          ` : ''}
+
           <div class="admin-folder-filters">
             <button class="admin-filter-pill ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">
               <i class="fas fa-list"></i> Todos (${fList.length})
@@ -1242,15 +1227,14 @@
             </button>
           </div>
           <div class="admin-folder-items" data-folder="${escapeHtml(fKey)}">
-            ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:16px; text-align:center;">Nenhum ponto alocado a este Hub. Arraste pontos de spawn para cá ou use o Gizmo 3D.</div>` : ''}
+            ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:16px; text-align:center;">Nenhum ponto alocado a este Hub. Clique em <b>+ Adicionar Ponto neste Hub</b> acima ou arraste pontos para cá.</div>` : ''}
           </div>
         </div>
       `;
 
       // Alternância do Acordeão (Expandir / Recolher)
       const header = folderCard.querySelector('.admin-folder-header');
-      header.addEventListener('click', function (e) {
-        if (e.target.closest('.btn-new-spawn-hub')) return;
+      header.addEventListener('click', function () {
         const currentlyOpen = folderCard.classList.contains('expanded');
         if (currentlyOpen) {
           folderCard.classList.remove('expanded');
@@ -1262,29 +1246,28 @@
           window._openSpawnFolders.add(folderCardKey);
           const icon = folderCard.querySelector('.admin-folder-title > i');
           if (icon && !isGeral) icon.className = 'fas fa-folder-open';
+          if (!isGeral) {
+            selectedSpawnFolder = fKey;
+            updateSpawnNpcBadge(fKey, npc?.npc_name || npc?.name);
+          }
         }
 
         selectedSpawnFolder = fKey;
-        const folderSelect = document.getElementById('spawn-form-folder');
-        if (folderSelect) folderSelect.value = fKey;
-        updateSpawnNpcBadge(fKey, npc?.npc_name);
         document.querySelectorAll('.admin-folder-card').forEach(c => {
           c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
         });
       });
 
-      // Botão "+ Novo Ponto neste Hub"
-      const btnNewInHub = folderCard.querySelector('.btn-new-spawn-hub');
-      if (btnNewInHub) {
-        btnNewInHub.addEventListener('click', function (e) {
+      // Botão "+ Adicionar Ponto neste Hub" no banner interno da pasta
+      const btnCreateInHub = folderCard.querySelector('.btn-create-spawn-hub');
+      if (btnCreateInHub) {
+        btnCreateInHub.addEventListener('click', function (e) {
           e.stopPropagation();
           const targetNpcId = this.getAttribute('data-npc-id');
-          selectedSpawnFolder = targetNpcId;
-          const folderSelect = document.getElementById('spawn-form-folder');
-          if (folderSelect) folderSelect.value = targetNpcId;
-          updateSpawnNpcBadge(targetNpcId, npc?.npc_name);
+          const targetNpcName = this.getAttribute('data-npc-name');
+          clearSpawnForm(targetNpcId, targetNpcName);
           document.getElementById('spawn-form-id')?.focus();
-          showAdminToast(`Formulário de Spawns vinculado ao Hub "${hubTitle}".`);
+          showAdminToast(`Formulário de Spawns vinculado ao Hub "${targetNpcName}".`);
         });
       }
 
@@ -1504,8 +1487,7 @@
         return;
       }
 
-      const folderSelect = document.getElementById('spawn-form-folder');
-      const folderVal = (selectedSpawnFolder || (folderSelect?.options && folderSelect.selectedIndex >= 0 ? folderSelect.options[folderSelect.selectedIndex]?.value : null) || folderSelect?.value || 'Geral').trim() || 'Geral';
+      const folderVal = (selectedSpawnFolder || window._activeSpawnHubId || document.getElementById('spawn-form-npc-id')?.value || 'Geral').trim() || 'Geral';
       const sName = (document.getElementById('spawn-form-name')?.value || '').trim() || spawnId;
       const sType = document.getElementById('spawn-form-type')?.value || 'truck';
       const sModel = (document.getElementById('spawn-form-model')?.value || '').trim();
@@ -1543,8 +1525,6 @@
 
       selectedSpawnFolder = folderVal;
       renderSpawnsTab();
-
-      if (folderSelect) folderSelect.value = folderVal;
 
       if (spawnIdInput) spawnIdInput.value = '';
       const nameInput = document.getElementById('spawn-form-name');
