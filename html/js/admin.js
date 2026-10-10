@@ -303,6 +303,20 @@
           showAdminToast('Coordenadas do NPC capturadas via Gizmo!', 'info');
         }
         break;
+      case 'admin_delivery_coords_calibrated':
+        if (item.coords) {
+          const rx = document.getElementById('route-form-deliv-x');
+          const ry = document.getElementById('route-form-deliv-y');
+          const rz = document.getElementById('route-form-deliv-z');
+          const rh = document.getElementById('route-form-deliv-h');
+          if (rx) rx.value = Number(item.coords.x).toFixed(2);
+          if (ry) ry.value = Number(item.coords.y).toFixed(2);
+          if (rz) rz.value = Number(item.coords.z).toFixed(2);
+          if (rh) rh.value = Number(item.coords.heading || item.coords.h || 0.0).toFixed(1);
+        }
+        openAdminModal('modal-route-form');
+        showAdminToast('Ponto de entrega e vaga calibrados via Gizmo 3D!', 'success');
+        break;
     }
   });
 
@@ -962,6 +976,8 @@
     document.getElementById('route-form-deliv-x').value = '';
     document.getElementById('route-form-deliv-y').value = '';
     document.getElementById('route-form-deliv-z').value = '';
+    const rdhClean = document.getElementById('route-form-deliv-h');
+    if (rdhClean) rdhClean.value = '';
     document.getElementById('route-form-forklift').checked = false;
     document.getElementById('route-form-adr').checked = false;
 
@@ -994,6 +1010,11 @@
     document.getElementById('route-form-deliv-x').value = dCoords.x ? Number(dCoords.x).toFixed(2) : '';
     document.getElementById('route-form-deliv-y').value = dCoords.y ? Number(dCoords.y).toFixed(2) : '';
     document.getElementById('route-form-deliv-z').value = dCoords.z ? Number(dCoords.z).toFixed(2) : '';
+    const rdhFill = document.getElementById('route-form-deliv-h');
+    if (rdhFill) {
+      const hVal = dCoords.heading !== undefined ? dCoords.heading : (dCoords.h !== undefined ? dCoords.h : dCoords.w);
+      rdhFill.value = hVal !== undefined ? Number(hVal).toFixed(1) : '';
+    }
 
     document.getElementById('route-form-forklift').checked = (r.has_forklift == 1 || r.has_forklift === true);
     document.getElementById('route-form-adr').checked = (r.requires_adr == 1 || r.requires_adr === true || r.type === 'adr');
@@ -1019,7 +1040,9 @@
     const delivery = {
       x: parseFloat(document.getElementById('route-form-deliv-x').value) || 0.0,
       y: parseFloat(document.getElementById('route-form-deliv-y').value) || 0.0,
-      z: parseFloat(document.getElementById('route-form-deliv-z').value) || 0.0
+      z: parseFloat(document.getElementById('route-form-deliv-z').value) || 0.0,
+      heading: parseFloat(document.getElementById('route-form-deliv-h')?.value) || 0.0,
+      h: parseFloat(document.getElementById('route-form-deliv-h')?.value) || 0.0
     };
 
     const payload = {
@@ -2522,6 +2545,8 @@
           document.getElementById('route-form-deliv-x').value = c.x.toFixed(2);
           document.getElementById('route-form-deliv-y').value = c.y.toFixed(2);
           document.getElementById('route-form-deliv-z').value = c.z.toFixed(2);
+          const rdhCap = document.getElementById('route-form-deliv-h');
+          if (rdhCap && c.heading !== undefined) rdhCap.value = Number(c.heading).toFixed(1);
         } else if (targetPrefix === 'spawn') {
           document.getElementById('spawn-form-x').value = c.x.toFixed(2);
           document.getElementById('spawn-form-y').value = c.y.toFixed(2);
@@ -2823,6 +2848,38 @@
 
     const btnCapDeliv = document.getElementById('btn-cap-deliv');
     if (btnCapDeliv) btnCapDeliv.addEventListener('click', () => captureCoords('route-deliv'));
+
+    const btnGizmoDeliv = document.getElementById('btn-gizmo-deliv');
+    if (btnGizmoDeliv) {
+      btnGizmoDeliv.addEventListener('click', function () {
+        const routeId = (document.getElementById('route-form-id')?.value || '').trim();
+        const routeTitle = (document.getElementById('route-form-title')?.value || '').trim() || 'Ponto de Entrega';
+        const xVal = document.getElementById('route-form-deliv-x')?.value;
+        const yVal = document.getElementById('route-form-deliv-y')?.value;
+        const zVal = document.getElementById('route-form-deliv-z')?.value;
+        const hVal = document.getElementById('route-form-deliv-h')?.value;
+
+        let coords = null;
+        if (xVal && yVal && zVal) {
+          const x = parseFloat(xVal);
+          const y = parseFloat(yVal);
+          const z = parseFloat(zVal);
+          const h = parseFloat(hVal);
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            coords = { x: x, y: y, z: z, heading: isNaN(h) ? 0.0 : h, h: isNaN(h) ? 0.0 : h };
+          }
+        }
+
+        postNUI('adminStartDeliveryGizmo', {
+          route_id: routeId,
+          title: routeTitle,
+          name: routeTitle,
+          coords: coords,
+          is_delivery: true,
+          spawn_type: 'delivery_bay'
+        });
+      });
+    }
 
     const btnCapSpawn = document.getElementById('btn-cap-spawn');
     if (btnCapSpawn) btnCapSpawn.addEventListener('click', () => captureCoords('spawn'));

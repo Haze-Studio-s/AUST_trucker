@@ -65,8 +65,12 @@ local function CleanCoords(c)
     if not (IsFiniteNumber(x) and IsFiniteNumber(y) and IsFiniteNumber(z)) then return {} end
     if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 or z < -500.0 or z > 2500.0 then return {} end
     local out = { x = x, y = y, z = z }
-    local w = tonumber(c.w or c.heading)
-    if IsFiniteNumber(w) then out.w = w end
+    local w = tonumber(c.w or c.heading or c.h)
+    if IsFiniteNumber(w) then
+        out.w = w
+        out.heading = w
+        out.h = w
+    end
     return out
 end
 

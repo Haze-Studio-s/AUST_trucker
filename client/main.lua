@@ -2571,7 +2571,11 @@ function StartDeliveryRoute(deliveryCoords, jobId)
     end
 
     local destCoords = vector3(deliveryCoords.x, deliveryCoords.y, deliveryCoords.z)
-    local destH = (type(deliveryCoords) == 'vector4' and deliveryCoords.w) or (ActiveJob and ActiveJob.deliveryCoords and type(ActiveJob.deliveryCoords) == 'vector4' and ActiveJob.deliveryCoords.w) or 0.0
+    local destH = (type(deliveryCoords) == 'vector4' and deliveryCoords.w)
+        or (type(deliveryCoords) == 'table' and (deliveryCoords.heading or deliveryCoords.h or deliveryCoords.w))
+        or (ActiveJob and ActiveJob.deliveryCoords and ((type(ActiveJob.deliveryCoords) == 'vector4' and ActiveJob.deliveryCoords.w) or (type(ActiveJob.deliveryCoords) == 'table' and (ActiveJob.deliveryCoords.heading or ActiveJob.deliveryCoords.h or ActiveJob.deliveryCoords.w))))
+        or 0.0
+    destH = tonumber(destH) or 0.0
     local currentDeliveryTextUi = nil
     local isUnloading = false
 
@@ -4096,6 +4100,14 @@ RegisterNUICallback('adminStartNPCGizmo', function(data, cb)
     data = data or {}
     data.is_npc = true
     data.spawn_type = 'npc'
+    OffsetEditor.StartSpawnCalibration(data)
+    if cb then cb('ok') end
+end)
+
+RegisterNUICallback('adminStartDeliveryGizmo', function(data, cb)
+    data = data or {}
+    data.is_delivery = true
+    data.spawn_type = 'delivery_bay'
     OffsetEditor.StartSpawnCalibration(data)
     if cb then cb('ok') end
 end)

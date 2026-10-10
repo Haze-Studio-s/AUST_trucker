@@ -1050,7 +1050,8 @@ function OffsetEditor.StartSpawnCalibration(data)
 
     local spawnType = tostring(data.spawn_type or 'truck'):lower()
     local isNpc = (data.is_npc or spawnType == 'npc' or spawnType == 'ped')
-    local isMarker = not isNpc and (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
+    local isDelivery = (data.is_delivery == true or spawnType == 'delivery_bay' or spawnType == 'delivery')
+    local isMarker = not isNpc and (isDelivery or spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
     local modelStr = data.model
     local isVeh = not isMarker and not isNpc
 
@@ -1075,7 +1076,7 @@ function OffsetEditor.StartSpawnCalibration(data)
     local hasCustomCoords = false
 
     -- Só aceita coordenadas pré-definidas se NÃO for um novo cadastro e se os dados forem válidos
-    local isNewItem = (data.is_new == true) or (not data.id and not data.npc_id and not data.duplicate_data and not data.is_duplication)
+    local isNewItem = (data.is_new == true) or (not data.id and not data.npc_id and not data.route_id and not data.duplicate_data and not data.is_duplication)
     if not isNewItem and data.coords and data.coords.x and data.coords.y and data.coords.z then
         local cx = tonumber(data.coords.x)
         local cy = tonumber(data.coords.y)
@@ -1244,7 +1245,7 @@ function OffsetEditor.StartSpawnCalibration(data)
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1000 })
             end
 
-            -- Renderização Visual da Baia (DrawMarker 30 Zebrado Oficial)
+            -- Renderização Visual da Baia e Ponto de Entrega (Sincronizado com o Script)
             if isMarker then
                 local markerZ = CurrentSpawnCoords.z - 0.45
                 local foundGround, groundZ = GetGroundZFor_3dCoord(CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z + 2.0, false)
@@ -1252,20 +1253,67 @@ function OffsetEditor.StartSpawnCalibration(data)
                     markerZ = groundZ + 0.05
                 end
 
-                -- Vaga Zebrada DrawMarker 30 (Faixas no solo idênticas ao print)
-                DrawMarker(
-                    30,
-                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ,
-                    0.0, 0.0, 0.0,
-                    90.0, CurrentSpawnCoords.heading or 0.0, 0.0,
-                    3.0, 1.0, 10.0,
-                    255, 60, 60, 75,
-                    0, 0, 0, 0
-                )
+                if isDelivery then
+                    -- 1. Vaga Zebrada 30 Oficial da Entrega (Dimensões oficiais da carreta de 10m x 3m do script de entrega)
+                    DrawMarker(
+                        30,
+                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ,
+                        0.0, 0.0, 0.0,
+                        90.0, CurrentSpawnCoords.heading or 0.0, 0.0,
+                        3.0, 1.0, 10.0,
+                        0, 255, 136, 85,
+                        0, 0, 0, 0
+                    )
+
+                    -- 2. Cilindro Central no Solo (DrawMarker 1) destacando o checkpoint
+                    DrawMarker(
+                        1,
+                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ - 0.15,
+                        0.0, 0.0, 0.0,
+                        0.0, 0.0, 0.0,
+                        3.2, 3.2, 0.6,
+                        16, 185, 129, 130,
+                        false, false, 2, false, nil, nil, false
+                    )
+
+                    -- 3. Chevron Indicador Vertical Flutuante (DrawMarker 21)
+                    DrawMarker(
+                        21,
+                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ + 1.2,
+                        0.0, 0.0, 0.0,
+                        0.0, 180.0, 0.0,
+                        0.8, 0.8, 0.8,
+                        16, 185, 129, 180,
+                        false, true, 2, false, nil, nil, false
+                    )
+
+                    -- 4. Vetor Direcional (Linha indicando a orientação da cabine/frente da vaga)
+                    local radH = math.rad(CurrentSpawnCoords.heading or 0.0)
+                    local fwdX = -math.sin(radH) * 5.0
+                    local fwdY = math.cos(radH) * 5.0
+                    DrawLine(
+                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ + 0.2,
+                        CurrentSpawnCoords.x + fwdX, CurrentSpawnCoords.y + fwdY, markerZ + 0.2,
+                        0, 255, 136, 220
+                    )
+                else
+                    -- Vaga Zebrada DrawMarker 30 (Faixas no solo padrão)
+                    DrawMarker(
+                        30,
+                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ,
+                        0.0, 0.0, 0.0,
+                        90.0, CurrentSpawnCoords.heading or 0.0, 0.0,
+                        3.0, 1.0, 10.0,
+                        255, 60, 60, 75,
+                        0, 0, 0, 0
+                    )
+                end
             end
 
             -- HUD
-            local titleTag = isMarker and ((spawnType == 'delivery_bay' and "~r~[GIZMO 3D - PONTO DE ENTREGA]~s~" or "~g~[GIZMO 3D - BAIA DE CARGA]~s~") .. "\n~c~(Marcador Visual DrawMarker)~s~") or "~g~[GIZMO DE SPAWN 3D]~s~"
+            local titleTag = isDelivery and "~g~[GIZMO 3D - PONTO DE ENTREGA]~s~\n~c~(Vaga Zebrada & Marcador Oficial de Entrega)~s~"
+                or (isMarker and "~g~[GIZMO 3D - BAIA DE CARGA]~s~\n~c~(Marcador Visual DrawMarker)~s~")
+                or "~g~[GIZMO DE SPAWN 3D]~s~"
             local hudText = string.format(
                 "%s\n" ..
                 "X: ~y~%.2f~s~ | Y: ~y~%.2f~s~ | Z: ~y~%.2f~s~\n" ..
@@ -1512,6 +1560,38 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
             })
             ActiveCalibSpawnData = nil
             OffsetEditor.StopPreview()
+        elseif (ActiveCalibSpawnData and (ActiveCalibSpawnData.is_delivery or ActiveCalibSpawnData.spawn_type == 'delivery_bay' or ActiveCalibSpawnData.spawn_type == 'delivery')) then
+            local dData = ActiveCalibSpawnData
+            local deliveryPayload = {
+                route_id = dData.route_id or dData.id,
+                coords = {
+                    x = CurrentSpawnCoords.x,
+                    y = CurrentSpawnCoords.y,
+                    z = CurrentSpawnCoords.z,
+                    heading = CurrentSpawnCoords.heading,
+                    h = CurrentSpawnCoords.heading,
+                    w = CurrentSpawnCoords.heading
+                }
+            }
+
+            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+            lib.notify({
+                title = 'Ponto de Entrega Calibrado',
+                description = ('Vaga e coordenadas calibradas com sucesso!\nX: %.2f | Y: %.2f | Z: %.2f | Ângulo: %.1f°'):format(
+                    CurrentSpawnCoords.x, CurrentSpawnCoords.y, CurrentSpawnCoords.z, CurrentSpawnCoords.heading
+                ),
+                type = 'success',
+                duration = 4500
+            })
+
+            SendNUIMessage({
+                action = 'admin_delivery_coords_calibrated',
+                coords = CurrentSpawnCoords,
+                delivery = deliveryPayload
+            })
+            ActiveCalibSpawnData = nil
+            OffsetEditor.StopPreview()
         else
             local bData = ActiveCalibSpawnData or {}
             local rawId = bData.id or bData.spawn_id or bData.base_id
@@ -1561,7 +1641,6 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
             OffsetEditor.StopPreview()
         end
     else
-        ActiveCalibSpawnData = nil
         if BatchSpawnState.active then
             if #BatchSpawnState.confirmedItems > 0 then
                 TriggerServerEvent('aurp_trucker:server:adminSaveBatchSpawns', BatchSpawnState.confirmedItems)
@@ -1578,7 +1657,12 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
             ActiveDuplicationData = nil
             OffsetEditor.StopPreview()
             lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
+        elseif ActiveCalibSpawnData and (ActiveCalibSpawnData.is_delivery or ActiveCalibSpawnData.spawn_type == 'delivery_bay' or ActiveCalibSpawnData.spawn_type == 'delivery') then
+            ActiveCalibSpawnData = nil
+            OffsetEditor.StopPreview()
+            lib.notify({ title = 'Calibração', description = 'Posicionamento do ponto de entrega cancelado.', type = 'info' })
         else
+            ActiveCalibSpawnData = nil
             lib.notify({ title = 'Calibração', description = 'Calibração cancelada.', type = 'info' })
         end
     end
