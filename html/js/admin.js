@@ -45,7 +45,7 @@
   }
 
   function closeAllAdminModals() {
-    document.querySelectorAll('.admin-modal-overlay.active').forEach(m => {
+    document.querySelectorAll('.admin-modal-overlay').forEach(m => {
       m.classList.remove('active');
     });
   }
@@ -60,7 +60,7 @@
 
     const overlay = document.createElement('div');
     overlay.id = 'admin-confirm-modal';
-    overlay.className = 'admin-modal-overlay';
+    overlay.className = 'admin-modal-overlay active';
     overlay.style.position = 'fixed';
     overlay.style.inset = '0';
     overlay.style.zIndex = '10000000';
@@ -113,7 +113,7 @@
 
     const overlay = document.createElement('div');
     overlay.id = 'admin-prompt-modal';
-    overlay.className = 'admin-modal-overlay';
+    overlay.className = 'admin-modal-overlay active';
 
     overlay.innerHTML = `
       <div class="admin-modal-box">
