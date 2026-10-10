@@ -284,23 +284,15 @@
         }
         break;
       case 'admin_npc_coords_calibrated':
-        if (item.coords) {
-          const nx = document.getElementById('npc-form-x');
-          const ny = document.getElementById('npc-form-y');
-          const nz = document.getElementById('npc-form-z');
-          const nh = document.getElementById('npc-form-h');
-          if (nx) nx.value = item.coords.x;
-          if (ny) ny.value = item.coords.y;
-          if (nz) nz.value = item.coords.z;
-          if (nh) nh.value = item.coords.heading;
-        }
+        closeAdminModal('modal-npc-form');
+        resetNPCForm();
         if (item.npc && item.npc.id) {
           if (!adminData.npcs) adminData.npcs = {};
           adminData.npcs[item.npc.id] = item.npc;
           renderNPCsTab();
-          showAdminToast(`NPC Despachante "${item.npc.name || item.npc.id}" posicionado e salvo com sucesso!`, 'success');
+          showAdminToast(`NPC Despachante "${item.npc.name || item.npc.id}" posicionado e salvo com sucesso via Gizmo 3D!`, 'success');
         } else {
-          showAdminToast('Coordenadas do NPC capturadas via Gizmo!', 'info');
+          showAdminToast('NPC Despachante posicionado e salvo com sucesso via Gizmo 3D!', 'success');
         }
         break;
       case 'admin_delivery_coords_calibrated':
@@ -2505,11 +2497,21 @@
     const idInput = (document.getElementById('npc-form-id')?.value || '').trim();
     const isNew = !idInput;
 
+    const xVal = parseFloat(document.getElementById('npc-form-x')?.value);
+    const yVal = parseFloat(document.getElementById('npc-form-y')?.value);
+    const zVal = parseFloat(document.getElementById('npc-form-z')?.value);
+    const hVal = parseFloat(document.getElementById('npc-form-h')?.value) || 0.0;
+
+    if (isNaN(xVal) || isNaN(yVal) || isNaN(zVal) || (xVal === 0.0 && yVal === 0.0)) {
+      showAdminToast('Defina a localização do NPC usando o Gizmo 3D ou Capturar Coordenadas!', 'error');
+      return;
+    }
+
     const coords = {
-      x: parseFloat(document.getElementById('npc-form-x').value) || 0.0,
-      y: parseFloat(document.getElementById('npc-form-y').value) || 0.0,
-      z: parseFloat(document.getElementById('npc-form-z').value) || 0.0,
-      heading: parseFloat(document.getElementById('npc-form-h').value) || 0.0
+      x: xVal,
+      y: yVal,
+      z: zVal,
+      heading: hVal
     };
 
     const payload = {

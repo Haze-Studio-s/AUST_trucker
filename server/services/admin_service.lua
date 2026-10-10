@@ -317,6 +317,26 @@ function AdminService.LoadAll()
             end
             npcMap[n.id] = n
         end
+
+        -- Se a tabela estiver vazia, cria o Despachante Central (Porto) oficial como dispatcher_1
+        if #npcs == 0 and Config and Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.Dispatcher then
+            local dPos = Config.Polarix.Warehouse.Dispatcher
+            local defCoords = { x = dPos.x, y = dPos.y, z = dPos.z, heading = dPos.w, w = dPos.w }
+            MySQL.query.await([[
+                INSERT INTO aust_trucker_npcs (id, name, model, coords, heading, blip_sprite, blip_color, is_active)
+                VALUES ('dispatcher_1', 'Despachante Central (Porto)', 's_m_m_dockwork_01', ?, ?, 477, 2, 1)
+            ]], { json.encode(defCoords), dPos.w })
+            npcMap['dispatcher_1'] = {
+                id = 'dispatcher_1',
+                name = 'Despachante Central (Porto)',
+                model = 's_m_m_dockwork_01',
+                coords = defCoords,
+                heading = dPos.w,
+                blip_sprite = 477,
+                blip_color = 2,
+                is_active = 1
+            }
+        end
         AdminService.NPCs = npcMap
 
         -- 6. Carrega Economia
@@ -1672,6 +1692,10 @@ RegisterNetEvent('aurp_trucker:server:adminSaveNPC', function(npcData)
     end
 
     local cleanCoords = CleanCoords(npcData.coords)
+    if not cleanCoords.x or (cleanCoords.x == 0.0 and cleanCoords.y == 0.0) then
+        TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Coordenadas do NPC inválidas ou zeradas!', type = 'error' })
+        return
+    end
     local cleanHeading = ClampNum(npcData.heading or (npcData.coords and npcData.coords.heading), -360.0, 360.0, 0.0)
 
     local clean = {

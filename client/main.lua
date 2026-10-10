@@ -529,8 +529,21 @@ end
 -- DESPACHANTE NPC: ACESSO EXCLUSIVO VIA TABLET NUI (ZERO COMANDOS OBSOLETOS)
 -- =======================================================================
 
+function CleanupStaticDispatcherPed()
+    if DispatcherPed and DoesEntityExist(DispatcherPed) then
+        pcall(function() exports.ox_target:removeLocalEntity(DispatcherPed) end)
+        DeleteEntity(DispatcherPed)
+        DispatcherPed = nil
+    end
+end
+_G.CleanupStaticDispatcherPed = CleanupStaticDispatcherPed
+
 CreateThread(function()
     while not Config or not Config.Polarix or not Config.Polarix.Warehouse do Wait(100) end
+    Wait(2500) -- Permite que a sincronização dinâmica de despachantes do banco assuma prioridade
+    if _G.HasDynamicAdminNPCs then return end
+    if DispatcherPed and DoesEntityExist(DispatcherPed) then return end
+
     local wh = Config.Polarix.Warehouse
     local pedHash = joaat(wh.YardManagerPed or 's_m_m_dockwork_01')
     lib.requestModel(pedHash)

@@ -948,9 +948,22 @@ RegisterNetEvent('aurp_trucker:client:adminSyncProps', function(propsList)
     if Config.Debug then print(("^2[AUST_Trucker Client] Props homologados sincronizados em tempo real! (%d props)^7"):format(type(propsList) == 'table' and #propsList or 0)) end
 end)
 
+local isSyncingAdminNPCs = false
+
 RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
-    -- Remove NPCs dinâmicos antigos
-    for _, data in pairs(DynamicAdminPeds) do
+    if isSyncingAdminNPCs then
+        Wait(100)
+    end
+    isSyncingAdminNPCs = true
+    _G.HasDynamicAdminNPCs = true
+
+    -- 1. Destrói o despachante estático legado se existir no mapa
+    if _G.CleanupStaticDispatcherPed then
+        pcall(_G.CleanupStaticDispatcherPed)
+    end
+
+    -- 2. Remove com segurança todos os NPCs dinâmicos e blips previamente rastreados
+    for _, data in pairs(DynamicAdminPeds or {}) do
         if data.ped and DoesEntityExist(data.ped) then
             pcall(function() exports.ox_target:removeLocalEntity(data.ped) end)
             DeleteEntity(data.ped)
@@ -961,51 +974,76 @@ RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
     end
     DynamicAdminPeds = {}
 
-    -- Cria ou atualiza novos despachantes
-    for id, npc in pairs(npcList or {}) do
-        if npc.is_active ~= 0 and npc.coords then
-            CreateThread(function()
-                local modelHash = joaat(npc.model or 's_m_m_dockwork_01')
-                lib.requestModel(modelHash)
-                local ped = CreatePed(4, modelHash, npc.coords.x, npc.coords.y, npc.coords.z - 1.0, npc.heading or 0.0, false, false)
-                SetEntityAsMissionEntity(ped, true, true)
-                SetBlockingOfNonTemporaryEvents(ped, true)
-                SetPedFleeAttributes(ped, 0, false)
-                SetPedCombatAttributes(ped, 17, true)
-                FreezeEntityPosition(ped, true)
-                SetEntityInvincible(ped, true)
+    -- 3. Criação sequencial e síncrona sem disparar múltiplas threads concorrentes
+    CreateThread(function()
+        for id, npc in pairs(npcList or {}) do
+            if npc and (npc.is_active ~= 0 and npc.is_active ~= false) and npc.coords then
+                local coords = type(npc.coords) == 'string' and json.decode(npc.coords) or npc.coords
+                if coords and coords.x and coords.y and coords.z then
+                    local cx = tonumber(coords.x)
+                    local cy = tonumber(coords.y)
+                    local cz = tonumber(coords.z)
+                    local ch = tonumber(npc.heading or coords.heading or coords.w or coords.h or 0.0)
 
-                exports.ox_target:addLocalEntity(ped, {
-                    {
-                        name = 'admin_dispatcher_' .. id,
-                        icon = 'fas fa-truck-ramp-box',
-                        label = 'Abrir Central de Fretes (' .. (npc.name or 'Logística') .. ')',
-                        distance = 2.5,
-                        onSelect = function()
-                            TriggerEvent('truck_logistics:openJobBoard', id)
+                    if cx and cy and cz and (cx ~= 0.0 or cy ~= 0.0) then
+                        -- Limpeza preventiva de peds órfãos/clipping no raio de 1.8 metros
+                        local nearbyPeds = lib.getNearbyPeds(vector3(cx, cy, cz), 1.8)
+                        for _, np in ipairs(nearbyPeds or {}) do
+                            if np.ped and DoesEntityExist(np.ped) and not IsPedAPlayer(np.ped) then
+                                pcall(function() exports.ox_target:removeLocalEntity(np.ped) end)
+                                DeleteEntity(np.ped)
+                            end
                         end
-                    }
-                })
 
-                local blip = AddBlipForCoord(npc.coords.x, npc.coords.y, npc.coords.z)
-                SetBlipSprite(blip, npc.blip_sprite or 477)
-                SetBlipColour(blip, npc.blip_color or 2)
-                SetBlipScale(blip, 0.85)
-                SetBlipAsShortRange(blip, true)
-                BeginTextCommandSetBlipName("STRING")
-                AddTextComponentString(npc.name or 'Central Logística')
-                EndTextCommandSetBlipName(blip)
+                        local modelHash = joaat(npc.model or npc.npc_model or 's_m_m_dockwork_01')
+                        lib.requestModel(modelHash, 4000)
 
-                DynamicAdminPeds[id] = { ped = ped, blip = blip }
-            end)
+                        local ped = CreatePed(4, modelHash, cx, cy, cz - 1.0, ch, false, false)
+                        if ped and DoesEntityExist(ped) then
+                            SetEntityAsMissionEntity(ped, true, true)
+                            SetBlockingOfNonTemporaryEvents(ped, true)
+                            SetPedFleeAttributes(ped, 0, false)
+                            SetPedCombatAttributes(ped, 17, true)
+                            SetPedCanRagdoll(ped, false)
+                            FreezeEntityPosition(ped, true)
+                            SetEntityInvincible(ped, true)
+
+                            exports.ox_target:addLocalEntity(ped, {
+                                {
+                                    name = 'admin_dispatcher_' .. tostring(id),
+                                    icon = 'fas fa-truck-ramp-box',
+                                    label = 'Abrir Central de Fretes (' .. (npc.name or npc.npc_name or 'Logística') .. ')',
+                                    distance = 2.5,
+                                    onSelect = function()
+                                        TriggerEvent('truck_logistics:openJobBoard', tostring(id))
+                                    end
+                                }
+                            })
+
+                            local blip = AddBlipForCoord(cx, cy, cz)
+                            SetBlipSprite(blip, npc.blip_sprite or 477)
+                            SetBlipColour(blip, npc.blip_color or 2)
+                            SetBlipScale(blip, 0.85)
+                            SetBlipAsShortRange(blip, true)
+                            BeginTextCommandSetBlipName("STRING")
+                            AddTextComponentString(npc.name or npc.npc_name or 'Central Logística')
+                            EndTextCommandSetBlipName(blip)
+
+                            DynamicAdminPeds[tostring(id)] = { ped = ped, blip = blip }
+                        end
+                    end
+                end
+            end
         end
-    end
 
-    -- Sincroniza a interface administrativa NUI em tempo real caso esteja aberta
-    SendNUIMessage({
-        action = 'adminSyncNPCs',
-        npcs = npcList
-    })
+        isSyncingAdminNPCs = false
+
+        -- Sincroniza a interface administrativa NUI em tempo real caso esteja aberta
+        SendNUIMessage({
+            action = 'adminSyncNPCs',
+            npcs = npcList
+        })
+    end)
 end)
 
 -- ============================================================
