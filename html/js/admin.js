@@ -189,6 +189,12 @@
           populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
         }
         break;
+      case 'adminSyncNPCs':
+        if (item.npcs) {
+          adminData.npcs = item.npcs;
+          renderNPCsTab();
+        }
+        break;
       case 'admin_update_offsets':
         if (item.offsets) {
           adminData.trailerOffsets = item.offsets;
@@ -1941,6 +1947,8 @@
         if (titleEl) titleEl.innerHTML = `<i class="fas fa-user-edit"></i> Editar Despachante #${escapeHtml(id)}`;
         const btnSave = document.getElementById('btn-save-npc');
         if (btnSave) btnSave.innerHTML = `<i class="fas fa-save"></i> Atualizar NPC #${escapeHtml(id)}`;
+        const btnDel = document.getElementById('btn-delete-npc');
+        if (btnDel) btnDel.style.display = 'inline-flex';
         showAdminToast(`NPC #${id} carregado no formulário para edição.`);
       });
     });
@@ -1960,6 +1968,7 @@
         postNUI('adminStartNPCGizmo', {
           id: id,
           npc_id: id,
+          is_new: false,
           name: name,
           npc_name: name,
           model: model,
@@ -1993,6 +2002,8 @@
           postNUI('adminDeleteNPC', { id: id });
           delete adminData.npcs[id];
           renderNPCsTab();
+          const currentFormId = (document.getElementById('npc-form-id')?.value || '').trim();
+          if (currentFormId === id) resetNPCForm();
           showAdminToast(`NPC #${id} removido.`);
         });
       });
@@ -2021,6 +2032,8 @@
     if (titleEl) titleEl.innerHTML = `<i class="fas fa-user-plus"></i> Novo Despachante`;
     const btnSave = document.getElementById('btn-save-npc');
     if (btnSave) btnSave.innerHTML = `<i class="fas fa-save"></i> Salvar e Spawnar NPC`;
+    const btnDel = document.getElementById('btn-delete-npc');
+    if (btnDel) btnDel.style.display = 'none';
     showAdminToast('Formulário pronto para cadastrar um novo NPC.');
   }
 
@@ -2201,6 +2214,24 @@
     const btnSaveNPC = document.getElementById('btn-save-npc');
     if (btnSaveNPC) btnSaveNPC.addEventListener('click', saveNPCForm);
 
+    const btnDeleteNPC = document.getElementById('btn-delete-npc');
+    if (btnDeleteNPC) {
+      btnDeleteNPC.addEventListener('click', function () {
+        const id = (document.getElementById('npc-form-id')?.value || '').trim();
+        if (!id) {
+          showAdminToast('Nenhum despachante selecionado para excluir.', 'error');
+          return;
+        }
+        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o despachante #${id}?`, () => {
+          postNUI('adminDeleteNPC', { id: id });
+          delete adminData.npcs[id];
+          renderNPCsTab();
+          resetNPCForm();
+          showAdminToast(`Despachante #${id} removido.`);
+        });
+      });
+    }
+
     const btnNewNPC = document.getElementById('btn-new-npc');
     if (btnNewNPC) btnNewNPC.addEventListener('click', resetNPCForm);
 
@@ -2299,19 +2330,31 @@
     if (btnGizmoNPC) {
       btnGizmoNPC.addEventListener('click', function () {
         const npcId = (document.getElementById('npc-form-id')?.value || '').trim();
+        const isNew = !npcId;
         const npcName = (document.getElementById('npc-form-name')?.value || '').trim() || 'Despachante Central';
         const npcModel = (document.getElementById('npc-form-model')?.value || '').trim() || 's_m_m_dockwork_01';
 
-        const x = parseFloat(document.getElementById('npc-form-x')?.value);
-        const y = parseFloat(document.getElementById('npc-form-y')?.value);
-        const z = parseFloat(document.getElementById('npc-form-z')?.value);
-        const h = parseFloat(document.getElementById('npc-form-h')?.value);
+        const xVal = document.getElementById('npc-form-x')?.value;
+        const yVal = document.getElementById('npc-form-y')?.value;
+        const zVal = document.getElementById('npc-form-z')?.value;
+        const hVal = document.getElementById('npc-form-h')?.value;
 
-        const coords = (!isNaN(x) && !isNaN(y) && !isNaN(z)) ? { x: x, y: y, z: z, heading: isNaN(h) ? 0.0 : h } : null;
+        let coords = null;
+        // Só repassa coordenadas se for edição de entidade existente ou se o usuário preencheu explicitamente campos válidos
+        if (!isNew && xVal && yVal && zVal) {
+          const x = parseFloat(xVal);
+          const y = parseFloat(yVal);
+          const z = parseFloat(zVal);
+          const h = parseFloat(hVal);
+          if (!isNaN(x) && !isNaN(y) && !isNaN(z)) {
+            coords = { x: x, y: y, z: z, heading: isNaN(h) ? 0.0 : h };
+          }
+        }
 
         postNUI('adminStartNPCGizmo', {
-          id: npcId,
-          npc_id: npcId,
+          id: isNew ? null : npcId,
+          npc_id: isNew ? null : npcId,
+          is_new: isNew,
           name: npcName,
           npc_name: npcName,
           model: npcModel,
@@ -2321,7 +2364,7 @@
           spawn_type: 'npc'
         });
 
-        showAdminToast('Posicionando NPC com Gizmo 3D... Pressione [ENTER] para salvar ou [ESC] para cancelar.', 'info');
+        showAdminToast(isNew ? 'Posicionando Novo Despachante nos seus pés... Pressione [ENTER] para salvar!' : `Ajustando NPC #${npcId} via Gizmo 3D...`, 'info');
       });
     }
 

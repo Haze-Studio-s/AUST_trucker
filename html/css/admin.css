@@ -304,6 +304,10 @@
   width: 100%;
 }
 
+#admin-tab-npcs .admin-master-detail {
+  grid-template-columns: minmax(580px, 1.6fr) minmax(360px, 1fr);
+}
+
 .admin-master-col {
   display: flex;
   flex-direction: column;
@@ -596,13 +600,23 @@
 }
 .admin-table-npcs th,
 .admin-table-npcs td {
-  padding: 6px 7px;
+  padding: 8px 8px;
 }
-.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 50px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; }
-.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 85px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 110px; font-family: monospace; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 72px; min-width: 72px; text-align: center; }
+.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 95px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 11px; }
+.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; min-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 125px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 155px; font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
+.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 135px; min-width: 135px; text-align: center; white-space: nowrap; }
+.admin-table-npcs td:nth-child(5) .admin-btn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
 
 /* Colunas Específicas do Prop Editor (6DoF) */
 .admin-table-props-6dof {

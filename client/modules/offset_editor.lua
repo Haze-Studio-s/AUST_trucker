@@ -1000,6 +1000,12 @@ RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
             end)
         end
     end
+
+    -- Sincroniza a interface administrativa NUI em tempo real caso esteja aberta
+    SendNUIMessage({
+        action = 'adminSyncNPCs',
+        npcs = npcList
+    })
 end)
 
 -- ============================================================
@@ -1064,12 +1070,21 @@ function OffsetEditor.StartSpawnCalibration(data)
     local pCoords = GetEntityCoords(ped)
     local pHeading = GetEntityHeading(ped)
     local forward = GetEntityForwardVector(ped)
-    local spawnPos = pCoords + forward * 3.5
+    -- Posição padrão: imediatamente à frente do administrador (2.5m de distância)
+    local spawnPos = pCoords + forward * 2.5
+    local hasCustomCoords = false
 
-    -- Se vier com coordenadas pré-definidas (ex: duplicação do item existente ou edição de NPC)
-    if data.coords and data.coords.x and data.coords.y and data.coords.z then
-        spawnPos = vector3(tonumber(data.coords.x) + 0.0, tonumber(data.coords.y) + 0.0, tonumber(data.coords.z) + 0.0)
-        pHeading = tonumber(data.coords.heading or data.coords.w or data.coords.h or pHeading)
+    -- Só aceita coordenadas pré-definidas se NÃO for um novo cadastro e se os dados forem válidos
+    local isNewItem = (data.is_new == true) or (not data.id and not data.npc_id and not data.duplicate_data and not data.is_duplication)
+    if not isNewItem and data.coords and data.coords.x and data.coords.y and data.coords.z then
+        local cx = tonumber(data.coords.x)
+        local cy = tonumber(data.coords.y)
+        local cz = tonumber(data.coords.z)
+        if cx and cy and cz and (cx ~= 0.0 or cy ~= 0.0) then
+            spawnPos = vector3(cx + 0.0, cy + 0.0, cz + 0.0)
+            pHeading = tonumber(data.coords.heading or data.coords.w or data.coords.h or pHeading)
+            hasCustomCoords = true
+        end
     end
 
     -- Minimiza o menu administrativo principal
@@ -1124,11 +1139,14 @@ function OffsetEditor.StartSpawnCalibration(data)
         heading = tonumber(string.format("%.1f", pHeading))
     }
 
-    -- Câmera orbital focada na posição
-    local camPos = spawnPos + vector3(-forward.x * 5.0, -forward.y * 5.0, 2.5)
-    if data.coords then
+    -- Câmera orbital focada na posição da entidade
+    local camPos = nil
+    if hasCustomCoords then
         local radH = math.rad(pHeading)
         camPos = spawnPos + vector3(math.sin(radH) * -6.0, math.cos(radH) * -6.0, 3.0)
+    else
+        -- Para novas criações locais aos pés do admin: câmera suave posicionada atrás do admin olhando para o holograma
+        camPos = spawnPos + vector3(-forward.x * 4.5, -forward.y * 4.5, 2.0)
     end
     SpawnCam = CreateCamWithParams("DEFAULT_SCRIPTED_CAMERA", camPos.x, camPos.y, camPos.z, -15.0, 0.0, pHeading, 60.0, true, 2)
     SetCamActive(SpawnCam, true)
@@ -1450,14 +1468,15 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
             OffsetEditor.StopPreview()
         elseif (ActiveCalibSpawnData and (ActiveCalibSpawnData.is_npc or ActiveCalibSpawnData.spawn_type == 'npc' or ActiveCalibSpawnData.spawn_type == 'ped')) then
             local nData = ActiveCalibSpawnData
-            local rawId = nData.id or nData.npc_id
-            local npcId = (rawId and rawId ~= '') and rawId or ('dispatcher_' .. tostring(GetGameTimer()) .. '_' .. math.random(100, 999))
+            local isNewNpc = (nData.is_new == true) or not nData.id or nData.id == '' or nData.id == 'null'
+            local npcId = not isNewNpc and (nData.id or nData.npc_id) or nil
             local npcName = nData.name or nData.npc_name or 'Despachante Logístico'
             local npcModel = nData.model or nData.npc_model or 's_m_m_dockwork_01'
 
             local npcPayload = {
                 id = npcId,
                 npc_id = npcId,
+                is_new = isNewNpc,
                 name = npcName,
                 npc_name = npcName,
                 model = npcModel,
