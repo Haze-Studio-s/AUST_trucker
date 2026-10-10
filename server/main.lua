@@ -1650,22 +1650,25 @@ local function StartTruckDelivery(src, contractData)
             local allOffsets = (AdminService and AdminService.TrailerOffsets) or {}
             local tKey = tostring(trkTrailer):lower()
             local tHash = joaat(tKey)
+            local uHash = tHash & 0xFFFFFFFF
+            local sHash = (uHash >= 0x80000000) and (uHash - 0x100000000) or uHash
             local res = {}
 
-            if specific and specific.pallets and next(specific.pallets) ~= nil then
-                res[tKey] = specific
-                res[tHash] = specific
-                res[tostring(tHash)] = specific
-                res[(tHash & 0xFFFFFFFF)] = specific
-                res[tostring(tHash & 0xFFFFFFFF)] = specific
-            elseif allOffsets[tKey] then
-                res[tKey] = allOffsets[tKey]
-                res[tHash] = allOffsets[tKey]
-            elseif Config.TrailerSlots and Config.TrailerSlots[trkTrailer] then
-                res[tKey] = Config.TrailerSlots[trkTrailer]
-                res[tHash] = Config.TrailerSlots[trkTrailer]
+            local targetData = specific
+            if not targetData or not targetData.pallets or next(targetData.pallets) == nil then
+                targetData = allOffsets[tKey] or allOffsets[tHash] or allOffsets[uHash] or allOffsets[tostring(uHash)]
             end
-            res._specific = specific
+            if not targetData and Config.TrailerSlots then
+                targetData = Config.TrailerSlots[trkTrailer] or Config.TrailerSlots[tKey] or Config.TrailerSlots[tHash]
+            end
+
+            if targetData then
+                local keys = { tKey, tHash, tostring(tHash), uHash, tostring(uHash), sHash, tostring(sHash) }
+                for _, k in ipairs(keys) do
+                    res[k] = targetData
+                end
+            end
+            res._specific = targetData or specific
             return res
         end)(),
     }

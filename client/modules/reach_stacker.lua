@@ -133,9 +133,52 @@ end
 
 local function ResolveTrailerContainerSlot(trailer, containerEnt, slotIndex, totalContainers)
     local tModel = GetEntityModel(trailer)
-    local cfg = Config.TrailerSlots and (Config.TrailerSlots[tModel] or Config.TrailerSlots[tostring(tModel):lower()])
+    local uHash = tModel & 0xFFFFFFFF
+    local sHash = (uHash >= 0x80000000) and (uHash - 0x100000000) or uHash
+    local keys = { tModel, uHash, sHash, tostring(tModel), tostring(uHash), tostring(sHash) }
+    if tModel == joaat('freighttrailer') then table.insert(keys, 'freighttrailer') end
+    if tModel == joaat('docktrailer') then table.insert(keys, 'docktrailer') end
+    if _G.ActiveJob and _G.ActiveJob.trailerModel then table.insert(keys, tostring(_G.ActiveJob.trailerModel):lower()) end
 
-    -- 1. Se houver configuração de slots de container dedicada
+    -- 1. Prioridade Absoluta: Offsets salvos no banco e injetados na missão ativa (_G.ActiveJob)
+    if _G.ActiveJob and _G.ActiveJob.trailerOffsets then
+        local spec = _G.ActiveJob.trailerOffsets._specific
+        if spec and spec.pallets then
+            local s = spec.pallets[slotIndex] or spec.pallets[tonumber(slotIndex)] or spec.pallets[tostring(slotIndex)]
+            if s then
+                local rx = tonumber(s.rot_pitch) or tonumber(s.rx) or 0.0
+                local ry = tonumber(s.rot_roll) or tonumber(s.ry) or 0.0
+                local rz = tonumber(s.rot_yaw) or tonumber(s.heading) or 0.0
+                return vector3(tonumber(s.x) or 0.0, tonumber(s.y) or 0.0, tonumber(s.z) or 0.35), vector3(rx, ry, rz)
+            end
+        end
+
+        for _, k in ipairs(keys) do
+            local jobData = _G.ActiveJob.trailerOffsets[k]
+            if jobData and jobData.pallets then
+                local s = jobData.pallets[slotIndex] or jobData.pallets[tonumber(slotIndex)] or jobData.pallets[tostring(slotIndex)]
+                if s then
+                    local rx = tonumber(s.rot_pitch) or tonumber(s.rx) or 0.0
+                    local ry = tonumber(s.rot_roll) or tonumber(s.ry) or 0.0
+                    local rz = tonumber(s.rot_yaw) or tonumber(s.heading) or 0.0
+                    return vector3(tonumber(s.x) or 0.0, tonumber(s.y) or 0.0, tonumber(s.z) or 0.35), vector3(rx, ry, rz)
+                end
+            end
+        end
+    end
+
+    -- 2. Resolução através de Config.TrailerSlots
+    local cfg = nil
+    if Config and Config.TrailerSlots then
+        for _, k in ipairs(keys) do
+            if Config.TrailerSlots[k] then
+                cfg = Config.TrailerSlots[k]
+                break
+            end
+        end
+    end
+
+    -- 2.1 Se houver slots dedicados a contêineres na tabela
     if cfg and cfg.containers then
         if totalContainers and totalContainers > 1 and cfg.containers.double then
             local s = cfg.containers.double[slotIndex] or cfg.containers.double[1]
@@ -150,11 +193,14 @@ local function ResolveTrailerContainerSlot(trailer, containerEnt, slotIndex, tot
         end
     end
 
-    -- 2. Se houver slots calibrados no /truckeradmin (pallets table)
-    if cfg and cfg.pallets and #cfg.pallets > 0 then
-        local s = cfg.pallets[slotIndex] or cfg.pallets[1]
+    -- 2.2 Se houver slots calibrados no /truckeradmin (pallets table)
+    if cfg and cfg.pallets then
+        local s = cfg.pallets[slotIndex] or cfg.pallets[tonumber(slotIndex)] or cfg.pallets[tostring(slotIndex)] or cfg.pallets[1]
         if s then
-            return vector3(tonumber(s.x) or 0.0, tonumber(s.y) or 0.0, tonumber(s.z) or 0.35), vector3(0.0, 0.0, tonumber(s.heading) or 0.0)
+            local rx = tonumber(s.rot_pitch) or tonumber(s.rx) or 0.0
+            local ry = tonumber(s.rot_roll) or tonumber(s.ry) or 0.0
+            local rz = tonumber(s.rot_yaw) or tonumber(s.heading) or 0.0
+            return vector3(tonumber(s.x) or 0.0, tonumber(s.y) or 0.0, tonumber(s.z) or 0.35), vector3(rx, ry, rz)
         end
     end
 

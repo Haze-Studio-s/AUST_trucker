@@ -645,6 +645,10 @@ local function StartCouplingWatcher()
                     if dist <= 15.0 then
                         sleep = 20 -- Frequência ágil em aproximação para evitar atraso de frame e puxões
 
+                        -- Libera ativamente os freios do reboque na aproximação para permitir a articulação do acoplamento
+                        SetVehicleHandbrake(JobEntities.trailer, false)
+                        SetVehicleBrake(JobEntities.trailer, false)
+
                         -- Ponto da 5ª roda do caminhão (traseira)
                         local truckBone = GetEntityBoneIndexByName(JobEntities.truck, "attach_female")
                         local fifthWheelPos = (truckBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.truck, truckBone)
@@ -654,20 +658,30 @@ local function StartCouplingWatcher()
                             fifthWheelPos = GetOffsetFromEntityInWorldCoords(JobEntities.truck, 0.0, hitchY, 0.45)
                         end
 
-                        -- Ponto do pino rei da carreta (dianteira precisa)
+                        -- Ponto do pino rei da carreta (dianteira precisa com tratamento dedicado para freighttrailer)
+                        local trModel = GetEntityModel(JobEntities.trailer)
+                        local isFreight = (trModel == joaat('freighttrailer'))
                         local trailerBone = GetEntityBoneIndexByName(JobEntities.trailer, "attach_male")
                         local kingpinPos = (trailerBone ~= -1) and GetWorldPositionOfEntityBone(JobEntities.trailer, trailerBone)
                         if not kingpinPos then
-                            local _, maxDim = GetModelDimensions(GetEntityModel(JobEntities.trailer))
-                            local kingpinY = (maxDim.y > 0) and (maxDim.y - 1.2) or 3.5
-                            kingpinPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, kingpinY, 0.2)
+                            if isFreight then
+                                kingpinPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, 5.2, 0.35)
+                            else
+                                local _, maxDim = GetModelDimensions(trModel)
+                                local kingpinY = (maxDim.y > 0) and (maxDim.y - 1.2) or 3.5
+                                kingpinPos = GetOffsetFromEntityInWorldCoords(JobEntities.trailer, 0.0, kingpinY, 0.2)
+                            end
                         end
 
                         local hitchDist2D = #(vector2(fifthWheelPos.x, fifthWheelPos.y) - vector2(kingpinPos.x, kingpinPos.y))
                         local hitchDiffZ = math.abs(fifthWheelPos.z - kingpinPos.z)
 
-                        -- Acoplamento ultra-suave no contato físico milimétrico (<= 35cm) sem qualquer teleport
-                        if hitchDist2D <= 0.35 and hitchDiffZ <= 0.65 then
+                        -- Tolerâncias ampliadas: 2.0m XY e 1.0m Z para freighttrailer, com raio de busca nativo de 7.5m
+                        local maxDistXY = isFreight and 2.0 or 1.5
+                        local maxDeltaZ = isFreight and 1.0 or 0.8
+                        local attachRadius = isFreight and 7.5 or 3.5
+
+                        if hitchDist2D <= maxDistXY and hitchDiffZ <= maxDeltaZ then
                             -- Solicita controle autoritativo de rede local para evitar descompasso OneSync
                             if not NetworkHasControlOfEntity(JobEntities.trailer) then
                                 NetworkRequestControlOfEntity(JobEntities.trailer)
@@ -678,8 +692,8 @@ local function StartCouplingWatcher()
                             SetVehicleBrake(JobEntities.trailer, false)
                             SetEntityVelocity(JobEntities.trailer, 0.0, 0.0, 0.0)
 
-                            -- Engate suave com raio mínimo de busca (0.2m) eliminando snaps e puxões bruscos
-                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, 0.2)
+                            -- Engate suave com raio configurado eliminando snaps e garantindo acoplamento físico
+                            AttachVehicleToTrailer(JobEntities.truck, JobEntities.trailer, attachRadius)
                             Wait(25)
 
                             hasTrailer, trailerEnt = GetVehicleTrailerVehicle(JobEntities.truck)
@@ -3280,8 +3294,9 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                             SetVehicleOnGroundProperly(trailer)
                             pcall(function() SetTrailerLegsRaised(trailer, false) end)
                             FreezeEntityPosition(trailer, false)
-                            SetVehicleBrake(trailer, true)
-                            SetVehicleHandbrake(trailer, true)
+                            -- Libera ativamente freios para permitir engate físico livre
+                            SetVehicleBrake(trailer, false)
+                            SetVehicleHandbrake(trailer, false)
                         end
                     end)
                 end
@@ -3291,41 +3306,45 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                 end
             end
 
-            -- ACOPLAMENTO AUTOMÁTICO EM TRABALHOS RÁPIDOS DE PALETES (Diretriz do Usuário)
+            -- ACOPLAMENTO AUTOMÁTICO EM TRABALHOS RÁPIDOS (Diretriz do Usuário: Resiliente com Trava Condicional)
             if truck and DoesEntityExist(truck) and trailer and DoesEntityExist(trailer) then
                 local isQuickJobPallets = (payload and payload.cargoType == 'dry' and not payload.isOwned)
-                if isQuickJobPallets then
+                local isQuickJobFreight = (payload and not payload.isOwned and (GetEntityModel(trailer) == joaat('freighttrailer') or payload.cargoType == 'heavy'))
+                if isQuickJobPallets or isQuickJobFreight then
                     CreateThread(function()
-                        Wait(300) -- Aguarda estabilização física do spawn OneSync
+                        Wait(350) -- Aguarda estabilização física do spawn OneSync
                         if not DoesEntityExist(truck) or not DoesEntityExist(trailer) then return end
 
                         SetVehicleHandbrake(trailer, false)
                         SetVehicleBrake(trailer, false)
                         SetVehicleHandbrake(truck, false)
                         SetVehicleBrake(truck, false)
+                        FreezeEntityPosition(truck, false)
+                        FreezeEntityPosition(trailer, false)
 
-                        -- Tentativa de engate suave na 5ª roda
-                        AttachVehicleToTrailer(truck, trailer, 3.0)
-                        Wait(100)
-                        local hasTrailer, trailerEnt = GetVehicleTrailerVehicle(truck)
-                        if not hasTrailer or trailerEnt == 0 then
-                            hasTrailer = IsVehicleAttachedToTrailer(truck)
+                        -- Laço de acoplamento de até 5 segundos (10 tentativas de 500ms) com raio estendido
+                        local trkAttached = false
+                        local attempts = 0
+                        local attachRadius = (GetEntityModel(trailer) == joaat('freighttrailer')) and 7.5 or 6.5
+
+                        while attempts < 10 and not trkAttached do
+                            attempts = attempts + 1
+                            AttachVehicleToTrailer(truck, trailer, attachRadius)
+                            Wait(250)
+                            local hasTrailer, trailerEnt = GetVehicleTrailerVehicle(truck)
+                            if (hasTrailer and trailerEnt ~= 0) or IsVehicleAttachedToTrailer(truck) then
+                                trkAttached = true
+                                break
+                            end
+                            Wait(250)
                         end
 
-                        if not hasTrailer then
-                            -- Assistência com raio estendido
-                            AttachVehicleToTrailer(truck, trailer, 6.5)
-                            Wait(150)
-                            hasTrailer = IsVehicleAttachedToTrailer(truck)
-                        end
-
-                        if hasTrailer then
-                            -- CONGELAMENTO FÍSICO DE AMBOS OS VEÍCULOS DURANTE O CARREGAMENTO
+                        if trkAttached then
+                            -- TRAVA CONDICIONAL: Congela apenas com confirmação absoluta do acoplamento
                             FreezeEntityPosition(truck, true)
                             FreezeEntityPosition(trailer, true)
 
-                            -- Pula STEP_2_ENTER_TRUCK, STEP_3_COUPLE_TRAILER e STEP_4_PARK_DOCK:
-                            -- Avança diretamente para a fase de carregamento com a empilhadeira!
+                            -- Pula etapas preliminares e avança diretamente para a fase de carregamento
                             CurrentStage = 'STEP_5_ENTER_FORKLIFT'
                             ClearObjectiveMarkers(false)
 
@@ -3342,7 +3361,16 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                             end)
 
                             PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
-                            SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Assuma a empilhadeira para iniciar o carregamento dos paletes.', 'success')
+                            SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Prossiga para o carregamento da carga.', 'success')
+                        else
+                            -- Se o acoplamento automático não engatar em 5s, mantém descongelado para o jogador manobrar manualmente
+                            FreezeEntityPosition(truck, false)
+                            FreezeEntityPosition(trailer, false)
+                            SetVehicleHandbrake(trailer, false)
+                            SetVehicleBrake(trailer, false)
+                            if Config.Debug then
+                                print('^3[AUST_Trucker] Auto-couple atingiu timeout de 5s; veículos liberados para alinhamento manual.^7')
+                            end
                         end
                     end)
                 end

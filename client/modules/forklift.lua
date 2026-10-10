@@ -174,7 +174,13 @@ local function GetTrailerHashKeys(trailer)
     if not raw then return {} end
     local u = raw & 0xFFFFFFFF
     local s = (u >= 0x80000000) and (u - 0x100000000) or u
-    return { raw, u, s, tostring(raw), tostring(u), tostring(s) }
+    local keys = { raw, u, s, tostring(raw), tostring(u), tostring(s) }
+    if raw == joaat('freighttrailer') then table.insert(keys, 'freighttrailer') end
+    if raw == joaat('trflat') then table.insert(keys, 'trflat') end
+    if raw == joaat('docktrailer') then table.insert(keys, 'docktrailer') end
+    if type(trailer) == 'string' then table.insert(keys, trailer:lower()) end
+    if _G.ActiveJob and _G.ActiveJob.trailerModel then table.insert(keys, tostring(_G.ActiveJob.trailerModel):lower()) end
+    return keys
 end
 
 -- ============================================================

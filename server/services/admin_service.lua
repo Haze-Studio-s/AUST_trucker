@@ -450,16 +450,17 @@ function AdminService.ReloadTrailerOffsets()
 
     AdminService.TrailerOffsets = dualMap
     AdminService.CleanTrailerOffsets = offsetMap
+    AdminService.RawModelTrailerOffsets = rawModelMap
 
     -- Aplica os offsets dinâmicos sobre a tabela global Config.TrailerSlots com prioridade absoluta
     if Config and Config.TrailerSlots then
-        -- Reconstrói: restaura o estado estático original das chaves já mescladas antes (remove offsets apagados)
+        -- Reconstrói: restaura o estado estático original das chaves já mescladas antes (preserva containers e deckZ)
         AdminService._slotBase = AdminService._slotBase or {}
         for k, base in pairs(AdminService._slotBase) do
             if base == false then
                 Config.TrailerSlots[k] = nil
             else
-                local restored = { pallets = {}, forklift = base.forklift }
+                local restored = { pallets = {}, forklift = base.forklift, containers = base.containers, deckZ = base.deckZ }
                 for idx, v in pairs(base.pallets or {}) do restored.pallets[idx] = v end
                 Config.TrailerSlots[k] = restored
             end
@@ -476,7 +477,7 @@ function AdminService.ReloadTrailerOffsets()
                 if AdminService._slotBase[k] == nil then
                     local orig = Config.TrailerSlots[k]
                     if orig then
-                        local copy = { pallets = {}, forklift = orig.forklift }
+                        local copy = { pallets = {}, forklift = orig.forklift, containers = orig.containers, deckZ = orig.deckZ }
                         for idx, v in pairs(orig.pallets or {}) do copy.pallets[idx] = v end
                         AdminService._slotBase[k] = copy
                     else
@@ -484,7 +485,7 @@ function AdminService.ReloadTrailerOffsets()
                     end
                 end
                 if not Config.TrailerSlots[k] then
-                    Config.TrailerSlots[k] = { pallets = {}, forklift = nil }
+                    Config.TrailerSlots[k] = { pallets = {}, forklift = nil, containers = data.containers }
                 end
                 for idx, vec in pairs(data.pallets or {}) do
                     local slotEntry = { id = vec.id, label = vec.label, prop_model = vec.prop_model, x = tonumber(vec.x) or 0.0, y = tonumber(vec.y) or 0.0, z = tonumber(vec.z) or 0.0, heading = tonumber(vec.heading) or 0.0 }
@@ -533,16 +534,33 @@ function AdminService.GetOffsetsForTrailerAndCargo(trailerModel, cargoPropModel)
     end
 
     -- 2. Resolução em Cascata: Fallback para o modelo genérico do trailer
-    local fallbackKeys = { modelKey, hStr, u, s, hash }
+    local fallbackKeys = { modelKey, hStr, u, s, hash, tonumber(u), tonumber(s) }
     for _, k in ipairs(fallbackKeys) do
         if offsets[k] and offsets[k].pallets and next(offsets[k].pallets) ~= nil then
             return offsets[k]
         end
     end
 
+    -- 2.5 Varredura no RawModelTrailerOffsets (qualquer prop salvo para o trailer)
+    if AdminService.RawModelTrailerOffsets and AdminService.RawModelTrailerOffsets[modelKey] then
+        local rawEntry = AdminService.RawModelTrailerOffsets[modelKey]
+        if rawEntry.pallets and next(rawEntry.pallets) ~= nil then
+            return rawEntry
+        end
+    end
+
+    -- 2.6 Varredura ampla no CleanTrailerOffsets para qualquer chave que comece com modelKey
+    if AdminService.CleanTrailerOffsets then
+        for k, v in pairs(AdminService.CleanTrailerOffsets) do
+            if (v.trailer_model == modelKey or tostring(k):sub(1, #modelKey + 2) == (modelKey .. '::')) and v.pallets and next(v.pallets) ~= nil then
+                return v
+            end
+        end
+    end
+
     -- 3. Resolução em Cascata: Fallback para Config.TrailerSlots estático
     for _, k in ipairs(fallbackKeys) do
-        if Config.TrailerSlots and Config.TrailerSlots[k] and Config.TrailerSlots[k].pallets and next(Config.TrailerSlots[k].pallets) ~= nil then
+        if Config.TrailerSlots and Config.TrailerSlots[k] and (Config.TrailerSlots[k].pallets or Config.TrailerSlots[k].containers) then
             return Config.TrailerSlots[k]
         end
     end
