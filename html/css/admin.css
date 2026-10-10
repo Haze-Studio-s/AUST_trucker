@@ -414,6 +414,19 @@
   color: #ffffff;
 }
 
+.admin-btn-accent {
+  background: rgba(14, 165, 233, 0.15) !important;
+  border: 1px solid rgba(14, 165, 233, 0.35) !important;
+  color: #38bdf8 !important;
+}
+
+.admin-btn-accent:hover {
+  background: rgba(14, 165, 233, 0.3) !important;
+  border-color: #38bdf8 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.4) !important;
+}
+
 .admin-btn-outline {
   background: rgba(255, 255, 255, 0.04);
   border-color: rgba(255, 255, 255, 0.12);
@@ -597,25 +610,92 @@
 .admin-table-npcs {
   width: 100%;
   table-layout: fixed;
+  border-collapse: collapse;
 }
 .admin-table-npcs th,
 .admin-table-npcs td {
-  padding: 8px 8px;
+  padding: 8px 6px;
+  vertical-align: middle;
 }
-.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { width: 95px; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; font-size: 11px; }
-.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { width: auto; min-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { width: 125px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { width: 155px; font-family: monospace; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; }
-.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { width: 135px; min-width: 135px; text-align: center; white-space: nowrap; }
-.admin-table-npcs td:nth-child(5) .admin-btn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
+.admin-table-npcs th:nth-child(1), .admin-table-npcs td:nth-child(1) { 
+  width: 80px; 
+  text-overflow: ellipsis; 
+  overflow: hidden; 
+  white-space: nowrap; 
+  font-size: 11px; 
+}
+.admin-table-npcs th:nth-child(2), .admin-table-npcs td:nth-child(2) { 
+  width: auto; 
+  min-width: 90px; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+  font-weight: 600; 
+}
+.admin-table-npcs th:nth-child(3), .admin-table-npcs td:nth-child(3) { 
+  width: 135px; 
+  text-align: center; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+}
+.admin-table-npcs th:nth-child(4), .admin-table-npcs td:nth-child(4) { 
+  width: 145px; 
+  font-family: monospace; 
+  font-size: 10px; 
+  overflow: hidden; 
+  text-overflow: ellipsis; 
+  white-space: nowrap; 
+  color: #94a3b8; 
+  text-align: center;
+}
+.admin-table-npcs th:nth-child(5), .admin-table-npcs td:nth-child(5) { 
+  width: 145px; 
+  min-width: 145px; 
+  text-align: center; 
+  white-space: nowrap; 
+  padding: 6px 4px !important;
+}
+
+/* Blindagem e Isolamento Estrito dos Botões de Ação na Tabela contra Bootstrap e dark-style.css */
+.admin-table-npcs td:nth-child(5) .admin-btn,
+.admin-table-npcs td:nth-child(5) button,
+.admin-table td .admin-btn-action {
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-sizing: border-box !important;
+  border-radius: 6px !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  box-shadow: none !important;
+}
+
+.admin-table-npcs td:nth-child(5) .admin-btn i,
+.admin-table-npcs td:nth-child(5) button i,
+.admin-table td .admin-btn-action i {
+  font-size: 11px !important;
+  line-height: 1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.admin-actions-cell {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 100% !important;
 }
 
 /* Colunas Específicas do Prop Editor (6DoF) */
@@ -1070,3 +1150,99 @@
   display: flex;
 }
 
+
+/* ============================================================
+   SISTEMA DE PASTAS / HUBS DE NPCS PARA ROTAS E SPAWNS
+   ============================================================ */
+.admin-routes-folder {
+  margin-bottom: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  transition: all var(--admin-transition-fast);
+}
+
+.admin-routes-folder.expanded {
+  border-color: rgba(16, 185, 129, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.admin-routes-folder.drag-over,
+.admin-folder-card.drag-over {
+  border-color: var(--admin-primary) !important;
+  background: rgba(16, 185, 129, 0.08) !important;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.3) !important;
+  transform: scale(1.01);
+}
+
+.admin-routes-folder-header {
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--admin-transition-fast);
+}
+
+.admin-routes-folder-header:hover {
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.admin-routes-folder-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.admin-routes-folder-chevron {
+  transition: transform 0.2s ease;
+  color: var(--admin-text-muted);
+}
+
+.admin-routes-folder.expanded .admin-routes-folder-chevron {
+  transform: rotate(90deg);
+  color: var(--admin-primary);
+}
+
+.admin-routes-folder-content {
+  display: none;
+  padding: 8px 12px 12px 12px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-routes-folder.expanded .admin-routes-folder-content {
+  display: flex;
+}
+
+/* Indicador de Rota Arrastável */
+tr.admin-route-draggable {
+  cursor: grab;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+tr.admin-route-draggable:active {
+  cursor: grabbing;
+}
+
+tr.admin-route-draggable.is-dragging {
+  opacity: 0.4;
+  background: rgba(16, 185, 129, 0.15) !important;
+}
+
+.admin-drag-handle {
+  color: var(--admin-text-muted);
+  cursor: grab;
+  margin-right: 6px;
+  font-size: 11px;
+}
+
+.admin-drag-handle:hover {
+  color: var(--admin-primary);
+}

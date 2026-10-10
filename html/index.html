@@ -38,7 +38,7 @@
 		<link rel="stylesheet" href="css/style.css">
 		<link id="css-light" rel="stylesheet" href="css/light-style.css" disabled>
 		<link id="css-dark" rel="stylesheet" href="css/dark-style.css">
-		<link rel="stylesheet" href="css/admin.css?v=3.3.0">
+		<link rel="stylesheet" href="css/admin.css?v=3.4.0">
 
 		<!-- Font Awesome 6 -->
 		<link rel="stylesheet" href="vendor/fontawesome/css/all.min.css" />
@@ -1057,21 +1057,9 @@
 									</div>
 
 									<div class="admin-table-scroll" style="max-height: 520px;">
-										<table class="admin-table admin-table-routes">
-											<thead>
-												<tr>
-													<th>ID Rota</th>
-													<th>Título da Carga</th>
-													<th>Tipo</th>
-													<th>Recompensa</th>
-													<th>Distância</th>
-													<th>Ações</th>
-												</tr>
-											</thead>
-											<tbody id="admin-routes-tbody">
-												<!-- Populado via admin.js -->
-											</tbody>
-										</table>
+										<div id="admin-routes-folders-container" class="admin-folders-container">
+											<!-- Pastas de NPCs e Rotas geradas via admin.js -->
+										</div>
 									</div>
 								</div>
 							</div>
@@ -1079,9 +1067,11 @@
 							<!-- COLUNA DETAIL: FORMULÁRIO DE CRIAÇÃO / EDIÇÃO -->
 							<div class="admin-detail-col">
 								<div class="admin-card">
-									<div class="admin-card-header">
+									<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
 										<span class="admin-card-title"><i class="fas fa-plus-circle"></i> Criar / Editar Rota</span>
+										<span id="route-form-npc-badge" class="admin-badge admin-badge-heavy" style="display:none; font-size:10px;"><i class="fas fa-user-tie"></i> <span id="route-form-npc-label">Hub</span></span>
 									</div>
+									<input type="hidden" id="route-form-npc-id" value="">
 									<div class="admin-grid-2">
 										<div class="admin-form-group">
 											<label>Identificador Único (ID)</label>
@@ -1105,10 +1095,11 @@
 											<input type="text" id="route-form-title" class="admin-input" placeholder="ex: Barris de Óleo Bruto">
 										</div>
 										<div class="admin-form-group">
-											<label><i class="fas fa-folder"></i> Pasta de Spawns <span style="color:#ef4444;">*</span></label>
-											<select id="route-form-spawn-folder" class="admin-select" required>
-												<option value="">Selecione a Pasta de Spawn...</option>
+											<label><i class="fas fa-user-tie"></i> NPC Despachante (Hub) <span style="color:#ef4444;">*</span></label>
+											<select id="route-form-npc-select" class="admin-select" required>
+												<option value="">Selecione o NPC Despachante...</option>
 											</select>
+											<input type="hidden" id="route-form-spawn-folder" value="Geral">
 										</div>
 									</div>
 
@@ -1198,18 +1189,20 @@
 							<!-- COLUNA DETAIL: FORMULÁRIO DE NOVO PONTO -->
 							<div class="admin-detail-col">
 								<div class="admin-card">
-									<div class="admin-card-header">
+									<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
 										<span class="admin-card-title"><i class="fas fa-plus"></i> Novo Ponto de Spawn</span>
+										<span id="spawn-form-npc-badge" class="admin-badge admin-badge-heavy" style="display:none; font-size:10px;"><i class="fas fa-user-tie"></i> <span id="spawn-form-npc-label">Hub</span></span>
 									</div>
+									<input type="hidden" id="spawn-form-npc-id" value="">
 									<div class="admin-grid-2">
 										<div class="admin-form-group">
 											<label>Identificador (ID)</label>
 											<input type="text" id="spawn-form-id" class="admin-input" placeholder="ex: spawn_truck_paleto_01">
 										</div>
 										<div class="admin-form-group">
-											<label>Pasta / Categoria</label>
+											<label><i class="fas fa-user-tie"></i> NPC Despachante (Hub)</label>
 											<select id="spawn-form-folder" class="admin-select">
-												<option value="Geral">Geral</option>
+												<option value="">Selecione o NPC Despachante...</option>
 											</select>
 										</div>
 									</div>

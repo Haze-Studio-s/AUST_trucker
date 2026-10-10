@@ -443,11 +443,11 @@ local function CloseJobBoard()
     SendNUIMessage({ action = 'hide' })
 end
 
-local function OpenJobBoard()
+local function OpenJobBoard(npcId)
     if isNUIOpen then return end
 
     -- Buscar dados ANTES de ativar NUI focus
-    local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false)
+    local ok, data = pcall(lib.callback.await, 'aurp_trucker:getInitialData', false, npcId)
     if not ok or not data then
         lib.notify({ title = 'Erro', description = 'Não foi possível conectar ao servidor.', type = 'error' })
         return
@@ -521,11 +521,11 @@ local function OpenJobBoard()
     SetNuiFocus(true, true)
 end
 
-RegisterNetEvent('truck_logistics:openJobBoard', function()
-    OpenJobBoard()
+RegisterNetEvent('truck_logistics:openJobBoard', function(npcId)
+    OpenJobBoard(npcId)
 end)
-AddEventHandler('truck_logistics:openJobBoard', function()
-    OpenJobBoard()
+AddEventHandler('truck_logistics:openJobBoard', function(npcId)
+    OpenJobBoard(npcId)
 end)
 
 RegisterNetEvent('truck_logistics:openCargoManifest', function(contractId, party, baseReward)

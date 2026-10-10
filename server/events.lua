@@ -1774,9 +1774,23 @@ local function StartLCContractForPlayer(src, contractId, contractTypeOverride)
     local basePayment = math.floor(rawPayment * (1 - (rentalFeePct / 100)))
     local payment = math.floor(basePayment * (bonusInfo.moneyMultiplier or 1.0))
 
-    -- Sorteio de vagas livres de spawn na doca
-    local garageSpawns = Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns or { vector4(1250.55, -3162.4, 5.88, 270.00) }
-    local trailerSpawns = Config.LC_Headquarters and Config.LC_Headquarters.trailer_spawns or { vector4(1274.21, -3186.43, 5.91, 90.00) }
+    -- Sorteio de vagas livres de spawn na doca (com prioridade para spawns dinâmicos do Hub/NPC ou Pasta)
+    local dynamicTruckSpawns = nil
+    local dynamicTrailerSpawns = nil
+    if AdminService and AdminService.GetSpawnsByType then
+        local folderOrNpc = (load and load.npc_id) or (load and load.spawn_folder)
+        if folderOrNpc then
+            dynamicTruckSpawns = AdminService.GetSpawnsByType('truck', folderOrNpc, true)
+            dynamicTrailerSpawns = AdminService.GetSpawnsByType('trailer', folderOrNpc, true)
+        end
+    end
+
+    local garageSpawns = (dynamicTruckSpawns and #dynamicTruckSpawns > 0 and dynamicTruckSpawns)
+        or (Config.LC_Headquarters and Config.LC_Headquarters.garage_spawns)
+        or { vector4(1250.55, -3162.4, 5.88, 270.00) }
+    local trailerSpawns = (dynamicTrailerSpawns and #dynamicTrailerSpawns > 0 and dynamicTrailerSpawns)
+        or (Config.LC_Headquarters and Config.LC_Headquarters.trailer_spawns)
+        or { vector4(1274.21, -3186.43, 5.91, 90.00) }
     local truckSpawn = garageSpawns[((contractId - 1) % #garageSpawns) + 1]
     local trailerSpawn = trailerSpawns[((contractId - 1) % #trailerSpawns) + 1]
 

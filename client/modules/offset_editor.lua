@@ -982,7 +982,7 @@ RegisterNetEvent('aurp_trucker:client:adminSyncNPCs', function(npcList)
                         label = 'Abrir Central de Fretes (' .. (npc.name or 'Logística') .. ')',
                         distance = 2.5,
                         onSelect = function()
-                            ExecuteCommand('trucker')
+                            TriggerEvent('truck_logistics:openJobBoard', id)
                         end
                     }
                 })

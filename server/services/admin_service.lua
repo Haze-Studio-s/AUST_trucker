@@ -262,6 +262,7 @@ function AdminService.LoadAll()
                 pcall(function() r.delivery_coords = json.decode(r.delivery_coords) end)
             end
             r.spawn_folder = r.spawn_folder or 'Geral'
+            r.npc_id = (r.npc_id and r.npc_id ~= '' and r.npc_id) or nil
             routeMap[r.id] = r
         end
         AdminService.CustomRoutes = routeMap
@@ -290,6 +291,7 @@ function AdminService.LoadAll()
                 pcall(function() s.coords = json.decode(s.coords) end)
             end
             s.folder_name = s.folder_name or 'Geral'
+            s.npc_id = (s.npc_id and s.npc_id ~= '' and s.npc_id) or nil
             s.model = s.model or ''
             spawnMap[s.id] = s
         end
@@ -1042,6 +1044,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
         fragile         = routeData.fragile and 1 or 0,
         valuable        = routeData.valuable and 1 or 0,
         spawn_folder    = CleanStr(routeData.spawn_folder, 100, 'Geral'),
+        npc_id          = CleanId(routeData.npc_id or routeData.npcId, 50),
         pickup_coords   = CleanCoords(inheritedPickup or fallbackPickup),
         delivery_coords = CleanCoords(routeData.delivery_coords),
         is_active       = (routeData.is_active ~= false and routeData.is_active ~= 0) and 1 or 0,
@@ -1049,17 +1052,17 @@ RegisterNetEvent('aurp_trucker:server:adminSaveRoute', function(routeData)
 
     MySQL.query.await([[
         INSERT INTO aust_trucker_custom_routes
-        (id, name, type, cargo_model, cargo_name, truck_model, trailer_model, base_payment, base_xp, req_skill, fragile, valuable, spawn_folder, pickup_coords, delivery_coords, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, name, type, cargo_model, cargo_name, truck_model, trailer_model, base_payment, base_xp, req_skill, fragile, valuable, spawn_folder, npc_id, pickup_coords, delivery_coords, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
         name = VALUES(name), type = VALUES(type), cargo_model = VALUES(cargo_model), cargo_name = VALUES(cargo_name),
         truck_model = VALUES(truck_model), trailer_model = VALUES(trailer_model), base_payment = VALUES(base_payment),
         base_xp = VALUES(base_xp), req_skill = VALUES(req_skill), fragile = VALUES(fragile), valuable = VALUES(valuable),
-        spawn_folder = VALUES(spawn_folder),
+        spawn_folder = VALUES(spawn_folder), npc_id = VALUES(npc_id),
         pickup_coords = VALUES(pickup_coords), delivery_coords = VALUES(delivery_coords), is_active = VALUES(is_active)
     ]], {
         clean.id, clean.name, clean.type, clean.cargo_model, clean.cargo_name, clean.truck_model, clean.trailer_model,
-        clean.base_payment, clean.base_xp, clean.req_skill, clean.fragile, clean.valuable, clean.spawn_folder,
+        clean.base_payment, clean.base_xp, clean.req_skill, clean.fragile, clean.valuable, clean.spawn_folder, clean.npc_id,
         json.encode(clean.pickup_coords), json.encode(clean.delivery_coords), clean.is_active
     })
 
@@ -1118,6 +1121,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         coords      = coords,
         heading     = heading,
         folder_name = folderName,
+        npc_id      = CleanId(spawnData.npc_id or spawnData.npcId, 50),
     }
 
     -- 1. Garante que a pasta existe no banco e na memória
@@ -1140,17 +1144,17 @@ RegisterNetEvent('aurp_trucker:server:adminSaveSpawn', function(spawnData)
         if existingRow and existingRow.id then
             MySQL.query.await([[
                 UPDATE aust_trucker_spawns
-                SET name = ?, spawn_type = ?, model = ?, folder_name = ?, coords = ?, heading = ?
+                SET name = ?, spawn_type = ?, model = ?, folder_name = ?, npc_id = ?, coords = ?, heading = ?
                 WHERE id = ?
             ]], {
-                clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading, clean.id
+                clean.name, clean.spawn_type, clean.model, clean.folder_name, clean.npc_id, coordsJson, clean.heading, clean.id
             })
         else
             MySQL.query.await([[
-                INSERT INTO aust_trucker_spawns (id, name, spawn_type, model, folder_name, coords, heading)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO aust_trucker_spawns (id, name, spawn_type, model, folder_name, npc_id, coords, heading)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ]], {
-                clean.id, clean.name, clean.spawn_type, clean.model, clean.folder_name, coordsJson, clean.heading
+                clean.id, clean.name, clean.spawn_type, clean.model, clean.folder_name, clean.npc_id, coordsJson, clean.heading
             })
         end
     end)
@@ -1700,11 +1704,66 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteNPC', function(npcId)
     npcId = CleanId(npcId, 50)
     if not npcId then return end
 
+    -- Exclusão em Cascata: Remove rotas e spawns vinculados a este NPC
+    MySQL.query.await('DELETE FROM aust_trucker_custom_routes WHERE npc_id = ?', { npcId })
+    MySQL.query.await('DELETE FROM aust_trucker_spawns WHERE npc_id = ?', { npcId })
     MySQL.query.await('DELETE FROM aust_trucker_npcs WHERE id = ?', { npcId })
+
+    -- Limpa registros em memória RAM do AdminService
+    if AdminService.CustomRoutes then
+        for rId, r in pairs(AdminService.CustomRoutes) do
+            if r.npc_id and tostring(r.npc_id):lower() == tostring(npcId):lower() then
+                AdminService.CustomRoutes[rId] = nil
+            end
+        end
+    end
+    if AdminService.Spawns then
+        for sId, s in pairs(AdminService.Spawns) do
+            if s.npc_id and tostring(s.npc_id):lower() == tostring(npcId):lower() then
+                AdminService.Spawns[sId] = nil
+            end
+        end
+    end
     AdminService.NPCs[npcId] = nil
-    AdminLog(src, 'adminDeleteNPC', npcId)
+
+    AdminLog(src, 'adminDeleteNPC (cascade)', npcId)
     TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', -1, AdminService.NPCs)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC removido do mapa.', type = 'info' })
+    TriggerClientEvent('aurp_trucker:client:adminSyncRoutes', -1, AdminService.CustomRoutes)
+    TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC e todas as suas rotas e spawns associados foram removidos em cascata.', type = 'info' })
+end)
+
+-- Endpoints para Drag & Drop entre Hubs de NPCs
+RegisterNetEvent('aurp_trucker:server:adminAssignRouteNPC', function(data)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) or type(data) ~= 'table' then return end
+    local routeId = CleanId(data.routeId or data.id, 50)
+    local npcId = CleanId(data.npcId or data.npc_id, 50)
+    if not routeId then return end
+
+    MySQL.query.await('UPDATE aust_trucker_custom_routes SET npc_id = ? WHERE id = ?', { npcId, routeId })
+    if AdminService.CustomRoutes[routeId] then
+        AdminService.CustomRoutes[routeId].npc_id = npcId
+    end
+    AdminLog(src, 'adminAssignRouteNPC', ('route=%s npc=%s'):format(routeId, tostring(npcId)))
+    TriggerClientEvent('aurp_trucker:client:adminSyncRoutes', -1, AdminService.CustomRoutes)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Rota realocada com sucesso!', type = 'success' })
+end)
+
+RegisterNetEvent('aurp_trucker:server:adminAssignSpawnNPC', function(data)
+    local src = source
+    if not AdminService.IsPlayerAdmin(src) or type(data) ~= 'table' then return end
+    local spawnId = CleanId(data.spawnId or data.id, 50)
+    local npcId = CleanId(data.npcId or data.npc_id, 50)
+    if not spawnId then return end
+
+    MySQL.query.await('UPDATE aust_trucker_spawns SET npc_id = ? WHERE id = ?', { npcId, spawnId })
+    if AdminService.Spawns[spawnId] then
+        AdminService.Spawns[spawnId].npc_id = npcId
+    end
+    AdminLog(src, 'adminAssignSpawnNPC', ('spawn=%s npc=%s'):format(spawnId, tostring(npcId)))
+    TriggerClientEvent('aurp_trucker:client:adminSyncSpawns', -1, AdminService.Spawns)
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'Ponto de spawn realocado com sucesso!', type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminRequestNPCs', function()
@@ -1740,7 +1799,7 @@ end)
 -- CENTRALIZADOR DE CONTRATOS ATIVOS DO EMPREGO (SINCRONIZAÇÃO VIVA)
 -- ============================================================
 
-function AdminService.GetActiveContracts(citizenId)
+function AdminService.GetActiveContracts(citizenId, npcId)
     local contracts = {}
     local routes = AdminService.CustomRoutes or {}
     local eco = AdminService.Economy or {}
@@ -1755,6 +1814,13 @@ function AdminService.GetActiveContracts(citizenId)
     local idx = 1
     for rId, r in pairs(routes) do
         if r.is_active ~= 0 and r.is_active ~= false then
+            -- Exclusividade Regional: Se o jogador interagiu com um NPC específico, exibe apenas rotas deste Hub
+            if npcId and npcId ~= '' then
+                if not r.npc_id or tostring(r.npc_id):lower() ~= tostring(npcId):lower() then
+                    goto continueRoute
+                end
+            end
+
             local dist = tonumber(r.distance) or tonumber(r.distance_km) or 5.0
             if dist <= 0 then dist = 3.5 end
 
@@ -1811,6 +1877,7 @@ function AdminService.GetActiveContracts(citizenId)
                 adrLocked      = adrLocked,
                 withForklift   = (r.has_forklift == 1 or r.has_forklift == true),
                 spawn_folder   = r.spawn_folder or 'Geral',
+                npc_id         = r.npc_id,
                 pickup_coords  = r.pickup_coords,
                 delivery_coords = r.delivery_coords,
                 palletCount    = 4,
@@ -1826,6 +1893,7 @@ function AdminService.GetActiveContracts(citizenId)
             table.insert(contracts, contractData)
             idx = idx + 1
         end
+        ::continueRoute::
     end
 
     -- Caminho de leitura: nunca escreve no banco (seed só ocorre no boot/LoadAll quando a tabela está vazia)
@@ -1840,14 +1908,15 @@ function AdminService.GetSpawnsByType(spawnType, folderName, strict)
     if targetType == 'prop' then targetType = 'pallet' end
     local targetFolder = folderName and tostring(folderName):lower()
 
-    -- 1. Se informou folderName, busca primeiramente na pasta correspondente
+    -- 1. Se informou folderName ou npcId, busca primeiramente na pasta/NPC correspondente
     if targetFolder and targetFolder ~= '' then
         for _, s in pairs(AdminService.Spawns) do
             local sFolder = tostring(s.folder_name or 'Geral'):lower()
+            local sNpc = tostring(s.npc_id or ''):lower()
             local st = tostring(s.spawn_type):lower()
             if st == 'loading_bay' then st = 'load_bay' end
             if st == 'prop' then st = 'pallet' end
-            if sFolder == targetFolder and st == targetType and s.coords then
+            if (sFolder == targetFolder or (sNpc ~= '' and sNpc == targetFolder)) and st == targetType and s.coords then
                 table.insert(results, s.coords)
             end
         end

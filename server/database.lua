@@ -436,11 +436,13 @@ local TABLES = {
         `fragile` TINYINT(1) NOT NULL DEFAULT 0,
         `valuable` TINYINT(1) NOT NULL DEFAULT 0,
         `spawn_folder` VARCHAR(100) NOT NULL DEFAULT 'Geral',
+        `npc_id` VARCHAR(50) DEFAULT NULL,
         `pickup_coords` JSON NOT NULL,
         `delivery_coords` JSON NOT NULL,
         `is_active` TINYINT(1) NOT NULL DEFAULT 1,
         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX `idx_route_npc` (`npc_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
     -- Módulo Administrativo: Spawns e Baías Dinâmicas
@@ -449,9 +451,11 @@ local TABLES = {
         `name` VARCHAR(100) NOT NULL,
         `spawn_type` ENUM('truck', 'trailer', 'forklift', 'pallet', 'handler', 'loading_bay', 'delivery', 'load_bay', 'delivery_bay') NOT NULL,
         `folder_name` VARCHAR(100) NOT NULL DEFAULT 'Geral',
+        `npc_id` VARCHAR(50) DEFAULT NULL,
         `coords` JSON NOT NULL,
         `heading` FLOAT NOT NULL DEFAULT 0.0,
-        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX `idx_spawn_npc` (`npc_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]],
 
     -- Módulo Administrativo: Pastas de Spawns Dinâmicos
@@ -599,6 +603,11 @@ local MIGRATIONS = {
     -- Pastas Dedicadas de Spawns Dinâmicos
     "CREATE TABLE IF NOT EXISTS `aust_trucker_spawn_folders` (`name` VARCHAR(100) PRIMARY KEY, `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
     "INSERT IGNORE INTO `aust_trucker_spawn_folders` (`name`) VALUES ('Geral')",
+    -- Relacionamento Direto com NPCs Despachantes (Hub Organizacional)
+    "ALTER TABLE `aust_trucker_custom_routes` ADD COLUMN `npc_id` VARCHAR(50) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_spawns` ADD COLUMN `npc_id` VARCHAR(50) DEFAULT NULL",
+    "ALTER TABLE `aust_trucker_custom_routes` ADD INDEX `idx_route_npc` (`npc_id`)",
+    "ALTER TABLE `aust_trucker_spawns` ADD INDEX `idx_spawn_npc` (`npc_id`)",
 }
 
 -- Erros esperados em migrations idempotentes (coluna/chave já existe ou não existe para drop)

@@ -82,7 +82,7 @@ end
 -- Dados iniciais para abrir a NUI
 -- PERF: queries independentes lançadas em paralelo via Citizen.CreateThread (barrier pattern)
 -- Reduz latência de abertura da NUI de ~15 queries sequenciais para 2 fases paralelas
-function BuildInitialDataForPlayer(source, citizenId)
+function BuildInitialDataForPlayer(source, citizenId, npcId)
     local Player = source and Framework.GetPlayer(source)
     if not citizenId and Player then
         citizenId = Framework.GetCitizenId(Player)
@@ -269,7 +269,7 @@ function BuildInitialDataForPlayer(source, citizenId)
         -- Montar contratos LC idênticos à referência (Quick Jobs) com Sincronização em Tempo Real do AdminService
         local lc_contracts = {}
         if AdminService and AdminService.GetActiveContracts then
-            lc_contracts = AdminService.GetActiveContracts(citizenId)
+            lc_contracts = AdminService.GetActiveContracts(citizenId, npcId)
         end
 
         if not lc_contracts or #lc_contracts == 0 then
@@ -555,7 +555,7 @@ AddEventHandler('playerDropped', function()
 end)
 
 -- Callback principal para o frontend da NUI (Protegido com Rate Limit / Debounce)
-lib.callback.register('aurp_trucker:getInitialData', function(source)
+lib.callback.register('aurp_trucker:getInitialData', function(source, npcId)
     local Player = Framework.GetPlayer(source)
     if not Player then
         return {
@@ -566,15 +566,16 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
     end
 
     local nowMs = GetGameTimer()
-    local lastCall = _InitialDataRateLimit[source] or 0
-    if (nowMs - lastCall) < 2000 and _InitialDataCache[source] then
-        return _InitialDataCache[source]
+    local cacheKey = tostring(source) .. ':' .. tostring(npcId or 'all')
+    local lastCall = _InitialDataRateLimit[cacheKey] or 0
+    if (nowMs - lastCall) < 2000 and _InitialDataCache[cacheKey] then
+        return _InitialDataCache[cacheKey]
     end
-    _InitialDataRateLimit[source] = nowMs
+    _InitialDataRateLimit[cacheKey] = nowMs
 
     local citizenId = Framework.GetCitizenId(Player)
-    local data = BuildInitialDataForPlayer(source, citizenId)
-    _InitialDataCache[source] = data
+    local data = BuildInitialDataForPlayer(source, citizenId, npcId)
+    _InitialDataCache[cacheKey] = data
     return data
 end)
 

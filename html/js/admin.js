@@ -193,6 +193,8 @@
         if (item.npcs) {
           adminData.npcs = item.npcs;
           renderNPCsTab();
+          renderRoutesTab();
+          renderSpawnsTab();
         }
         break;
       case 'admin_update_offsets':
@@ -504,29 +506,64 @@
     return Array.from(folders).sort();
   }
 
-  function populateRouteSpawnFolders(selectedFolder) {
-    const folderSelect = document.getElementById('route-form-spawn-folder');
-    if (!folderSelect) return;
-    const currentVal = selectedFolder || folderSelect.value;
-    const folders = getSpawnFolders();
-    folderSelect.innerHTML = '<option value="">Selecione a Pasta de Spawn...</option>';
-    folders.forEach(fName => {
+  let draggedRouteId = null;
+
+  function populateRouteNPCSelect(selectedId) {
+    const npcSelect = document.getElementById('route-form-npc-select');
+    if (!npcSelect) return;
+    const currentVal = selectedId || npcSelect.value;
+    const npcs = adminData.npcs || {};
+    const npcKeys = Object.keys(npcs);
+
+    npcSelect.innerHTML = '<option value="">Selecione o NPC Despachante...</option>';
+    npcKeys.forEach(k => {
+      const n = npcs[k];
       const opt = document.createElement('option');
-      opt.value = fName;
-      opt.textContent = fName;
-      folderSelect.appendChild(opt);
+      opt.value = k;
+      opt.textContent = `${n.npc_name || n.name || 'Despachante'} (#${k})`;
+      npcSelect.appendChild(opt);
     });
-    if (currentVal && folders.includes(currentVal)) {
-      folderSelect.value = currentVal;
+
+    if (currentVal && npcs[currentVal]) {
+      npcSelect.value = currentVal;
+      updateRouteNpcBadge(currentVal, npcs[currentVal]?.npc_name);
+    } else {
+      updateRouteNpcBadge(null);
+    }
+
+    npcSelect.onchange = function () {
+      const val = this.value;
+      const nObj = npcs[val];
+      updateRouteNpcBadge(val, nObj ? (nObj.npc_name || nObj.name) : null);
+      const hiddenInput = document.getElementById('route-form-npc-id');
+      if (hiddenInput) hiddenInput.value = val || '';
+    };
+  }
+
+  function updateRouteNpcBadge(npcId, npcName) {
+    const badge = document.getElementById('route-form-npc-badge');
+    const label = document.getElementById('route-form-npc-label');
+    const hiddenInput = document.getElementById('route-form-npc-id');
+    if (!badge) return;
+
+    if (npcId) {
+      if (hiddenInput) hiddenInput.value = npcId;
+      if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
+      badge.style.display = 'inline-flex';
+    } else {
+      if (hiddenInput) hiddenInput.value = '';
+      badge.style.display = 'none';
     }
   }
 
   function renderRoutesTab() {
-    populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
-    const tbody = document.getElementById('admin-routes-tbody');
-    if (!tbody) return;
-    tbody.innerHTML = '';
+    populateRouteNPCSelect(document.getElementById('route-form-npc-id')?.value || document.getElementById('route-form-npc-select')?.value);
+    const container = document.getElementById('admin-routes-folders-container');
+    if (!container) return;
+    container.innerHTML = '';
 
+    const npcs = adminData.npcs || {};
+    const npcKeys = Object.keys(npcs);
     const routes = adminData.customRoutes || {};
     let entries = Object.keys(routes).map(k => ({ key: k, data: routes[k] }));
 
@@ -546,95 +583,293 @@
       });
     }
 
-    if (entries.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: var(--admin-text-muted);">Nenhuma rota encontrada para o filtro selecionado.</td></tr>`;
-      return;
-    }
+    // Agrupa rotas por npc_id
+    const routesByNpc = {};
+    npcKeys.forEach(k => {
+      routesByNpc[k] = [];
+    });
+    routesByNpc['__unassigned__'] = [];
 
     entries.forEach(e => {
       const r = e.data;
-      const k = e.key;
-      const tr = document.createElement('tr');
-      const jobType = (r.type || r.job_type || 'freight').toLowerCase();
-      let badgeClass = 'admin-badge-freight';
-      if (jobType === 'adr') badgeClass = 'admin-badge-adr';
-      else if (jobType === 'quick') badgeClass = 'admin-badge-quick';
-      else if (jobType === 'heavy') badgeClass = 'admin-badge-heavy';
-      else if (jobType === 'carrier') badgeClass = 'admin-badge-carrier';
+      const nId = r.npc_id && npcs[r.npc_id] ? String(r.npc_id) : '__unassigned__';
+      if (!routesByNpc[nId]) routesByNpc[nId] = [];
+      routesByNpc[nId].push(e);
+    });
 
-      const payment = r.base_payment || r.payment || 0;
-      const xp = r.base_xp || r.xp || 0;
-      const dist = r.distance || r.distance_km || 0;
+    window._openRouteFolders = window._openRouteFolders || new Set();
 
-      tr.innerHTML = `
-        <td style="font-weight:600; text-overflow:ellipsis; overflow:hidden;" title="#${escapeHtml(r.id || r.route_id || k)}">#${escapeHtml(r.id || r.route_id || k)}</td>
-        <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(r.name || r.title || 'Carga Sem Nome')}">${escapeHtml(r.name || r.title || 'Carga Sem Nome')}</td>
-        <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
-        <td>
-          <div style="line-height:1.2;">
-            <span>R$ ${Number(payment).toLocaleString()}</span><br>
-            <span style="color:var(--admin-primary); font-size:10px; font-weight:600;">+${escapeHtml(xp)} XP</span>
-          </div>
-        </td>
-        <td>
-          <div style="line-height:1.2;">
-            <span>${Number(dist).toFixed(1)} km</span><br>
-            <span style="color:var(--admin-text-muted); font-size:10px;">Nv ${r.req_skill || r.required_level || 1}</span>
-          </div>
-        </td>
-        <td style="text-align:center; white-space:nowrap;">
-          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
-            <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
-            <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
-          </div>
-        </td>
+    // Se nenhum NPC cadastrado
+    if (npcKeys.length === 0 && routesByNpc['__unassigned__'].length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center; padding: 40px 20px; color: var(--admin-text-muted);">
+          <i class="fas fa-user-tie" style="font-size:36px; margin-bottom:12px; color:var(--admin-primary); opacity:0.6;"></i>
+          <h4 style="color:#fff; margin-bottom:6px;">Nenhum Hub (NPC Despachante) Cadastrado</h4>
+          <p style="font-size:12px; max-width:480px; margin:0 auto 16px auto;">Para organizar rotas e contratos em Hubs operacionais, cadastre primeiro um NPC Despachante na aba "NPCs Despachantes".</p>
+          <button class="admin-btn admin-btn-primary" onclick="switchTab('npcs')" style="margin:0 auto;"><i class="fas fa-plus"></i> Cadastrar Despachante</button>
+        </div>
       `;
-      tbody.appendChild(tr);
-    });
+      return;
+    }
 
-    tbody.querySelectorAll('.btn-edit-route').forEach(btn => {
-      btn.addEventListener('click', function () {
-        const id = this.getAttribute('data-id');
-        fillRouteForm(adminData.customRoutes[id]);
+    // Lista de pastas: NPCs ativos primeiro + Pasta de Rotas Pendentes se houver
+    const folderKeys = [...npcKeys];
+    if (routesByNpc['__unassigned__'].length > 0 || npcKeys.length === 0) {
+      folderKeys.push('__unassigned__');
+    }
+
+    folderKeys.forEach((npcId, idx) => {
+      const isUnassigned = (npcId === '__unassigned__');
+      const npc = isUnassigned ? null : npcs[npcId];
+      const rList = routesByNpc[npcId] || [];
+      const folderKey = `route_hub_${npcId}`;
+
+      // Por padrão, se nenhuma pasta tiver sido aberta ainda, abre a primeira pasta
+      if (window._openRouteFolders.size === 0 && idx === 0) {
+        window._openRouteFolders.add(folderKey);
+      }
+      const isExpanded = window._openRouteFolders.has(folderKey);
+
+      const folderCard = document.createElement('div');
+      folderCard.className = `admin-routes-folder admin-folder-card ${isExpanded ? 'expanded' : ''}`;
+      folderCard.setAttribute('data-npc-id', npcId);
+
+      const hubTitle = isUnassigned ? 'Rotas Pendentes de Alocação' : (npc.npc_name || npc.name || `Despachante #${npcId}`);
+      const hubSub = isUnassigned ? 'Arraste para um NPC abaixo para vincular' : `ID: #${npcId} • Modelo: ${npc.npc_model || 's_m_m_trucker_01'}`;
+
+      folderCard.innerHTML = `
+        <div class="admin-routes-folder-header admin-folder-header" data-npc-id="${escapeHtml(npcId)}">
+          <div class="admin-folder-title" style="flex:1; min-width:0;">
+            <i class="fas ${isUnassigned ? 'fa-inbox' : (isExpanded ? 'fa-folder-open' : 'fa-folder')}" style="color:${isUnassigned ? '#f59e0b' : 'var(--admin-primary)'}; font-size:15px;"></i>
+            <div style="display:flex; flex-direction:column; min-width:0;">
+              <span style="font-weight:600; font-size:13px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(hubTitle)}
+              </span>
+              <span style="font-size:10px; color:var(--admin-text-muted);">${escapeHtml(hubSub)}</span>
+            </div>
+            <span class="admin-folder-badge" style="background:${isUnassigned ? 'rgba(245,158,11,0.2)' : 'rgba(14,165,233,0.15)'}; color:${isUnassigned ? '#f59e0b' : 'var(--admin-primary)'};">
+              ${rList.length} rota${rList.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${!isUnassigned ? `
+              <button class="admin-btn admin-btn-outline btn-new-route-hub" data-npc-id="${escapeHtml(npcId)}" style="padding: 3px 8px; font-size:10.5px;" title="Criar Nova Rota neste Hub">
+                <i class="fas fa-plus"></i> + Nova Rota
+              </button>
+            ` : ''}
+            <i class="fas fa-chevron-right admin-folder-chevron"></i>
+          </div>
+        </div>
+        <div class="admin-folder-body">
+          ${rList.length === 0 ? `
+            <div style="color:var(--admin-text-muted); font-size:11px; padding:16px; text-align:center;">
+              <i class="fas fa-route" style="opacity:0.4; font-size:18px; margin-bottom:6px; display:block;"></i>
+              Nenhuma rota vinculada a este Hub. Arraste rotas para cá ou clique em <b>+ Nova Rota</b> acima.
+            </div>
+          ` : `
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th style="width: 14%;">ID</th>
+                  <th style="width: 28%;">Carga</th>
+                  <th style="width: 14%; text-align:center;">Tipo</th>
+                  <th style="width: 18%;">Pagamento</th>
+                  <th style="width: 14%;">Distância</th>
+                  <th style="width: 12%; text-align:center;">Ações</th>
+                </tr>
+              </thead>
+              <tbody class="admin-routes-hub-tbody">
+              </tbody>
+            </table>
+          `}
+        </div>
+      `;
+
+      // Header click toggle
+      const header = folderCard.querySelector('.admin-routes-folder-header');
+      header.addEventListener('click', function (e) {
+        if (e.target.closest('.btn-new-route-hub')) return;
+        const currentlyOpen = folderCard.classList.contains('expanded');
+        if (currentlyOpen) {
+          folderCard.classList.remove('expanded');
+          window._openRouteFolders.delete(folderKey);
+          const icon = folderCard.querySelector('.admin-folder-title > i');
+          if (icon && !isUnassigned) icon.className = 'fas fa-folder';
+        } else {
+          folderCard.classList.add('expanded');
+          window._openRouteFolders.add(folderKey);
+          const icon = folderCard.querySelector('.admin-folder-title > i');
+          if (icon && !isUnassigned) icon.className = 'fas fa-folder-open';
+        }
       });
-    });
 
-    tbody.querySelectorAll('.btn-del-route').forEach(btn => {
-      btn.addEventListener('click', function () {
-        const id = this.getAttribute('data-id');
-        showConfirmModal('Excluir Rota', `Deseja realmente remover a rota #${id}?`, () => {
-          postNUI('adminDeleteRoute', { id: id });
-          delete adminData.customRoutes[id];
-          const currId = document.getElementById('route-form-id')?.value.trim();
-          if (currId === id) {
-            clearRouteForm();
-          }
-          renderRoutesTab();
-          renderEconomyTab();
-          showAdminToast(`Rota #${id} excluída com sucesso.`);
+      // Botão "+ Nova Rota neste Hub"
+      const btnNewInHub = folderCard.querySelector('.btn-new-route-hub');
+      if (btnNewInHub) {
+        btnNewInHub.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const targetNpcId = this.getAttribute('data-npc-id');
+          clearRouteForm(targetNpcId);
+          document.getElementById('route-form-id')?.focus();
+          showAdminToast(`Formulário vinculado ao Hub "${hubTitle}".`);
         });
+      }
+
+      // Drag & Drop no Header da Pasta (para soltar e alocar rota)
+      header.addEventListener('dragover', function (e) {
+        e.preventDefault();
+        header.classList.add('drag-over');
       });
+
+      header.addEventListener('dragleave', function () {
+        header.classList.remove('drag-over');
+      });
+
+      header.addEventListener('drop', function (e) {
+        e.preventDefault();
+        header.classList.remove('drag-over');
+        const targetNpc = this.getAttribute('data-npc-id');
+        const rId = e.dataTransfer.getData('text/plain') || draggedRouteId;
+
+        if (rId && targetNpc) {
+          const routeObj = adminData.customRoutes[rId];
+          const newNpcId = (targetNpc === '__unassigned__') ? null : targetNpc;
+          if (routeObj && routeObj.npc_id !== newNpcId) {
+            routeObj.npc_id = newNpcId;
+            postNUI('adminAssignRouteNPC', {
+              routeId: rId,
+              route_id: rId,
+              npcId: newNpcId,
+              npc_id: newNpcId
+            });
+            window._openRouteFolders.add(folderKey);
+            renderRoutesTab();
+            renderEconomyTab();
+            showAdminToast(`Rota #${rId} realocada para o Hub "${hubTitle}".`, 'success');
+          }
+        }
+      });
+
+      // Se tiver rotas, popula a tabela dentro da pasta
+      if (rList.length > 0) {
+        const tbody = folderCard.querySelector('.admin-routes-hub-tbody');
+        rList.forEach(e => {
+          const r = e.data;
+          const k = e.key;
+          const tr = document.createElement('tr');
+          tr.className = 'admin-route-draggable';
+          tr.setAttribute('draggable', 'true');
+          tr.setAttribute('data-id', k);
+
+          const jobType = (r.type || r.job_type || 'freight').toLowerCase();
+          let badgeClass = 'admin-badge-freight';
+          if (jobType === 'adr') badgeClass = 'admin-badge-adr';
+          else if (jobType === 'quick') badgeClass = 'admin-badge-quick';
+          else if (jobType === 'heavy') badgeClass = 'admin-badge-heavy';
+          else if (jobType === 'carrier') badgeClass = 'admin-badge-carrier';
+
+          const payment = r.base_payment || r.payment || 0;
+          const xp = r.base_xp || r.xp || 0;
+          const dist = r.distance || r.distance_km || 0;
+
+          tr.innerHTML = `
+            <td style="font-weight:600; text-overflow:ellipsis; overflow:hidden;" title="#${escapeHtml(r.id || r.route_id || k)}">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <i class="fas fa-grip-vertical admin-drag-handle" style="color:var(--admin-text-muted); cursor:grab;" title="Arraste para mover entre Hubs"></i>
+                <span>#${escapeHtml(r.id || r.route_id || k)}</span>
+              </div>
+            </td>
+            <td style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${escapeHtml(r.name || r.title || 'Carga Sem Nome')}">
+              ${escapeHtml(r.name || r.title || 'Carga Sem Nome')}
+            </td>
+            <td style="text-align:center;"><span class="admin-badge ${badgeClass}">${escapeHtml(jobType.toUpperCase())}</span></td>
+            <td>
+              <div style="line-height:1.2;">
+                <span>R$ ${Number(payment).toLocaleString()}</span><br>
+                <span style="color:var(--admin-primary); font-size:10px; font-weight:600;">+${escapeHtml(xp)} XP</span>
+              </div>
+            </td>
+            <td>
+              <div style="line-height:1.2;">
+                <span>${Number(dist).toFixed(1)} km</span><br>
+                <span style="color:var(--admin-text-muted); font-size:10px;">Nv ${r.req_skill || r.required_level || 1}</span>
+              </div>
+            </td>
+            <td style="text-align:center; white-space:nowrap;">
+              <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
+                <button class="admin-btn admin-btn-outline btn-edit-route" data-id="${escapeHtml(k)}" title="Editar Rota"><i class="fas fa-edit"></i></button>
+                <button class="admin-btn admin-btn-danger btn-del-route" data-id="${escapeHtml(k)}" title="Excluir Rota"><i class="fas fa-trash"></i></button>
+              </div>
+            </td>
+          `;
+
+          // Drag Events da Linha de Rota
+          tr.addEventListener('dragstart', function (ev) {
+            draggedRouteId = this.getAttribute('data-id');
+            this.classList.add('dragging');
+            ev.dataTransfer.setData('text/plain', draggedRouteId);
+          });
+
+          tr.addEventListener('dragend', function () {
+            this.classList.remove('dragging');
+            draggedRouteId = null;
+          });
+
+          tbody.appendChild(tr);
+        });
+
+        // Eventos de Editar e Deletar
+        tbody.querySelectorAll('.btn-edit-route').forEach(btn => {
+          btn.addEventListener('click', function () {
+            const id = this.getAttribute('data-id');
+            fillRouteForm(adminData.customRoutes[id]);
+          });
+        });
+
+        tbody.querySelectorAll('.btn-del-route').forEach(btn => {
+          btn.addEventListener('click', function () {
+            const id = this.getAttribute('data-id');
+            showConfirmModal('Excluir Rota', `Deseja realmente remover a rota #${id}?`, () => {
+              postNUI('adminDeleteRoute', { id: id });
+              delete adminData.customRoutes[id];
+              const currId = document.getElementById('route-form-id')?.value.trim();
+              if (currId === id) {
+                clearRouteForm();
+              }
+              renderRoutesTab();
+              renderEconomyTab();
+              showAdminToast(`Rota #${id} excluída com sucesso.`);
+            });
+          });
+        });
+      }
+
+      container.appendChild(folderCard);
     });
   }
 
-  function clearRouteForm() {
+  function clearRouteForm(defaultNpcId) {
     document.getElementById('route-form-id').value = '';
     document.getElementById('route-form-title').value = '';
     document.getElementById('route-form-type').value = 'freight';
-    document.getElementById('route-form-prop').value = 'hei_prop_carrier_cargo_04b';
     document.getElementById('route-form-payment').value = 2500;
     document.getElementById('route-form-xp').value = 150;
     document.getElementById('route-form-distance').value = 5.0;
     document.getElementById('route-form-level').value = 1;
-    populateRouteSpawnFolders('Geral');
-    document.getElementById('route-form-pickup-x').value = '';
-    document.getElementById('route-form-pickup-y').value = '';
-    document.getElementById('route-form-pickup-z').value = '';
     document.getElementById('route-form-deliv-x').value = '';
     document.getElementById('route-form-deliv-y').value = '';
     document.getElementById('route-form-deliv-z').value = '';
     document.getElementById('route-form-forklift').checked = false;
     document.getElementById('route-form-adr').checked = false;
+
+    if (defaultNpcId && (adminData.npcs || {})[defaultNpcId]) {
+      const npcSelect = document.getElementById('route-form-npc-select');
+      if (npcSelect) npcSelect.value = defaultNpcId;
+      const nObj = (adminData.npcs || {})[defaultNpcId];
+      updateRouteNpcBadge(defaultNpcId, nObj?.npc_name || nObj?.name);
+    } else {
+      populateRouteNPCSelect('');
+    }
 
     const delBtn = document.getElementById('btn-delete-route');
     if (delBtn) delBtn.style.display = 'none';
@@ -645,14 +880,12 @@
     document.getElementById('route-form-id').value = r.id || r.route_id || '';
     document.getElementById('route-form-title').value = r.name || r.title || '';
     document.getElementById('route-form-type').value = r.type || r.job_type || 'freight';
-    const propInput = document.getElementById('route-form-prop');
-    if (propInput) propInput.value = r.cargo_model || r.cargo_prop || 'hei_prop_carrier_cargo_04b';
     document.getElementById('route-form-payment').value = r.base_payment || r.payment || 2500;
     document.getElementById('route-form-xp').value = r.base_xp || r.xp || 150;
     document.getElementById('route-form-distance').value = r.distance || r.distance_km || 5.0;
     document.getElementById('route-form-level').value = r.req_skill || r.required_level || 1;
 
-    populateRouteSpawnFolders(r.spawn_folder || 'Geral');
+    populateRouteNPCSelect(r.npc_id || '');
 
     const dCoords = r.delivery_coords ? (typeof r.delivery_coords === 'string' ? JSON.parse(r.delivery_coords) : r.delivery_coords) : {};
     document.getElementById('route-form-deliv-x').value = dCoords.x ? Number(dCoords.x).toFixed(2) : '';
@@ -673,15 +906,11 @@
       return;
     }
 
-    const spawnFolder = (document.getElementById('route-form-spawn-folder')?.value || '').trim();
-    if (!spawnFolder) {
-      showAdminToast('Vínculo Obrigatório: Selecione uma Pasta de Spawn para esta rota!', 'error');
-      return;
-    }
-
-    const spawnsInFolder = Object.values(adminData.spawns || {}).filter(s => (s.folder_name || 'Geral') === spawnFolder);
-    if (spawnsInFolder.length === 0) {
-      showAdminToast("A pasta selecionada está incompleta. Configure o Ponto de Coleta, Veículos e Props na aba 'Spawns Dinâmicos' antes de vinculá-la a esta rota.", 'error');
+    const npcSelect = document.getElementById('route-form-npc-select');
+    const npcId = (npcSelect?.value || document.getElementById('route-form-npc-id')?.value || '').trim();
+    if (!npcId) {
+      showAdminToast('Vínculo Obrigatório: Selecione o NPC Despachante (Hub) responsável por esta rota!', 'error');
+      if (npcSelect) npcSelect.focus();
       return;
     }
 
@@ -694,6 +923,7 @@
     const payload = {
       id: routeId,
       route_id: routeId,
+      npc_id: npcId,
       name: document.getElementById('route-form-title').value.trim() || 'Carga Personalizada',
       title: document.getElementById('route-form-title').value.trim() || 'Carga Personalizada',
       type: document.getElementById('route-form-type').value,
@@ -706,7 +936,7 @@
       distance_km: parseFloat(document.getElementById('route-form-distance').value) || 5.0,
       req_skill: parseInt(document.getElementById('route-form-level').value) || 1,
       required_level: parseInt(document.getElementById('route-form-level').value) || 1,
-      spawn_folder: spawnFolder,
+      spawn_folder: npcId,
       delivery_coords: delivery,
       has_forklift: document.getElementById('route-form-forklift').checked ? 1 : 0,
       requires_adr: document.getElementById('route-form-adr').checked ? 1 : 0
@@ -716,12 +946,75 @@
     adminData.customRoutes[routeId] = payload;
     renderRoutesTab();
     renderEconomyTab();
-    showAdminToast(`Rota #${routeId} salva e sincronizada em tempo real!`);
+    showAdminToast(`Rota #${routeId} salva e vinculada ao Hub #${npcId}!`, 'success');
   }
 
   // ============================================================
   // ABA 2: SPAWNS DINÂMICOS (PASTAS & DRAG-AND-DROP)
   // ============================================================
+  function updateSpawnNpcBadge(npcId, npcName) {
+    const badge = document.getElementById('spawn-form-npc-badge');
+    const label = document.getElementById('spawn-form-npc-label');
+    const hiddenInput = document.getElementById('spawn-form-npc-id');
+    if (!badge) return;
+
+    if (npcId && npcId !== 'Geral') {
+      if (hiddenInput) hiddenInput.value = npcId;
+      if (label) label.textContent = `${npcName || 'Hub'} (#${npcId})`;
+      badge.style.display = 'inline-flex';
+    } else {
+      if (hiddenInput) hiddenInput.value = '';
+      badge.style.display = 'none';
+    }
+  }
+
+  function populateSpawnNPCFolders(selectedFolder) {
+    const folderSelect = document.getElementById('spawn-form-folder');
+    if (!folderSelect) return;
+    const npcs = adminData.npcs || {};
+    const npcKeys = Object.keys(npcs);
+    const currentVal = selectedFolder || folderSelect.value;
+
+    folderSelect.innerHTML = '';
+    if (npcKeys.length === 0) {
+      folderSelect.innerHTML = '<option value="Geral">Geral (Sem Hubs Cadastrados)</option>';
+      updateSpawnNpcBadge(null);
+      return;
+    }
+
+    npcKeys.forEach(k => {
+      const n = npcs[k];
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = `${n.npc_name || n.name || 'Despachante'} (#${k})`;
+      folderSelect.appendChild(opt);
+    });
+
+    const optGeral = document.createElement('option');
+    optGeral.value = 'Geral';
+    optGeral.textContent = 'Geral / Pátio Global';
+    folderSelect.appendChild(optGeral);
+
+    if (currentVal && (npcs[currentVal] || currentVal === 'Geral')) {
+      folderSelect.value = currentVal;
+      selectedSpawnFolder = currentVal;
+      updateSpawnNpcBadge(currentVal, npcs[currentVal]?.npc_name);
+    } else if (npcKeys.length > 0) {
+      folderSelect.value = npcKeys[0];
+      selectedSpawnFolder = npcKeys[0];
+      updateSpawnNpcBadge(npcKeys[0], npcs[npcKeys[0]]?.npc_name);
+    }
+
+    folderSelect.onchange = function () {
+      selectedSpawnFolder = this.value;
+      const nObj = npcs[this.value];
+      updateSpawnNpcBadge(this.value, nObj ? (nObj.npc_name || nObj.name) : null);
+      document.querySelectorAll('.admin-folder-card').forEach(c => {
+        c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
+      });
+    };
+  }
+
   function fillSpawnForm(s) {
     if (!s) return;
     const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
@@ -737,10 +1030,12 @@
     const sh = document.getElementById('spawn-form-h');
 
     if (sId) sId.value = s.id || s.key || s.spawn_id || '';
+    const f = s.npc_id || s.folder_name || s.folderName || s.folder || 'Geral';
+    selectedSpawnFolder = f;
+    populateSpawnNPCFolders(f);
+
     if (sFolder) {
-      const f = s.folder_name || s.folderName || s.folder || 'Geral';
       sFolder.value = f;
-      selectedSpawnFolder = f;
       document.querySelectorAll('.admin-folder-card').forEach(c => {
         c.style.borderColor = (c.getAttribute('data-folder') === f) ? 'var(--admin-primary)' : '';
       });
@@ -775,7 +1070,6 @@
       { val: 'hei_prop_carrier_cargo_04b', desc: 'Container Marítimo' }
     ];
 
-    // Adiciona props homologados da aba de cargas
     const props = adminData.homologatedProps || [];
     props.forEach(p => {
       const model = p.prop_model || p.model_hash || p.name;
@@ -794,7 +1088,6 @@
 
   function getNextSequentialName(baseName, existingList) {
     if (!baseName) baseName = 'Ponto de Spawn';
-    // Remove qualquer sufixo numérico existente, ex: "Vaga (2)" -> "Vaga"
     const cleanBase = baseName.replace(/\s*\(\d+\)$/, '').trim();
     let maxNum = 1;
     const escapedBase = cleanBase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -838,66 +1131,56 @@
     const t = String(s.spawn_type || 'truck').toLowerCase().trim();
     if (t === 'pallet' || t === 'prop') return 'props';
     if (t === 'load_bay' || t === 'delivery_bay' || t === 'marker' || t === 'bay' || t === 'drawmarker') return 'bays';
-    return 'vehicles'; // truck, trailer, forklift, handler, etc.
+    return 'vehicles';
   }
 
   function renderSpawnsTab() {
     const container = document.getElementById('admin-spawns-folders-container');
-    const folderSelect = document.getElementById('spawn-form-folder');
     if (!container) return;
     container.innerHTML = '';
     populateSpawnModelSuggestions();
 
     adminData.spawns = normalizeSpawns(adminData.spawns);
     const spawnsList = Object.values(adminData.spawns);
+    const npcs = adminData.npcs || {};
+    const npcKeys = Object.keys(npcs);
 
-    const folderList = normalizeFolders(adminData.spawnFolders);
+    populateSpawnNPCFolders(selectedSpawnFolder);
+
+    // Mapeia spawns para cada Hub de NPC
     const folders = {};
-    folderList.forEach(f => {
-      folders[f] = [];
+    npcKeys.forEach(k => {
+      folders[k] = [];
     });
+    folders['Geral'] = [];
 
     spawnsList.forEach(s => {
-      const fName = (s.folder_name && String(s.folder_name).trim()) || 'Geral';
-      s.folder_name = fName;
-      if (!folders[fName]) {
-        folders[fName] = [];
-        if (!folderList.includes(fName)) folderList.push(fName);
-      }
-      folders[fName].push(s);
+      const fNpc = (s.npc_id && npcs[s.npc_id]) ? String(s.npc_id) : (s.folder_name && npcs[s.folder_name] ? String(s.folder_name) : 'Geral');
+      s.npc_id = (fNpc === 'Geral') ? null : fNpc;
+      s.folder_name = fNpc;
+      if (!folders[fNpc]) folders[fNpc] = [];
+      folders[fNpc].push(s);
     });
-
-    if (folderSelect) {
-      const currentSelected = selectedSpawnFolder || folderSelect.value;
-      folderSelect.innerHTML = '';
-      folderList.forEach(fName => {
-        const opt = document.createElement('option');
-        opt.value = fName;
-        opt.textContent = fName;
-        folderSelect.appendChild(opt);
-      });
-      if (currentSelected && folderList.includes(currentSelected)) {
-        folderSelect.value = currentSelected;
-        selectedSpawnFolder = currentSelected;
-      } else {
-        folderSelect.value = 'Geral';
-        selectedSpawnFolder = 'Geral';
-      }
-      folderSelect.onchange = function () {
-        selectedSpawnFolder = this.value;
-        document.querySelectorAll('.admin-folder-card').forEach(c => {
-          c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
-        });
-      };
-    }
 
     window._openSpawnFolders = window._openSpawnFolders || new Set();
     window._activeSpawnFolderFilters = window._activeSpawnFolderFilters || {};
 
-    folderList.forEach(folderName => {
-      const fList = folders[folderName] || [];
-      const isExpanded = window._openSpawnFolders.has(folderName);
-      const activeFilter = window._activeSpawnFolderFilters[folderName] || 'all';
+    const folderList = [...npcKeys];
+    if (folders['Geral'].length > 0 || npcKeys.length === 0) {
+      folderList.push('Geral');
+    }
+
+    folderList.forEach((fKey, idx) => {
+      const isGeral = (fKey === 'Geral');
+      const npc = isGeral ? null : npcs[fKey];
+      const fList = folders[fKey] || [];
+      const folderCardKey = `spawn_hub_${fKey}`;
+
+      if (window._openSpawnFolders.size === 0 && idx === 0) {
+        window._openSpawnFolders.add(folderCardKey);
+      }
+      const isExpanded = window._openSpawnFolders.has(folderCardKey);
+      const activeFilter = window._activeSpawnFolderFilters[fKey] || 'all';
 
       let countVehicles = 0;
       let countProps = 0;
@@ -911,21 +1194,35 @@
 
       const folderCard = document.createElement('div');
       folderCard.className = `admin-folder-card ${isExpanded ? 'expanded' : ''}`;
-      folderCard.setAttribute('data-folder', folderName);
-      if (folderName === selectedSpawnFolder) {
+      folderCard.setAttribute('data-folder', fKey);
+      folderCard.setAttribute('data-npc-id', fKey);
+      if (fKey === selectedSpawnFolder) {
         folderCard.style.borderColor = 'var(--admin-primary)';
       }
 
-      const isDefault = folderName === 'Geral';
+      const hubTitle = isGeral ? 'Pátio Global / Spawns Gerais' : (npc.npc_name || npc.name || `Despachante #${fKey}`);
+      const hubSub = isGeral ? 'Spawns não vinculados a nenhum Hub específico' : `Hub ID: #${fKey} • Modelo: ${npc.npc_model || 's_m_m_trucker_01'}`;
+
       folderCard.innerHTML = `
-        <div class="admin-folder-header">
-          <div class="admin-folder-title">
-            <i class="fas fa-folder${isExpanded ? '-open' : ''}"></i>
-            <span>${escapeHtml(folderName)}</span>
-            <span class="admin-folder-badge">${fList.length} ponto${fList.length !== 1 ? 's' : ''}</span>
+        <div class="admin-folder-header" data-folder="${escapeHtml(fKey)}">
+          <div class="admin-folder-title" style="flex:1; min-width:0;">
+            <i class="fas ${isGeral ? 'fa-warehouse' : (isExpanded ? 'fa-folder-open' : 'fa-folder')}" style="color:${isGeral ? '#f59e0b' : 'var(--admin-primary)'}; font-size:15px;"></i>
+            <div style="display:flex; flex-direction:column; min-width:0;">
+              <span style="font-weight:600; font-size:13px; color:#fff; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                ${escapeHtml(hubTitle)}
+              </span>
+              <span style="font-size:10px; color:var(--admin-text-muted);">${escapeHtml(hubSub)}</span>
+            </div>
+            <span class="admin-folder-badge" style="background:${isGeral ? 'rgba(245,158,11,0.2)' : 'rgba(14,165,233,0.15)'}; color:${isGeral ? '#f59e0b' : 'var(--admin-primary)'};">
+              ${fList.length} ponto${fList.length !== 1 ? 's' : ''}
+            </span>
           </div>
-          <div style="display:flex; gap:10px; align-items:center;">
-            ${!isDefault ? `<button class="admin-btn admin-btn-danger btn-del-folder" data-folder="${escapeHtml(folderName)}" style="padding: 2px 8px; font-size:10px;" title="Excluir Pasta"><i class="fas fa-trash"></i></button>` : ''}
+          <div style="display:flex; gap:8px; align-items:center;">
+            ${!isGeral ? `
+              <button class="admin-btn admin-btn-outline btn-new-spawn-hub" data-npc-id="${escapeHtml(fKey)}" style="padding: 3px 8px; font-size:10.5px;" title="Adicionar Ponto neste Hub">
+                <i class="fas fa-plus"></i> + Novo Ponto
+              </button>
+            ` : ''}
             <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
@@ -944,8 +1241,8 @@
               <i class="fas fa-warehouse"></i> Baias (${countBays})
             </button>
           </div>
-          <div class="admin-folder-items" data-folder="${escapeHtml(folderName)}">
-            ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:10px; text-align:center;">Pasta vazia. Arraste pontos de spawn para cá.</div>` : ''}
+          <div class="admin-folder-items" data-folder="${escapeHtml(fKey)}">
+            ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:16px; text-align:center;">Nenhum ponto alocado a este Hub. Arraste pontos de spawn para cá ou use o Gizmo 3D.</div>` : ''}
           </div>
         </div>
       `;
@@ -953,27 +1250,43 @@
       // Alternância do Acordeão (Expandir / Recolher)
       const header = folderCard.querySelector('.admin-folder-header');
       header.addEventListener('click', function (e) {
-        if (e.target.closest('.btn-del-folder')) return;
+        if (e.target.closest('.btn-new-spawn-hub')) return;
         const currentlyOpen = folderCard.classList.contains('expanded');
         if (currentlyOpen) {
           folderCard.classList.remove('expanded');
-          window._openSpawnFolders.delete(folderName);
-          const icon = folderCard.querySelector('.admin-folder-title i');
-          if (icon) icon.className = 'fas fa-folder';
+          window._openSpawnFolders.delete(folderCardKey);
+          const icon = folderCard.querySelector('.admin-folder-title > i');
+          if (icon && !isGeral) icon.className = 'fas fa-folder';
         } else {
           folderCard.classList.add('expanded');
-          window._openSpawnFolders.add(folderName);
-          const icon = folderCard.querySelector('.admin-folder-title i');
-          if (icon) icon.className = 'fas fa-folder-open';
+          window._openSpawnFolders.add(folderCardKey);
+          const icon = folderCard.querySelector('.admin-folder-title > i');
+          if (icon && !isGeral) icon.className = 'fas fa-folder-open';
         }
 
-        // Seleção rápida da pasta no formulário
-        selectedSpawnFolder = folderName;
-        if (folderSelect) folderSelect.value = folderName;
+        selectedSpawnFolder = fKey;
+        const folderSelect = document.getElementById('spawn-form-folder');
+        if (folderSelect) folderSelect.value = fKey;
+        updateSpawnNpcBadge(fKey, npc?.npc_name);
         document.querySelectorAll('.admin-folder-card').forEach(c => {
           c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
         });
       });
+
+      // Botão "+ Novo Ponto neste Hub"
+      const btnNewInHub = folderCard.querySelector('.btn-new-spawn-hub');
+      if (btnNewInHub) {
+        btnNewInHub.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const targetNpcId = this.getAttribute('data-npc-id');
+          selectedSpawnFolder = targetNpcId;
+          const folderSelect = document.getElementById('spawn-form-folder');
+          if (folderSelect) folderSelect.value = targetNpcId;
+          updateSpawnNpcBadge(targetNpcId, npc?.npc_name);
+          document.getElementById('spawn-form-id')?.focus();
+          showAdminToast(`Formulário de Spawns vinculado ao Hub "${hubTitle}".`);
+        });
+      }
 
       // Filtros Rápidos por Categoria (Pills)
       const filterPills = folderCard.querySelectorAll('.admin-filter-pill');
@@ -983,7 +1296,7 @@
         pill.addEventListener('click', function (e) {
           e.stopPropagation();
           const filter = this.getAttribute('data-filter') || 'all';
-          window._activeSpawnFolderFilters[folderName] = filter;
+          window._activeSpawnFolderFilters[fKey] = filter;
           filterPills.forEach(p => p.classList.remove('active'));
           this.classList.add('active');
 
@@ -1007,7 +1320,7 @@
               emptyFilterMsg.style.cssText = 'color:var(--admin-text-muted); font-size:11px; padding:12px; text-align:center;';
               itemsContainer.appendChild(emptyFilterMsg);
             }
-            emptyFilterMsg.textContent = `Nenhum item do tipo "${filter === 'vehicles' ? 'Veículos' : (filter === 'props' ? 'Props' : 'Baias')}" nesta pasta.`;
+            emptyFilterMsg.textContent = `Nenhum item do tipo "${filter === 'vehicles' ? 'Veículos' : (filter === 'props' ? 'Props' : 'Baias')}" neste Hub.`;
             emptyFilterMsg.style.display = 'block';
           } else if (emptyFilterMsg) {
             emptyFilterMsg.style.display = 'none';
@@ -1015,6 +1328,7 @@
         });
       });
 
+      // Renderiza itens
       fList.forEach(s => {
         const cat = getSpawnCategory(s);
         const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
@@ -1030,7 +1344,7 @@
 
         row.innerHTML = `
           <div style="display:flex; align-items:center; gap:10px;">
-            <i class="fas fa-grip-vertical" style="color:var(--admin-text-muted); cursor:grab;"></i>
+            <i class="fas fa-grip-vertical" style="color:var(--admin-text-muted); cursor:grab;" title="Arraste para mover entre Hubs"></i>
             <strong>#${escapeHtml(s.id || s.key || s.spawn_id)}</strong>
             <span style="color:#fff;">${escapeHtml(s.name || s.spawn_name || 'Ponto')}</span>
             <span class="admin-badge admin-badge-quick">${escapeHtml((s.spawn_type || 'truck').toUpperCase())}</span>
@@ -1061,29 +1375,36 @@
         itemsContainer.appendChild(row);
       });
 
-      folderCard.addEventListener('dragover', function (e) {
+      // Drag & Drop no Card do Hub
+      header.addEventListener('dragover', function (e) {
         e.preventDefault();
-        folderCard.classList.add('drag-over');
+        header.classList.add('drag-over');
       });
 
-      folderCard.addEventListener('dragleave', function () {
-        folderCard.classList.remove('drag-over');
+      header.addEventListener('dragleave', function () {
+        header.classList.remove('drag-over');
       });
 
-      folderCard.addEventListener('drop', function (e) {
+      header.addEventListener('drop', function (e) {
         e.preventDefault();
-        folderCard.classList.remove('drag-over');
-        const targetFolder = this.getAttribute('data-folder');
-        if (draggedSpawnId && targetFolder) {
-          const spawnObj = adminData.spawns[draggedSpawnId];
-          if (spawnObj && spawnObj.folder_name !== targetFolder) {
-            spawnObj.folder_name = targetFolder;
-            postNUI('adminMoveSpawnFolder', {
-              spawn_id: draggedSpawnId,
-              folder_name: targetFolder
+        header.classList.remove('drag-over');
+        const targetNpc = this.getAttribute('data-folder');
+        const sId = e.dataTransfer.getData('text/plain') || draggedSpawnId;
+        if (sId && targetNpc) {
+          const spawnObj = adminData.spawns[sId];
+          const newNpcId = (targetNpc === 'Geral') ? null : targetNpc;
+          if (spawnObj && (spawnObj.npc_id !== newNpcId || spawnObj.folder_name !== targetNpc)) {
+            spawnObj.npc_id = newNpcId;
+            spawnObj.folder_name = targetNpc;
+            postNUI('adminAssignSpawnNPC', {
+              spawnId: sId,
+              spawn_id: sId,
+              npcId: newNpcId,
+              npc_id: newNpcId
             });
+            window._openSpawnFolders.add(folderCardKey);
             renderSpawnsTab();
-            showAdminToast(`Spawn movido para "${targetFolder}".`);
+            showAdminToast(`Spawn #${sId} realocado para o Hub "${hubTitle}".`, 'success');
           }
         }
       });
@@ -1120,6 +1441,7 @@
           name: newName,
           spawn_type: s.spawn_type || 'truck',
           model: s.model || '',
+          npc_id: s.npc_id || null,
           folder_name: s.folder_name || 'Geral',
           coords: {
             x: parseFloat(coords.x) || 0.0,
@@ -1130,12 +1452,10 @@
           }
         };
 
-        // 1. Ativa Preview da Área com todos os spawns existentes
         if (spawnsList.length > 0) {
           postNUI('adminStartPreview', { spawns: spawnsList });
         }
 
-        // 2. Aciona o Gizmo 3D posicionado nas coordenadas originais
         postNUI('adminStartSpawnGizmo', {
           spawn_type: cloneObj.spawn_type,
           model: cloneObj.model,
@@ -1172,24 +1492,6 @@
         });
       });
     });
-
-    container.querySelectorAll('.btn-del-folder').forEach(btn => {
-      btn.addEventListener('click', function () {
-        const f = this.getAttribute('data-folder');
-        showConfirmModal('Excluir Pasta', `Deseja excluir a pasta "${f}"? Todos os pontos contidos nela serão movidos para "Geral".`, () => {
-          postNUI('adminDeleteSpawnFolder', { folder_name: f });
-          if (adminData.spawnFolders) {
-            adminData.spawnFolders = adminData.spawnFolders.filter(x => x !== f);
-          }
-          Object.values(adminData.spawns).forEach(s => {
-            if (s.folder_name === f) s.folder_name = 'Geral';
-          });
-          renderSpawnsTab();
-          populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
-          showAdminToast(`Pasta "${f}" excluída. Pontos movidos para "Geral".`);
-        });
-      });
-    });
   }
 
   function saveSpawnForm() {
@@ -1215,9 +1517,12 @@
         heading: parseFloat(document.getElementById('spawn-form-h')?.value) || 0.0
       };
 
+      const targetNpcId = (folderVal === 'Geral') ? null : folderVal;
+
       const payload = {
         id: spawnId,
         spawn_id: spawnId,
+        npc_id: targetNpcId,
         name: sName,
         spawn_name: sName,
         spawn_type: sType,
@@ -1229,29 +1534,18 @@
         heading: coords.heading
       };
 
-      // 1. Post para o servidor
       postNUI('adminSaveSpawn', payload);
 
-      // 2. Atualiza cache local garantindo dicionário normalizado
       if (!adminData.spawns || Array.isArray(adminData.spawns)) {
         adminData.spawns = normalizeSpawns(adminData.spawns);
       }
       adminData.spawns[spawnId] = payload;
 
-      if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
-      if (!adminData.spawnFolders.includes(folderVal)) {
-        adminData.spawnFolders.push(folderVal);
-      }
-
-      // 3. Renderiza a aba atualizada
       selectedSpawnFolder = folderVal;
       renderSpawnsTab();
-      populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
 
-      // 4. Mantém a pasta ativa selecionada no formulário
       if (folderSelect) folderSelect.value = folderVal;
 
-      // 5. Limpa campos para o próximo cadastro
       if (spawnIdInput) spawnIdInput.value = '';
       const nameInput = document.getElementById('spawn-form-name');
       if (nameInput) nameInput.value = '';
@@ -1266,7 +1560,7 @@
       const modelInput = document.getElementById('spawn-form-model');
       if (modelInput) modelInput.value = '';
 
-      showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso na pasta "${folderVal}"!`, 'success');
+      showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso no Hub "${folderVal}"!`, 'success');
     } catch (err) {
       console.error('[Admin NUI] Erro ao salvar spawn:', err);
       showAdminToast('Erro ao salvar ponto de spawn: ' + (err.message || err), 'error');
@@ -1911,16 +2205,16 @@
       tr.innerHTML = `
         <td style="font-weight:600;">#${escapeHtml(n.npc_id || k)}</td>
         <td title="${escapeHtml(n.npc_name || 'Despachante')}">${escapeHtml(n.npc_name || 'Despachante')}</td>
-        <td style="text-align:center;"><span class="admin-badge admin-badge-heavy">${escapeHtml(n.npc_model || 's_m_m_trucker_01')}</span></td>
-        <td style="font-family: monospace; font-size: 10.5px;">
+        <td style="text-align:center;"><span class="admin-badge admin-badge-heavy" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block;">${escapeHtml(n.npc_model || 's_m_m_trucker_01')}</span></td>
+        <td style="font-family: monospace; font-size: 10px; text-align: center;">
           X:${coords.x ? Number(coords.x).toFixed(1) : 0} Y:${coords.y ? Number(coords.y).toFixed(1) : 0} Z:${coords.z ? Number(coords.z).toFixed(1) : 0}
         </td>
         <td style="text-align:center; white-space: nowrap;">
-          <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
-            <button class="admin-btn admin-btn-outline btn-edit-npc" data-id="${escapeHtml(k)}" title="Editar no Formulário"><i class="fas fa-edit"></i></button>
-            <button class="admin-btn admin-btn-accent btn-gizmo-npc-row" data-id="${escapeHtml(k)}" data-name="${escapeHtml(n.npc_name || n.name || '')}" data-model="${escapeHtml(n.npc_model || n.model || '')}" data-x="${escapeHtml(coords.x || '')}" data-y="${escapeHtml(coords.y || '')}" data-z="${escapeHtml(coords.z || '')}" data-h="${escapeHtml(coords.heading || coords.w || '')}" title="Ajustar Posição com Gizmo 3D"><i class="fas fa-arrows-alt"></i></button>
-            <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
-            <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
+          <div class="admin-actions-cell">
+            <button class="admin-btn admin-btn-outline admin-btn-action btn-edit-npc" data-id="${escapeHtml(k)}" title="Editar no Formulário"><i class="fas fa-edit"></i></button>
+            <button class="admin-btn admin-btn-accent admin-btn-action btn-gizmo-npc-row" data-id="${escapeHtml(k)}" data-name="${escapeHtml(n.npc_name || n.name || '')}" data-model="${escapeHtml(n.npc_model || n.model || '')}" data-x="${escapeHtml(coords.x || '')}" data-y="${escapeHtml(coords.y || '')}" data-z="${escapeHtml(coords.z || '')}" data-h="${escapeHtml(coords.heading || coords.w || '')}" title="Ajustar Posição com Gizmo 3D"><i class="fas fa-arrows-alt"></i></button>
+            <button class="admin-btn admin-btn-outline admin-btn-action btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
+            <button class="admin-btn admin-btn-danger admin-btn-action btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       `;
@@ -1998,13 +2292,29 @@
     tbody.querySelectorAll('.btn-del-npc').forEach(btn => {
       btn.addEventListener('click', function () {
         const id = this.getAttribute('data-id');
-        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o NPC #${id}?`, () => {
+        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o NPC #${id}? Todas as rotas e pontos de spawn associados a este Hub serão excluídos em cascata.`, () => {
           postNUI('adminDeleteNPC', { id: id });
           delete adminData.npcs[id];
+          if (adminData.customRoutes) {
+            Object.keys(adminData.customRoutes).forEach(rk => {
+              if (adminData.customRoutes[rk]?.npc_id === id) {
+                delete adminData.customRoutes[rk];
+              }
+            });
+          }
+          if (adminData.spawns) {
+            Object.keys(adminData.spawns).forEach(sk => {
+              if (adminData.spawns[sk]?.npc_id === id || adminData.spawns[sk]?.folder_name === id) {
+                delete adminData.spawns[sk];
+              }
+            });
+          }
           renderNPCsTab();
+          renderRoutesTab();
+          renderSpawnsTab();
           const currentFormId = (document.getElementById('npc-form-id')?.value || '').trim();
           if (currentFormId === id) resetNPCForm();
-          showAdminToast(`NPC #${id} removido.`);
+          showAdminToast(`NPC #${id} e suas entidades vinculadas foram removidos.`);
         });
       });
     });
@@ -2222,12 +2532,28 @@
           showAdminToast('Nenhum despachante selecionado para excluir.', 'error');
           return;
         }
-        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o despachante #${id}?`, () => {
+        showConfirmModal('Remover NPC Despachante', `Deseja realmente remover o despachante #${id}? Todas as rotas e pontos de spawn associados a este Hub serão excluídos em cascata.`, () => {
           postNUI('adminDeleteNPC', { id: id });
           delete adminData.npcs[id];
+          if (adminData.customRoutes) {
+            Object.keys(adminData.customRoutes).forEach(rk => {
+              if (adminData.customRoutes[rk]?.npc_id === id) {
+                delete adminData.customRoutes[rk];
+              }
+            });
+          }
+          if (adminData.spawns) {
+            Object.keys(adminData.spawns).forEach(sk => {
+              if (adminData.spawns[sk]?.npc_id === id || adminData.spawns[sk]?.folder_name === id) {
+                delete adminData.spawns[sk];
+              }
+            });
+          }
           renderNPCsTab();
+          renderRoutesTab();
+          renderSpawnsTab();
           resetNPCForm();
-          showAdminToast(`Despachante #${id} removido.`);
+          showAdminToast(`Despachante #${id} e suas entidades vinculadas foram removidos.`);
         });
       });
     }
