@@ -223,6 +223,22 @@
           if (sy) sy.value = item.coords.y;
           if (sz) sz.value = item.coords.z;
           if (sh) sh.value = item.coords.heading;
+        }
+        if (item.spawn && item.spawn.id) {
+          if (!adminData.spawns || Array.isArray(adminData.spawns)) {
+            adminData.spawns = normalizeSpawns(adminData.spawns);
+          }
+          adminData.spawns[item.spawn.id] = item.spawn;
+          const sFolder = item.spawn.folder_name || item.spawn.folder || 'Geral';
+          if (!adminData.spawnFolders) adminData.spawnFolders = ['Geral'];
+          if (!adminData.spawnFolders.includes(sFolder)) {
+            adminData.spawnFolders.push(sFolder);
+          }
+          selectedSpawnFolder = sFolder;
+          renderSpawnsTab();
+          populateRouteSpawnFolders(document.getElementById('route-form-spawn-folder')?.value);
+          showAdminToast(`Ponto de Spawn "${item.spawn.name || item.spawn.id}" gravado e sincronizado!`, 'success');
+        } else {
           showAdminToast('Coordenadas capturadas com sucesso!');
         }
         break;
@@ -792,6 +808,13 @@
     return uniqueId;
   }
 
+  function getSpawnCategory(s) {
+    const t = String(s.spawn_type || 'truck').toLowerCase().trim();
+    if (t === 'pallet' || t === 'prop') return 'props';
+    if (t === 'load_bay' || t === 'delivery_bay' || t === 'marker' || t === 'bay' || t === 'drawmarker') return 'bays';
+    return 'vehicles'; // truck, trailer, forklift, handler, etc.
+  }
+
   function renderSpawnsTab() {
     const container = document.getElementById('admin-spawns-folders-container');
     const folderSelect = document.getElementById('spawn-form-folder');
@@ -842,12 +865,27 @@
       };
     }
 
+    window._openSpawnFolders = window._openSpawnFolders || new Set();
+    window._activeSpawnFolderFilters = window._activeSpawnFolderFilters || {};
+
     folderList.forEach(folderName => {
       const fList = folders[folderName] || [];
+      const isExpanded = window._openSpawnFolders.has(folderName);
+      const activeFilter = window._activeSpawnFolderFilters[folderName] || 'all';
+
+      let countVehicles = 0;
+      let countProps = 0;
+      let countBays = 0;
+      fList.forEach(s => {
+        const cat = getSpawnCategory(s);
+        if (cat === 'vehicles') countVehicles++;
+        else if (cat === 'props') countProps++;
+        else if (cat === 'bays') countBays++;
+      });
+
       const folderCard = document.createElement('div');
-      folderCard.className = 'admin-folder-card';
+      folderCard.className = `admin-folder-card ${isExpanded ? 'expanded' : ''}`;
       folderCard.setAttribute('data-folder', folderName);
-      folderCard.style.cursor = 'pointer';
       if (folderName === selectedSpawnFolder) {
         folderCard.style.borderColor = 'var(--admin-primary)';
       }
@@ -856,38 +894,113 @@
       folderCard.innerHTML = `
         <div class="admin-folder-header">
           <div class="admin-folder-title">
-            <i class="fas fa-folder"></i>
+            <i class="fas fa-folder${isExpanded ? '-open' : ''}"></i>
             <span>${escapeHtml(folderName)}</span>
-            <span class="admin-folder-badge">${fList.length} pontos</span>
+            <span class="admin-folder-badge">${fList.length} ponto${fList.length !== 1 ? 's' : ''}</span>
           </div>
-          <div style="display:flex; gap:6px; align-items:center;">
+          <div style="display:flex; gap:10px; align-items:center;">
             ${!isDefault ? `<button class="admin-btn admin-btn-danger btn-del-folder" data-folder="${escapeHtml(folderName)}" style="padding: 2px 8px; font-size:10px;" title="Excluir Pasta"><i class="fas fa-trash"></i></button>` : ''}
+            <i class="fas fa-chevron-right admin-folder-chevron"></i>
           </div>
         </div>
-        <div class="admin-folder-items" data-folder="${escapeHtml(folderName)}">
-          ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:6px; text-align:center;">Pasta vazia. Arraste pontos de spawn para cá.</div>` : ''}
+        <div class="admin-folder-body">
+          <div class="admin-folder-filters">
+            <button class="admin-filter-pill ${activeFilter === 'all' ? 'active' : ''}" data-filter="all">
+              <i class="fas fa-list"></i> Todos (${fList.length})
+            </button>
+            <button class="admin-filter-pill ${activeFilter === 'vehicles' ? 'active' : ''}" data-filter="vehicles">
+              <i class="fas fa-truck"></i> Veículos (${countVehicles})
+            </button>
+            <button class="admin-filter-pill ${activeFilter === 'props' ? 'active' : ''}" data-filter="props">
+              <i class="fas fa-boxes-stacked"></i> Props (${countProps})
+            </button>
+            <button class="admin-filter-pill ${activeFilter === 'bays' ? 'active' : ''}" data-filter="bays">
+              <i class="fas fa-warehouse"></i> Baias (${countBays})
+            </button>
+          </div>
+          <div class="admin-folder-items" data-folder="${escapeHtml(folderName)}">
+            ${fList.length === 0 ? `<div style="color:var(--admin-text-muted); font-size:11px; padding:10px; text-align:center;">Pasta vazia. Arraste pontos de spawn para cá.</div>` : ''}
+          </div>
         </div>
       `;
 
-      // Seleção rápida da pasta clicando no card
-      folderCard.addEventListener('click', function (e) {
-        if (e.target.closest('.btn-del-folder') || e.target.closest('.admin-spawn-row') || e.target.closest('.btn-tp-spawn') || e.target.closest('.btn-del-spawn') || e.target.closest('.btn-edit-spawn') || e.target.closest('.btn-dup-spawn')) return;
+      // Alternância do Acordeão (Expandir / Recolher)
+      const header = folderCard.querySelector('.admin-folder-header');
+      header.addEventListener('click', function (e) {
+        if (e.target.closest('.btn-del-folder')) return;
+        const currentlyOpen = folderCard.classList.contains('expanded');
+        if (currentlyOpen) {
+          folderCard.classList.remove('expanded');
+          window._openSpawnFolders.delete(folderName);
+          const icon = folderCard.querySelector('.admin-folder-title i');
+          if (icon) icon.className = 'fas fa-folder';
+        } else {
+          folderCard.classList.add('expanded');
+          window._openSpawnFolders.add(folderName);
+          const icon = folderCard.querySelector('.admin-folder-title i');
+          if (icon) icon.className = 'fas fa-folder-open';
+        }
+
+        // Seleção rápida da pasta no formulário
         selectedSpawnFolder = folderName;
         if (folderSelect) folderSelect.value = folderName;
-        document.querySelectorAll('.admin-folder-card').forEach(c => c.style.borderColor = '');
-        folderCard.style.borderColor = 'var(--admin-primary)';
-        showAdminToast(`Pasta "${folderName}" selecionada no formulário.`);
+        document.querySelectorAll('.admin-folder-card').forEach(c => {
+          c.style.borderColor = (c.getAttribute('data-folder') === selectedSpawnFolder) ? 'var(--admin-primary)' : '';
+        });
       });
 
+      // Filtros Rápidos por Categoria (Pills)
+      const filterPills = folderCard.querySelectorAll('.admin-filter-pill');
       const itemsContainer = folderCard.querySelector('.admin-folder-items');
 
+      filterPills.forEach(pill => {
+        pill.addEventListener('click', function (e) {
+          e.stopPropagation();
+          const filter = this.getAttribute('data-filter') || 'all';
+          window._activeSpawnFolderFilters[folderName] = filter;
+          filterPills.forEach(p => p.classList.remove('active'));
+          this.classList.add('active');
+
+          const rows = folderCard.querySelectorAll('.admin-spawn-row');
+          let visibleCount = 0;
+          rows.forEach(r => {
+            const cat = r.getAttribute('data-category') || 'vehicles';
+            if (filter === 'all' || cat === filter) {
+              r.style.display = 'flex';
+              visibleCount++;
+            } else {
+              r.style.display = 'none';
+            }
+          });
+
+          let emptyFilterMsg = folderCard.querySelector('.admin-filter-empty-msg');
+          if (visibleCount === 0 && fList.length > 0) {
+            if (!emptyFilterMsg) {
+              emptyFilterMsg = document.createElement('div');
+              emptyFilterMsg.className = 'admin-filter-empty-msg';
+              emptyFilterMsg.style.cssText = 'color:var(--admin-text-muted); font-size:11px; padding:12px; text-align:center;';
+              itemsContainer.appendChild(emptyFilterMsg);
+            }
+            emptyFilterMsg.textContent = `Nenhum item do tipo "${filter === 'vehicles' ? 'Veículos' : (filter === 'props' ? 'Props' : 'Baias')}" nesta pasta.`;
+            emptyFilterMsg.style.display = 'block';
+          } else if (emptyFilterMsg) {
+            emptyFilterMsg.style.display = 'none';
+          }
+        });
+      });
+
       fList.forEach(s => {
+        const cat = getSpawnCategory(s);
         const coords = s.coords ? (typeof s.coords === 'string' ? JSON.parse(s.coords) : s.coords) : {};
         const hVal = coords.heading != null ? coords.heading : (coords.w != null ? coords.w : (s.heading != null ? s.heading : 0));
         const row = document.createElement('div');
         row.className = 'admin-spawn-row';
         row.setAttribute('draggable', 'true');
         row.setAttribute('data-id', s.id || s.key || s.spawn_id);
+        row.setAttribute('data-category', cat);
+        if (activeFilter !== 'all' && cat !== activeFilter) {
+          row.style.display = 'none';
+        }
 
         row.innerHTML = `
           <div style="display:flex; align-items:center; gap:10px;">
@@ -1326,7 +1439,7 @@
       folders[fName].push({ key: compKey, item: item });
     });
 
-    window._openOffsetFolders = window._openOffsetFolders || new Set(['Geral']);
+    window._openOffsetFolders = window._openOffsetFolders || new Set();
 
     Object.keys(folders).sort().forEach(folderName => {
       const fList = folders[folderName];

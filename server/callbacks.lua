@@ -1763,6 +1763,12 @@ lib.callback.register('aurp_trucker:server:getVehiclePropOffsets', function(sour
     return { dualMap = dualMap, rawMap = rawMap }
 end)
 
+lib.callback.register('aurp_trucker:server:getAdminSpawns', function(source)
+    local spawns = (AdminService and AdminService.Spawns) or {}
+    local folders = (AdminService and AdminService.SpawnFolders) or {}
+    return { spawns = spawns, folders = folders }
+end)
+
 -- =======================================================================
 -- ALOCAÇÃO DINÂMICA DE BAIAS DE CARREGAMENTO (ANTI-COLISÃO AUTORITATIVA)
 -- =======================================================================

@@ -3750,6 +3750,26 @@ RegisterNetEvent('aurp_trucker:client:adminSyncRoutes', function(routes)
 end)
 
 RegisterNetEvent('aurp_trucker:client:adminSyncSpawns', function(spawns)
+    _G.ClientAdminSpawns = spawns
+    if Config then Config.AdminSpawns = spawns end
+
+    -- Sincronização em tempo real de baias de carregamento com missão ativa
+    if ActiveJob and ActiveJob.spawnFolder and spawns then
+        local targetF = tostring(ActiveJob.spawnFolder):lower()
+        for _, sp in pairs(spawns) do
+            if tostring(sp.folder_name or 'Geral'):lower() == targetF and tostring(sp.spawn_type):lower() == 'load_bay' then
+                if sp.coords then
+                    ActiveJob.loadBayCoords = sp.coords
+                    if CurrentStage == 'STEP_4_PARK_DOCK' then
+                        local dockCoords = vector3(sp.coords.x, sp.coords.y, sp.coords.z)
+                        UpdateMissionObjective('dock', dockCoords, 'Baía de Carregamento')
+                    end
+                    break
+                end
+            end
+        end
+    end
+
     SendNUIMessage({
         action = 'adminSyncSpawns',
         spawns = spawns
@@ -4039,6 +4059,14 @@ CreateThread(function()
                 })
             end
             if Config.Debug then print("^2[AUST_Trucker] Sincronização inicial de VehiclePropOffsets (6DoF) concluída!^7") end
+        end
+
+        -- Sincronização inicial de spawns dinâmicos e baias
+        local spRes = lib.callback.await('aurp_trucker:server:getAdminSpawns', false)
+        if spRes and spRes.spawns then
+            _G.ClientAdminSpawns = spRes.spawns
+            if Config then Config.AdminSpawns = spRes.spawns end
+            if Config.Debug then print("^2[AUST_Trucker] Sincronização inicial de Spawns Dinâmicos concluída!^7") end
         end
     end)
 end)

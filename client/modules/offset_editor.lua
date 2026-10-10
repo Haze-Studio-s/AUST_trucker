@@ -39,6 +39,7 @@ local IsCalibratingSpawn = false
 local SpawnGhostEnt = nil
 local SpawnCam = nil
 local ActiveDuplicationData = nil
+local ActiveCalibSpawnData = nil
 local CurrentSpawnCoords = { x = 0.0, y = 0.0, z = 0.0, heading = 0.0 }
 local ActivePreviewEntities = {}
 local ActivePreviewMarkers = {}
@@ -874,6 +875,40 @@ RegisterNetEvent('aurp_trucker:client:adminSyncOffsets', function(trailerModel, 
         end
     end
 
+    -- Sincronização em tempo real com a missão ativa (_G.ActiveJob)
+    if _G.ActiveJob and _G.ActiveJob.trailerOffsets then
+        local jobTrailer = _G.ActiveJob.trailerModel and tostring(_G.ActiveJob.trailerModel):lower()
+        if not jobTrailer or jobTrailer == trailerModel or jobTrailer == '' or joaat(jobTrailer) == hash then
+            if not _G.ActiveJob.trailerOffsets._specific then
+                _G.ActiveJob.trailerOffsets._specific = { pallets = {}, forklift = nil }
+            end
+            if isForklift then
+                _G.ActiveJob.trailerOffsets._specific.forklift = slotEntry
+            else
+                _G.ActiveJob.trailerOffsets._specific.pallets[slotIndex] = slotEntry
+                _G.ActiveJob.trailerOffsets._specific.pallets[tonumber(slotIndex)] = slotEntry
+                _G.ActiveJob.trailerOffsets._specific.pallets[tostring(slotIndex)] = slotEntry
+            end
+            for _, k in ipairs(keys) do
+                if not _G.ActiveJob.trailerOffsets[k] then
+                    _G.ActiveJob.trailerOffsets[k] = { pallets = {}, forklift = nil }
+                end
+                if isForklift then
+                    _G.ActiveJob.trailerOffsets[k].forklift = slotEntry
+                else
+                    _G.ActiveJob.trailerOffsets[k].pallets[slotIndex] = slotEntry
+                    _G.ActiveJob.trailerOffsets[k].pallets[tonumber(slotIndex)] = slotEntry
+                    _G.ActiveJob.trailerOffsets[k].pallets[tostring(slotIndex)] = slotEntry
+                end
+            end
+        end
+    end
+
+    -- Recarrega instantaneamente o fantasma de alinhamento da empilhadeira com o novo offset
+    if ForkliftModule and ForkliftModule.DeleteGhostProp then
+        ForkliftModule.DeleteGhostProp()
+    end
+
     -- Se o pacote completo do banco foi enviado, sincroniza e atualiza imediatamente a UI
     if updatedOffsets then
         SendNUIMessage({
@@ -981,6 +1016,7 @@ function OffsetEditor.StartSpawnCalibration(data)
     IsCalibratingSpawn = true
 
     data = data or {}
+    ActiveCalibSpawnData = data
     ActiveDuplicationData = (data.is_duplication and data.duplicate_data) or nil
 
     -- Inicializa Posicionamento Sequencial em Lote se quantity > 1
@@ -1402,15 +1438,58 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
                 duration = 4500
             })
             ActiveDuplicationData = nil
+            ActiveCalibSpawnData = nil
             OffsetEditor.StopPreview()
         else
-            lib.notify({ title = 'Coordenadas Capturadas', description = 'Coordenadas e rotação aplicadas com precisão!', type = 'success' })
+            local bData = ActiveCalibSpawnData or {}
+            local rawId = bData.id or bData.spawn_id or bData.base_id
+            local sId = (rawId and rawId ~= '') and rawId or ('spawn_' .. tostring(GetGameTimer()) .. '_' .. math.random(100, 999))
+            local sName = bData.name or bData.spawn_name or bData.base_name or sId
+            local sType = bData.spawn_type or 'truck'
+            local sModel = bData.model or ''
+            local sFolder = bData.folder_name or bData.folderName or bData.folder or 'Geral'
+
+            local singlePayload = {
+                id = sId,
+                spawn_id = sId,
+                name = sName,
+                spawn_name = sName,
+                spawn_type = sType,
+                model = sModel,
+                folder_name = sFolder,
+                folder = sFolder,
+                folderName = sFolder,
+                coords = {
+                    x = CurrentSpawnCoords.x,
+                    y = CurrentSpawnCoords.y,
+                    z = CurrentSpawnCoords.z,
+                    heading = CurrentSpawnCoords.heading,
+                    w = CurrentSpawnCoords.heading
+                },
+                heading = CurrentSpawnCoords.heading
+            }
+
+            -- GRAVAÇÃO OBRIGATÓRIA AUTOMÁTICA NO BANCO E SINCRONIZAÇÃO EM TEMPO REAL
+            TriggerServerEvent('aurp_trucker:server:adminSaveSpawn', singlePayload)
+            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+            lib.notify({
+                title = 'Spawn Salvo no Banco!',
+                description = ('Ponto "%s" salvo na pasta "%s" e sincronizado em tempo real!'):format(sName, sFolder),
+                type = 'success',
+                duration = 4500
+            })
+
             SendNUIMessage({
                 action = 'admin_spawn_coords_calibrated',
-                coords = CurrentSpawnCoords
+                coords = CurrentSpawnCoords,
+                spawn = singlePayload
             })
+            ActiveCalibSpawnData = nil
+            OffsetEditor.StopPreview()
         end
     else
+        ActiveCalibSpawnData = nil
         if BatchSpawnState.active then
             if #BatchSpawnState.confirmedItems > 0 then
                 TriggerServerEvent('aurp_trucker:server:adminSaveBatchSpawns', BatchSpawnState.confirmedItems)

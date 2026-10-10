@@ -1316,6 +1316,33 @@ RegisterNetEvent('aurp_trucker:server:adminSaveTrailerOffset', function(data)
         heading = heading,
         straps = (type(data.straps) == 'table' and data.straps) or (strapsJson and json.decode(strapsJson)) or nil
     }
+
+    -- Atualiza autoritativamente em tempo real lobbies de missões ativas no servidor
+    if PolarixLobbies then
+        for _, lobby in pairs(PolarixLobbies) do
+            if lobby.trailerOffsets then
+                local tKey = trailerModel:lower()
+                local tHash = joaat(tKey)
+                if not lobby.trailerOffsets[tKey] then lobby.trailerOffsets[tKey] = { pallets = {}, forklift = nil } end
+                if not lobby.trailerOffsets[tHash] then lobby.trailerOffsets[tHash] = { pallets = {}, forklift = nil } end
+                if isForklift == 1 then
+                    lobby.trailerOffsets[tKey].forklift = offsetPayload
+                    lobby.trailerOffsets[tHash].forklift = offsetPayload
+                else
+                    lobby.trailerOffsets[tKey].pallets[slotIndex] = offsetPayload
+                    lobby.trailerOffsets[tHash].pallets[slotIndex] = offsetPayload
+                end
+                if lobby.trailerOffsets._specific then
+                    if isForklift == 1 then
+                        lobby.trailerOffsets._specific.forklift = offsetPayload
+                    else
+                        lobby.trailerOffsets._specific.pallets[slotIndex] = offsetPayload
+                    end
+                end
+            end
+        end
+    end
+
     TriggerClientEvent('aurp_trucker:client:adminSyncOffsets', -1, trailerModel, slotIndex, isForklift == 1, offsetPayload, heading, cleanOffsets or updatedOffsets)
     TriggerClientEvent('ox_lib:notify', src, {
         title = 'Offset Calibrado',
