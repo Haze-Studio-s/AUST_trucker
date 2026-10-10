@@ -545,7 +545,16 @@ function BuildInitialDataForPlayer(source, citizenId)
     return result
 end
 
--- Callback principal para o frontend da NUI
+local _InitialDataRateLimit = {}
+local _InitialDataCache = {}
+
+AddEventHandler('playerDropped', function()
+    local s = source
+    _InitialDataRateLimit[s] = nil
+    _InitialDataCache[s] = nil
+end)
+
+-- Callback principal para o frontend da NUI (Protegido com Rate Limit / Debounce)
 lib.callback.register('aurp_trucker:getInitialData', function(source)
     local Player = Framework.GetPlayer(source)
     if not Player then
@@ -555,8 +564,18 @@ lib.callback.register('aurp_trucker:getInitialData', function(source)
             recruitingCompanies = {}
         }
     end
+
+    local nowMs = GetGameTimer()
+    local lastCall = _InitialDataRateLimit[source] or 0
+    if (nowMs - lastCall) < 2000 and _InitialDataCache[source] then
+        return _InitialDataCache[source]
+    end
+    _InitialDataRateLimit[source] = nowMs
+
     local citizenId = Framework.GetCitizenId(Player)
-    return BuildInitialDataForPlayer(source, citizenId)
+    local data = BuildInitialDataForPlayer(source, citizenId)
+    _InitialDataCache[source] = data
+    return data
 end)
 
 -- Abertura direta padrão truck_logistics:getData / getDataFor(src)
@@ -1749,14 +1768,7 @@ lib.callback.register('aurp_trucker:takeLicenseExam', function(source, licenseTy
     return res
 end)
 
-lib.callback.register('aurp_trucker:server:getTrailerOffsetsForModel', function(source, trailerModel)
-    local offsets = (AdminService and AdminService.ReloadTrailerOffsets and AdminService.ReloadTrailerOffsets()) or {}
-    local specific = nil
-    if trailerModel and offsets then
-        specific = offsets[tostring(trailerModel):lower()] or offsets[trailerModel]
-    end
-    return { all = offsets, specific = specific }
-end)
+-- [FASE 2] getTrailerOffsetsForModel oficial registrado em server/services/admin_service.lua (linha 903) com suporte a cargoPropModel
 
 lib.callback.register('aurp_trucker:server:getVehiclePropOffsets', function(source)
     local dualMap, rawMap = (AdminService and AdminService.ReloadVehiclePropOffsets and AdminService.ReloadVehiclePropOffsets()) or {}
@@ -1764,6 +1776,10 @@ lib.callback.register('aurp_trucker:server:getVehiclePropOffsets', function(sour
 end)
 
 lib.callback.register('aurp_trucker:server:getAdminSpawns', function(source)
+    -- [SEC-01] Validação estrita de autoridade administrativa
+    if not (AdminService and AdminService.IsPlayerAdmin and AdminService.IsPlayerAdmin(source)) then
+        return nil
+    end
     local spawns = (AdminService and AdminService.Spawns) or {}
     local folders = (AdminService and AdminService.SpawnFolders) or {}
     return { spawns = spawns, folders = folders }

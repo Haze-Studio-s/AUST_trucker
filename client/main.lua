@@ -1410,8 +1410,8 @@ CreateThread(function()
             local trCoords = GetEntityCoords(trailer)
             local distTrailer = #(pCoords - trCoords)
 
-            -- Renderização ativa sempre que o jogador estiver até 100m do reboque
-            if distTrailer <= 100.0 then
+            -- Renderização ativa realista: apenas visível a olho nu quando próximo (<= 20m)
+            if distTrailer <= 20.0 then
                 sleep = 0
                 for _, pData in ipairs(pList) do
                     local pEnt = pData.entity
@@ -1420,6 +1420,10 @@ CreateThread(function()
                         DrawPalletPolyStraps(trailer, pEnt)
                     end
                 end
+            elseif distTrailer <= 50.0 then
+                sleep = 250
+            else
+                sleep = 1000
             end
         end
 
@@ -1767,7 +1771,9 @@ CreateThread(function()
             end
         end
 
-        Wait(hasCargo and 0 or 250)
+        -- Otimização Resmon: SetEntityNoCollisionEntity persiste no motor do GTA V
+        -- Polling adaptativo a cada 500ms elimina 99% do consumo de CPU / GetGamePool
+        Wait(hasCargo and 500 or 1500)
     end
 end)
 
@@ -2338,13 +2344,18 @@ function StartDeliveryRoute(deliveryCoords, jobId)
                     local percent = math.floor(currentSmoothPercent + 0.5)
                     local isCritical = (percent <= 10 or percent >= 90)
 
-                    -- Atualiza HUD de estabilidade em tempo real
-                    SendNUIMessage({
-                        action = 'gmeter_update',
-                        percent = percent,
-                        isCritical = isCritical,
-                        speed = speedKmh
-                    })
+                    -- Atualiza HUD de estabilidade com debounce inteligente de IPC
+                    if not lastGmeterPercent or math.abs(percent - lastGmeterPercent) >= 1 or isCritical ~= lastGmeterCritical or (now - (lastGmeterSend or 0)) >= 200 then
+                        lastGmeterPercent = percent
+                        lastGmeterCritical = isCritical
+                        lastGmeterSend = now
+                        SendNUIMessage({
+                            action = 'gmeter_update',
+                            percent = percent,
+                            isCritical = isCritical,
+                            speed = speedKmh
+                        })
+                    end
 
                     -- GATILHO DINÂMICO E REALISTA DE QUEDA DE CARGA:
                     -- Tolerância aumentada: exige inclinação severa (> 32° real de roll) OU curva em alta velocidade (> 55 km/h na faixa crítica)

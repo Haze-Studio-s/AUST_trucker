@@ -224,28 +224,13 @@ local function CleanupLobbyEntities(lobby)
         pcall(function() SetPlayerRoutingBucket(lobby.src, 0) end)
     end
 
-    if lobby.trailer and DoesEntityExist(lobby.trailer) then
-        DeleteEntity(lobby.trailer)
-    end
-
-    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
-        DeleteEntity(lobby.truck)
-    end
-
-    if lobby.forklift and DoesEntityExist(lobby.forklift) then
-        DeleteEntity(lobby.forklift)
-    end
-
-    if lobby.handler and DoesEntityExist(lobby.handler) then
-        DeleteEntity(lobby.handler)
+    -- 1. Deleta cargas e anexos primeiro para evitar que fiquem órfãos flutuando no OneSync
+    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
+        DeleteEntity(lobby.hoseProp)
     end
 
     if lobby.container and DoesEntityExist(lobby.container) then
         DeleteEntity(lobby.container)
-    end
-
-    if lobby.hoseProp and DoesEntityExist(lobby.hoseProp) then
-        DeleteEntity(lobby.hoseProp)
     end
 
     if lobby.pallets then
@@ -262,6 +247,24 @@ local function CleanupLobbyEntities(lobby)
                 DeleteEntity(c)
             end
         end
+    end
+
+    -- 2. Deleta reboque e veículos de pátio
+    if lobby.trailer and DoesEntityExist(lobby.trailer) then
+        DeleteEntity(lobby.trailer)
+    end
+
+    if lobby.forklift and DoesEntityExist(lobby.forklift) then
+        DeleteEntity(lobby.forklift)
+    end
+
+    if lobby.handler and DoesEntityExist(lobby.handler) then
+        DeleteEntity(lobby.handler)
+    end
+
+    -- 3. Deleta caminhão alugado se não for próprio
+    if not lobby.isOwned and lobby.truck and DoesEntityExist(lobby.truck) then
+        DeleteEntity(lobby.truck)
     end
 
     if lobby.palletNetIds and #lobby.palletNetIds > 0 then
@@ -2253,12 +2256,19 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         end
     end
 
-    -- BLINDAGEM 3: Validação de tempo mínimo de viagem (anti-teleport)
+    -- BLINDAGEM 3: Validação de tempo mínimo de viagem (anti-teleport dinâmico)
     if lobby.startedTransitAt then
         local elapsed = os.time() - lobby.startedTransitAt
-        if elapsed < 10 then
-            if Config.Debug then print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s concluiu trajeto em tempo impossível (%ds)!"):format(tostring(src), elapsed)) end
-            TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Tempo de rota inconsistente!', 'error')
+        local distKm = tonumber(lobby.distance) or 1.0
+        -- Velocidade máxima teórica de um caminhão em reta livre: 150 km/h (com margem de tolerância)
+        local minTransitSec = math.max(10, math.floor((distKm / 150.0) * 3600))
+        if elapsed < minTransitSec then
+            if Config.Debug then
+                print(("[AUST_Trucker] ALERTA SEGURANÇA: Player %s concluiu trajeto em tempo impossível (%ds < %ds para %.2fkm)!"):format(
+                    tostring(src), elapsed, minTransitSec, distKm
+                ))
+            end
+            TriggerClientEvent('aurp_trucker:notify', src, 'Segurança', 'Tempo de rota inconsistente com a distância percorrida!', 'error')
             return
         end
     end
@@ -2491,16 +2501,27 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
     local xp = lobby.retainedXP or 0
     local repairCost = 0
 
-    -- Vistoria Autoritativa de Avarias
-    if inspection and type(inspection) == 'table' then
-        local engineHealth = tonumber(inspection.engineHealth) or 1000.0
-        local bodyHealth = tonumber(inspection.bodyHealth) or 1000.0
-        local burstTires = tonumber(inspection.burstTires) or 0
-        -- Valores vêm do client: rejeita NaN/inf e limita (burstTires negativo geraria dinheiro)
-        if burstTires ~= burstTires or burstTires == math.huge or burstTires == -math.huge then burstTires = 0 end
-        burstTires = math.floor(math.max(0, math.min(10, burstTires)))
-        if engineHealth ~= engineHealth then engineHealth = 1000.0 end
-        if bodyHealth ~= bodyHealth then bodyHealth = 1000.0 end
+    -- Vistoria Autoritativa de Avarias (Leitura primária direta da entidade no servidor)
+    local engineHealth = 1000.0
+    local bodyHealth = 1000.0
+    local burstTires = 0
+
+    if lobby.truck and DoesEntityExist(lobby.truck) then
+        engineHealth = GetVehicleEngineHealth(lobby.truck)
+        bodyHealth = GetVehicleBodyHealth(lobby.truck)
+        if inspection and type(inspection) == 'table' then
+            burstTires = tonumber(inspection.burstTires) or 0
+        end
+    elseif inspection and type(inspection) == 'table' then
+        engineHealth = tonumber(inspection.engineHealth) or 1000.0
+        bodyHealth = tonumber(inspection.bodyHealth) or 1000.0
+        burstTires = tonumber(inspection.burstTires) or 0
+    end
+
+    if burstTires ~= burstTires or burstTires == math.huge or burstTires == -math.huge then burstTires = 0 end
+    burstTires = math.floor(math.max(0, math.min(10, burstTires)))
+    if engineHealth ~= engineHealth then engineHealth = 1000.0 end
+    if bodyHealth ~= bodyHealth then bodyHealth = 1000.0 end
 
         -- Cálculo do custo de conserto baseado no desgaste real
         local engineDamage = math.max(0.0, 1000.0 - engineHealth)

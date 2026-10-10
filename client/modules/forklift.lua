@@ -76,8 +76,10 @@ function ForkliftModule.GetNearestGroundPallet(forklift)
         end
     end
 
-    -- 2. Varredura dinâmica de pool para paletes soltos próximos (caso tenha caído em trânsito)
-    if not bestEntity then
+    -- 2. Varredura dinâmica de pool para paletes soltos próximos (otimizada com throttle de 500ms)
+    local nowMs = GetGameTimer()
+    if not bestEntity and (not _G.ForkliftLastPoolScan or (nowMs - _G.ForkliftLastPoolScan) > 500) then
+        _G.ForkliftLastPoolScan = nowMs
         local PalletPropModels = {
             joaat('hei_prop_carrier_cargo_04b'),
             joaat('m24_1_prop_m24_1_carrier_cargo_04a'),
@@ -93,8 +95,15 @@ function ForkliftModule.GetNearestGroundPallet(forklift)
                 if dist < bestDist then
                     bestDist = dist
                     bestEntity = nearbyObj
+                    _G.ForkliftCachedFallbackPallet = nearbyObj
+                    break
                 end
             end
+        end
+    elseif not bestEntity and _G.ForkliftCachedFallbackPallet and DoesEntityExist(_G.ForkliftCachedFallbackPallet) and not IsEntityAttached(_G.ForkliftCachedFallbackPallet) then
+        local dist = #(forkCoords - GetEntityCoords(_G.ForkliftCachedFallbackPallet))
+        if dist < bestDist then
+            bestEntity = _G.ForkliftCachedFallbackPallet
         end
     end
 
@@ -1187,7 +1196,7 @@ function ForkliftModule.StartOperation(jobId, trailer, requiredCount, onLoadedCb
                             local pCoords = GetEntityCoords(targetPallet)
                             local dist = #(forkCoords - pCoords)
                             if dist <= 3.5 then
-                                sleep = 0
+                                sleep = 150
                                 if TextUIShowing ~= 'forks_guide' then
                                     lib.showTextUI('Alinhe e insira os garfos por baixo do vão do palete', { position = 'left-center', icon = 'pallet' })
                                     TextUIShowing = 'forks_guide'
