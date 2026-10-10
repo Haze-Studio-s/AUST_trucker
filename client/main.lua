@@ -128,23 +128,64 @@ local CurrentObjectiveBlip = nil
 local SecondaryObjectivePoint = nil
 local SecondaryObjectiveBlip = nil
 
-local function ClearObjectiveMarkers(keepSecondary)
+local function PurgeObjectiveMarkers(keepSecondary)
+    -- 1. Desliga rota e remove blip principal
     if CurrentObjectivePoint then
         pcall(function() CurrentObjectivePoint:remove() end)
         CurrentObjectivePoint = nil
     end
     if CurrentObjectiveBlip and DoesBlipExist(CurrentObjectiveBlip) then
+        pcall(function() SetBlipRoute(CurrentObjectiveBlip, false) end)
         RemoveBlip(CurrentObjectiveBlip)
         CurrentObjectiveBlip = nil
     end
+
+    -- 2. Se não mantiver secundário, varre secundário e todas as entidades da missão
     if not keepSecondary then
         if SecondaryObjectivePoint then
             pcall(function() SecondaryObjectivePoint:remove() end)
             SecondaryObjectivePoint = nil
         end
         if SecondaryObjectiveBlip and DoesBlipExist(SecondaryObjectiveBlip) then
+            pcall(function() SetBlipRoute(SecondaryObjectiveBlip, false) end)
             RemoveBlip(SecondaryObjectiveBlip)
             SecondaryObjectiveBlip = nil
+        end
+
+        -- Varredura Dupla: Remove qualquer blip órfão agarrado a entidades da missão no GTA V
+        local entitiesToPurge = {
+            JobEntities and JobEntities.truck,
+            JobEntities and JobEntities.trailer,
+            JobEntities and JobEntities.forklift,
+            JobEntities and JobEntities.handler,
+            JobEntities and JobEntities.container
+        }
+        if LoadedPallets then
+            for _, p in ipairs(LoadedPallets) do
+                if p and p.entity then
+                    entitiesToPurge[#entitiesToPurge + 1] = p.entity
+                end
+            end
+        end
+
+        for i = 1, #entitiesToPurge do
+            local ent = entitiesToPurge[i]
+            if ent and ent ~= 0 and DoesEntityExist(ent) then
+                local entBlip = GetBlipFromEntity(ent)
+                if entBlip and entBlip ~= 0 and DoesBlipExist(entBlip) then
+                    pcall(function() SetBlipRoute(entBlip, false) end)
+                    RemoveBlip(entBlip)
+                end
+            end
+        end
+
+        if TrailerBayWatcherPoint then
+            pcall(function() TrailerBayWatcherPoint:remove() end)
+            TrailerBayWatcherPoint = nil
+        end
+        if DockWatcherPoint then
+            pcall(function() DockWatcherPoint:remove() end)
+            DockWatcherPoint = nil
         end
         if Zones and Zones.ClearObjective then
             pcall(Zones.ClearObjective)
@@ -152,14 +193,36 @@ local function ClearObjectiveMarkers(keepSecondary)
     end
 end
 
+-- Trava Síncrona: Garante que os marcadores foram destruídos antes de avançar para a próxima etapa
+local function PurgeObjectiveMarkersAndWait(keepSecondary)
+    PurgeObjectiveMarkers(keepSecondary)
+    local maxWait = 50
+    while maxWait > 0 do
+        local remaining = false
+        if CurrentObjectiveBlip and DoesBlipExist(CurrentObjectiveBlip) then
+            remaining = true
+        end
+        if not keepSecondary and SecondaryObjectiveBlip and DoesBlipExist(SecondaryObjectiveBlip) then
+            remaining = true
+        end
+        if not remaining then break end
+        Wait(10)
+        maxWait = maxWait - 10
+    end
+end
+
+local ClearObjectiveMarkers = PurgeObjectiveMarkers
+_G.PurgeObjectiveMarkers = PurgeObjectiveMarkers
+_G.PurgeObjectiveMarkersAndWait = PurgeObjectiveMarkersAndWait
+
 function UpdateMissionObjective(objType, target, text, isSecondary)
     if not target then
-        ClearObjectiveMarkers(false)
+        PurgeObjectiveMarkersAndWait(false)
         return
     end
 
     if not isSecondary then
-        ClearObjectiveMarkers(true)
+        PurgeObjectiveMarkersAndWait(true)
     end
 
     local isEntity = false
@@ -175,6 +238,15 @@ function UpdateMissionObjective(objType, target, text, isSecondary)
     end
 
     if not targetCoords then return end
+
+    -- Blindagem contra duplicação de blips na mesma entidade
+    if isEntity and targetEntity and DoesEntityExist(targetEntity) then
+        local prevEntBlip = GetBlipFromEntity(targetEntity)
+        if prevEntBlip and prevEntBlip ~= 0 and DoesBlipExist(prevEntBlip) then
+            pcall(function() SetBlipRoute(prevEntBlip, false) end)
+            RemoveBlip(prevEntBlip)
+        end
+    end
 
     -- Alturas (Z) e configurações de Blip
     local offsetZ = 2.0
@@ -630,11 +702,8 @@ local function StartCouplingWatcher()
                         SetVehicleBrake(JobEntities.trailer, false)
                     end
 
-                    if TrailerBayWatcherPoint then
-                        pcall(function() TrailerBayWatcherPoint:remove() end)
-                        TrailerBayWatcherPoint = nil
-                    end
-                    ClearObjectiveMarkers(false)
+                    -- DESTRUIÇÃO INSTANTÂNEA SINCRONIZADA (Milissegundo Zero)
+                    PurgeObjectiveMarkersAndWait(false)
 
                     local isContainerLoaded = false
                     if ActiveJob and ActiveJob.cargoType == 'heavy' then
@@ -737,7 +806,7 @@ local function StartCouplingWatcher()
                                         end
                                         self:remove()
                                         DockWatcherPoint = nil
-                                        ClearObjectiveMarkers(false)
+                                        PurgeObjectiveMarkersAndWait(false)
 
                                         -- Libera a baia ocupada no servidor
                                         if reqJobId then
@@ -1768,7 +1837,7 @@ end
 
 local function StartStrappingPalletsStage()
     CurrentStage = 'STEP_7_STRAP_PALLETS'
-    ClearObjectiveMarkers(false)
+    PurgeObjectiveMarkersAndWait(false)
     currentTieIndex = 1
 
     if #LoadedPallets == 0 and (not ActiveJob or not ActiveJob.withForklift or not ForkliftLoadedOnTrailer or ForkliftSecured) then
@@ -1784,7 +1853,7 @@ local SetupEmbarkForkliftStage = nil
 
 SetupRopesStage = function()
     CurrentStage = 'STEP_6_GET_ROPES'
-    ClearObjectiveMarkers(false)
+    PurgeObjectiveMarkersAndWait(false)
     hasRopes = false
     HasRopes = false
     currentTieIndex = 1
@@ -1844,7 +1913,7 @@ end
 function StartDeliveryRoute(deliveryCoords, jobId)
     if CurrentStage == 'STEP_8_IN_TRANSIT' then return end
     CurrentStage = 'STEP_8_IN_TRANSIT'
-    ClearObjectiveMarkers(false)
+    PurgeObjectiveMarkersAndWait(false)
 
     if ActiveStrappingZoneId then
         pcall(function() exports.ox_target:removeZone(ActiveStrappingZoneId) end)
@@ -2565,6 +2634,10 @@ end
 
 local function OnPlayerEnteredTruck(truck)
     if CurrentStage ~= 'STEP_2_ENTER_TRUCK' then return end
+
+    -- Transição Estrita: Purga todos os marcadores anteriores com trava síncrona antes de avançar
+    PurgeObjectiveMarkersAndWait(false)
+
     CurrentStage = 'STEP_3_COUPLE_TRAILER'
 
     JobEntities.truck = truck
@@ -2919,7 +2992,7 @@ lib.onCache('vehicle', function(veh)
                         UpdateMissionObjective('pallet', nextCont, 'Próximo Contêiner')
                     end
                 elseif action == 'dropped' then
-                    ClearObjectiveMarkers(false)
+                    PurgeObjectiveMarkersAndWait(false)
                     local isCoupled = false
                     if JobEntities.truck and DoesEntityExist(JobEntities.truck) then
                         local hasTr, trEnt = GetVehicleTrailerVehicle(JobEntities.truck)
@@ -2941,7 +3014,7 @@ lib.onCache('vehicle', function(veh)
                     end
                 end
             end, function()
-                ClearObjectiveMarkers(false)
+                PurgeObjectiveMarkersAndWait(false)
             end, containerList, reqCount)
         end
     end
