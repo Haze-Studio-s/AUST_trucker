@@ -2136,20 +2136,11 @@ function StartDeliveryRoute(deliveryCoords, jobId)
             local truckSpeed = (truck and DoesEntityExist(truck)) and (GetEntitySpeed(truck) * 3.6) or 0.0
             local shouldBeInTransit = isDrivingTruck and (truckSpeed >= 3.0)
 
-            -- PILAR 5: ESTABILIDADE FÍSICA HAVOK (PARKING FREEZE SEGURO)
-            -- NUNCA congelar o reboque se houver entidades físicas atreladas (evita reação de parede infinita)
-            if truckSpeed < 0.5 and not isDrivingTruck then
-                if stoppedSince == 0 then stoppedSince = GetGameTimer() end
-                if GetGameTimer() - stoppedSince >= 5000 and not isParkFrozen then
-                    isParkFrozen = true
-                    FreezeEntityPosition(truck, true)
-                end
-            else
-                stoppedSince = 0
-                if isParkFrozen then
-                    isParkFrozen = false
-                    FreezeEntityPosition(truck, false)
-                end
+            -- PILAR 5: ESTABILIDADE FÍSICA HAVOK (Sem congelamento em trânsito)
+            -- O caminhão e a carreta NUNCA são congelados em trânsito; controle cinemático aplicado aos paletes.
+            if isParkFrozen then
+                isParkFrozen = false
+                FreezeEntityPosition(truck, false)
             end
 
             -- CONTROLE FÍSICO CINEMÁTICO RÍGIDO (Elimina micro-desync e arrasto inercial)
@@ -3482,24 +3473,19 @@ RegisterNetEvent('aurp_trucker:client:polarixJobStarted', function(payload)
                                 SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Entre na cabine e posicione o conjunto na baía indicada.', 'success')
                                 StartTruckEnterWatcher(truck)
                             else
-                                -- Carga de paletes: congelamento preventivo na baia durante o carregamento com empilhadeira
-                                FreezeEntityPosition(truck, true)
-                                FreezeEntityPosition(trailer, true)
-                                CurrentStage = 'STEP_5_ENTER_FORKLIFT'
+                                -- Carga de paletes: caminhão e carreta livres para condução (freeze apenas na baía de carregamento)
+                                FreezeEntityPosition(truck, false)
+                                FreezeEntityPosition(trailer, false)
+                                SetVehicleHandbrake(truck, false)
+                                SetVehicleHandbrake(trailer, false)
+                                SetVehicleBrake(truck, false)
+                                SetVehicleBrake(trailer, false)
+                                CurrentStage = 'STEP_2_ENTER_TRUCK'
 
-                                CreateThread(function()
-                                    local wTimer = 0
-                                    while (not JobEntities.forklift or not DoesEntityExist(JobEntities.forklift)) and wTimer < 4000 do
-                                        Wait(100)
-                                        wTimer = wTimer + 100
-                                    end
-                                    if JobEntities.forklift and DoesEntityExist(JobEntities.forklift) then
-                                        UpdateMissionObjective('forklift', JobEntities.forklift, 'Empilhadeira de Carregamento')
-                                    end
-                                end)
-
+                                UpdateMissionObjective('truck', truck, 'Seu Caminhão')
                                 PlaySoundFrontend(-1, "PIN_BUTTON", "ATM_SOUNDS", true)
-                                SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Assuma a empilhadeira para iniciar o carregamento dos paletes.', 'success')
+                                SendMissionNotify('Central Logística', 'Caminhão e carreta acoplados no pátio! Entre na cabine e posicione o conjunto na baía indicada.', 'success')
+                                StartTruckEnterWatcher(truck)
                             end
                         else
                             -- Se o acoplamento automático não engatar em 5s, mantém descongelado para o jogador manobrar manualmente
