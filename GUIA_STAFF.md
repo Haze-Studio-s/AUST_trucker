@@ -717,7 +717,7 @@ Acesso exclusivo para administradores com permissão ACE `command.truckeradmin`.
 
 ### 2. Offsets Trailer 3D & Cintas de Amarração (6DoF)
 - **Calibração de Cargas e Cintas:** Na aba **Offsets Trailer 3D**, use o alternador flutuante `[ Carga ]` e `[ Cinta Catraca ]`.
-- **Cintas Catraca (`prop_ratchet_strap`):** Posicione e rotacione cintas individualmente com precisão 6DoF sobre cada carga do reboque. Os dados são salvos na coluna `straps` e aplicados fisicamente no gameplay quando o jogador conclui o minigame de amarração.
+- **Cintas Catraca (`strap`):** Posicione e rotacione cintas individualmente com precisão 6DoF sobre cada carga do reboque. Os dados são salvos na coluna `straps` e aplicados fisicamente no gameplay quando o jogador conclui o minigame de amarração.
 
 ### 3. Controles do Gizmo 3D
 | Comando / Tecla | Ação |

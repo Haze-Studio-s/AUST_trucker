@@ -1093,7 +1093,7 @@ local function ExecutePalletTie(index)
         palletData.isSecured = true
         palletData.riskLevel = 0
 
-        -- SPAWN & ATTACH DA CINTA CATRACA CUSTOMIZADA (prop_ratchet_strap)
+        -- SPAWN & ATTACH DA CINTA CATRACA CUSTOMIZADA (strap)
         if palletEnt and DoesEntityExist(palletEnt) then
             if palletData.strapEntities then
                 for _, sEnt in ipairs(palletData.strapEntities) do
@@ -1113,7 +1113,7 @@ local function ExecutePalletTie(index)
                 palletData.strapEntity = nil
             end
 
-            local strapModel = joaat('prop_ratchet_strap')
+            local strapModel = joaat('strap')
             RequestModel(strapModel)
             local timeout = 100
             while not HasModelLoaded(strapModel) and timeout > 0 do
@@ -3932,6 +3932,7 @@ AddEventHandler('onResourceStop', function(resourceName)
         [joaat('sm3d_prop_logi_shelf_2')] = true,
         [joaat('sm3d_prop_logi_shelf_3')] = true,
         [joaat('prop_cs_fuel_nozle')] = true,
+        [joaat('strap')] = true,
         [joaat('prop_ratchet_strap')] = true,
     }
 

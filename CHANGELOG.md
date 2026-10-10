@@ -4,7 +4,7 @@
 
 ### Adicionado & Aprimorado
 - **Cintas de Amarração 6DoF em Offsets Trailer 3D (`client/modules/offset_editor.lua`, `server/services/admin_service.lua`, `server/database.lua`):**
-  - Implementada calibração visual de cintas/catracas (`prop_ratchet_strap`) acopladas à configuração da carga no reboque.
+  - Implementada calibração visual de cintas/catracas (`strap`) acopladas à configuração da carga no reboque.
   - Coluna `straps` (JSON) persistida na tabela `aust_trucker_trailer_offsets`.
   - Adicionado seletor de alvo na barra flutuante do Gizmo 3D (`[ Carga ]` vs `[ Cinta Catraca ]`), permitindo ao administrador alternar e ajustar individualmente o posicionamento e rotações 6DoF (X, Y, Z, Pitch, Roll, Yaw) da cinta sobre a carga.
   - Sincronização em tempo real via `aurp_trucker:client:adminSyncOffsets` propagando o array `straps` diretamente para os slots de trailer em memória.

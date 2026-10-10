@@ -109,7 +109,7 @@ function OffsetEditor.SwitchCalibrationTarget(target)
         CalibTarget = 'strap'
 
         if not CalibStrapGhost or not DoesEntityExist(CalibStrapGhost) then
-            local strapHash = joaat('prop_ratchet_strap')
+            local strapHash = joaat('strap')
             lib.requestModel(strapHash, 5000)
             local gCoords = GetEntityCoords(CalibGhost)
             local gHeading = GetEntityHeading(CalibGhost)

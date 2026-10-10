@@ -6,7 +6,7 @@ author 'AURP Development Team'
 description 'AUST_trucker — Sistema de Caminhoneiros — Empresas, Jobs e Economia Dinâmica'
 version '20.9.17'
 
-data_file 'DLC_ITYP_REQUEST' 'stream/prop_ratchet_strap.ytyp'
+data_file 'DLC_ITYP_REQUEST' 'stream/strap.ytyp'
 
 dependencies {
     'oxmysql',
@@ -96,5 +96,5 @@ ui_page 'html/index.html'
 
 files {
     'html/**',
-    'stream/prop_ratchet_strap.ytyp',
+    'stream/strap.ytyp',
 }
