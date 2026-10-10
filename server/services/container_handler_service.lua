@@ -6,6 +6,7 @@
 ContainerHandlerService = {}
 
 -- Guard: garantir que o campo exista mesmo se main.lua carregar antes
+if not VP_Trucker then VP_Trucker = {} end
 if not VP_Trucker.ContainerJobs then
     VP_Trucker.ContainerJobs = {}
 end

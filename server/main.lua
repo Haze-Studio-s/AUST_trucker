@@ -2534,7 +2534,6 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
         repairCost = math.max(0, engineCost + bodyCost + tireCost)
         -- Desconto limitado a no máximo 65% do pagamento retido para evitar saldo negativo
         repairCost = math.min(repairCost, math.floor(payment * 0.65))
-    end
 
     local finalPayment = math.max(100, payment - repairCost)
 
