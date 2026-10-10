@@ -138,6 +138,11 @@
             } else if (e.key === 'c' || e.key === 'C') {
                 e.preventDefault();
                 sendCallback('copyGizmoSlot');
+            } else if (e.key === 'x' || e.key === 'X') {
+                e.preventDefault();
+                const nextTarget = (currentTarget === 'cargo') ? 'strap' : 'cargo';
+                updateTargetButtonsUI(nextTarget);
+                sendCallback('switchGizmoTarget', { target: nextTarget });
             }
         });
     }

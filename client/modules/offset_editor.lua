@@ -108,20 +108,62 @@ function OffsetEditor.SwitchCalibrationTarget(target)
         if not CalibGhost or not DoesEntityExist(CalibGhost) then return end
         CalibTarget = 'strap'
 
+        local gCoords = GetEntityCoords(CalibGhost)
+        local gHeading = GetEntityHeading(CalibGhost)
+        local tCoords = GetEntityCoords(CalibTrailer)
+        local tHeading = GetEntityHeading(CalibTrailer)
+        local tRot = GetEntityRotation(CalibTrailer, 2)
+
+        -- Verifica se já existe configuração de cinta salva para este slot
+        local savedStrap = (SavedSlotOffsets[CalibParams.slotIndex] and SavedSlotOffsets[CalibParams.slotIndex].straps and SavedSlotOffsets[CalibParams.slotIndex].straps[1])
+
         if not CalibStrapGhost or not DoesEntityExist(CalibStrapGhost) then
             local strapHash = joaat('strap')
             lib.requestModel(strapHash, 5000)
-            local gCoords = GetEntityCoords(CalibGhost)
-            local gHeading = GetEntityHeading(CalibGhost)
 
-            local strapObj = CreateObject(strapHash, gCoords.x, gCoords.y, gCoords.z + 0.05, false, false, false)
+            local spawnPos = nil
+            local spawnHeading = gHeading
+
+            if savedStrap and type(savedStrap) == 'table' then
+                CurrentStrapOffsets = {
+                    x = tonumber(savedStrap.x) or 0.0,
+                    y = tonumber(savedStrap.y) or 0.0,
+                    z = tonumber(savedStrap.z) or 0.65,
+                    rx = tonumber(savedStrap.rx) or 0.0,
+                    ry = tonumber(savedStrap.ry) or 0.0,
+                    rz = tonumber(savedStrap.rz or savedStrap.heading) or 0.0,
+                    heading = tonumber(savedStrap.heading or savedStrap.rz) or 0.0
+                }
+                spawnPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentStrapOffsets.x, CurrentStrapOffsets.y, CurrentStrapOffsets.z)
+                spawnHeading = (tHeading + (CurrentStrapOffsets.rz or 0.0)) % 360.0
+            else
+                -- Posicionamento inicial padrão: exatamente no topo da carga do palete
+                local defaultZ = gCoords.z + 0.65
+                spawnPos = vector3(gCoords.x, gCoords.y, defaultZ)
+                local relOffset = GetOffsetFromEntityGivenWorldCoords(CalibTrailer, gCoords.x, gCoords.y, defaultZ)
+                local relHeading = (gHeading - tHeading) % 360.0
+                CurrentStrapOffsets = {
+                    x = tonumber(string.format("%.3f", relOffset.x)),
+                    y = tonumber(string.format("%.3f", relOffset.y)),
+                    z = tonumber(string.format("%.3f", relOffset.z)),
+                    rx = 0.0,
+                    ry = 0.0,
+                    rz = tonumber(string.format("%.1f", relHeading)),
+                    heading = tonumber(string.format("%.1f", relHeading))
+                }
+            end
+
+            local strapObj = CreateObject(strapHash, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
             if strapObj and DoesEntityExist(strapObj) then
                 SetEntityAsMissionEntity(strapObj, true, true)
                 SetEntityAlpha(strapObj, 220, false)
                 SetEntityCollision(strapObj, false, false)
                 SetEntityInvincible(strapObj, true)
                 FreezeEntityPosition(strapObj, true)
-                SetEntityHeading(strapObj, gHeading)
+                SetEntityHeading(strapObj, spawnHeading)
+                if savedStrap and savedStrap.rx then
+                    SetEntityRotation(strapObj, (tRot.x + (savedStrap.rx or 0.0)) % 360.0, (tRot.y + (savedStrap.ry or 0.0)) % 360.0, (tRot.z + (savedStrap.rz or 0.0)) % 360.0, 2, true)
+                end
                 CalibStrapGhost = strapObj
             end
         end
@@ -287,6 +329,26 @@ function OffsetEditor.CopyPreviousSlot()
             rotation = { x = gWorldRot.x, y = gWorldRot.y, z = gWorldRot.z }
         }
     })
+
+    -- Se o slot de referência possuir cinta calibrada, clona também os parâmetros da cinta
+    if src.straps and src.straps[1] then
+        local srcStrap = src.straps[1]
+        CurrentStrapOffsets = {
+            x = CurrentOffsets.x,
+            y = CurrentOffsets.y,
+            z = tonumber(srcStrap.z) or (CurrentOffsets.z + 0.65),
+            rx = tonumber(srcStrap.rx) or 0.0,
+            ry = tonumber(srcStrap.ry) or 0.0,
+            rz = tonumber(srcStrap.rz or srcStrap.heading) or 0.0,
+            heading = tonumber(srcStrap.heading or srcStrap.rz) or 0.0
+        }
+        if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) then
+            local sWorld = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentStrapOffsets.x, CurrentStrapOffsets.y, CurrentStrapOffsets.z)
+            SetEntityCoordsNoOffset(CalibStrapGhost, sWorld.x, sWorld.y, sWorld.z, false, false, false)
+            local tRot = GetEntityRotation(CalibTrailer, 2)
+            SetEntityRotation(CalibStrapGhost, (tRot.x + (CurrentStrapOffsets.rx or 0.0)) % 360.0, (tRot.y + (CurrentStrapOffsets.ry or 0.0)) % 360.0, (tRot.z + (CurrentStrapOffsets.rz or 0.0)) % 360.0, 2, true)
+        end
+    end
 
     PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FRONTEND_DEFAULT_SOUNDSET", 0)
     lib.notify({
@@ -691,7 +753,13 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 lib.notify({ title = 'Gizmo 3D', description = 'Modo: Rotação (Anéis)', type = 'info', duration = 1200 })
             end
 
-            -- 5. AJUSTE FINO AUXILIAR VIA TECLADO (SETAS + Q/E)
+            -- Alternância rápida entre Carga (Palete) e Cinta Catraca via tecla [X]
+            if not CalibParams.isForklift and (IsDisabledControlJustPressed(0, 73) or IsControlJustPressed(0, 73)) then -- Tecla X
+                local nextTarget = (CalibTarget == 'cargo') and 'strap' or 'cargo'
+                OffsetEditor.SwitchCalibrationTarget(nextTarget)
+            end
+
+            -- 5. AJUSTE FINO AUXILIAR VIA TECLADO (SETAS + Q/E + Z/C)
             local moveStep = 0.015
             local rotStep = 1.0
             if IsDisabledControlPressed(0, 21) then
@@ -699,46 +767,111 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
                 rotStep = 3.5
             end
 
-            local kbMoved = false
-            if IsDisabledControlPressed(0, 172) or IsDisabledControlPressed(0, 27) then CurrentOffsets.y = CurrentOffsets.y + moveStep; kbMoved = true end
-            if IsDisabledControlPressed(0, 173) then CurrentOffsets.y = CurrentOffsets.y - moveStep; kbMoved = true end
-            if IsDisabledControlPressed(0, 174) then CurrentOffsets.x = CurrentOffsets.x - moveStep; kbMoved = true end
-            if IsDisabledControlPressed(0, 175) then CurrentOffsets.x = CurrentOffsets.x + moveStep; kbMoved = true end
-            if IsDisabledControlPressed(0, 44) then CurrentOffsets.z = CurrentOffsets.z - moveStep; kbMoved = true end -- Q
-            if IsDisabledControlPressed(0, 38) then CurrentOffsets.z = CurrentOffsets.z + moveStep; kbMoved = true end -- E
+            if CalibTarget == 'strap' then
+                if CalibStrapGhost and DoesEntityExist(CalibStrapGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
+                    local strapKbMoved = false
+                    if IsDisabledControlPressed(0, 172) or IsDisabledControlPressed(0, 27) then CurrentStrapOffsets.y = CurrentStrapOffsets.y + moveStep; strapKbMoved = true end
+                    if IsDisabledControlPressed(0, 173) then CurrentStrapOffsets.y = CurrentStrapOffsets.y - moveStep; strapKbMoved = true end
+                    if IsDisabledControlPressed(0, 174) then CurrentStrapOffsets.x = CurrentStrapOffsets.x - moveStep; strapKbMoved = true end
+                    if IsDisabledControlPressed(0, 175) then CurrentStrapOffsets.x = CurrentStrapOffsets.x + moveStep; strapKbMoved = true end
+                    if IsDisabledControlPressed(0, 44)  then CurrentStrapOffsets.z = CurrentStrapOffsets.z - moveStep; strapKbMoved = true end -- Q (Descer)
+                    if IsDisabledControlPressed(0, 38)  then CurrentStrapOffsets.z = CurrentStrapOffsets.z + moveStep; strapKbMoved = true end -- E (Subir)
 
-            if kbMoved and CalibGhost and DoesEntityExist(CalibGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
-                local worldPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z)
-                SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
-                local tHeading = GetEntityHeading(CalibTrailer)
-                SetEntityHeading(CalibGhost, (tHeading + CurrentOffsets.heading) % 360.0)
+                    if IsDisabledControlPressed(0, 20) then -- Z (Girar anti-horário)
+                        CurrentStrapOffsets.rz = ((CurrentStrapOffsets.rz or 0.0) - rotStep) % 360.0
+                        CurrentStrapOffsets.heading = CurrentStrapOffsets.rz
+                        strapKbMoved = true
+                    elseif IsDisabledControlPressed(0, 26) then -- C (Girar horário)
+                        CurrentStrapOffsets.rz = ((CurrentStrapOffsets.rz or 0.0) + rotStep) % 360.0
+                        CurrentStrapOffsets.heading = CurrentStrapOffsets.rz
+                        strapKbMoved = true
+                    end
 
-                -- Notifica o Three.js para sincronizar a posição do Gizmo
-                SendNUIMessage({
-                    action = 'setGizmoEntity',
-                    data = {
-                        position = { x = worldPos.x, y = worldPos.y, z = worldPos.z },
-                        rotation = { x = 0, y = 0, z = (tHeading + CurrentOffsets.heading) % 360.0 }
-                    }
-                })
+                    if strapKbMoved then
+                        CurrentStrapOffsets.x = tonumber(string.format("%.3f", CurrentStrapOffsets.x))
+                        CurrentStrapOffsets.y = tonumber(string.format("%.3f", CurrentStrapOffsets.y))
+                        CurrentStrapOffsets.z = tonumber(string.format("%.3f", CurrentStrapOffsets.z))
+                        CurrentStrapOffsets.rz = tonumber(string.format("%.1f", CurrentStrapOffsets.rz))
+
+                        local worldPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentStrapOffsets.x, CurrentStrapOffsets.y, CurrentStrapOffsets.z)
+                        SetEntityCoordsNoOffset(CalibStrapGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+                        local tRot = GetEntityRotation(CalibTrailer, 2)
+                        local finalRotZ = (tRot.z + (CurrentStrapOffsets.rz or 0.0)) % 360.0
+                        local finalRotX = (tRot.x + (CurrentStrapOffsets.rx or 0.0)) % 360.0
+                        local finalRotY = (tRot.y + (CurrentStrapOffsets.ry or 0.0)) % 360.0
+                        SetEntityRotation(CalibStrapGhost, finalRotX, finalRotY, finalRotZ, 2, true)
+
+                        SendNUIMessage({
+                            action = 'setGizmoEntity',
+                            data = {
+                                position = { x = worldPos.x, y = worldPos.y, z = worldPos.z },
+                                rotation = { x = finalRotX, y = finalRotY, z = finalRotZ }
+                            }
+                        })
+                    end
+                end
+            else
+                local kbMoved = false
+                if IsDisabledControlPressed(0, 172) or IsDisabledControlPressed(0, 27) then CurrentOffsets.y = CurrentOffsets.y + moveStep; kbMoved = true end
+                if IsDisabledControlPressed(0, 173) then CurrentOffsets.y = CurrentOffsets.y - moveStep; kbMoved = true end
+                if IsDisabledControlPressed(0, 174) then CurrentOffsets.x = CurrentOffsets.x - moveStep; kbMoved = true end
+                if IsDisabledControlPressed(0, 175) then CurrentOffsets.x = CurrentOffsets.x + moveStep; kbMoved = true end
+                if IsDisabledControlPressed(0, 44)  then CurrentOffsets.z = CurrentOffsets.z - moveStep; kbMoved = true end -- Q
+                if IsDisabledControlPressed(0, 38)  then CurrentOffsets.z = CurrentOffsets.z + moveStep; kbMoved = true end -- E
+                if IsDisabledControlPressed(0, 20)  then -- Z
+                    CurrentOffsets.heading = (CurrentOffsets.heading - rotStep) % 360.0
+                    kbMoved = true
+                end
+
+                if kbMoved and CalibGhost and DoesEntityExist(CalibGhost) and CalibTrailer and DoesEntityExist(CalibTrailer) then
+                    local worldPos = GetOffsetFromEntityInWorldCoords(CalibTrailer, CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z)
+                    SetEntityCoordsNoOffset(CalibGhost, worldPos.x, worldPos.y, worldPos.z, false, false, false)
+                    local tHeading = GetEntityHeading(CalibTrailer)
+                    SetEntityHeading(CalibGhost, (tHeading + CurrentOffsets.heading) % 360.0)
+
+                    SendNUIMessage({
+                        action = 'setGizmoEntity',
+                        data = {
+                            position = { x = worldPos.x, y = worldPos.y, z = worldPos.z },
+                            rotation = { x = 0, y = 0, z = (tHeading + CurrentOffsets.heading) % 360.0 }
+                        }
+                    })
+                end
+
+                -- 7. COPIAR ALTURA E ROTAÇÃO DO SLOT ANTERIOR VIA TECLA [C] (somente no modo carga)
+                if IsDisabledControlJustPressed(0, 26) or IsControlJustPressed(0, 26) then
+                    OffsetEditor.CopyPreviousSlot()
+                end
             end
 
-            -- 6. HUD INFORMATIVO NA TELA
-            local targetLabel = CalibParams.isForklift and '~y~Empilhadeira (Slot Final)~s~' or ('~y~Palete Slot %d~s~'):format(CalibParams.slotIndex)
+            -- 6. HUD INFORMATIVO NA TELA COM DISTINÇÃO CLARA ENTRE CARGA E CINTA
+            local targetLabel = CalibParams.isForklift and '~y~Empilhadeira~s~' or ('~y~Palete Slot %d~s~'):format(CalibParams.slotIndex)
+            local targetHighlight = (CalibTarget == 'strap') and '~g~[CINTA CATRACA]~s~' or '~b~[CARGA / PALETE]~s~'
             local modeStatus = IsGizmoCursorActive and '~g~[CURSOR GIZMO ATIVO]~s~' or '~b~[CÂMERA LIVRE]~s~'
             local gizmoModeLabel = CurrentGizmoMode == 'translate' and '~w~Translação (Setas)~s~' or '~w~Rotação (Anéis)~s~'
 
-            local hudText = ('~g~[GIZMO 3D vp_staff_studio]~s~ %s\n' ..
-                'Trailer: ~w~%s~s~  |  Alvo: %s  |  Gizmo: %s\n' ..
-                'Offset: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~\n' ..
+            local offsetLine = ''
+            if CalibTarget == 'strap' then
+                offsetLine = ('Offset Cinta: ~g~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~g~%.1f°~s~'):format(
+                    CurrentStrapOffsets.x or 0.0, CurrentStrapOffsets.y or 0.0, CurrentStrapOffsets.z or 0.0, CurrentStrapOffsets.rz or CurrentStrapOffsets.heading or 0.0
+                )
+            else
+                offsetLine = ('Offset Carga: ~b~X: %.3f  |  Y: %.3f  |  Z: %.3f~s~  |  Rot: ~b~%.1f°~s~'):format(
+                    CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
+                )
+            end
+
+            local hudText = ('~g~[GIZMO 3D]~s~ %s\n' ..
+                'Trailer: ~w~%s~s~  |  Slot: %s  |  Alvo: %s\n' ..
+                '%s  |  Gizmo: %s\n' ..
                 '~w~[WASD] Voo Livre  |  [Mouse] Girar Câmera  |  [Shift] Turbo\n' ..
-                '~y~[SEGURE ALT]~w~ Ativa Cursor para Arrastar o Gizmo\n' ..
-                '~y~[C ou Botão]~w~ Copiar Altura (Z) e Rotação do Anterior\n' ..
-                '[T] Setas Translação  |  [R] Anéis Rotação\n' ..
-                '~g~[ENTER ou Botão] Salvar & Próximo Slot~s~  |  ~r~[ESC] Finalizar~s~'):format(
+                '~y~[X] Alternar Carga <-> Cinta~s~  |  ~y~[ALT Segurar] Cursor para Arrastar o Gizmo~s~\n' ..
+                '~w~[Setas + Q/E] Ajuste Fino  |  [Z/C] Girar Alvo\n' ..
+                '[T] Modo Setas  |  [R] Modo Rotação\n' ..
+                '~g~[ENTER ou Botão] Salvar & Próximo Slot~s~  |  ~r~[ESC] Cancelar~s~'):format(
                 modeStatus,
-                CalibParams.trailerModel, targetLabel, gizmoModeLabel,
-                CurrentOffsets.x, CurrentOffsets.y, CurrentOffsets.z, CurrentOffsets.heading
+                CalibParams.trailerModel, targetLabel, targetHighlight,
+                offsetLine, gizmoModeLabel
             )
 
             SetTextFont(0)
@@ -752,11 +885,6 @@ function OffsetEditor.StartCalibration(trailerModel, slotIndex, isForklift, prop
             SetTextEntry("STRING")
             AddTextComponentString(hudText)
             DrawText(0.015, 0.65)
-
-            -- 7. COPIAR ALTURA E ROTAÇÃO DO SLOT ANTERIOR VIA TECLA [C]
-            if IsDisabledControlJustPressed(0, 26) or IsControlJustPressed(0, 26) then
-                OffsetEditor.CopyPreviousSlot()
-            end
 
             -- 8. SALVAMENTO E FLUXO CONTÍNUO (SEAMLESS SEQUENCING) VIA TECLADO ENTER
             local isKeyboardEnter = (
