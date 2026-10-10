@@ -1254,7 +1254,7 @@ function OffsetEditor.StartSpawnCalibration(data)
                 end
 
                 if isDelivery then
-                    -- 1. Vaga Zebrada 30 Oficial da Entrega (Dimensões oficiais da carreta de 10m x 3m do script de entrega)
+                    -- Vaga Zebrada 30 Oficial da Entrega (Dimensões oficiais da carreta de 10m x 3m do script de entrega)
                     DrawMarker(
                         30,
                         CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ,
@@ -1263,38 +1263,6 @@ function OffsetEditor.StartSpawnCalibration(data)
                         3.0, 1.0, 10.0,
                         0, 255, 136, 85,
                         0, 0, 0, 0
-                    )
-
-                    -- 2. Cilindro Central no Solo (DrawMarker 1) destacando o checkpoint
-                    DrawMarker(
-                        1,
-                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ - 0.15,
-                        0.0, 0.0, 0.0,
-                        0.0, 0.0, 0.0,
-                        3.2, 3.2, 0.6,
-                        16, 185, 129, 130,
-                        false, false, 2, false, nil, nil, false
-                    )
-
-                    -- 3. Chevron Indicador Vertical Flutuante (DrawMarker 21)
-                    DrawMarker(
-                        21,
-                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ + 1.2,
-                        0.0, 0.0, 0.0,
-                        0.0, 180.0, 0.0,
-                        0.8, 0.8, 0.8,
-                        16, 185, 129, 180,
-                        false, true, 2, false, nil, nil, false
-                    )
-
-                    -- 4. Vetor Direcional (Linha indicando a orientação da cabine/frente da vaga)
-                    local radH = math.rad(CurrentSpawnCoords.heading or 0.0)
-                    local fwdX = -math.sin(radH) * 5.0
-                    local fwdY = math.cos(radH) * 5.0
-                    DrawLine(
-                        CurrentSpawnCoords.x, CurrentSpawnCoords.y, markerZ + 0.2,
-                        CurrentSpawnCoords.x + fwdX, CurrentSpawnCoords.y + fwdY, markerZ + 0.2,
-                        0, 255, 136, 220
                     )
                 else
                     -- Vaga Zebrada DrawMarker 30 (Faixas no solo padrão)
