@@ -4092,6 +4092,14 @@ RegisterNUICallback('adminStartSpawnGizmo', function(data, cb)
     if cb then cb('ok') end
 end)
 
+RegisterNUICallback('adminStartNPCGizmo', function(data, cb)
+    data = data or {}
+    data.is_npc = true
+    data.spawn_type = 'npc'
+    OffsetEditor.StartSpawnCalibration(data)
+    if cb then cb('ok') end
+end)
+
 RegisterNUICallback('adminStartPreview', function(data, cb)
     OffsetEditor.StartPreview(data and data.spawns)
     if cb then cb('ok') end

@@ -249,6 +249,26 @@
           showAdminToast(`Ponto "${item.spawn.name || item.spawn.id}" duplicado e salvo com sucesso!`, 'success');
         }
         break;
+      case 'admin_npc_coords_calibrated':
+        if (item.coords) {
+          const nx = document.getElementById('npc-form-x');
+          const ny = document.getElementById('npc-form-y');
+          const nz = document.getElementById('npc-form-z');
+          const nh = document.getElementById('npc-form-h');
+          if (nx) nx.value = item.coords.x;
+          if (ny) ny.value = item.coords.y;
+          if (nz) nz.value = item.coords.z;
+          if (nh) nh.value = item.coords.heading;
+        }
+        if (item.npc && item.npc.id) {
+          if (!adminData.npcs) adminData.npcs = {};
+          adminData.npcs[item.npc.id] = item.npc;
+          renderNPCsTab();
+          showAdminToast(`NPC Despachante "${item.npc.name || item.npc.id}" posicionado e salvo com sucesso!`, 'success');
+        } else {
+          showAdminToast('Coordenadas do NPC capturadas via Gizmo!', 'info');
+        }
+        break;
     }
   });
 
@@ -1891,12 +1911,41 @@
         </td>
         <td style="text-align:center; white-space: nowrap;">
           <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
+            <button class="admin-btn admin-btn-accent btn-gizmo-npc-row" data-id="${escapeHtml(k)}" data-name="${escapeHtml(n.npc_name || n.name || '')}" data-model="${escapeHtml(n.npc_model || n.model || '')}" data-x="${escapeHtml(coords.x || '')}" data-y="${escapeHtml(coords.y || '')}" data-z="${escapeHtml(coords.z || '')}" data-h="${escapeHtml(coords.heading || coords.w || '')}" title="Ajustar Posição com Gizmo 3D"><i class="fas fa-arrows-alt"></i></button>
             <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
             <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
           </div>
         </td>
       `;
       tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.btn-gizmo-npc-row').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const id = this.getAttribute('data-id');
+        const name = this.getAttribute('data-name');
+        const model = this.getAttribute('data-model') || 's_m_m_dockwork_01';
+        const x = parseFloat(this.getAttribute('data-x'));
+        const y = parseFloat(this.getAttribute('data-y'));
+        const z = parseFloat(this.getAttribute('data-z'));
+        const h = parseFloat(this.getAttribute('data-h'));
+
+        const coords = (!isNaN(x) && !isNaN(y) && !isNaN(z)) ? { x: x, y: y, z: z, heading: isNaN(h) ? 0.0 : h } : null;
+
+        postNUI('adminStartNPCGizmo', {
+          id: id,
+          npc_id: id,
+          name: name,
+          npc_name: name,
+          model: model,
+          npc_model: model,
+          coords: coords,
+          is_npc: true,
+          spawn_type: 'npc'
+        });
+
+        showAdminToast(`Ajustando NPC #${id} via Gizmo 3D... Pressione [ENTER] para confirmar!`, 'info');
+      });
     });
 
     tbody.querySelectorAll('.btn-tp-npc').forEach(btn => {
@@ -2192,6 +2241,36 @@
 
     const btnCapNPC = document.getElementById('btn-cap-npc');
     if (btnCapNPC) btnCapNPC.addEventListener('click', () => captureCoords('npc'));
+
+    const btnGizmoNPC = document.getElementById('btn-gizmo-npc');
+    if (btnGizmoNPC) {
+      btnGizmoNPC.addEventListener('click', function () {
+        const npcId = (document.getElementById('npc-form-id')?.value || '').trim();
+        const npcName = (document.getElementById('npc-form-name')?.value || '').trim() || 'Despachante Central';
+        const npcModel = (document.getElementById('npc-form-model')?.value || '').trim() || 's_m_m_dockwork_01';
+
+        const x = parseFloat(document.getElementById('npc-form-x')?.value);
+        const y = parseFloat(document.getElementById('npc-form-y')?.value);
+        const z = parseFloat(document.getElementById('npc-form-z')?.value);
+        const h = parseFloat(document.getElementById('npc-form-h')?.value);
+
+        const coords = (!isNaN(x) && !isNaN(y) && !isNaN(z)) ? { x: x, y: y, z: z, heading: isNaN(h) ? 0.0 : h } : null;
+
+        postNUI('adminStartNPCGizmo', {
+          id: npcId,
+          npc_id: npcId,
+          name: npcName,
+          npc_name: npcName,
+          model: npcModel,
+          npc_model: npcModel,
+          coords: coords,
+          is_npc: true,
+          spawn_type: 'npc'
+        });
+
+        showAdminToast('Posicionando NPC com Gizmo 3D... Pressione [ENTER] para salvar ou [ESC] para cancelar.', 'info');
+      });
+    }
 
     // ============================================================
     // CONTROLES DA ABA PROP EDITOR (6DoF)

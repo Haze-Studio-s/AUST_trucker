@@ -1043,19 +1043,21 @@ function OffsetEditor.StartSpawnCalibration(data)
     end
 
     local spawnType = tostring(data.spawn_type or 'truck'):lower()
-    local isMarker = (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
+    local isNpc = (data.is_npc or spawnType == 'npc' or spawnType == 'ped')
+    local isMarker = not isNpc and (spawnType == 'load_bay' or spawnType == 'delivery_bay' or spawnType == 'marker' or spawnType == 'drawmarker' or spawnType == 'bay')
     local modelStr = data.model
-    local isVeh = not isMarker
+    local isVeh = not isMarker and not isNpc
 
     if not modelStr or modelStr == '' then
-        if spawnType == 'truck' then modelStr = 'hauler'
+        if isNpc then modelStr = 's_m_m_dockwork_01'
+        elseif spawnType == 'truck' then modelStr = 'hauler'
         elseif spawnType == 'trailer' then modelStr = 'trailers2'
         elseif spawnType == 'forklift' then modelStr = 'forklift'
         elseif spawnType == 'handler' then modelStr = 'handler'
         elseif spawnType == 'pallet' or spawnType == 'prop' then modelStr = 'prop_wood_pallet_01'; isVeh = false
         else modelStr = 'hei_prop_carrier_cargo_04b'; isVeh = false end
     else
-        if spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end
+        if isNpc or spawnType == 'pallet' or spawnType == 'prop' or isMarker then isVeh = false end
     end
 
     local ped = cache.ped or PlayerPedId()
@@ -1064,7 +1066,7 @@ function OffsetEditor.StartSpawnCalibration(data)
     local forward = GetEntityForwardVector(ped)
     local spawnPos = pCoords + forward * 3.5
 
-    -- Se vier com coordenadas pré-definidas (ex: duplicação do item existente)
+    -- Se vier com coordenadas pré-definidas (ex: duplicação do item existente ou edição de NPC)
     if data.coords and data.coords.x and data.coords.y and data.coords.z then
         spawnPos = vector3(tonumber(data.coords.x) + 0.0, tonumber(data.coords.y) + 0.0, tonumber(data.coords.z) + 0.0)
         pHeading = tonumber(data.coords.heading or data.coords.w or data.coords.h or pHeading)
@@ -1079,7 +1081,13 @@ function OffsetEditor.StartSpawnCalibration(data)
     lib.requestModel(hash, 5000)
 
     local ghost = nil
-    if isVeh then
+    if isNpc then
+        ghost = CreatePed(4, hash, spawnPos.x, spawnPos.y, spawnPos.z, pHeading, false, false)
+        if ghost and DoesEntityExist(ghost) then
+            SetBlockingOfNonTemporaryEvents(ghost, true)
+            SetPedCanRagdoll(ghost, false)
+        end
+    elseif isVeh then
         ghost = CreateVehicle(hash, spawnPos.x, spawnPos.y, spawnPos.z, pHeading, false, false)
         if ghost and DoesEntityExist(ghost) then SetVehicleDoorsLocked(ghost, 2) end
     else
@@ -1438,6 +1446,51 @@ function OffsetEditor.StopSpawnCalibration(cam, confirmed)
                 duration = 4500
             })
             ActiveDuplicationData = nil
+            ActiveCalibSpawnData = nil
+            OffsetEditor.StopPreview()
+        elseif (ActiveCalibSpawnData and (ActiveCalibSpawnData.is_npc or ActiveCalibSpawnData.spawn_type == 'npc' or ActiveCalibSpawnData.spawn_type == 'ped')) then
+            local nData = ActiveCalibSpawnData
+            local rawId = nData.id or nData.npc_id
+            local npcId = (rawId and rawId ~= '') and rawId or ('dispatcher_' .. tostring(GetGameTimer()) .. '_' .. math.random(100, 999))
+            local npcName = nData.name or nData.npc_name or 'Despachante Logístico'
+            local npcModel = nData.model or nData.npc_model or 's_m_m_dockwork_01'
+
+            local npcPayload = {
+                id = npcId,
+                npc_id = npcId,
+                name = npcName,
+                npc_name = npcName,
+                model = npcModel,
+                npc_model = npcModel,
+                coords = {
+                    x = CurrentSpawnCoords.x,
+                    y = CurrentSpawnCoords.y,
+                    z = CurrentSpawnCoords.z,
+                    heading = CurrentSpawnCoords.heading,
+                    w = CurrentSpawnCoords.heading
+                },
+                heading = CurrentSpawnCoords.heading,
+                blip_sprite = nData.blip_sprite or 477,
+                blip_color = nData.blip_color or 2,
+                is_active = (nData.is_active ~= false and nData.is_active ~= 0) and 1 or 0
+            }
+
+            -- GRAVAÇÃO AUTOMÁTICA NO BANCO E SINCRONIZAÇÃO EM TEMPO REAL
+            TriggerServerEvent('aurp_trucker:server:adminSaveNPC', npcPayload)
+            PlaySoundFrontend(-1, "PROPERTY_PURCHASE", "HUD_AWARDS", 0)
+
+            lib.notify({
+                title = 'NPC Salvo no Banco!',
+                description = ('Despachante "%s" posicionado e salvo com sucesso!'):format(npcName),
+                type = 'success',
+                duration = 4500
+            })
+
+            SendNUIMessage({
+                action = 'admin_npc_coords_calibrated',
+                coords = CurrentSpawnCoords,
+                npc = npcPayload
+            })
             ActiveCalibSpawnData = nil
             OffsetEditor.StopPreview()
         else
