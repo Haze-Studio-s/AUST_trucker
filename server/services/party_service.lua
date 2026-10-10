@@ -95,8 +95,8 @@ function PartyService.Create(src, data)
         return nil, 'Você já está em um grupo ativo.'
     end
 
-    local maxSize = (data and tonumber(data.members)) or Config.Party.maxSize or 4
-    if maxSize > 8 then maxSize = 8 end
+    local maxSize = (data and tonumber(data.members)) or Config.Party.maxSize or 2
+    if maxSize > 2 then maxSize = 2 end
     if maxSize < 2 then maxSize = 2 end
 
     local partyId = NewUUID()
@@ -218,6 +218,17 @@ function PartyService.Invite(src, targetSrc)
 
     if targetCid == cid or tonumber(targetSrc) == tonumber(src) then
         return false, 'Você não pode convidar a si mesmo.'
+    end
+
+    -- Validação de proximidade física (máximo 10m)
+    local ped = GetPlayerPed(src)
+    local targetPed = GetPlayerPed(targetSrc)
+    if ped and targetPed and ped ~= 0 and targetPed ~= 0 then
+        local pCoords = GetEntityCoords(ped)
+        local tCoords = GetEntityCoords(targetPed)
+        if #(pCoords - tCoords) > 10.0 then
+            return false, 'O jogador convidado precisa estar próximo de você (máx 10m).'
+        end
     end
 
     if VP_Trucker.PlayerParties[targetCid] then

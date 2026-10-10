@@ -2400,3 +2400,9 @@ AddEventHandler('onResourceStop', function(resourceName)
     end
     IsCalibrating, IsCalibratingSpawn, IsPreviewActive, IsPropEditorActive, PropEditorGizmoActive = false, false, false, false, false
 end)
+
+-- Solicitação inicial dos NPCs despachantes ao iniciar o script no client
+CreateThread(function()
+    Wait(1500)
+    TriggerServerEvent('aurp_trucker:server:adminRequestNPCs')
+end)

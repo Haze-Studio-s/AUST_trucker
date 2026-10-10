@@ -1522,12 +1522,13 @@
 							<!-- COLUNA DETAIL: ADICIONAR OU ATUALIZAR NPC -->
 							<div class="admin-detail-col">
 								<div class="admin-card">
-									<div class="admin-card-header">
-										<span class="admin-card-title"><i class="fas fa-user-plus"></i> Adicionar ou Atualizar NPC</span>
+									<div class="admin-card-header" style="display:flex; justify-content:space-between; align-items:center;">
+										<span id="npc-card-title" class="admin-card-title"><i class="fas fa-user-plus"></i> Novo Despachante</span>
+										<button id="btn-new-npc" class="admin-btn admin-btn-outline" style="padding: 4px 10px; font-size:11px;" title="Limpar formulário para criar um novo NPC"><i class="fas fa-plus"></i> Novo Despachante</button>
 									</div>
 									<div class="admin-form-group">
-										<label>Identificador Único</label>
-										<input type="text" id="npc-form-id" class="admin-input" placeholder="ex: dispatcher_porto_01">
+										<label>Identificador Único (Opcional - Gerado Automaticamente se Vazio)</label>
+										<input type="text" id="npc-form-id" class="admin-input" placeholder="Automático (ex: dispatcher_1)">
 									</div>
 									<div class="admin-form-group">
 										<label>Nome do Despachante</label>

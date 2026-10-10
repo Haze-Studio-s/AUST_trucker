@@ -1628,17 +1628,50 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteSpawnFolder', function(folderNa
 end)
 
 -- 6. NPCS E DESPACHANTES
+local function GenerateNextNPCId()
+    local maxNum = 0
+    for id, _ in pairs(AdminService.NPCs or {}) do
+        local num = tostring(id):match('dispatcher_(%d+)')
+        if num then
+            local n = tonumber(num)
+            if n and n > maxNum then maxNum = n end
+        end
+    end
+    if maxNum == 0 then
+        local count = 0
+        for _ in pairs(AdminService.NPCs or {}) do count = count + 1 end
+        maxNum = count
+    end
+    local candidate = 'dispatcher_' .. tostring(maxNum + 1)
+    while AdminService.NPCs and AdminService.NPCs[candidate] do
+        maxNum = maxNum + 1
+        candidate = 'dispatcher_' .. tostring(maxNum + 1)
+    end
+    return candidate
+end
+
 RegisterNetEvent('aurp_trucker:server:adminSaveNPC', function(npcData)
     local src = source
     if not AdminService.IsPlayerAdmin(src) or type(npcData) ~= 'table' then return end
 
-    local npcId = CleanId(npcData.id, 50) or ('npc_' .. tostring(os.time()) .. '_' .. math.random(100, 999))
+    local isNew = (npcData.is_new == true) or not npcData.id or npcData.id == '' or npcData.id == 'null'
+    local npcId = nil
+    if not isNew then
+        npcId = CleanId(npcData.id or npcData.npc_id, 50)
+    end
+    if not npcId or npcId == '' then
+        npcId = GenerateNextNPCId()
+    end
+
+    local cleanCoords = CleanCoords(npcData.coords)
+    local cleanHeading = ClampNum(npcData.heading or (npcData.coords and npcData.coords.heading), -360.0, 360.0, 0.0)
+
     local clean = {
         id          = npcId,
-        name        = CleanStr(npcData.name, 100, 'Despachante Logístico'),
-        model       = CleanStr(npcData.model, 50, 's_m_m_dockwork_01'),
-        coords      = CleanCoords(npcData.coords),
-        heading     = ClampNum(npcData.heading, -360.0, 360.0, 0.0),
+        name        = CleanStr(npcData.name or npcData.npc_name, 100, 'Despachante Logístico'),
+        model       = CleanStr(npcData.model or npcData.npc_model, 50, 's_m_m_trucker_01'),
+        coords      = cleanCoords,
+        heading     = cleanHeading,
         blip_sprite = math.floor(ClampNum(npcData.blip_sprite, 0, 900, 477)),
         blip_color  = math.floor(ClampNum(npcData.blip_color, 0, 90, 2)),
         is_active   = (npcData.is_active ~= false and npcData.is_active ~= 0) and 1 or 0,
@@ -1658,7 +1691,7 @@ RegisterNetEvent('aurp_trucker:server:adminSaveNPC', function(npcData)
     AdminService.NPCs[npcId] = clean
     AdminLog(src, 'adminSaveNPC', npcId)
     TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', -1, AdminService.NPCs)
-    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC despachante atualizado em tempo real!', type = 'success' })
+    TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = ('NPC despachante (%s) salvo em tempo real!'):format(clean.name), type = 'success' })
 end)
 
 RegisterNetEvent('aurp_trucker:server:adminDeleteNPC', function(npcId)
@@ -1672,6 +1705,11 @@ RegisterNetEvent('aurp_trucker:server:adminDeleteNPC', function(npcId)
     AdminLog(src, 'adminDeleteNPC', npcId)
     TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', -1, AdminService.NPCs)
     TriggerClientEvent('ox_lib:notify', src, { title = 'Admin Trucker', description = 'NPC removido do mapa.', type = 'info' })
+end)
+
+RegisterNetEvent('aurp_trucker:server:adminRequestNPCs', function()
+    local src = source
+    TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', src, AdminService.NPCs or {})
 end)
 
 -- 7. ECONOMIA E XP (SINCRONIZAÇÃO GLOBAL)

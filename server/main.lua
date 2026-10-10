@@ -326,6 +326,98 @@ function PolarixOwnsEntity(citizenId, ent)
     return true, false
 end
 
+-- Helper para verificar se um jogador pertence ao lobby (solo ou party)
+function IsLobbyMember(lobby, src, citizenId)
+    if not lobby then return false end
+    if lobby.src == src or (citizenId and lobby.citizenId == citizenId) then
+        return true
+    end
+    if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+        local party = VP_Trucker.Parties[lobby.partyId]
+        if citizenId and party.members and party.members[citizenId] then
+            return true
+        end
+        for cid, mInfo in pairs(party.members or {}) do
+            if mInfo.src and mInfo.src == src then return true end
+        end
+    end
+    return false
+end
+
+-- Helper para broadcast de eventos aos membros do lobby (solo ou party)
+function BroadcastToLobby(lobby, eventName, ...)
+    if not lobby then return end
+    if lobby.src then
+        TriggerClientEvent(eventName, lobby.src, ...)
+    end
+    if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+        local party = VP_Trucker.Parties[lobby.partyId]
+        for cid, mInfo in pairs(party.members or {}) do
+            if mInfo.src and mInfo.src ~= lobby.src then
+                TriggerClientEvent(eventName, mInfo.src, ...)
+            end
+        end
+    end
+end
+
+-- Helper para entregar chaves de veículos a todos os membros do lobby
+function GiveJobKeysToLobby(lobby, targetSrc)
+    if not lobby then return end
+    local targets = {}
+    if targetSrc then
+        table.insert(targets, targetSrc)
+    else
+        if lobby.src then table.insert(targets, lobby.src) end
+        if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+            local party = VP_Trucker.Parties[lobby.partyId]
+            for cid, mInfo in pairs(party.members or {}) do
+                if mInfo.src and mInfo.src ~= lobby.src then
+                    table.insert(targets, mInfo.src)
+                end
+            end
+        end
+    end
+
+    for _, pSrc in ipairs(targets) do
+        -- Chaves do caminhão
+        if lobby.truck and DoesEntityExist(lobby.truck) and lobby.truckPlate then
+            if exports.ox_inventory then
+                local kMeta = { plate = lobby.truckPlate, description = "Truck Key - " .. lobby.truckPlate }
+                local added = exports.ox_inventory:AddItem(pSrc, 'keys', 1, kMeta)
+                if not added then exports.ox_inventory:AddItem(pSrc, 'vehiclekey', 1, kMeta) end
+            end
+            if exports['qbx_vehiclekeys'] then pcall(function() exports['qbx_vehiclekeys']:GiveKeys(pSrc, lobby.truck) end) end
+            if exports['qb-vehiclekeys'] then pcall(function() exports['qb-vehiclekeys']:GiveKeys(pSrc, lobby.truckPlate) end) end
+            TriggerClientEvent('vehiclekeys:client:SetOwner', pSrc, lobby.truckPlate)
+            TriggerClientEvent('qb-vehiclekeys:client:AddKeys', pSrc, lobby.truckPlate)
+        end
+
+        -- Chaves da empilhadeira
+        if lobby.forklift and DoesEntityExist(lobby.forklift) and lobby.forkliftPlate then
+            if exports.ox_inventory then
+                local fMeta = { plate = lobby.forkliftPlate, description = "Forklift Key - " .. lobby.forkliftPlate }
+                local added = exports.ox_inventory:AddItem(pSrc, 'keys', 1, fMeta)
+                if not added then exports.ox_inventory:AddItem(pSrc, 'vehiclekey', 1, fMeta) end
+            end
+            if exports['qbx_vehiclekeys'] then pcall(function() exports['qbx_vehiclekeys']:GiveKeys(pSrc, lobby.forklift) end) end
+            if exports['qb-vehiclekeys'] then pcall(function() exports['qb-vehiclekeys']:GiveKeys(pSrc, lobby.forkliftPlate) end) end
+            TriggerClientEvent('vehiclekeys:client:SetOwner', pSrc, lobby.forkliftPlate)
+            TriggerClientEvent('qb-vehiclekeys:client:AddKeys', pSrc, lobby.forkliftPlate)
+        end
+
+        -- Chaves do Reach Stacker
+        if lobby.handler and DoesEntityExist(lobby.handler) and lobby.handlerPlate then
+            if exports.ox_inventory then
+                local hMeta = { plate = lobby.handlerPlate, description = "Reach Stacker Key - " .. lobby.handlerPlate }
+                local added = exports.ox_inventory:AddItem(pSrc, 'keys', 1, hMeta)
+                if not added then exports.ox_inventory:AddItem(pSrc, 'vehiclekey', 1, hMeta) end
+            end
+            if exports['qbx_vehiclekeys'] then pcall(function() exports['qbx_vehiclekeys']:GiveKeys(pSrc, lobby.handler) end) end
+            TriggerClientEvent('vehiclekeys:client:SetOwner', pSrc, lobby.handlerPlate)
+        end
+    end
+end
+
 -- Helper de remoção de chaves autoritativas (Caminhão alugado, Empilhadeira, Reach Stacker e Carros da Cegonha)
 local function RemoveJobKeys(src, lobby)
     if not src or not lobby then return end
@@ -1517,8 +1609,11 @@ local function StartTruckDelivery(src, contractData)
         baseXP = math.floor(baseXP * 1.35)
     end
 
+    local playerPartyId = VP_Trucker and VP_Trucker.PlayerParties and VP_Trucker.PlayerParties[citizenId]
+
     local lobbyData = {
         jobId = jobId,
+        partyId = playerPartyId,
         routeId = contractData.id or contractData.route_id or nil,
         spawnFolder = contractData.spawn_folder or 'Geral',
         src = src,
@@ -1569,6 +1664,15 @@ local function StartTruckDelivery(src, contractData)
 
     PolarixLobbies[jobId] = lobbyData
     PlayerPolarixLobbies[citizenId] = jobId
+    if playerPartyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[playerPartyId] then
+        local party = VP_Trucker.Parties[playerPartyId]
+        for mCid, mInfo in pairs(party.members or {}) do
+            PlayerPolarixLobbies[mCid] = jobId
+            if _G.Player and mInfo.src and _G.Player(mInfo.src) then
+                _G.Player(mInfo.src).state:set('activeJobId', jobId, true)
+            end
+        end
+    end
 
     -- BLINDAGEM ONESYNC: Trava de Autoridade Server-Side no Motorista (A1)
     -- Impede que observadores próximos roubem a propriedade de rede das entidades da carga
@@ -1693,8 +1797,11 @@ local function StartTruckDelivery(src, contractData)
         GlobalState.activeTruckerPallets = updatedGlobal
     end
 
-    TriggerClientEvent('aurp_trucker:client:polarixJobStarted', src, payload)
-    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, palletNetIds, jobId)
+    -- Entrega autoritativa de chaves para todos os membros do lobby (motorista e parceiro)
+    GiveJobKeysToLobby(lobbyData)
+
+    BroadcastToLobby(lobbyData, 'aurp_trucker:client:polarixJobStarted', payload)
+    BroadcastToLobby(lobbyData, 'aurp_trucker:client:polarixSyncPallets', palletNetIds, jobId)
 
     -- Inicia o First Step Timer anti-griefing de pátio (6 minutos)
     local yardLoc = chosenTruckCoord and vector3(chosenTruckCoord.x, chosenTruckCoord.y, chosenTruckCoord.z) or (wh and wh.TruckSpawnCoords and vector3(wh.TruckSpawnCoords.x, wh.TruckSpawnCoords.y, wh.TruckSpawnCoords.z))
@@ -1712,8 +1819,10 @@ end)
 -- ETAPA 2: Validação de Inspeção Concluída e Liberação de Chaves QBox (Caminhão e Empilhadeira)
 RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
     local src = source
+    local Player = Framework.GetPlayer(src)
+    local citizenId = Player and Framework.GetCitizenId(Player)
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then return end
+    if not lobby or not IsLobbyMember(lobby, src, citizenId) then return end
     -- Máquina de estados: inspeção só é válida antes do carregamento começar
     if lobby.stage ~= 'STEP_GET_TRUCK' and not (lobby.stage == 'STATUS_LOADING' and (lobby.loadedCount or 0) == 0) then return end
     if not lobby.truck or not DoesEntityExist(lobby.truck) then return end
@@ -1777,15 +1886,19 @@ RegisterNetEvent('aurp_trucker:server:inspectionCompleted', function(jobId)
         TriggerClientEvent('qb-vehiclekeys:client:AddKeys', src, lobby.forkliftPlate)
     end
 
+    GiveJobKeysToLobby(lobby)
+
     local truckNetId = NetworkGetNetworkIdFromEntity(lobby.truck)
-    TriggerClientEvent('aurp_trucker:client:inspectionUnlocked', src, jobId, lobby.truckPlate, truckNetId, lobby.forkliftPlate)
-    TriggerClientEvent('aurp_trucker:client:polarixSyncPallets', src, lobby.palletNetIds)
+    BroadcastToLobby(lobby, 'aurp_trucker:client:inspectionUnlocked', jobId, lobby.truckPlate, truckNetId, lobby.forkliftPlate)
+    BroadcastToLobby(lobby, 'aurp_trucker:client:polarixSyncPallets', lobby.palletNetIds, jobId)
 end)
 
 -- ETAPA 3: Acomodação do Palete na Carreta (Carga Seca)
 local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset, slotHeading)
+    local Player = Framework.GetPlayer(src)
+    local citizenId = Player and Framework.GetCitizenId(Player)
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then
+    if not lobby or not IsLobbyMember(lobby, src, citizenId) then
         PolarixReject('palletLoaded', jobId, lobby, 'lobby inexistente ou de outro jogador')
         return
     end
@@ -1910,14 +2023,14 @@ local function HandlePalletLoaded(src, jobId, slotIndex, palletNetId, slotOffset
         end
     end
 
-    TriggerClientEvent('aurp_trucker:client:polarixProgressSync', src, lobby.loadedCount, lobby.requiredCount)
-    TriggerClientEvent('aurp_trucker:client:dryProgressSync', src, lobby.loadedCount, lobby.requiredCount)
+    BroadcastToLobby(lobby, 'aurp_trucker:client:polarixProgressSync', lobby.loadedCount, lobby.requiredCount)
+    BroadcastToLobby(lobby, 'aurp_trucker:client:dryProgressSync', lobby.loadedCount, lobby.requiredCount)
 
     if lobby.loadedCount < lobby.requiredCount then
-        TriggerClientEvent('aurp_trucker:notify', src, 'Central Logística', ("Palete acomodado com sucesso! (%d/%d). Continue o carregamento."):format(lobby.loadedCount, lobby.requiredCount), 'info')
+        BroadcastToLobby(lobby, 'aurp_trucker:notify', 'Central Logística', ("Palete acomodado com sucesso! (%d/%d). Continue o carregamento."):format(lobby.loadedCount, lobby.requiredCount), 'info')
     else
         lobby.stage = 'STEP_STRAPPING'
-        TriggerClientEvent('aurp_trucker:notify', src, 'Central Logística', 'Todos os paletes foram estivados com sucesso!', 'success')
+        BroadcastToLobby(lobby, 'aurp_trucker:notify', 'Central Logística', 'Todos os paletes foram estivados com sucesso!', 'success')
     end
 end
 
@@ -2089,8 +2202,10 @@ end)
 -- ETAPA 4: Validação de Cintas e Liberação de Rota GPS (Carga Seca)
 RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
     local src = source
+    local Player = Framework.GetPlayer(src)
+    local citizenId = Player and Framework.GetCitizenId(Player)
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.src ~= src then
+    if not lobby or not IsLobbyMember(lobby, src, citizenId) then
         PolarixReject('strappingCompleted', jobId, lobby, 'lobby inexistente ou de outro jogador')
         return
     end
@@ -2151,7 +2266,7 @@ RegisterNetEvent('aurp_trucker:server:strappingCompleted', function(jobId)
         ))
     end
 
-    TriggerClientEvent('aurp_trucker:client:polarixReadyForTransit', src, lobby.deliveryCoords)
+    BroadcastToLobby(lobby, 'aurp_trucker:client:polarixReadyForTransit', lobby.deliveryCoords)
 end)
 
 -- ETAPA: Notificação de Palete Perdido durante a Viagem (Corda Rompida)
@@ -2225,7 +2340,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
     local citizenId = Framework.GetCitizenId(Player)
 
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.citizenId ~= citizenId then
+    if not lobby or not IsLobbyMember(lobby, src, citizenId) then
         PolarixReject('completePolarixDelivery', jobId, lobby, 'lobby inexistente ou de outro jogador')
         return
     end
@@ -2382,6 +2497,52 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
 
         pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
+        -- DUPLICAÇÃO INTEGRAL PARA MEMBROS DA PARTY (Diretriz 1: 100% para cada membro)
+        if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+            local party = VP_Trucker.Parties[lobby.partyId]
+            for partnerCid, mInfo in pairs(party.members or {}) do
+                if partnerCid ~= citizenId and mInfo.src then
+                    local pPlayer = Framework.GetPlayer(mInfo.src)
+                    if pPlayer then
+                        Framework.AddMoney(pPlayer, 'bank', payment, 'polarix-trucker-job-coop')
+                        pcall(DB_AddPlayerStats, partnerCid, payment, dist)
+                        if ProgressionService and ProgressionService.AddDirectXP then
+                            pcall(ProgressionService.AddDirectXP, mInfo.src, partnerCid, xp)
+                        else
+                            pcall(DB_AddXP, partnerCid, xp)
+                        end
+                        pcall(function()
+                            MySQL.query.await([[
+                                INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
+                                VALUES (?, 1, ?, 1, ?)
+                                ON DUPLICATE KEY UPDATE
+                                    xp = xp + VALUES(xp),
+                                    total_deliveries = total_deliveries + 1,
+                                    total_earned = total_earned + VALUES(total_earned),
+                                    level = FLOOR(1 + (xp / 1000))
+                            ]], { partnerCid, xp, payment })
+                        end)
+                        pcall(DB_UpdateAustTruckerStats, partnerCid, xp, 1)
+                        TriggerClientEvent('aust_trucker:client:ClearObjective', mInfo.src)
+                        TriggerClientEvent('aurp_trucker:client:polarixJobFinished', mInfo.src, {
+                            isQuickJob = false,
+                            payment = payment,
+                            unloadingFee = unloadingFee,
+                            xp = xp,
+                            lostPallets = lostCount,
+                            deliveredPallets = deliveredCount,
+                            distance = dist
+                        })
+                        TriggerClientEvent('aurp_trucker:notify', mInfo.src, 'Frete Cooperativo', ('Entrega em equipe concluída! Você recebeu 100%% da recompensa: $%d e %d XP!'):format(payment, xp), 'success')
+                    end
+                end
+                PlayerPolarixLobbies[partnerCid] = nil
+                if mInfo.src and _G.Player and _G.Player(mInfo.src) then
+                    _G.Player(mInfo.src).state:set('activeJobId', nil, true)
+                end
+            end
+        end
+
         -- Deleta apenas a carreta da carga e adereços da entrega, preservando o caminhão do jogador
         if lobby.trailer and DoesEntityExist(lobby.trailer) then
             DeleteEntity(lobby.trailer)
@@ -2464,7 +2625,7 @@ RegisterNetEvent('aurp_trucker:server:completePolarixDelivery', function(jobId)
         local returnCoords = (Config.Polarix and Config.Polarix.Warehouse and Config.Polarix.Warehouse.TruckSpawnCoords)
             or vector4(1245.79, -3155.76, 4.6, 90.0)
 
-        TriggerClientEvent('aurp_trucker:client:polarixCargoDeliveredReturnRequired', src, {
+        BroadcastToLobby(lobby, 'aurp_trucker:client:polarixCargoDeliveredReturnRequired', {
             jobId = jobId,
             returnCoords = returnCoords,
             retainedPayment = payment,
@@ -2481,7 +2642,7 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
     local citizenId = Framework.GetCitizenId(Player)
 
     local lobby = PolarixLobbies[jobId]
-    if not lobby or lobby.citizenId ~= citizenId then return end
+    if not lobby or not IsLobbyMember(lobby, src, citizenId) then return end
     if lobby.stage ~= 'STATUS_RETURNING_TO_BASE' then return end
 
     -- Validação de proximidade da base de retorno
@@ -2574,6 +2735,55 @@ RegisterNetEvent('aurp_trucker:server:returnQuickJobTruck', function(jobId, insp
 
     pcall(DB_UpdateAustTruckerStats, citizenId, xp, 1)
 
+    -- DUPLICAÇÃO INTEGRAL PARA MEMBROS DA PARTY NO TRABALHO RÁPIDO (100% para cada membro)
+    if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+        local party = VP_Trucker.Parties[lobby.partyId]
+        for partnerCid, mInfo in pairs(party.members or {}) do
+            if partnerCid ~= citizenId and mInfo.src then
+                local pPlayer = Framework.GetPlayer(mInfo.src)
+                if pPlayer then
+                    Framework.AddMoney(pPlayer, 'bank', finalPayment, 'polarix-quickjob-returned-coop')
+                    pcall(DB_AddPlayerStats, partnerCid, finalPayment, dist)
+                    if ProgressionService and ProgressionService.AddDirectXP then
+                        pcall(ProgressionService.AddDirectXP, mInfo.src, partnerCid, xp)
+                    else
+                        pcall(DB_AddXP, partnerCid, xp)
+                    end
+                    pcall(function()
+                        MySQL.query.await([[
+                            INSERT INTO 0r_trucker (citizenid, level, xp, total_deliveries, total_earned)
+                            VALUES (?, 1, ?, 1, ?)
+                            ON DUPLICATE KEY UPDATE
+                                xp = xp + VALUES(xp),
+                                total_deliveries = total_deliveries + 1,
+                                total_earned = total_earned + VALUES(total_earned),
+                                level = FLOOR(1 + (xp / 1000))
+                        ]], { partnerCid, xp, finalPayment })
+                    end)
+                    pcall(DB_UpdateAustTruckerStats, partnerCid, xp, 1)
+                    RemoveJobKeys(mInfo.src, lobby)
+                    TriggerClientEvent('aust_trucker:client:ClearObjective', mInfo.src)
+                    TriggerClientEvent('aurp_trucker:client:polarixJobFinished', mInfo.src, {
+                        isQuickJob = true,
+                        payment = finalPayment,
+                        originalPayment = payment,
+                        repairCost = repairCost,
+                        unloadingFee = lobby.unloadingFee or 0,
+                        xp = xp,
+                        lostPallets = lobby.lostPallets or 0,
+                        deliveredPallets = lobby.deliveredPallets or 0,
+                        distance = dist
+                    })
+                    TriggerClientEvent('aurp_trucker:notify', mInfo.src, 'Trabalho Rápido Cooperativo', ('Trabalho em equipe concluído! Você recebeu 100%% da remuneração: $%d e %d XP!'):format(finalPayment, xp), 'success')
+                end
+            end
+            PlayerPolarixLobbies[partnerCid] = nil
+            if mInfo.src and _G.Player and _G.Player(mInfo.src) then
+                _G.Player(mInfo.src).state:set('activeJobId', nil, true)
+            end
+        end
+    end
+
     -- Limpeza definitiva das entidades restantes (caminhão da firma)
     CleanupLobbyEntities(lobby)
 
@@ -2663,14 +2873,48 @@ RegisterNetEvent('aurp_trucker:server:emergencyRespawnEquipment', function(jobId
     TriggerClientEvent('aurp_trucker:notify', src, 'Reposição Concluída', 'Empilhadeira restabelecida no pátio com segurança.', 'success')
 end)
 
--- Limpeza ao desconectar
+-- Resiliência de Missão e Limpeza ao desconectar (Diretriz 3: Transferência Automática de Liderança)
 AddEventHandler('playerDropped', function()
     local src = source
+    local Player = Framework.GetPlayer(src)
+    local citizenId = Player and Framework.GetCitizenId(Player)
+
     for jobId, lobby in pairs(PolarixLobbies) do
-        if lobby.src == src then
-            CleanupLobbyEntities(lobby)
-            if lobby.citizenId then PlayerPolarixLobbies[lobby.citizenId] = nil end
-            PolarixLobbies[jobId] = nil
+        if lobby.src == src or (citizenId and lobby.citizenId == citizenId) then
+            local partnerFound = false
+
+            -- Se o lobby faz parte de uma party, tenta transferir o comando para o parceiro online
+            if lobby.partyId and VP_Trucker and VP_Trucker.Parties and VP_Trucker.Parties[lobby.partyId] then
+                local party = VP_Trucker.Parties[lobby.partyId]
+                for cid, mInfo in pairs(party.members or {}) do
+                    if cid ~= (citizenId or lobby.citizenId) and mInfo.src and mInfo.src ~= src then
+                        -- Migra autoritativamente a liderança da missão para o parceiro online
+                        lobby.src = mInfo.src
+                        lobby.citizenId = cid
+                        PlayerPolarixLobbies[cid] = jobId
+                        if citizenId then PlayerPolarixLobbies[citizenId] = nil end
+                        partnerFound = true
+
+                        -- Notifica o parceiro e entrega as chaves garantidas
+                        GiveJobKeysToLobby(lobby, mInfo.src)
+                        TriggerClientEvent('aurp_trucker:notify', mInfo.src, 'Liderança Assumida', 'O líder desconectou da rota! Você assumiu o comando da entrega cooperativa.', 'warning')
+                        if Config.Debug then
+                            print(("[AUST_Trucker Party] Líder desconectou. Comando da rota %s migrado com sucesso para o parceiro %s (Src: %s)."):format(
+                                tostring(jobId), tostring(cid), tostring(mInfo.src)
+                            ))
+                        end
+                        break
+                    end
+                end
+            end
+
+            -- Se nenhum parceiro online estava no lobby, encerra e limpa as entidades
+            if not partnerFound then
+                CleanupLobbyEntities(lobby)
+                if lobby.citizenId then PlayerPolarixLobbies[lobby.citizenId] = nil end
+                if citizenId then PlayerPolarixLobbies[citizenId] = nil end
+                PolarixLobbies[jobId] = nil
+            end
             break
         end
     end

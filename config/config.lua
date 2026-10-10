@@ -1274,7 +1274,7 @@ Config.IndustryOwnership = {
 -- CONVOY SYSTEM (Fase 3A — Multiplayer)
 -- ================================================
 Config.Party = {
-    maxSize                  = 6,        -- máximo de membros por party
+    maxSize                  = 2,        -- máximo de membros por party (Dupla: Motorista + Ajudante)
     cbRadioKey               = 'Z',      -- tecla para abrir input do rádio CB
     cbRadioRange             = 500.0,    -- metros — fora do range não recebe mensagem
     cbMessageDuration        = 8,        -- segundos antes de sumir do HUD

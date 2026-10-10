@@ -874,6 +874,16 @@ AddEventHandler('QBCore:Server:OnPlayerLoaded', function()
     if PartyService then
         PartyService.OnPlayerReconnect(src, citizenId)
     end
+    if AdminService and AdminService.NPCs then
+        TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', src, AdminService.NPCs)
+    end
+end)
+
+RegisterNetEvent('aurp_trucker:server:adminRequestNPCs', function()
+    local src = source
+    if AdminService and AdminService.NPCs then
+        TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', src, AdminService.NPCs)
+    end
 end)
 
 -- L1: Equivalente ESX para QBCore:Server:OnPlayerLoaded
@@ -892,6 +902,9 @@ if Config.Framework == 'esx' then
         PayPendingPayoutsOnLogin(src, citizenId)
         if PartyService then
             PartyService.OnPlayerReconnect(src, citizenId)
+        end
+        if AdminService and AdminService.NPCs then
+            TriggerClientEvent('aurp_trucker:client:adminSyncNPCs', src, AdminService.NPCs)
         end
     end)
 end

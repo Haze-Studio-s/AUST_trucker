@@ -1911,6 +1911,7 @@
         </td>
         <td style="text-align:center; white-space: nowrap;">
           <div style="display:inline-flex; gap:4px; justify-content:center; align-items:center;">
+            <button class="admin-btn admin-btn-outline btn-edit-npc" data-id="${escapeHtml(k)}" title="Editar no Formulário"><i class="fas fa-edit"></i></button>
             <button class="admin-btn admin-btn-accent btn-gizmo-npc-row" data-id="${escapeHtml(k)}" data-name="${escapeHtml(n.npc_name || n.name || '')}" data-model="${escapeHtml(n.npc_model || n.model || '')}" data-x="${escapeHtml(coords.x || '')}" data-y="${escapeHtml(coords.y || '')}" data-z="${escapeHtml(coords.z || '')}" data-h="${escapeHtml(coords.heading || coords.w || '')}" title="Ajustar Posição com Gizmo 3D"><i class="fas fa-arrows-alt"></i></button>
             <button class="admin-btn admin-btn-outline btn-tp-npc" data-x="${escapeHtml(coords.x)}" data-y="${escapeHtml(coords.y)}" data-z="${escapeHtml(coords.z)}" data-h="${escapeHtml(coords.heading)}" title="Teleportar"><i class="fas fa-location-arrow"></i></button>
             <button class="admin-btn admin-btn-danger btn-del-npc" data-id="${escapeHtml(k)}" title="Remover"><i class="fas fa-trash"></i></button>
@@ -1918,6 +1919,30 @@
         </td>
       `;
       tbody.appendChild(tr);
+    });
+
+    tbody.querySelectorAll('.btn-edit-npc').forEach(btn => {
+      btn.addEventListener('click', function () {
+        const id = this.getAttribute('data-id');
+        const n = (adminData.npcs || {})[id];
+        if (!n) return;
+        const coords = n.coords ? (typeof n.coords === 'string' ? JSON.parse(n.coords) : n.coords) : {};
+        document.getElementById('npc-form-id').value = id;
+        document.getElementById('npc-form-name').value = n.npc_name || n.name || '';
+        document.getElementById('npc-form-model').value = n.npc_model || n.model || 's_m_m_trucker_01';
+        document.getElementById('npc-form-x').value = coords.x ? Number(coords.x).toFixed(2) : '';
+        document.getElementById('npc-form-y').value = coords.y ? Number(coords.y).toFixed(2) : '';
+        document.getElementById('npc-form-z').value = coords.z ? Number(coords.z).toFixed(2) : '';
+        document.getElementById('npc-form-h').value = coords.heading ? Number(coords.heading).toFixed(2) : '';
+        const targetCb = document.getElementById('npc-form-target');
+        if (targetCb) targetCb.checked = (n.enable_target !== 0 && n.is_active !== 0);
+
+        const titleEl = document.getElementById('npc-card-title');
+        if (titleEl) titleEl.innerHTML = `<i class="fas fa-user-edit"></i> Editar Despachante #${escapeHtml(id)}`;
+        const btnSave = document.getElementById('btn-save-npc');
+        if (btnSave) btnSave.innerHTML = `<i class="fas fa-save"></i> Atualizar NPC #${escapeHtml(id)}`;
+        showAdminToast(`NPC #${id} carregado no formulário para edição.`);
+      });
     });
 
     tbody.querySelectorAll('.btn-gizmo-npc-row').forEach(btn => {
@@ -1974,12 +1999,34 @@
     });
   }
 
+  function resetNPCForm() {
+    const idEl = document.getElementById('npc-form-id');
+    if (idEl) idEl.value = '';
+    const nameEl = document.getElementById('npc-form-name');
+    if (nameEl) nameEl.value = '';
+    const modelEl = document.getElementById('npc-form-model');
+    if (modelEl) modelEl.value = 's_m_m_trucker_01';
+    const xEl = document.getElementById('npc-form-x');
+    if (xEl) xEl.value = '';
+    const yEl = document.getElementById('npc-form-y');
+    if (yEl) yEl.value = '';
+    const zEl = document.getElementById('npc-form-z');
+    if (zEl) zEl.value = '';
+    const hEl = document.getElementById('npc-form-h');
+    if (hEl) hEl.value = '';
+    const targetCb = document.getElementById('npc-form-target');
+    if (targetCb) targetCb.checked = true;
+
+    const titleEl = document.getElementById('npc-card-title');
+    if (titleEl) titleEl.innerHTML = `<i class="fas fa-user-plus"></i> Novo Despachante`;
+    const btnSave = document.getElementById('btn-save-npc');
+    if (btnSave) btnSave.innerHTML = `<i class="fas fa-save"></i> Salvar e Spawnar NPC`;
+    showAdminToast('Formulário pronto para cadastrar um novo NPC.');
+  }
+
   function saveNPCForm() {
-    const npcId = document.getElementById('npc-form-id').value.trim();
-    if (!npcId) {
-      showAdminToast('Informe o identificador do NPC (ex: dispatcher_paleto)!', 'error');
-      return;
-    }
+    const idInput = (document.getElementById('npc-form-id')?.value || '').trim();
+    const isNew = !idInput;
 
     const coords = {
       x: parseFloat(document.getElementById('npc-form-x').value) || 0.0,
@@ -1989,17 +2036,20 @@
     };
 
     const payload = {
-      npc_id: npcId,
+      id: idInput || null,
+      npc_id: idInput || null,
+      is_new: isNew,
+      name: document.getElementById('npc-form-name').value.trim() || 'Despachante Central',
       npc_name: document.getElementById('npc-form-name').value.trim() || 'Despachante Central',
+      model: document.getElementById('npc-form-model').value.trim() || 's_m_m_trucker_01',
       npc_model: document.getElementById('npc-form-model').value.trim() || 's_m_m_trucker_01',
       coords: coords,
       enable_target: document.getElementById('npc-form-target') ? (document.getElementById('npc-form-target').checked ? 1 : 0) : 1
     };
 
     postNUI('adminSaveNPC', payload);
-    adminData.npcs[npcId] = payload;
-    renderNPCsTab();
-    showAdminToast(`NPC #${npcId} salvo e spawnado no mapa com sucesso!`);
+    resetNPCForm();
+    showAdminToast(isNew ? 'Criando novo NPC despachante no servidor...' : `Atualizando NPC #${idInput}...`);
   }
 
   // ============================================================
@@ -2150,6 +2200,9 @@
 
     const btnSaveNPC = document.getElementById('btn-save-npc');
     if (btnSaveNPC) btnSaveNPC.addEventListener('click', saveNPCForm);
+
+    const btnNewNPC = document.getElementById('btn-new-npc');
+    if (btnNewNPC) btnNewNPC.addEventListener('click', resetNPCForm);
 
     const btnNewFolder = document.getElementById('btn-new-spawn-folder');
     if (btnNewFolder) {
