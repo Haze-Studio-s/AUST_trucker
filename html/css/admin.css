@@ -294,32 +294,28 @@
 }
 
 /* ==========================================================================
-   Layout Master-Detail Lado a Lado (UX Otimizada)
+   Layout Master-Detail / Full Width (Modais Sob Demanda)
    ========================================================================== */
 .admin-master-detail {
-  display: grid;
-  grid-template-columns: minmax(520px, 1.45fr) minmax(380px, 1fr);
-  gap: 16px;
-  align-items: start;
+  display: block;
   width: 100%;
 }
 
 #admin-tab-npcs .admin-master-detail {
-  grid-template-columns: minmax(580px, 1.6fr) minmax(360px, 1fr);
+  display: block;
+  width: 100%;
 }
 
 .admin-master-col {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  width: 100%;
   gap: 14px;
 }
 
 .admin-detail-col {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 14px;
+  display: none; /* Elementos de formulário agora residem dentro de .admin-modal-overlay */
 }
 
 .admin-detail-col .admin-card,
@@ -1473,4 +1469,126 @@ tr.admin-route-draggable.is-dragging {
   box-shadow: 0 2px 8px var(--admin-primary-glow);
   transform: translateY(-1px);
 }
+
+/* ==========================================================================
+   Modais Centralizados Sob Demanda (Lation Emerald Edition)
+   ========================================================================== */
+.admin-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 10, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.admin-modal-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.admin-modal-dialog {
+  background: var(--admin-card-bg);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 12px;
+  width: 92%;
+  max-width: 660px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 30px rgba(16, 185, 129, 0.15);
+  transform: scale(0.95);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.admin-modal-overlay.active .admin-modal-dialog {
+  transform: scale(1);
+}
+
+.admin-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  background: rgba(15, 23, 42, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-modal-title i {
+  color: var(--admin-primary);
+  font-size: 16px;
+}
+
+.btn-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 16px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-modal-close:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  transform: rotate(90deg);
+}
+
+.admin-modal-body {
+  padding: 18px 20px;
+  overflow-y: auto;
+  max-height: calc(90vh - 120px);
+}
+
+.admin-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.admin-modal-body::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.admin-modal-body::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.3);
+  border-radius: 3px;
+}
+
+.admin-modal-body::-webkit-scrollbar-thumb:hover {
+  background: var(--admin-primary);
+}
+
+.admin-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px;
+  background: rgba(15, 23, 42, 0.65);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 

@@ -28,6 +28,32 @@
   // Elimina janelas nativas do Windows CEF fora do jogo
   // ============================================================
 
+  function openAdminModal(modalId) {
+    if (!modalId) return;
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.add('active');
+    }
+  }
+
+  function closeAdminModal(modalId) {
+    if (!modalId) return;
+    const modal = document.getElementById(modalId);
+    if (modal) {
+      modal.classList.remove('active');
+    }
+  }
+
+  function closeAllAdminModals() {
+    document.querySelectorAll('.admin-modal-overlay.active').forEach(m => {
+      m.classList.remove('active');
+    });
+  }
+
+  window.openAdminModal = openAdminModal;
+  window.closeAdminModal = closeAdminModal;
+  window.closeAllAdminModals = closeAllAdminModals;
+
   function showConfirmModal(title, message, onConfirm) {
     const existing = document.getElementById('admin-confirm-modal');
     if (existing) existing.remove();
@@ -288,6 +314,12 @@
       if (confirmModal) { confirmModal.remove(); return; }
       if (promptModal) { promptModal.remove(); return; }
 
+      const activeModal = document.querySelector('.admin-modal-overlay.active');
+      if (activeModal) {
+        activeModal.classList.remove('active');
+        return;
+      }
+
       const panel = document.getElementById('admin-panel');
       if (panel && panel.style.display === 'flex') {
         closeAdminPanel();
@@ -389,6 +421,7 @@
   }
 
   function closeAdminPanel() {
+    closeAllAdminModals();
     const panel = document.getElementById('admin-panel');
     if (panel) {
       panel.style.display = 'none';
@@ -459,6 +492,7 @@
   }
 
   function switchTab(tabName) {
+    closeAllAdminModals();
     activeTab = tabName;
     document.querySelectorAll('.admin-tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('data-tab') === tabName);
@@ -766,6 +800,7 @@
           const targetNpcId = this.getAttribute('data-npc-id');
           const targetNpcName = this.getAttribute('data-npc-name');
           clearRouteForm(targetNpcId, targetNpcName);
+          openAdminModal('modal-route-form');
           document.getElementById('route-form-id')?.focus();
           showAdminToast(`Formulário vinculado ao Hub "${targetNpcName}".`);
         });
@@ -779,6 +814,7 @@
           const targetNpcId = this.getAttribute('data-npc-id');
           const targetNpcName = this.getAttribute('data-npc-name');
           clearRouteForm(targetNpcId, targetNpcName);
+          openAdminModal('modal-route-form');
           document.getElementById('route-form-id')?.focus();
           showAdminToast(`Formulário vinculado ao Hub "${targetNpcName}".`);
         });
@@ -964,6 +1000,7 @@
 
     const delBtn = document.getElementById('btn-delete-route');
     if (delBtn) delBtn.style.display = 'inline-flex';
+    openAdminModal('modal-route-form');
   }
 
   function saveRouteForm() {
@@ -1011,6 +1048,8 @@
     adminData.customRoutes[routeId] = payload;
     renderRoutesTab();
     renderEconomyTab();
+    closeAdminModal('modal-route-form');
+    clearRouteForm();
     showAdminToast(`Rota #${routeId} salva e vinculada ao Hub #${npcId}!`, 'success');
   }
 
@@ -1109,6 +1148,7 @@
     if (sy && coords.y != null) sy.value = parseFloat(coords.y).toFixed(2);
     if (sz && coords.z != null) sz.value = parseFloat(coords.z).toFixed(2);
     if (sh) sh.value = parseFloat(hVal).toFixed(1);
+    openAdminModal('modal-spawn-form');
   }
 
   function populateSpawnModelSuggestions() {
@@ -1356,6 +1396,7 @@
           const targetHubId = this.getAttribute('data-npc-id');
           const targetHubName = this.getAttribute('data-npc-name');
           clearSpawnForm(targetHubId, targetHubName);
+          openAdminModal('modal-spawn-form');
           document.getElementById('spawn-form-id')?.focus();
           showAdminToast(`Formulário de Spawns vinculado ao Hub "${targetHubName}".`);
         });
@@ -1369,6 +1410,7 @@
           const targetNpcId = this.getAttribute('data-npc-id');
           const targetNpcName = this.getAttribute('data-npc-name');
           clearSpawnForm(targetNpcId, targetNpcName);
+          openAdminModal('modal-spawn-form');
           document.getElementById('spawn-form-id')?.focus();
           showAdminToast(`Formulário de Spawns vinculado ao Hub "${targetNpcName}".`);
         });
@@ -1643,6 +1685,7 @@
       const modelInput = document.getElementById('spawn-form-model');
       if (modelInput) modelInput.value = '';
 
+      closeAdminModal('modal-spawn-form');
       showAdminToast(`Ponto de spawn #${spawnId} gravado com sucesso no Hub "${folderVal}"!`, 'success');
     } catch (err) {
       console.error('[Admin NUI] Erro ao salvar spawn:', err);
@@ -1760,6 +1803,7 @@
     });
     adminData.homologatedProps.push(payload);
     renderPropsTab();
+    closeAdminModal('modal-prop-form');
     showAdminToast(`Modelo "${model}" homologado com sucesso! Já disponível como carga.`);
 
     document.getElementById('prop-form-model').value = '';
@@ -2326,6 +2370,7 @@
         if (btnSave) btnSave.innerHTML = `<i class="fas fa-save"></i> Atualizar NPC #${escapeHtml(id)}`;
         const btnDel = document.getElementById('btn-delete-npc');
         if (btnDel) btnDel.style.display = 'inline-flex';
+        openAdminModal('modal-npc-form');
         showAdminToast(`NPC #${id} carregado no formulário para edição.`);
       });
     });
@@ -2396,7 +2441,10 @@
           renderRoutesTab();
           renderSpawnsTab();
           const currentFormId = (document.getElementById('npc-form-id')?.value || '').trim();
-          if (currentFormId === id) resetNPCForm();
+          if (currentFormId === id) {
+            resetNPCForm();
+            closeAdminModal('modal-npc-form');
+          }
           showAdminToast(`NPC #${id} e suas entidades vinculadas foram removidos.`);
         });
       });
@@ -2455,6 +2503,7 @@
 
     postNUI('adminSaveNPC', payload);
     resetNPCForm();
+    closeAdminModal('modal-npc-form');
     showAdminToast(isNew ? 'Criando novo NPC despachante no servidor...' : `Atualizando NPC #${idInput}...`);
   }
 
@@ -2567,6 +2616,45 @@
       });
     }
 
+    // ============================================================
+    // MODAIS SOB DEMANDA: LISTENERS GLOBAIS DE FECHAMENTO E BACKDROP
+    // ============================================================
+    document.querySelectorAll('.btn-modal-close, .btn-modal-cancel').forEach(btn => {
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const targetModalId = this.getAttribute('data-modal');
+        if (targetModalId) {
+          closeAdminModal(targetModalId);
+        } else {
+          const parentOverlay = this.closest('.admin-modal-overlay');
+          if (parentOverlay) parentOverlay.classList.remove('active');
+        }
+      });
+    });
+
+    document.querySelectorAll('.admin-modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', function (e) {
+        if (e.target === this) {
+          this.classList.remove('active');
+        }
+      });
+    });
+
+    const btnOpenPropModal = document.getElementById('btn-open-prop-modal');
+    if (btnOpenPropModal) {
+      btnOpenPropModal.addEventListener('click', function () {
+        openAdminModal('modal-prop-form');
+      });
+    }
+
+    const btnOpenNPCModal = document.getElementById('btn-open-npc-modal');
+    if (btnOpenNPCModal) {
+      btnOpenNPCModal.addEventListener('click', function () {
+        resetNPCForm();
+        openAdminModal('modal-npc-form');
+      });
+    }
+
     const btnSaveRoute = document.getElementById('btn-save-route');
     if (btnSaveRoute) btnSaveRoute.addEventListener('click', saveRouteForm);
 
@@ -2584,6 +2672,7 @@
           renderRoutesTab();
           renderEconomyTab();
           clearRouteForm();
+          closeAdminModal('modal-route-form');
           showAdminToast(`Rota #${id} excluída com sucesso.`);
         });
       });
@@ -2636,13 +2725,19 @@
           renderRoutesTab();
           renderSpawnsTab();
           resetNPCForm();
+          closeAdminModal('modal-npc-form');
           showAdminToast(`Despachante #${id} e suas entidades vinculadas foram removidos.`);
         });
       });
     }
 
     const btnNewNPC = document.getElementById('btn-new-npc');
-    if (btnNewNPC) btnNewNPC.addEventListener('click', resetNPCForm);
+    if (btnNewNPC) {
+      btnNewNPC.addEventListener('click', function () {
+        resetNPCForm();
+        openAdminModal('modal-npc-form');
+      });
+    }
 
     const btnNewFolder = document.getElementById('btn-new-spawn-folder');
     if (btnNewFolder) {
